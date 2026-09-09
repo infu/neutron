@@ -8,6 +8,17 @@ import { amountsForLiquidity, getSqrtRatioAtTick, liquidityForAmounts, MAX_TICK,
 
 export type LiquidityPreviewReads = Pick<ReturnType<typeof createLiquidityReadClient>, "readPool">;
 
+/** Public ICPSwap v3.7.0 claim/removal settlement estimate. Positive output
+ * <= fee remains pool credit: no ledger transfer or fee debit is expected. */
+export function estimateLiquidityPayout(gross: bigint, ledgerFee: bigint): {
+  net: bigint; status: "no_output" | "retained_in_pool" | "transfer_estimated";
+} {
+  if (gross < 0n || ledgerFee < 0n) throw new Error("Payout amounts and ledger fees must be nonnegative.");
+  if (gross === 0n) return { net: 0n, status: "no_output" };
+  if (gross <= ledgerFee) return { net: 0n, status: "retained_in_pool" };
+  return { net: gross - ledgerFee, status: "transfer_estimated" };
+}
+
 function nat(value: string, label: string): bigint {
   if (typeof value !== "string" || !/^[0-9]+$/u.test(value)) throw new Error(`${label} must be an exact nonnegative integer.`);
   return BigInt(value);
@@ -173,12 +184,31 @@ export async function previewLiquidity(
     if (index === 0) amount0 = withdrawalAmount; else amount1 = withdrawalAmount;
   }
   signal?.throwIfAborted();
+  const deposit = request.kind === "mint" || request.kind === "increase";
+  const warnings: string[] = [];
+  const payout = (amount: bigint, fee: bigint, token: string) => {
+    if (deposit) return { net: null, status: "not_applicable" };
+    const estimate = estimateLiquidityPayout(amount, fee);
+    if (estimate.status === "retained_in_pool") {
+      // ICPSwap v3.7.0 credits claim/removal gross output to TokenHolder.
+      // _withdraw exits before a balance debit or ledger transfer for <= fee;
+      // the amount is retained pool credit, not a fee already charged or lost.
+      warnings.push(`${token}: the gross amount (${amount} atoms) does not exceed its transfer fee (${fee} atoms). No Wallet transfer is expected; the amount would remain in your pool balance.`);
+    }
+    return { net: estimate.net.toString(), status: estimate.status };
+  };
+  const payout0 = payout(amount0, fee0, view.pool.token0.address);
+  const payout1 = payout(amount1, fee1, view.pool.token1.address);
   return {
+    version: 1,
     request: { ...effective }, pool: poolId, owner,
     token0: { ...view.pool.token0 }, token1: { ...view.pool.token1 },
     fee: String(view.pool.fee), tick_spacing: String(view.pool.tickSpacing), tick: String(view.metadata.tick), sqrt_price_x96: view.metadata.sqrtPriceX96,
     fee0: fee0.toString(), fee1: fee1.toString(), funding0: funding0.toString(), funding1: funding1.toString(),
     expected_amount0: amount0.toString(), expected_amount1: amount1.toString(), expected_liquidity: liquidity.toString(),
+    amount_semantics: deposit ? "input_consumption" : "gross_pool_output",
+    expected_net_amount0: payout0.net, expected_net_amount1: payout1.net,
+    payout0: payout0.status, payout1: payout1.status, warnings,
     unused0: view.unused.balance0, unused1: view.unused.balance1, baseline_positions: view.positions.map(positionToWire),
     observed_at: observedAt(view), price_protection: false,
     detail: "Expected amounts reflect the observed pool state. ICPSwap liquidity methods have no price minimum or deadline. Desired amounts cap input consumption. Protocol success does not prove a refund or withdrawal reached Wallet.",

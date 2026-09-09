@@ -3,14 +3,14 @@
  * 94eeb92ad6ecc2713d38fd3bef48cd4f328a3513, checked against production 2026-09-08.
  * These observations inform display; the backend revalidates every effect.
  */
-import { Actor, HttpAgent } from "@dfinity/agent";
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@icp-sdk/core/principal";
 import { AccountIdentifier } from "@icp-sdk/canisters/ledger/icp";
 import { amountsForLiquidity, getSqrtRatioAtTick } from "./liquidity_math";
+import { createIcpswapQueryTransport, icpswapQuery, ICPSWAP_QUERY_HOST, type IcpswapQueryTransportOptions } from "./ic_query";
 
 export const ICPSWAP_FACTORY = "4mmnk-kiaaa-aaaag-qbllq-cai";
-export const ICPSWAP_QUERY_HOST = "https://icp-api.io";
+export { ICPSWAP_QUERY_HOST } from "./ic_query";
 export type ReadSource = { kind: "direct-canister-query"; host: string; observedAt: string };
 export type ReadIssue = { canister: string; method: string; message: string };
 export type PoolIdentity = {
@@ -123,20 +123,18 @@ export type LiquidityQuery = (request: {
   canister: string; method: LiquidityReadMethod; args: unknown[]; signal: AbortSignal;
 }) => Promise<unknown>;
 
-const anonymousQuery: LiquidityQuery = async ({ canister, method, args, signal }) => {
-  checkAbort(signal);
-  const agent = await HttpAgent.create({
-    host: ICPSWAP_QUERY_HOST,
-    fetch: Object.assign((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
-      fetch(input, { ...init, signal }), fetch),
-  });
-  checkAbort(signal);
-  const signature = liquidityReadMethods[method];
-  const actor = Actor.createActor(() => IDL.Service({
-    [method]: IDL.Func(signature.args as [] | [IDL.Type, ...IDL.Type[]], [signature.output], ["query"]),
-  }), { agent, canisterId: canister });
-  return actor[method]!(...args);
-};
+/** Reuse verified subnet keys between pool reads. Creating an HttpAgent for
+ * every method discards that cache and repeats read_state certificate queries.
+ * Fresh nonces prevent gateway response caching; no pool snapshot is cached.
+ *
+ * Cancellation belongs to the read, not to the shared agent's fetch function.
+ * A cancelled SDK query may finish verification in the background, but its
+ * reply cannot reach the caller or cancel another reader's network request. */
+export function createLiquidityQueryTransport(options?: IcpswapQueryTransportOptions): LiquidityQuery {
+  const query = options === undefined ? icpswapQuery : createIcpswapQueryTransport(options);
+  return (request) => query({ ...request, signature: liquidityReadMethods[request.method] });
+}
+const anonymousQuery = createLiquidityQueryTransport();
 
 function checkAbort(signal?: AbortSignal): void { signal?.throwIfAborted(); }
 function propagateAbort(error: unknown, signal?: AbortSignal): void {

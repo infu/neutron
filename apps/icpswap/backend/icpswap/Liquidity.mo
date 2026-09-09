@@ -80,12 +80,18 @@ module {
           amount0; amount1; fees0 = value.tokensOwed0; fees1 = value.tokensOwed1; fees_current = feesCurrent; error };
     };
     public class Service(calls : Capabilities.BackendCallsV1, journal : Actions.Journal, now : () -> Int) {
-        func call(request : Client.CallRequest) : async* Result<Client.CallResult> {
+        func batch(requests : [Client.CallRequest]) : async* Result<[Client.CallResult]> {
             try {
-                let replies = await* calls.call_batch([request]);
-                if (replies.size() != 1) return #err("The protocol returned no usable reply.");
-                #ok(replies[0]);
+                let replies = await* calls.call_batch(requests);
+                if (replies.size() != requests.size()) return #err("The protocol returned no usable reply.");
+                #ok(replies);
             } catch (error) { #err(Error.message(error)) };
+        };
+        func call(request : Client.CallRequest) : async* Result<Client.CallResult> {
+            switch (await* batch([request])) {
+                case (#err(e)) #err(e);
+                case (#ok(replies)) #ok(replies[0]);
+            };
         };
         public func pools() : async* Result<[Types.PoolData]> {
             switch (await* call(Client.poolsRequest(Client.swapFactoryPrincipal()))) {
@@ -106,30 +112,29 @@ module {
         public func pool(poolText : Text) : async* Result<PoolView> {
             let registered = switch (await* verified(poolText)) { case (#err(e)) return #err(e); case (#ok(v)) v };
             let poolId = registered.canisterId;
-            let metadata = switch (await* call(Client.poolMetadataRequest(poolId))) {
-                case (#err(e)) return #err(e);
-                case (#ok(reply)) switch (Client.decodePoolMetadata(reply)) { case (#err(e)) return #err(e); case (#ok(v)) v };
-            };
+            // These read methods need only the factory-verified pool and owner.
+            // Dispatch them together instead of paying six serial inter-canister
+            // round trips. They are observations, not an atomic pool snapshot.
+            let replies = switch (await* batch([
+                Client.poolMetadataRequest(poolId),
+                Client.cachedTokenFeeRequest(poolId),
+                Client.availabilityRequest(poolId),
+                LiquidityClient.positionsRequest(poolId, calls.canister_principal),
+                LiquidityClient.withdrawQueueRequest(poolId),
+                LiquidityClient.transactionsRequest(poolId, calls.canister_principal),
+            ])) { case (#err(e)) return #err(e); case (#ok(v)) v };
+            let metadata = switch (Client.decodePoolMetadata(replies[0])) { case (#err(e)) return #err(e); case (#ok(v)) v };
             if (not sameToken(registered.token0, metadata.token0) or not sameToken(registered.token1, metadata.token1) or
                 registered.fee != metadata.fee or registered.key != metadata.key) {
                 return #err("Pool metadata disagrees with the factory's canonical token order or fee.");
             };
-            let fees = switch (await* call(Client.cachedTokenFeeRequest(poolId))) {
-                case (#err(e)) return #err(e);
-                case (#ok(reply)) switch (Client.decodeCachedTokenFee(reply)) { case (#err(e)) return #err(e); case (#ok(v)) v };
-            };
-            let availability = switch (await* call(Client.availabilityRequest(poolId))) {
-                case (#err(e)) return #err(e);
-                case (#ok(reply)) switch (Client.decodeAvailability(reply)) { case (#err(e)) return #err(e); case (#ok(v)) v };
-            };
+            let fees = switch (Client.decodeCachedTokenFee(replies[1])) { case (#err(e)) return #err(e); case (#ok(v)) v };
+            let availability = switch (Client.decodeAvailability(replies[2])) { case (#err(e)) return #err(e); case (#ok(v)) v };
             var available = availability.available;
             for (owner in availability.whiteList.vals()) {
                 if (Principal.equal(owner, calls.canister_principal)) available := true;
             };
-            let owned = switch (await* call(LiquidityClient.positionsRequest(poolId, calls.canister_principal))) {
-                case (#err(e)) return #err(e);
-                case (#ok(reply)) switch (outcome(LiquidityClient.decodePositions(reply))) { case (#err(e)) return #err(e); case (#ok(v)) v };
-            };
+            let owned = switch (outcome(LiquidityClient.decodePositions(replies[3]))) { case (#err(e)) return #err(e); case (#ok(v)) v };
             // The owner list contains stored owed amounts without fee-growth
             // refresh. Current estimates use getUserPosition in browser reads
             // and the selected-position action preview; do not label stored
@@ -138,22 +143,16 @@ module {
                 positionView(value.id, value, metadata.sqrtPriceX96, false,
                     "Current fees unavailable in this pool snapshot: getUserPositionsByPrincipal returns stored owed amounts without refreshing fee growth. fees0/fees1 are not a current fee estimate; use the position read or liquidity preview for current fees.")
             });
-            let queue = switch (await* call(LiquidityClient.withdrawQueueRequest(poolId))) {
-                case (#err(e)) return #err(e);
-                case (#ok(reply)) switch (outcome(LiquidityClient.decodeWithdrawQueue(reply))) { case (#err(e)) return #err(e); case (#ok(v)) v };
-            };
+            let queue = switch (outcome(LiquidityClient.decodeWithdrawQueue(replies[4]))) { case (#err(e)) return #err(e); case (#ok(v)) v };
             var diagnostics = "";
-            let transactions : [Transaction] = switch (await* call(LiquidityClient.transactionsRequest(poolId, calls.canister_principal))) {
-                case (#err(e)) { diagnostics := "Could not read protocol transactions: " # e; [] };
-                case (#ok(reply)) switch (LiquidityClient.decodeTransactions(reply)) {
-                    case (#ok(v)) Array.map<LiquidityClient.TransactionSummary, Transaction>(LiquidityClient.summarizeTransactions(v), func(tx) {
-                        { id = tx.id; kind = tx.kind; state = tx.state;
-                          token = switch (tx.token) { case null null; case (?p) ?Principal.toText(p) };
-                          amount = tx.amount; error = tx.error; unused_reserved = tx.unused_reserved; support_required = tx.support_required };
-                    });
-                    case (#rejected(e)) { diagnostics := "Could not read protocol transactions: " # e; [] };
-                    case (#unknown(e)) { diagnostics := "Could not read protocol transactions: " # e; [] };
-                };
+            let transactions : [Transaction] = switch (LiquidityClient.decodeTransactions(replies[5])) {
+                case (#ok(v)) Array.map<LiquidityClient.TransactionSummary, Transaction>(LiquidityClient.summarizeTransactions(v), func(tx) {
+                    { id = tx.id; kind = tx.kind; state = tx.state;
+                      token = switch (tx.token) { case null null; case (?p) ?Principal.toText(p) };
+                      amount = tx.amount; error = tx.error; unused_reserved = tx.unused_reserved; support_required = tx.support_required };
+                });
+                case (#rejected(e)) { diagnostics := "Could not read protocol transactions: " # e; [] };
+                case (#unknown(e)) { diagnostics := "Could not read protocol transactions: " # e; [] };
             };
             var reserved0 = 0;
             var reserved1 = 0;

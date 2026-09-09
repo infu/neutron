@@ -43,7 +43,9 @@ describe("browser-only ICPSwap liquidity preview", () => {
       observed_at: "1788912000123000000", price_protection: false });
     expect(plan.request).toEqual(input);
     expect(calls).toEqual([[POOL, OWNER, undefined]]);
-    const { source: _source, read_errors: _errors, ...wire } = plan;
+    const { source: _source, read_errors: _errors, version: _version,
+      amount_semantics: _semantics, expected_net_amount0: _net0, expected_net_amount1: _net1,
+      payout0: _payout0, payout1: _payout1, warnings: _warnings, ...wire } = plan;
     expect(parseLiquidityPlan(wire)).toEqual(wire);
     expect(JSON.parse(JSON.stringify(plan))).toEqual(plan);
   });

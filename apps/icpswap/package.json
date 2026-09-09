@@ -16,7 +16,7 @@
     "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo test/market_logic.test.mo test/swap_logic.test.mo test/liquidity_math.test.mo test/actions_logic.test.mo test/history_paging.test.mo test/protocol_reply.test.mo",
     "test": "npm run package && bun test && npm run test:memory",
     "test:chart": "node test/browser/chart.mjs",
-    "test:browser": "node test/browser/app.mjs"
+    "test:browser": "node test/browser/app.mjs && node test/browser/review.mjs && node test/browser/exit_review.mjs"
   },
   "author": "",
   "license": "LicenseRef-Neutron-Sovereign-Application-Use-License-1.0",

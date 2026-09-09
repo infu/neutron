@@ -29,7 +29,7 @@ export async function authorizeAction(context: MsgBusToolContext, review: JsonOb
         tileId: "main", tool: "icpswap_review_v1", arguments: args,
       });
     }
-    if (result?.approved !== true) throw new Error("ICPSwap action review declined. The saved operation can be reviewed later.");
+    if (result?.approved !== true) throw new Error("ICPSwap action review declined. No funding or protocol action was sent by this review. Retain the operation ID if you choose to try again.");
   }
   context.signal?.throwIfAborted();
 }

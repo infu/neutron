@@ -57,6 +57,20 @@ available tiers are compared concurrently. Agent previews use the same reader,
 report the pool-context observation time, and read ledger metadata through
 Wallet without writing it to Neutron's backend.
 
+Swap and liquidity readers share an anonymous query agent, with verified subnet
+keys retained in memory and a fresh nonce on each query. This avoids repeated
+certificate reads without caching application replies or requiring IndexedDB
+in a sandboxed tile. Query cancellation does not interrupt other readers.
+
+Both public quote tools return a typed version-1 response. Swap `expected_out`
+is net of the output ledger fee; `minimum_out_gross` is the pool-enforced gross
+minimum. Compare net estimates with `minimum_out_net_estimate`. The legacy
+`minimum_out` field remains a deprecated gross alias for compatibility.
+Slippage uses `floor(gross * 100000 / (100000 + slippage))`, where 500 is 0.5%.
+Liquidity previews distinguish input consumption from gross outputs and report
+net payout estimates separately. Positive outputs at or below their ledger fee
+remain pool credit; they are not expected Wallet transfers or paid ledger fees.
+
 Opening a liquidity editor does not persist token metadata. Market refresh and
 the resident's market-data timer refresh browser analytics rather than invoking
 the backend's replicated market refresh. The existing six-hour backend task
@@ -64,8 +78,17 @@ still retains local price history when the browser is closed.
 
 The backend owns durable watchlists, preferences, local history and operation
 journals. Preparing and executing a saved action still validates current pool
-state, fees, account access and funding as the Neutron canister. Browser previews
-are advisory and are never accepted as authorization or a saved execution plan.
+state, fees, account access and funding as the Neutron canister. New removals,
+closes, claims and unused withdrawals show the existing approval dialog using a
+fresh browser observation before any durable preparation update. Saved token
+labels format the review without refreshing Wallet balances. After approval,
+the backend prepares the durable plan; changed request amounts, identities,
+ledger fees or funding requirements require a new review before execution.
+Output estimates and fee growth remain advisory because the protocol provides
+no liquidity price minimum. Existing operations always use their retained plan
+and known outcome. Zero-funding exits skip empty funding-journal writes.
+Backend preparation also batches independent pool reads while keeping the
+reservation observation before the unused balance and all mutations sequential.
 Reconciliation reads the saved result and then queries ICPSwap directly; an
 unavailable pool read preserves the known protocol result with a diagnostic.
 
@@ -243,7 +266,7 @@ All persistent state stays app-local:
 All three production v1 schemas and their lock entries are retained exactly.
 The imported draft's additional fee cache is transient; it does not replace the
 released swap schema. Wallet fee observations refresh that cache, including a
-valid zero fee. Release 201 through 204 installations keep all three roots. Upgrades from
+valid zero fee. Release 201 through 205 installations keep all three roots. Upgrades from
 release 200 keep both original roots and initialize only the actions root.
 No fake migration, reinstall or reset is required.
 Historical public schema assets are pinned in `test/fixtures/history/200` for

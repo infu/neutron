@@ -2,10 +2,10 @@
  * and validates the pool in the durable backend before requesting funding.
  * Candid follows upstream v3.7.0, commit 94eeb92ad6ecc2713d38fd3bef48cd4f328a3513.
  */
-import { Actor, HttpAgent } from "@dfinity/agent";
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@icp-sdk/core/principal";
-import { ICPSWAP_FACTORY, ICPSWAP_QUERY_HOST, liquidityReadMethods } from "./liquidity_reads";
+import { ICPSWAP_FACTORY, liquidityReadMethods } from "./liquidity_reads";
+import { icpswapQuery } from "./ic_query";
 import type { SwapQuote, SwapRequest } from "./backend";
 
 const TokenIdl = IDL.Record({ address: IDL.Text, standard: IDL.Text });
@@ -41,28 +41,7 @@ export type SwapQuoteOptions = {
   decimalsIn: number; decimalsOut: number; feeIn?: bigint | undefined; feeOut?: bigint | undefined; signal?: AbortSignal | undefined;
 };
 
-let agentPromise: Promise<HttpAgent> | null = null;
-function queryAgent(): Promise<HttpAgent> {
-  if (!agentPromise) {
-    // Retain the SDK's verified subnet key cache between edits. Nonces prevent
-    // an identical amount refresh from reusing a gateway's old query reply.
-    agentPromise = HttpAgent.create({ host: ICPSWAP_QUERY_HOST, verifyQuerySignatures: true, useQueryNonces: true });
-    void agentPromise.catch(() => { agentPromise = null; });
-  }
-  return agentPromise;
-}
-const anonymousQuery: SwapQuoteQuery = async ({ canister, method, args, signal }) => {
-  signal.throwIfAborted();
-  const agent = await queryAgent();
-  signal.throwIfAborted();
-  const signature = swapQuoteMethods[method];
-  const actor = Actor.createActor<Record<string, (...args: unknown[]) => Promise<unknown>>>(() => IDL.Service({
-    [method]: IDL.Func(signature.args as [] | [IDL.Type, ...IDL.Type[]], [signature.output], ["query"]),
-  }), { agent, canisterId: canister });
-  const reply = await actor[method]!(...args);
-  signal.throwIfAborted();
-  return reply;
-};
+const anonymousQuery: SwapQuoteQuery = (request) => icpswapQuery({ ...request, signature: swapQuoteMethods[request.method] });
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}: expected record`);

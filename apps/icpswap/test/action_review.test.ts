@@ -96,4 +96,20 @@ describe("exact action reviews", () => {
     expect(review.position).toBe("Pool unused balance");
     expect(review.range).toBeNull();
   });
+
+  test.each(["claim", "decrease", "close"])("%s keeps sub-fee pool credit distinct from a Wallet payout", (kind) => {
+    const plan = { ...liquidity, funding0: "0", funding1: "0", expected_amount0: "429", expected_amount1: "10001",
+      request: { kind, position_id: "5090", liquidity: "186839601" } };
+    const review = buildActionReview({ operationId: ID, kind: "liquidity", input: { kind }, plan, metadata });
+    expect(review.expectedPoolAmountsGross).toEqual(["0.00000429 ICP", "0.010001 ckUSDC"]);
+    expect(review.estimatedWalletAmountsNet).toEqual(["0 ICP", "0.000001 ckUSDC"]);
+    expect((review.notes as string[]).some((note) => note.includes("0.00000429 ICP") && note.includes("stay in your pool balance"))).toBe(true);
+  });
+
+  test("missing transfer fee leaves the net estimate unavailable", () => {
+    const plan = { ...liquidity, funding0: "0", funding1: "0", fee0: null, expected_amount0: "429", expected_amount1: "0", request: { kind: "claim" } };
+    const review = buildActionReview({ operationId: ID, kind: "liquidity", input: {}, plan, metadata });
+    expect(review.estimatedWalletAmountsNet).toEqual(["Unavailable", "0 ckUSDC"]);
+    expect((review.notes as string[]).some((note) => note.includes("stay in your pool balance"))).toBe(false);
+  });
 });

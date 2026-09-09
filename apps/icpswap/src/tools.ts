@@ -21,6 +21,7 @@ import {
 } from "./api.ts";
 import { createBackendClient } from "./backend.ts";
 import { swapQuoteReader } from "./swap_quote.ts";
+import { swapQuoteOutputSchema } from "./quote_schema.ts";
 import { createRequestId } from "./funding.ts";
 import { readTokenInfo, type WalletTokenInfo } from "./wallet.ts";
 import { createLiquidityReadClient, type BrowserPoolView } from "./liquidity_reads.ts";
@@ -798,6 +799,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
     "icpswap_quote_swap",
     {
       title: "Quote an ICPSwap swap",
+      outputSchema: swapQuoteOutputSchema,
       description:
         "Query ICPSwap directly from the browser to compare direct pools and report expected net output, the gross pool minimum after slippage, price impact and observed ledger fees. This preview does not inspect allowances or establish account access. Use icpswap_swap_v1 to revalidate and execute a saved, reviewed swap.",
       inputSchema: {
@@ -847,6 +849,7 @@ export function registerTools(dependencies: ResearchToolDependencies): void {
       });
       return {
         source: "icpswap-pool",
+        version: 1,
         transport: "direct-canister-query",
         as_of: nowIso(),
         as_of_kind: "response_time",

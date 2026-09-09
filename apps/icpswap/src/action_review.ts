@@ -1,6 +1,7 @@
 import { isJsonObject, type JsonObject } from "neutron-tools/app";
 import { fromBaseUnits } from "./amount.ts";
 import { tickToPrice } from "./liquidity_math.ts";
+import { estimateLiquidityPayout } from "./liquidity_quote.ts";
 import type { WalletTokenInfo } from "./wallet.ts";
 
 export type ActionReviewInput = {
@@ -8,7 +9,7 @@ export type ActionReviewInput = {
   kind: "swap" | "liquidity";
   input: JsonObject;
   plan: JsonObject;
-  metadata: ReadonlyMap<string, WalletTokenInfo>;
+  metadata: ReadonlyMap<string, Pick<WalletTokenInfo, "ledger" | "symbol" | "decimals">>;
 };
 
 const UNAVAILABLE = "Unavailable";
@@ -33,9 +34,28 @@ function afterFee(amount: unknown, fee: unknown): string | null {
   return gross === null || cost === null ? null : (gross > cost ? gross - cost : 0n).toString();
 }
 
+/** Exit consent fixes the protocol request and costs. Output amounts, fee
+ * growth and spot price are observations, not liquidity slippage guarantees. */
+export function sameLiquidityExitTerms(approved: JsonObject, prepared: JsonObject): boolean {
+  const a = isJsonObject(approved.request) ? approved.request : null;
+  const b = isJsonObject(prepared.request) ? prepared.request : null;
+  if (!a || !b || !["decrease", "close", "claim", "withdraw"].includes(String(a.kind))) return false;
+  for (const key of ["pool", "kind", "position_id", "tick_lower", "tick_upper", "amount0", "amount1", "liquidity", "withdraw_token", "withdraw_amount"]) {
+    if (a[key] !== b[key]) return false;
+  }
+  for (const key of ["pool", "owner", "fee", "tick_spacing", "fee0", "fee1", "price_protection"]) {
+    if (approved[key] !== prepared[key]) return false;
+  }
+  for (const key of ["token0", "token1"]) {
+    const left = approved[key], right = prepared[key];
+    if (!isJsonObject(left) || !isJsonObject(right) || left.address !== right.address || left.standard !== right.standard) return false;
+  }
+  return [approved.funding0, approved.funding1, prepared.funding0, prepared.funding1].every((value) => nat(value) === 0n);
+}
+
 /** A compact review of the retained plan; formatting never rounds atomic amounts. */
 export function buildActionReview({ operationId, kind, input, plan, metadata }: ActionReviewInput): JsonObject {
-  const infoFor = (ledger: string | null): WalletTokenInfo | null => {
+  const infoFor = (ledger: string | null): Pick<WalletTokenInfo, "ledger" | "symbol" | "decimals"> | null => {
     const info = ledger === null ? undefined : metadata.get(ledger);
     return info && info.ledger === ledger && Number.isSafeInteger(info.decimals) && info.decimals >= 0 && info.decimals <= 255 && info.symbol.trim() !== "" ? info : null;
   };
@@ -89,7 +109,7 @@ export function buildActionReview({ operationId, kind, input, plan, metadata }: 
     "Payouts and refunds settle asynchronously. A successful protocol call does not confirm receipt in Wallet.",
   ];
   if (adding) notes.push("Token maximums cap position inputs. The pool may refund unused input asynchronously; check refunds and unused balances before reusing those funds.");
-  else if (operation !== "withdraw") notes.push("Expected pool amounts are gross of outgoing ledger fees; each payout is reduced by its token's transfer fee.");
+  else if (operation !== "withdraw") notes.push("Expected pool amounts are before transfer fees. Only amounts above the token's transfer fee can be sent to Wallet.");
 
   const funding: JsonObject[] = [];
   for (const [suffix, token, ledger] of [["0", token0, ledger0], ["1", token1, ledger1]] as const) {
@@ -136,6 +156,14 @@ export function buildActionReview({ operationId, kind, input, plan, metadata }: 
     notes.push("The withdrawal amount is gross; one outgoing ledger fee is deducted from the Wallet receipt.");
   } else {
     review.expectedPoolAmountsGross = [amount(plan.expected_amount0, ledger0), amount(plan.expected_amount1, ledger1)];
+    review.estimatedWalletAmountsNet = ["0", "1"].map((suffix) => {
+      const ledger = suffix === "0" ? ledger0 : ledger1;
+      const gross = nat(plan[`expected_amount${suffix}`]), fee = nat(plan[`fee${suffix}`]);
+      if (gross === null || fee === null) return UNAVAILABLE;
+      const payout = estimateLiquidityPayout(gross, fee);
+      if (payout.status === "retained_in_pool") notes.push(`${amount(gross.toString(), ledger)} is at or below the transfer fee. It would stay in your pool balance; no Wallet payout or transfer fee debit is expected for this token.`);
+      return amount(payout.net.toString(), ledger);
+    });
     if (operation === "decrease" || operation === "close") {
       const liquidity = nat(request.liquidity);
       review.liquidityToRemove = liquidity === null ? UNAVAILABLE : liquidity.toString();

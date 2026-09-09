@@ -64,6 +64,11 @@ persistent actor Self {
             public var overlappingSaved : ?Liquidity.Prepared = null;
             public var reads = 0;
             public var batches = 0;
+            public var batchMethods : [[Text]] = [];
+            public var failReadMethod = "";
+            public var shortReadBatch = false;
+            public var throwReadBatch = false;
+            public var reverseReadCompletion = false;
             var memory = Memory.init();
             var timestamp : Int = 100;
             func now() : Int { timestamp += 1; timestamp };
@@ -77,6 +82,9 @@ persistent actor Self {
             func response(request : Client.CallRequest) : async* Client.CallResult {
                 assert (request.cycles == 0);
                 methods := Array.concat(methods, [request.method]);
+                if (request.method == failReadMethod) {
+                    return #err({ code = "unavailable"; message = "Fixture read unavailable" });
+                };
                 if (request.method == "getPools") {
                     assert (request.canister == Client.swapFactoryPrincipal());
                     reads += 1;
@@ -234,8 +242,15 @@ persistent actor Self {
                 call = response;
                 call_batch = func(batch : [Client.CallRequest]) : async* [Client.CallResult] {
                     batches += 1;
-                    assert (batch.size() == 1);
-                    [await* response(batch[0])];
+                    batchMethods := Array.concat(batchMethods, [Array.map<Client.CallRequest, Text>(batch, func(request) { request.method })]);
+                    if (batch.size() == 1) return [await* response(batch[0])];
+                    assert (batch.size() == 6);
+                    if (throwReadBatch) throw Error.reject("Fixture batch unavailable");
+                    let requests = if (reverseReadCompletion) Array.reverse(batch) else batch;
+                    var replies : [Client.CallResult] = [];
+                    for (request in requests.vals()) replies := Array.concat(replies, [await* response(request)]);
+                    if (shortReadBatch) return [];
+                    if (reverseReadCompletion) Array.reverse(replies) else replies;
                 };
             };
             public var service = Liquidity.Service(calls, journal, now);
@@ -274,6 +289,58 @@ persistent actor Self {
         assert (failed(await* identity.service.preview({ mint with kind = "close"; position_id = ?404 })));
         assert (failed(await* identity.service.preview({ mint with tick_lower = -59 })));
         assert (identity.requests.size() == 0);
+
+        // A pool snapshot now takes three dependent rounds: canonical factory,
+        // independent pool reads, then the actual unused balance. The broker
+        // returns replies in request order even if remote completion differs.
+        let batched = Fixture();
+        batched.reverseReadCompletion := true;
+        let batchedPool = ok(await* batched.service.pool(mint.pool));
+        assert (batched.batches == 3 and batched.reads == 8);
+        assert (batched.batchMethods == [
+            ["getPools"],
+            ["metadata", "getCachedTokenFee", "getAvailabilityState", "getUserPositionsByPrincipal", "getUserWithdrawQueue", "getTransactionsByOwner"],
+            ["getUserUnusedBalance"],
+        ]);
+        assert (batchedPool.token0 == token0 and batchedPool.fee0 == 10000);
+        assert (batchedPool.positions[0].id == 7 and batchedPool.unused0 == 250000);
+        assert (batchedPool.protocol_diagnostics == "" and batched.requests.size() == 0);
+        let batchedClose = ok(await* batched.service.preview({ mint with kind = "close"; position_id = ?7 }));
+        assert (batched.batches == 7);
+        assert (batched.batchMethods[6] == ["getUserPosition"]);
+        assert (batchedClose.request.liquidity == position.liquidity);
+        assert (batched.requests.size() == 0);
+
+        // Every required pool read retains its failure semantics. A partial or
+        // lost batch must not produce a plan or reach unused balances/effects.
+        for (method in ["metadata", "getCachedTokenFee", "getAvailabilityState", "getUserPositionsByPrincipal", "getUserWithdrawQueue"].vals()) {
+            let unavailable = Fixture();
+            unavailable.failReadMethod := method;
+            assert (failed(await* unavailable.service.preview(mint)));
+            assert (unavailable.batches == 2 and unavailable.requests.size() == 0);
+            assert (unavailable.journal.list().size() == 0);
+        };
+        let shortBatch = Fixture();
+        shortBatch.shortReadBatch := true;
+        assert (failed(await* shortBatch.service.preview(mint)));
+        assert (shortBatch.batches == 2 and shortBatch.requests.size() == 0);
+        let lostBatch = Fixture();
+        lostBatch.throwReadBatch := true;
+        assert (failed(await* lostBatch.service.preview(mint)));
+        assert (lostBatch.batches == 2 and lostBatch.requests.size() == 0);
+
+        // Optional transaction diagnostics stay partial: queued balances remain
+        // reserved and may not suppress funding when transaction state is lost.
+        let partial = Fixture();
+        partial.advanceWithdrawal := true;
+        partial.unused0 := 100000;
+        partial.failReadMethod := "getTransactionsByOwner";
+        let partialPool = ok(await* partial.service.pool(mint.pool));
+        assert (Text.contains(partialPool.protocol_diagnostics, #text("Fixture read unavailable")));
+        assert (partialPool.reserved0 == 100000 and partialPool.unused0 == 100000);
+        assert (failed(await* partial.service.preview(mint)));
+        let partialClose = ok(await* partial.service.preview({ mint with kind = "close"; position_id = ?7 }));
+        assert (partialClose.request.liquidity == position.liquidity and partial.requests.size() == 0);
 
         // The owner list stores owed amounts without refreshing fee growth.
         // Zero stored fees must carry a noncurrent reason, while the existing

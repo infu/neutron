@@ -60,6 +60,8 @@ const names: Record<string, string> = {
   amountOutMinimum: "Minimum received", amountIn: "Input amount", positionId: "Position", liquidity: "Liquidity",
   tickLower: "Lower tick", tickUpper: "Upper tick", range: "Price range", feeTier: "Pool fee", account: "Owner account",
   totalDebit: "Maximum wallet debit", funding: "Funding steps", fundingSteps: "Funding steps", fundingRequests: "Funding requests",
+  expectedPoolAmountsGross: "Before transfer fees", estimatedWalletAmountsNet: "Estimated in Wallet",
+  expectedOutputNet: "Estimated in Wallet", liquidityToRemove: "Liquidity removed",
 };
 function label(key: string): string { return names[key] ?? key.replaceAll("_", " ").replace(/([a-z])([A-Z])/gu, "$1 $2").replace(/^./u, (value) => value.toUpperCase()); }
 function valueText(value: unknown): string {
