@@ -54,7 +54,7 @@ Authorization, and records the unmodified gateway response in
 and omits Authorization from its allow list. Production preflight checks must
 therefore be recorded separately; they cannot be inferred from this gate.
 
-The current default archive pins are Kernel 359 and Marketplace 111. For new
+The current default archive pins are Kernel 359 and Marketplace 112. For new
 release candidates, provide `--version`, `--sha256`, `--kernel-version` and
 `--kernel-sha256`; archives remain unchanged. Add `--custom-target` to exercise
 the separately selected protocol case, where a real runtime permission request

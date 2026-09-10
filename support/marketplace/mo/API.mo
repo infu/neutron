@@ -32,6 +32,9 @@ module {
     screenshotArtifacts : [Nat64];
     ratingCount : Nat;
     ratingTotal : Nat;
+    // Lifetime distinct Neutron acquisitions, separated by the price paid then.
+    // Optional for clients that also read older protocol releases.
+    acquisitionCounts : ?{ free : Nat; paid : Nat };
     owned : Bool;
     visible : Bool;
   };

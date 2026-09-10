@@ -74,10 +74,10 @@ Publication to both sources is verified. Existing users choose
 **Settings → Upgrade all**. The compatible Kernel and app transition updates
 preserve installed state and switch their normal update source to the
 marketplace. Users then install
-[Marketplace version 111](https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/packages/e2f861cc3147ed0933216730999d5f74272a988a1e63fb3470faf64d687931be.neutron)
+[Marketplace version 112](https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/packages/6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21.neutron)
 separately; publishing does not add that app automatically. This public package
 was verified by publication postflight with SHA-256
-`e2f861cc3147ed0933216730999d5f74272a988a1e63fb3470faf64d687931be`.
+`6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21`.
 
 No existing Neutron has been upgraded by this deployment record. No Dispenser
 starter change or Git push is included. The missing burn-service destinations
@@ -115,8 +115,8 @@ was installed or reinstalled by these tests or by publication.
 The protocol was upgraded in place to Wasm
 `2bde4755ae504b96706c48b752daa681a19a5b0aa302da764c41529c00789143`
 using `icp --mode upgrade --wasm-memory-persistence keep`. Its running module
-and unchanged controllers were verified afterward. This is the current protocol
-module; the initial deployment above remains historical evidence.
+and unchanged controllers were verified afterward. This module was subsequently
+upgraded for the acquisition-count response described below.
 
 The upgrade exposes the existing `Vary` header to browser clients and rebuilds
 the affected certified responses. Database roots and Candid remain unchanged.
@@ -164,3 +164,75 @@ All managed-memory schema and migration sources and lock lineages are unchanged.
 The emitted, unpublished Kernel 357/358 and Marketplace 110 archives remain
 preserved. Publication does not install into an existing production Neutron;
 the old source and Dispenser starter were not changed.
+
+
+## Marketplace 112 storefront and acquisition counts
+
+Marketplace batch **4** publishes only Marketplace 112. Request:
+`3aaa08ffb9c29f311b22402e2b1e15e85cb8edd7809c7854325d371657f34ee1`.
+The receipt-v2 postflight verifies all 27 selected packages and offered sources
+against the frozen review; the other 26 releases, including Kernel 359, are
+unchanged. The identical repeated publication returned `batch_id: null`; all
+27 packages and offered sources were verified `unchanged` with their exact
+versions, paths, sizes and SHA-256 digests.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Marketplace 112 | 476,452 | `6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21` |
+| Offered source | 1,744,271 | `1cce57d3b5d886d8f2aa0c2c194a93f8435274dbfa29e0937368fcdd5bfd0857` |
+
+The storefront removes its connection settings, ranking-refresh notice and
+obsolete installation status box. The existing Install control still recovers
+a canceled or interrupted selection using its saved request. Financial operation
+recovery remains available. Cards and details show lifetime purchases for paid
+apps and acquisitions for free apps, without counting reinstalls or retries.
+
+The protocol was upgraded in place, retaining Wasm memory, to
+`26feaa471ee6fbd2c86afffd6de80448f3e0c60ba8dc6dd11068b07540699c00`.
+The running module and unchanged controllers were checked after deployment.
+Public app responses now include optional acquisition counts from the existing
+lifetime counters. Persistent schema and stable types are unchanged. An exact
+upgrade from the previous production module retained historical counts,
+ownership, orders and audits; repeated acquisition and installation preparation
+did not increment counts or ledger effects. Production public reads verified
+these fields after deployment.
+
+Focused validation passed: complete Marketplace packaging and typecheck,
+backend memory initialization/restoration, three count/compatibility cases,
+nine protocol domain cases, the exact deployed-module upgrade case, and the
+storefront and installation-recovery browser suites. Browser checks covered
+compact and wide layouts, accurate installation handoff, cancellation/retry,
+financial recovery, hidden settings/notices and count formatting. The complete
+Kernel and installed-browser qualification suites were not rerun for this
+follow-up, as requested. No app memory schema or migration lineage changed.
+
+
+## First-party icons and screenshots
+
+The reviewed [media selection](../catalog/first-party-media.json) publishes
+24 existing app icons and 40 screenshots, totaling 2,838,676 bytes. Request:
+`598c7293e6f519c6d917a343b4370027bd57888c51e3ead8279ae2b6fcb22291`.
+All 24 listings were updated and their public images verified through certified
+HTTP against the selected MIME types, sizes and SHA-256 digests. The retained
+listing owner, title, description, price, visibility, approved candidate and
+package version matched the pre-publication review. No package changed during
+media publication. Future ordinary package publication preserves attached media.
+
+Screenshots show the current app UIs with local demo content; no private user
+accounts or production financial actions were used for capture. DeFi and social
+apps include compact tile examples. Kernel and Marketplace remain excluded from
+the storefront; the tools-only Blast app has no UI or existing icon to capture.
+
+The media publisher passed 11 focused retry/preservation tests and 12 existing
+transport tests. Its journal retains exact requests and upload responses for
+interruption recovery. Repeating the exact media publication verified all 24
+listings `unchanged`, with `updateCalls: 0`, and reread all 64 image files through
+certified HTTP. A final browser check of the current UI with production public
+queries loaded all 25 storefront apps, decoded all 24 published icons, and
+verified Wallet/Aave screenshot galleries and readable counts at 380px and
+1200px without overflow or page errors. All 33 observed external responses
+were HTTP 200; no update or financial calls were made. The release record
+retains the exact file and browser evidence.
+
+These updates do not install apps into existing production Neutrons. The legacy
+source and Dispenser starter are unchanged, and no Git push is included.

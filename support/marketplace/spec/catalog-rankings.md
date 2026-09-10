@@ -31,6 +31,15 @@ durable `(Neutron, appId)` acquisition, not browser identity or payment-call cou
 This counts Neutrons, not independently verified humans; no anti-Sybil policy is
 implied.
 
+Catalog, app-detail, library and publisher app records include optional
+`acquisitionCounts: { free, paid }`, the exact lifetime counts for each acquisition
+kind. Current releases always return it; absence means an older protocol, not
+zero sales. These totals do not depend on the selected ranking window or its
+snapshot time. The app displays paid acquisitions as purchases and free
+acquisitions separately; a price change never relabels previous free claims as
+purchases. Counts come from the existing per-app totals without additional
+browser calls or a purchase-history scan.
+
 ## Tables and indexes
 
 | Table | Purpose and keys |

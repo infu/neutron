@@ -155,6 +155,38 @@ persistent actor {
     });
   };
 
+  public func public_views_keep_lifetime_free_and_paid_acquisitions_distinct() : async Test.Metrics {
+    Test.test(func() {
+      let memory = Fixtures.memory();
+      let db = Store.Use(memory);
+      ignore Fixtures.draft(db, "countedapp", 0);
+      let published = Fixtures.approve(db, Fixtures.candidate(db, "countedapp", 100, "counted-package"), "counted-audit");
+      assert Views.app(db, Fixtures.owner(), null, published.app).acquisitionCounts == ?{ free = 0; paid = 0 };
+      let free : Types.CreateAcquisition = { owner = Fixtures.other(); appId = "countedapp"; orderId = 1; kind = #free; atNs = 10; paidAtoms = 0; ledger = null; block = null };
+      let first = Rankings.recordAcquisition(db, free);
+      ignore Fixtures.stored(Store.insertEntitlement(db, { owner = free.owner; appId = free.appId; orderId = free.orderId; kind = free.kind; acquiredAtNs = free.atNs }));
+      let paidApp = Fixtures.ok(Catalog.save(db, Fixtures.owner(), Fixtures.listing("countedapp", 1_000_000, ?published.app.revision), 11));
+      let paid : Types.CreateAcquisition = { free with owner = Fixtures.owner(); orderId = 2; kind = #paid; atNs = 12; paidAtoms = 1_000_000; ledger = ?Fixtures.auditor(); block = ?123 };
+      ignore Rankings.recordAcquisition(db, paid);
+      assert Rankings.recordAcquisition(db, { free with orderId = 3; kind = #paid; paidAtoms = 1_000_000 }) == first;
+      ignore Rankings.advance(db, 13, 10);
+      let #ok(catalog) = Views.catalog(db, Fixtures.owner(), null, { search = ""; tier = #paid; window = #all; cursor = null; limit = 10 }, 13) else { assert false; loop {} };
+      assert catalog.apps.size() == 1 and catalog.apps[0].acquisitionCounts == ?{ free = 1; paid = 1 };
+      let #ok(detail) = Views.detail(db, Fixtures.owner(), null, paidApp.appId) else { assert false; loop {} };
+      assert detail.app.acquisitionCounts == ?{ free = 1; paid = 1 };
+      let #ok(library) = Views.library(db, Fixtures.owner(), free.owner, { cursor = null; limit = 10 }) else { assert false; loop {} };
+      assert library.apps.size() == 1 and library.apps[0].acquisitionCounts == ?{ free = 1; paid = 1 };
+      let #ok(publisher) = Views.publisherApps(db, Fixtures.owner(), Fixtures.owner(), { cursor = null; limit = 10 }) else { assert false; loop {} };
+      assert publisher.apps.size() == 1 and publisher.apps[0].acquisitionCounts == ?{ free = 1; paid = 1 };
+      ignore Rankings.advance(db, Rankings.monthNs + 13, 10);
+      let restored = Store.Use(memory);
+      let ?ranking = Store.getRanking(restored, paidApp.appId) else { assert false; loop {} };
+      assert ranking.paid30 == 0 and ranking.free30 == 0;
+      assert Views.app(restored, Fixtures.owner(), null, paidApp).acquisitionCounts == ?{ free = 1; paid = 1 };
+      assert restored.acquisitions.size() == 2;
+    });
+  };
+
   public func private_library_and_earnings_preserve_revoked_ownership() : async Test.Metrics {
     Test.test(func() {
       let db = Store.Use(Fixtures.memory());

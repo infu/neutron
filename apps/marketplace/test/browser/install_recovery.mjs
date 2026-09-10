@@ -32,7 +32,7 @@ const setupUrl=latest=>'https://'+owner+'.icp0.io/#repo='+canisterId+'&manifest=
 if(failureMode==='revoked'){state.saved={quote:quote(['editor'],originalId),setupUrl:setupUrl(false),opened:false};state.retained[originalId]=state.saved;}
 const readyQuote=saved=>({...saved.quote,setupUrl:saved.setupUrl,cycles:{...saved.quote.cycles,total:'0',processing:'0'},fee:{...saved.quote.fee,processingCycles:'0',totalCycles:'0',processingBytes:'0'}});
 const savedQuote=saved=>saved.setupUrl?readyQuote(saved):({...saved.quote,...(saved.unavailableReason?{unavailableReason:saved.unavailableReason}:{})});
-const operation=saved=>({operationId:saved.quote.operationId,appIds:saved.quote.appIds,state:saved.unavailableReason?'failed':'pending',nextAction:'resume',message:saved.unavailableReason|| (saved.setupUrl?'The original installation is ready. Open its installer.':'The original preparation reply was interrupted. Continue this saved request.'),installation:savedQuote(saved)});
+const operation=saved=>({operationId:saved.quote.operationId,appIds:saved.quote.appIds,state:saved.unavailableReason?'failed':'pending',nextAction:'resume',message:saved.unavailableReason|| (saved.opened?'The package review was opened. This is not an installation receipt. Reopen this saved selection if the review was closed; its prepared download access is retained.':saved.setupUrl?'The original installation is ready. Open its installer.':'The original preparation reply was interrupted. Continue this saved request.'),installation:savedQuote(saved)});
 function result(value){state.publicResults.push(structuredClone(value));return {resultJson:JSON.stringify(value)}}
 function prepared(saved){const handoff={url:saved.setupUrl,appIds:saved.quote.appIds,access:{source:canisterId,token:'private-install-token',paths:['/packages/editor.v0.0.1.neutron']}};return {resultJson:JSON.stringify({result:operation(saved),handoff})}}
 window.marketplaceTransport={async callTool(call){
@@ -50,10 +50,10 @@ window.marketplaceTransport={async callTool(call){
  if(method==='catalog')return Promise.resolve(result(page(args.tier==='free'?[app]:[])));
  if(method==='library')return Promise.resolve(result(page([{...app,installedVersion:state.installed?'101':null}])));
  if(method==='detail')return Promise.resolve(result(app));
- if(method==='recentOperations')return Promise.resolve(result(state.saved&&!state.saved.opened?[operation(state.saved)]:[]));
+ if(method==='recentOperations')return Promise.resolve(result(state.saved?[operation(state.saved)]:[]));
  if(method==='operation')return Promise.resolve(result(operation(state.saved)));
  if(method==='quoteInstallation'){
-  const saved=args.operationId?(state.retained[args.operationId]??(state.saved?.quote.operationId===args.operationId?state.saved:null)):state.saved&&!state.saved.opened&&JSON.stringify(state.saved.quote.appIds)===JSON.stringify(args.appIds)?state.saved:null;
+  const saved=args.operationId?(state.retained[args.operationId]??(state.saved?.quote.operationId===args.operationId?state.saved:null)):state.saved&&JSON.stringify(state.saved.quote.appIds)===JSON.stringify(args.appIds)?state.saved:null;
   const value=saved?savedQuote(saved):quote(args.appIds,args.operationId||originalId);
   if(latestMode&&args.operationId&&args.operationId!==originalId&&!state.latestIds.includes(args.operationId))state.latestIds.push(args.operationId);
   state.quotes.push({requested:args.operationId??null,returned:value.operationId,ready:!!value.setupUrl});
@@ -82,8 +82,8 @@ window.marketplaceTransport={async callTool(call){
   return prepared(state.saved);
  }
  if(method==='installationOpened'){
-  state.opened.push(args);state.saved.opened=true;state.installed=true;
-  return Promise.resolve(result({operationId:state.saved.quote.operationId,appIds:state.saved.quote.appIds,state:'complete',nextAction:'none',message:'Installer opened.'}));
+  state.opened.push(args);state.saved.opened=true;
+  return Promise.resolve(result(operation(state.saved)));
  }
  return Promise.reject(Error('Unexpected background method '+method));
 }};
@@ -126,7 +126,31 @@ try {
   assert.equal(JSON.stringify(successful.calls).includes("private-install-token"), false, "public background requests must not receive private access tokens");
   assert.equal((await page.locator("body").innerText()).includes("private-install-token"), false);
   assert.equal(await page.getByRole("button", { name: "Open installer", exact: true }).count(), 0, "no second install click is required after successful preparation");
-  checks.push("One Install click prepares and opens the generic manifest installer after asynchronous work; the access token stays confined to the private handoff.");
+  assert.equal(await page.locator('.mp-operation').count(), 0);
+  assert.equal(await page.getByText("Saved request", { exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "View saved progress", exact: true }).count(), 0);
+  assert.equal(await page.evaluate(() => window.installRecovery.installed), false, "presented does not mean installed");
+  assert.equal(await page.getByLabel("Select Canvas Studio", { exact: true }).isEnabled(), true);
+  await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await page.getByRole("button", { name: "My Apps", exact: true }).click();
+  const pendingRow = page.locator('.mp-library-row');
+  await pendingRow.getByRole("button", { name: "Install", exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-operation').count(), 0, "retained pending handoffs must not return as saved-action cards after remount");
+  await pendingRow.getByRole("button", { name: "Install", exact: true }).click();
+  await page.waitForFunction(() => window.installRecovery.opened.length === 2);
+  const reopened = await page.evaluate(() => ({ preparations:window.installRecovery.preparations,offers:window.installRecovery.offers,saved:window.installRecovery.saved,installed:window.installRecovery.installed }));
+  assert.deepEqual(reopened.preparations, ["1".padStart(32,"0"), "1".padStart(32,"0")]);
+  assert.deepEqual(reopened.offers[1].call.arguments, reopened.offers[0].call.arguments, "cancel/retry must reuse the exact private handoff");
+  assert.equal(reopened.installed, false);
+  assert.equal(await page.locator('.mp-operation').count(), 0);
+  await page.evaluate(() => { window.installRecovery.installed = true; });
+  await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
+  await pendingRow.getByText("Installed · Up to date", { exact: true }).waitFor();
+  assert.equal(await pendingRow.getByRole("button", { name: "Installed", exact: true }).isDisabled(), true);
+  assert.equal(await page.locator('.mp-operation').count(), 0, "installed apps must not retain a stale install banner");
+  assert.equal(await page.getByText("Saved request", { exact: true }).count(), 0);
+  await page.screenshot({ path: join(output, "installed-without-banner.png") });
+  checks.push("One Install click opens the generic review with private access confined to the handoff; canceled reviews reuse the saved request after remount without banners, and only a confirmed library read marks the app installed.");
   for (const mode of ["ready", "unknown"]) {
     await page.goto(`${url}/?failure=${mode}`);
     await page.getByRole("button", { name: "My Apps", exact: true }).click();
@@ -139,6 +163,7 @@ try {
     await page.getByRole("button", { name: "Explore", exact: true }).click();
     await page.getByRole("button", { name: "My Apps", exact: true }).click();
     await page.waitForFunction(() => window.installRecovery.quotes.length >= 2);
+    assert.equal(await page.locator(".mp-operation").count(), 0, "interrupted installs recover through the library control without duplicate cards");
     const recovered = await page.evaluate(() => window.installRecovery.quotes.at(-1));
     assert.equal(recovered.returned, original, "remount must recover the existing durable identity");
     const resume = page.locator(".mp-library-row").getByRole("button", { name: "Install", exact: true });

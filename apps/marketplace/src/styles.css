@@ -62,6 +62,8 @@
   .mp-card-category { color: var(--mp-muted); font-size: 11px; }
   .mp-card-summary { font-size: 11px; color: #acb1be; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mp-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 13px; }
+  .mp-card-metrics { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .mp-acquisitions { color: var(--mp-muted); font-size: 11px; overflow-wrap: anywhere; }
   .mp-rating { color: var(--mp-muted); font-size: 11px; }
   .mp-rating small { color: #687080; font-size: 10px; }
   .mp-get-button { border: 0; border-radius: 20px; color: var(--nt-accent); background: #2c263c; padding: 5px 13px; min-width: 62px; font-size: 12px !important; font-weight: 600 !important; white-space: nowrap; }
@@ -124,7 +126,7 @@
   .mp-detail-hero { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; }
   .mp-detail-hero h2 { font-size: 28px; margin: 3px 0 5px; }
   .mp-detail-hero p { color: #b0b5c1; }
-  .mp-detail-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 24px; border-block: 1px solid var(--mp-line); padding-block: 15px; }
+  .mp-detail-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); margin-bottom: 24px; border-block: 1px solid var(--mp-line); padding-block: 15px; }
   .mp-detail-stats > div { padding-inline: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
   .mp-detail-stats > div + div { border-left: 1px solid var(--mp-line); }
   .mp-detail-stats strong { font-size: 17px; font-weight: 600; color: #c9c4d5; overflow-wrap: anywhere; max-width: 100%; }
@@ -175,9 +177,6 @@
   .mp-cost-detail > summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 11px; }
   .mp-cost-detail > summary strong { font-weight: 500; text-align: right; }
   .mp-cost-detail[open] .mp-facts { margin-block: 12px; }
-  .mp-account-card { padding: 14px; background: #1d1a28; border: 1px solid #353043; border-radius: 9px; display: flex; flex-direction: column; gap: 5px; }
-  .mp-account-card strong { font-size: 13px; font-family: var(--nt-font-mono); }
-  .mp-account-card p { color: var(--mp-muted); font-size: 11px; }
   .mp-referral-card { background: radial-gradient(at top right, #332944, transparent 65%), #181520; border: 1px solid #413450; border-radius: var(--mp-radius); padding: 22px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
   .mp-referral-card h3 { font-size: 22px; letter-spacing: -.03em; }
   .mp-referral-card p { color: #b1a7c0; font-size: 12px; max-width: 540px; }

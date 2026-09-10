@@ -60,7 +60,7 @@ export async function configured(context: MsgBusToolContext, input: { canisterId
 export async function protocolClient(context: MsgBusToolContext) {
   const generation = clientGeneration;
   const state = await currentState(context);
-  if (!state.canisterId) throw new Error("Connect this app to the marketplace protocol in Settings.");
+  if (!state.canisterId) throw new Error("Marketplace configuration is unavailable. Update the app and retry setup.");
   const key = `${state.host}:${state.canisterId}:${state.revision}:${browserReadIdentity?.getPrincipal().toText() ?? "legacy"}`;
   if (!agentCache || agentCache.key !== key) agentCache = { key, agent: await makeAgent(state, browserReadIdentity ?? (state.seed ? Ed25519KeyIdentity.generate(state.seed) : undefined)) };
   const transport = makeTransport({ canisterId: state.canisterId, agent: agentCache.agent, contract: CONTRACT, kernel: context.kernel });
@@ -121,7 +121,8 @@ export async function protocolClient(context: MsgBusToolContext) {
   }
   function listing(value: WireApp): AppListing {
     const icon = first(value.iconUrl);
-    return { id: value.appId, title: value.title, summary: value.summary, category: "Apps", publisher: value.publisher.toText(), priceUsdMicros: String(value.priceUsdMicros), ...(icon ? { iconUrl: artifactUrl(icon) } : {}), version: String(first(value.version) ?? 0n), rating: value.ratingCount ? Number(value.ratingTotal) / Number(value.ratingCount) : null, ratingCount: Number(value.ratingCount), owned: value.owned };
+    const counts = first(value.acquisitionCounts ?? []);
+    return { id: value.appId, title: value.title, summary: value.summary, category: "Apps", publisher: value.publisher.toText(), priceUsdMicros: String(value.priceUsdMicros), ...(icon ? { iconUrl: artifactUrl(icon) } : {}), version: String(first(value.version) ?? 0n), rating: value.ratingCount ? Number(value.ratingTotal) / Number(value.ratingCount) : null, ratingCount: Number(value.ratingCount), ...(counts ? { freeAcquisitions: String(counts.free), paidPurchases: String(counts.paid) } : {}), owned: value.owned };
   }
   async function detailWire(appId: string): Promise<Detail> { return query("app_detail", [appId]); }
   async function detail(appId: string): Promise<AppDetail> {
@@ -241,7 +242,7 @@ async function ensureConnection(context: MsgBusToolContext, restoreRevoked: bool
     const promise = (async () => {
       const state = await currentState(context);
       checkCurrent();
-      if (!state.canisterId) throw new Error("Choose a marketplace in Settings.");
+      if (!state.canisterId) throw new Error("Marketplace configuration is unavailable. Update the app and retry setup.");
       const identity = state.seed ? { state, identity: Ed25519KeyIdentity.generate(state.seed) } : await readIdentity(context.kernel);
       checkCurrent();
       savedState = identity.state;

@@ -75,7 +75,8 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
     referralTerms: { version: 1n, discountBps: 1000n, affiliateBps: 3000n, developerBps: 3000n },
   });
   const app = (appId: string): WireApp => ({ appId, title: appId, summary: `${appId} summary`, description: `${appId} description`, publisher: OWNER,
-    priceUsdMicros: 0n, revision: 1n, version: [101n], iconUrl: [], screenshots: [], iconArtifact: [], screenshotArtifacts: [], ratingCount: 0n, ratingTotal: 0n, owned: false, visible: true });
+    priceUsdMicros: 0n, revision: 1n, version: [101n], iconUrl: [], screenshots: [], iconArtifact: [], screenshotArtifacts: [], ratingCount: 0n, ratingTotal: 0n,
+    ...(appId === "notes" ? { acquisitionCounts: [{ free: 9007199254740993n, paid: 7n }] as [{ free: bigint; paid: bigint }] } : {}), owned: false, visible: true });
   const actualTransport = await import("../src/transport.ts");
   mock.module("../src/transport.ts", () => ({
     ...actualTransport,
@@ -258,6 +259,9 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
     const client = await protocolClient(context());
     const page = await client.catalog({ tier: "free", window: "month", search: "" });
     expect(page.items.map(app => app.id)).toEqual(["notes", "wallet"]);
+    expect(page.items[0]).toMatchObject({ freeAcquisitions: "9007199254740993", paidPurchases: "7" });
+    expect(page.items[1].freeAcquisitions).toBeUndefined();
+    expect(page.items[1].paidPurchases).toBeUndefined();
     expect(page.nextCursor).toBe('{"generation":"3","offset":"24"}');
     await client.catalog({ tier: "free", window: "month", search: "", cursor: page.nextCursor! });
     expect(calls.queries.at(-1)).toMatchObject({ method: "catalog_query", args: [{ cursor: [{ generation: 3n, offset: 24n }], tier: { free: null }, window: { month: null } }] });

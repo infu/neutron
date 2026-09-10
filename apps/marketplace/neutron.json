@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 111,
+  "version": 112,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",

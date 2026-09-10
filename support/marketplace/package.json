@@ -22,12 +22,13 @@
     "icp:install": "icp canister install marketplace --mode install --wasm build/marketplace.wasm",
     "icp:upgrade": "icp canister install marketplace --mode upgrade --wasm-memory-persistence keep --wasm build/marketplace.wasm",
     "icp:status": "icp canister status marketplace --json",
-    "test:unit": "bun test ./scripts/build-init.test.ts ./test/storage-inputs.test.ts ./test/public-candid.test.ts ./scripts/operator.test.ts ./scripts/publisher.test.ts ./scripts/migration-inventory.test.ts ./scripts/first-party-publish.test.ts ./scripts/first-party-transport.test.ts",
+    "test:unit": "bun test ./scripts/build-init.test.ts ./test/storage-inputs.test.ts ./test/public-candid.test.ts ./scripts/operator.test.ts ./scripts/publisher.test.ts ./scripts/migration-inventory.test.ts ./scripts/first-party-publish.test.ts ./scripts/first-party-transport.test.ts ./scripts/publish-media.test.ts",
     "operator": "bun scripts/operator.ts",
     "publish:prepare": "bun scripts/publisher.ts",
     "migration:plan": "bun scripts/migration-inventory.ts",
     "production:review": "bun scripts/publish-catalog.ts",
-    "production:publish": "bun scripts/publish-catalog.ts --execute"
+    "production:publish": "bun scripts/publish-catalog.ts --execute",
+    "publish:media": "bun scripts/publish-media.ts"
   },
   "dependencies": {
     "neutron-scripts": "^1.1.0"

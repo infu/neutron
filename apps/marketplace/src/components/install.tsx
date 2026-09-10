@@ -3,7 +3,7 @@ import type { InstallationQuote, MarketplaceClient } from "../view-types.ts";
 import { ErrorNote, Icon, errorMessage, useRead } from "./primitives.tsx";
 
 /** Installation's protocol fee is reviewed on the existing Install control. */
-export function InstallControl({ client, appIds, disabled = false, busy = false, label = "Install", onInstall, className = "mp-secondary", preparedQuote }: {
+export function InstallControl({ client, appIds, disabled = false, busy = false, label = "Install", onInstall, className = "mp-secondary" }: {
   client: MarketplaceClient;
   appIds: string[];
   disabled?: boolean;
@@ -11,20 +11,16 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   label?: string;
   onInstall: (ids: string[], quote: InstallationQuote) => Promise<void> | void;
   className?: string;
-  /** A saved selection resumes the original installation request. */
-  preparedQuote?: InstallationQuote | undefined;
 }) {
   const [revision, setRevision] = useState(0);
   const [dispatchBusy, setDispatchBusy] = useState(false);
   const [failure, setFailure] = useState<{ key: string; error: string } | null>(null);
   const dispatching = useRef(false);
   const selection = JSON.stringify(appIds);
-  const initial = preparedQuote?.setupUrl && JSON.stringify(preparedQuote.appIds) === selection ? preparedQuote : undefined;
-  const retained = useRef<{ selection: string; operationId?: string }>({ selection, ...(initial ? { operationId: initial.operationId } : {}) });
+  const retained = useRef<{ selection: string; operationId?: string }>({ selection });
   if (retained.current.selection !== selection) retained.current = { selection };
   const key = !disabled && appIds.length ? JSON.stringify([selection, revision]) : null;
-  const usePrepared = revision === 0 && initial?.operationId === retained.current.operationId && !!initial?.sourceAccess;
-  const read = useRead(usePrepared ? null : key, async () => {
+  const read = useRead(key, async () => {
     const requested = [...appIds];
     const identity = retained.current;
     const operationId = identity.operationId;
@@ -36,9 +32,9 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
     return quote;
   });
   const dispatchError = failure?.key === key ? failure.error : "";
-  const quote = read.error || read.loading || dispatchError ? null : usePrepared ? initial : read.data;
+  const quote = read.error || read.loading || dispatchError ? null : read.data;
   const working = busy || dispatchBusy;
-  const hasPreparedSelection = !!(usePrepared ? initial?.setupUrl : read.data?.setupUrl);
+  const hasPreparedSelection = !!read.data?.setupUrl;
   const unavailableReason = read.data?.unavailableReason;
   const canPrepareLatest = hasPreparedSelection || !!unavailableReason;
   function prepareLatest() {

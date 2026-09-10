@@ -21,7 +21,7 @@ import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const principal='3rurp-vyaaa-aaaay-aacua-cai';
 const scenario=new URL(location.href).searchParams;
-const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[]};
+const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[],installations:[]};
 const entries=[
  ['notes','Quiet Notes','A little space for your biggest ideas.','0'],
  ['garden','Garden','A clearer view of your day.','0'],
@@ -30,7 +30,7 @@ const entries=[
  ['focus','Focus','A considered space for your best work.','1999999'],
  ['folio','Folio','Your portfolio, beautifully in view.','5000000'],
 ];
-const listing=([id,title,summary,priceUsdMicros])=>({id,title,summary,priceUsdMicros,category:'Productivity',publisher:principal,version:'3',rating:id==='studio'?null:4.8,ratingCount:id==='studio'?0:42,owned:state.owned.includes(id)});
+const listing=([id,title,summary,priceUsdMicros])=>({id,title,summary,priceUsdMicros,category:'Productivity',publisher:principal,version:'3',rating:id==='studio'?null:4.8,ratingCount:id==='studio'?0:42,owned:state.owned.includes(id),freeAcquisitions:priceUsdMicros==='0'?'42':'0',paidPurchases:priceUsdMicros==='0'?'0':'1234'});
 const money=atoms=>({atoms,decimals:6,symbol:'ckUSDC'});
 const cycles={total:'1100000',processing:'1100000',schedule:'fixed-v1'};
 const quote=(args)=>{
@@ -38,9 +38,10 @@ const quote=(args)=>{
  return {operationId:dependency?'22222222222222222222222222222222':'0123456789abcdef0123456789abcdef',commitment:dependency?'free-root-paid-dependency':'exact-reviewed-quote',appIds:args.appIds,items:entries.filter(x=>args.appIds.includes(x[0])||(dependency&&x[0]==='folio')).map(listing),token:args.token,subtotalUsdMicros:dependency?'5000000':'10000000',discountUsdMicros:dependency?'0':args.affiliateCode?'1000000':'0',payment:money(dependency?'5000000':args.affiliateCode?'9000000':'10000000'),approvalFee:money('10000'),collectionFee:money('10000'),totalDebit:money(dependency?'5020000':args.affiliateCode?'9020000':'10020000'),allocations:dependency?[{kind:'developer',principal,amount:money('1500000')},{kind:'burn',principal:null,amount:money('3500000')}]:[{kind:'developer',principal,amount:money('2700000')},{kind:'affiliate',principal:'aaaaa-aa',amount:money('2700000')},{kind:'burn',principal:null,amount:money('3600000')}],cycles,affiliateCode:args.affiliateCode,warnings:[],opaque:{immutable:true}};
 };
 const session={configured:true,canisterId:'aaaaa-aa',host:'https://icp-api.io',account:principal,connected:true};
+const installResult=quote=>({operationId:quote.operationId,appIds:quote.appIds,state:'pending',nextAction:'resume',installation:quote,message:'The package review was opened. This is not an installation receipt. Reopen this saved selection if the review was closed; its prepared download access is retained.'});
 const client={
  initialize:async()=>{state.initializations++;if(scenario.get('setup')==='fatal'&&state.initializations===1)throw Error('Neutron is temporarily unavailable.');if(scenario.get('setup')==='delegate')return {...session,connected:false,connectionError:'Read access could not be prepared.'};return session;},configure:async x=>({...session,...x}),connect:async()=>{state.connections++;return session;},
- catalog:async input=>{state.calls.push(['catalog',input]);if(scenario.get('catalog')==='paid-error'&&input.tier==='paid'&&!state.paidReadFailed){state.paidReadFailed=true;throw Error('Paid charts are temporarily unavailable.');}const matches=entries.filter(x=>(input.tier==='free'?x[3]==='0':x[3]!=='0')&&x[1].toLowerCase().includes(input.search.toLowerCase()));const paged=scenario.get('catalog')==='paged';return {items:(paged?(input.cursor?matches.slice(1):matches.slice(0,1)):matches).map(listing),nextCursor:paged&&!input.cursor&&matches.length>1?input.tier+'-next':null,asOf:'2026-09-10T00:00:00Z'}},
+ catalog:async input=>{state.calls.push(['catalog',input]);if(scenario.get('catalog')==='paid-error'&&input.tier==='paid'&&!state.paidReadFailed){state.paidReadFailed=true;throw Error('Paid charts are temporarily unavailable.');}const matches=entries.filter(x=>(input.tier==='free'?x[3]==='0':x[3]!=='0')&&x[1].toLowerCase().includes(input.search.toLowerCase()));const paged=scenario.get('catalog')==='paged';return {items:(paged?(input.cursor?matches.slice(1):matches.slice(0,1)):matches).map(listing),nextCursor:paged&&!input.cursor&&matches.length>1?input.tier+'-next':null,asOf:'2026-09-10T00:00:00Z',warning:'Rankings are refreshing. These results share the displayed snapshot time.'}},
  detail:async id=>({...listing(entries.find(x=>x[0]===id)),description:'Your ideas deserve a place of their own. Work in a calm, focused space, with everything you need at your fingertips.',screenshots:[],audit:{auditor:principal,verdict:'approved',analysis:'The submitted package was checked for malware. No malicious behavior was found in this review.',date:'2026-09-10T00:00:00Z',packageHash:'a'.repeat(64)},ownRating:null}),
  library:async()=>({items:entries.filter(x=>state.owned.includes(x[0])).map(x=>({...listing(x),acquiredAt:'2026-09-10',installedVersion:state.installed.includes(x[0])?'1':null,available:true})),nextCursor:null}),
  publisherApps:async()=>({items:[],nextCursor:null}),
@@ -49,9 +50,9 @@ const client={
  purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
  operation:async id=>{state.calls.push(['operation',id]);return {operationId:id,state:'pending',message:'Waiting for the original payment.',nextAction:'resume'}},
  resumeOperation:async id=>{state.calls.push(['resumeOperation',id]);return {operationId:id,state:'complete',message:'Your app is ready.',nextAction:'none'}},
- recentOperations:async()=>state.restored?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[],
- quoteInstallation:async(ids,operationId)=>{const quote={operationId:operationId??(state.installationQuotes.length+1).toString(16).padStart(32,'0'),appIds:[...ids],canisterId:session.canisterId,owner:principal,cycles,fee:{feeVersion:'1',processingCycles:cycles.processing,storageCycles:'0',totalCycles:cycles.total,processingBytes:'1024',newStorageBytes:'0'}};state.installationQuotes.push(quote);return quote;},
- install:async(ids,quote)=>{if(!state.installationQuotes.includes(quote)||JSON.stringify(ids)!==JSON.stringify(quote.appIds))throw Error('Install must retain the exact reviewed quote and app selection.');state.calls.push(['install',ids]);return {message:'Install review opened.'}},
+ recentOperations:async()=>[...state.installations.map(installResult),...(state.restored?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[])],
+ quoteInstallation:async(ids,operationId)=>{const saved=state.installations.find(item=>operationId?item.operationId===operationId:JSON.stringify(item.appIds)===JSON.stringify(ids));const quote=saved??{operationId:operationId??(state.installationQuotes.length+1).toString(16).padStart(32,'0'),appIds:[...ids],canisterId:session.canisterId,owner:principal,cycles,fee:{feeVersion:'1',processingCycles:cycles.processing,storageCycles:'0',totalCycles:cycles.total,processingBytes:'1024',newStorageBytes:'0'}};state.installationQuotes.push(quote);return quote;},
+ install:async(ids,quote)=>{if(!state.installationQuotes.includes(quote)||JSON.stringify(ids)!==JSON.stringify(quote.appIds))throw Error('Install must retain the exact reviewed quote and app selection.');state.calls.push(['install',ids,quote.operationId]);let saved=state.installations.find(item=>item.operationId===quote.operationId);if(!saved){saved={...quote,setupUrl:'https://example.invalid/#manifest='+quote.operationId,cycles:{...cycles,total:'0',processing:'0'},fee:{...quote.fee,totalCycles:'0',processingCycles:'0'}};state.installations.push(saved);}return installResult(saved)},
  rate:async (...args)=>{state.calls.push(['rate',...args])},
  earnings:async()=>({referralCode:'QUIET-CODE',affiliateDiscountBps:1000,affiliateShareBps:3000,balances:[{token:'ckUSDC',available:money('4500000'),reserved:money('250000'),earned:null}]}),
  createReferralCode:async()=> 'QUIET-CODE',
@@ -87,9 +88,16 @@ try {
   assert.equal(await page.evaluate(() => window.marketplaceFixture.initializations), 1);
   assert.equal(await page.evaluate(() => window.marketplaceFixture.connections), 0);
   assert.equal(await page.getByRole("button", { name: /^(Connect|Connected|Connect this Neutron)$/ }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Marketplace settings", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("dialog", { name: "Marketplace settings", exact: true }).count(), 0);
+  assert.equal(await page.getByLabel("Marketplace canister", { exact: true }).count(), 0);
+  assert.equal(await page.getByLabel("IC gateway", { exact: true }).count(), 0);
   assert.deepEqual(await page.locator('.mp-catalog-section > h3').allTextContents(), ['Top paid', 'Top free']);
   assert.equal(await page.locator('.mp-rank').count(), 0);
   assert.equal(await page.getByRole("button", { name: /Top (paid|free)/ }).count(), 0);
+  assert.equal(await page.getByText("Rankings are refreshing. These results share the displayed snapshot time.", { exact: true }).count(), 0);
+  assert.equal(await page.getByRole("region", { name: "Top paid", exact: true }).getByText("1,234 purchases", { exact: true }).count(), 3);
+  assert.equal(await page.getByRole("region", { name: "Top free", exact: true }).getByText("42 added", { exact: true }).count(), 3);
   checks.push("Marketplace initializes automatically for this Neutron, without a Connect action; paid then free charts are visible together with no rank numbers.");
   for (const width of [320, 380, 480, 960]) {
     await page.setViewportSize({ width, height: 760 });
@@ -97,9 +105,13 @@ try {
     assert.ok(bounds.document <= width, `Document overflows at ${width}: ${JSON.stringify(bounds)}`);
     assert.ok(bounds.body <= bounds.client + 1, `Content overflows at ${width}`);
     assert.ok(bounds.firstCard < 320, `First app needs scrolling at ${width}`);
+    assert.equal(await page.getByRole("region", { name: "Top paid", exact: true }).getByText("1,234 purchases", { exact: true }).first().isVisible(), true);
+    assert.equal(await page.getByRole("region", { name: "Top free", exact: true }).getByText("42 added", { exact: true }).first().isVisible(), true);
+    const clippedCounts = await page.locator('.mp-acquisitions').evaluateAll(elements => elements.some(element => element.scrollWidth > element.clientWidth + 1));
+    assert.equal(clippedCounts, false, `Acquisition counts must remain readable at ${width}`);
     await page.screenshot({ path: join(output, `explore-${width}.png`) });
   }
-  checks.push("Explore is compact and has no horizontal overflow at 320, 380, 480 and 960px.");
+  checks.push("Explore is compact at 320, 380, 480 and 960px, with readable paid purchase/free acquisition counts and no ranking-refresh notice or horizontal overflow.");
   await page.setViewportSize({ width: 380, height: 760 });
   await page.getByRole("combobox", { name: "Ranking period" }).selectOption("month");
   await page.getByRole("button", { name: "$1.999999", exact: true }).waitFor();
@@ -108,11 +120,26 @@ try {
   await page.getByRole("button", { name: /Atlas Productivity/ }).click();
   const appDetail = page.getByRole("dialog", { name: "Atlas", exact: true });
   await appDetail.getByText("Audited by AI", { exact: true }).waitFor();
+  const purchases = appDetail.locator('.mp-detail-stats > div').filter({ hasText: 'Purchases · All time' });
+  assert.equal(await purchases.locator('strong').innerText(), '1,234');
+  await page.setViewportSize({ width: 320, height: 760 });
+  assert.equal(await purchases.isVisible(), true);
+  assert.equal(await appDetail.locator('.mp-detail-stats').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, "paid detail counts must fit a narrow tile");
+  await page.setViewportSize({ width: 380, height: 760 });
   await appDetail.locator('.mp-audit > summary').click();
   assert.match(await appDetail.locator('.mp-audit').innerText(), /3rurp-vyaaa-aaaay-aacua-cai/);
   assert.match(await appDetail.locator('.mp-audit').innerText(), /submitted package was checked for malware/);
   await appDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
-  checks.push("App details display Audited by AI while retaining the auditor principal and exact review analysis.");
+  await page.getByRole("button", { name: /Quiet Notes Productivity/ }).click();
+  const freeDetail = page.getByRole("dialog", { name: "Quiet Notes", exact: true });
+  const additions = freeDetail.locator('.mp-detail-stats > div').filter({ hasText: 'Added · All time' });
+  await additions.waitFor();
+  assert.equal(await additions.locator('strong').innerText(), '42');
+  await page.setViewportSize({ width: 320, height: 760 });
+  assert.equal(await freeDetail.locator('.mp-detail-stats').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, "free detail counts must fit a narrow tile");
+  await freeDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page.setViewportSize({ width: 380, height: 760 });
+  checks.push("Paid and free details show their all-time acquisition counts on narrow tiles; Audited by AI retains the auditor principal and exact review analysis.");
   await page.getByRole("button", { name: "$10.00", exact: true }).click();
   const checkout = page.getByRole("dialog", { name: "Review purchase", exact: true });
   await checkout.getByLabel(/Affiliate code/).fill("QUIET-CODE");
@@ -132,11 +159,30 @@ try {
   await page.getByLabel("Select available", { exact: true }).check();
   await page.getByRole("button", { name: "Install selected", exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.calls.find(x=>x[0]==='install')[1]), ["notes", "garden"]);
-  checks.push("My Apps installs exactly the selected owned apps together.");
+  await page.getByRole("button", { name: "Install selected", exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Select Quiet Notes", { exact: true }).isChecked(), true);
+  assert.equal(await page.getByLabel("Select Garden", { exact: true }).isChecked(), true);
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.installed), [], "opening a review must not mark apps installed");
+  assert.equal(await page.locator('.mp-operation').filter({ hasText: /package review was opened|Ready to install/ }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "View saved progress", exact: true }).count(), 0, "saved install handoffs must not become recovery cards");
+  await page.getByRole("button", { name: "Install selected", exact: true }).click();
+  const repeated = await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='install'));
+  assert.deepEqual(repeated.map(call=>call[1]), [["notes", "garden"], ["notes", "garden"]]);
+  assert.equal(repeated[0][2], repeated[1][2], "reopening a canceled batch must retain its original request");
+  assert.equal(await page.locator('.mp-operation').count(), 1, "the existing financial recovery panel must remain available");
+  assert.match(await page.locator('.mp-operation').innerText(), /Waiting for the original payment/);
+  await page.getByRole("button", { name: "Explore", exact: true }).click();
+  await page.getByRole("button", { name: "My Apps", exact: true }).click();
+  await page.getByLabel("Select available", { exact: true }).check();
+  await page.getByRole("button", { name: "Install selected", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='install').at(-1)[2]), repeated[0][2], "a remounted selection must recover the same saved request");
+  assert.equal(await page.locator('.mp-operation').filter({ hasText: /package review was opened|Ready to install/ }).count(), 0);
+  checks.push("My Apps retains the selected batch for cancel/retry and reuses its saved request after remount, without install-progress cards or false installed status; financial recovery stays visible.");
   await page.evaluate(() => { window.marketplaceFixture.installed=['garden']; window.marketplaceFixture.restored=true; });
   await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
   await page.waitForFunction(() => document.querySelector('input[aria-label="Select Garden"]')?.disabled === true);
   assert.match(await page.locator('.mp-library-list').innerText(), /Update to 3 in Settings/);
+  assert.equal(await page.getByLabel("Select Garden", { exact: true }).isChecked(), false, "a confirmed installed app must leave the selection");
   await page.getByLabel("Select available", { exact: true }).check();
   await page.getByRole("button", { name: "Install selected", exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.calls.filter(x=>x[0]==='install').at(-1)[1]), ["notes"]);

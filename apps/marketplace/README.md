@@ -13,19 +13,15 @@ unconfigured installations select the production marketplace
 is prepared automatically, without a Connect button. The manifest declares the
 production protocol's exact update routes, so the ordinary install or upgrade
 review grants them together with the app's cycle budget. Opening the installed
-app or reinstalling it does not require another route permission. Selecting a
-custom protocol or restoring explicitly revoked access uses the normal runtime
-permission review.
-Existing explicit configuration, browser signing seeds and saved requests
-remain intact on upgrade.
-**Marketplace settings** can select another deployed protocol; a local
-deployment can use its localhost replica origin.
+app or reinstalling it does not require another route permission. Restoring
+explicitly revoked access uses the normal runtime permission review.
+The production canister and gateway are defined in code, with no connection
+settings in the app. Existing configuration, browser signing seeds and saved
+requests remain intact on upgrade.
 
 Use IC Wallet for ICP, ckBTC or ckUSDC purchases. Ethereum USDC checkout
 uses EVM Wallet or a connected MetaMask/browser wallet. Review the app's requested
 permissions, including Wallet access and the protocol's fixed cycle charges.
-Changing the configured marketplace changes the catalog shown; it does not
-delete purchases held by the previous protocol.
 
 Public and authenticated private queries run directly from the browser.
 Package downloads use authorized certified HTTP. Protocol mutations go through
@@ -49,7 +45,9 @@ Uninstall still removes app-local journals and browser signing data.
   30 days or all time. Kernel and Marketplace packages remain available to the
   installer and updater but are omitted from these storefront lists. Inspect
   descriptions, screenshots and the release's audit under **Audited by AI**,
-  including its actual auditor and analysis. Checkout
+  including its actual auditor and analysis. Cards and app details show lifetime
+  paid-purchase or free-acquisition counts; reinstalls and retries do not add to
+  them. Listing icons and screenshots are served from the marketplace. Checkout
   shows the token price, ledger fees, referral discount, developer/affiliate
   shares and allocation toward burning NTN before purchase.
 - **My Apps:** select one or several acquired apps and choose **Install**.
@@ -60,7 +58,8 @@ Uninstall still removes app-local journals and browser signing data.
   the source; the access credential is passed privately to the installer.
   Closing or reloading the review keeps the original preparation and access in
   Marketplace, so reopening the same selection does not charge them again.
-  **Refresh cost** retains the original request. **Prepare latest selection**
+  Install handoffs do not create a persistent status card; the existing Install
+  control reopens the saved selection. **Refresh cost** retains the original request. **Prepare latest selection**
   explicitly reviews a new request if the old release is unavailable or newer
   releases are wanted. Installed apps update through Neutron Settings.
 - **Publish:** create or edit a listing, attach a `.neutron` package and matching

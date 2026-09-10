@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AppListing, CycleEstimate, Money } from "../view-types.ts";
 
+export function acquisitionStats(app: AppListing): { count: string; label: string } | null {
+  const free = BigInt(app.priceUsdMicros) === 0n;
+  const value = free ? app.freeAcquisitions : app.paidPurchases;
+  if (value === undefined) return null;
+  const count = BigInt(value);
+  return { count: count.toLocaleString("en-US"), label: free ? "added" : count === 1n ? "purchase" : "purchases" };
+}
+
 export function usd(micros: string): string {
   const value = BigInt(micros);
   if (value === 0n) return "Free";
@@ -21,7 +29,6 @@ export function parseAmount(input: string, decimals: number): string {
   return result.toString();
 }
 export function decimalAmount(value: Money): string { return quantity(value).slice(0, -(value.symbol.length + 1)).replaceAll(",", ""); }
-export function shortPrincipal(value: string): string { return value.length < 24 ? value : `${value.slice(0, 10)}…${value.slice(-8)}`; }
 export function dateLabel(value: string | undefined): string {
   if (!value) return "";
   const milliseconds = /^\d+$/.test(value) ? Number(value.length > 15 ? BigInt(value) / 1_000_000n : value) : Date.parse(value);
@@ -44,7 +51,7 @@ export function useRead<T>(key: string | null, read: () => Promise<T>, refresh =
   return key !== null && state.key === key ? state : { key, data: null, error: "", loading: key !== null };
 }
 
-type IconName = "store" | "search" | "apps" | "publish" | "earnings" | "close" | "back" | "refresh" | "check" | "arrow" | "settings" | "shield" | "download" | "plus" | "copy";
+type IconName = "store" | "search" | "apps" | "publish" | "earnings" | "close" | "back" | "refresh" | "check" | "arrow" | "shield" | "download" | "plus" | "copy";
 const paths: Record<IconName, ReactNode> = {
   store: <><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10c0 3 4 3 4 0 0 3 5 3 5 0 0 3 5 3 5 0 0 3 4 3 4 0" /><path d="M9 20v-6h6v6" /></>,
   search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
@@ -54,7 +61,6 @@ const paths: Record<IconName, ReactNode> = {
   close: <path d="m6 6 12 12M18 6 6 18" />, back: <path d="m14 5-7 7 7 7" />,
   refresh: <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1" /></>,
   check: <path d="m5 12 4 4L19 6" />, arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
-  settings: <><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="3" /><circle cx="15" cy="17" r="3" /></>,
   shield: <><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6z" /><path d="m8 12 3 3 5-6" /></>,
   download: <><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" /></>,
   plus: <path d="M12 5v14M5 12h14" />, copy: <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M15 8V4H4v11h4" /></>,

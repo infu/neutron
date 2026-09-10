@@ -21,6 +21,10 @@ module {
   public func app(db : Store.DB, source : Principal, owner : ?Principal, record : Types.App) : API.App {
     let version = switch (Catalog.approvedRelease(db, record)) { case null null; case (?candidate) ?candidate.version };
     let owned = switch (owner) { case null false; case (?principal) Store.getEntitlement(db, principal, record.appId) != null };
+    let acquisitionCounts = switch (Store.getRanking(db, record.appId)) {
+      case null ({ free = 0; paid = 0 });
+      case (?ranking) ({ free = ranking.freeAll; paid = ranking.paidAll });
+    };
     let screenshots = List.empty<Text>();
     for (artifactId in record.screenshots.vals()) {
       switch (imageUrl(db, source, artifactId)) { case null {}; case (?url) List.add(screenshots, url) };
@@ -32,6 +36,7 @@ module {
       iconUrl = switch (record.iconArtifact) { case null null; case (?id) imageUrl(db, source, id) };
       screenshots = List.toArray(screenshots); screenshotArtifacts = record.screenshots;
       ratingCount = record.ratingCount; ratingTotal = record.ratingTotal; owned;
+      acquisitionCounts = ?acquisitionCounts;
       visible = Catalog.eligible(db, record);
     };
   };

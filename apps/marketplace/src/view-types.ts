@@ -8,7 +8,9 @@ export type Page<T> = { items: T[]; nextCursor: string | null; asOf?: string; wa
 export type AppListing = {
   id: string; title: string; summary: string; category: string; publisher: string;
   priceUsdMicros: string; iconUrl?: string; version: string;
-  rating: number | null; ratingCount: number; acquisitions?: number; owned?: boolean;
+  rating: number | null; ratingCount: number; owned?: boolean;
+  /** Exact lifetime counts; retries and reinstalls do not count again. */
+  freeAcquisitions?: string; paidPurchases?: string;
 };
 export type AuditView = { auditor: string; verdict: "approved" | "rejected" | "revoked"; analysis: string; date: string; packageHash: string };
 export type AppDetail = AppListing & {
@@ -75,7 +77,6 @@ export type InstallationQuote = {
 };
 export interface MarketplaceClient {
   initialize(): Promise<Session>;
-  configure(input: { canisterId: string; host: string }): Promise<Session>;
   connect(): Promise<Session>;
   catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>>;
   detail(appId: string): Promise<AppDetail>;

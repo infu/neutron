@@ -13,6 +13,7 @@ import { reader, type HttpReader } from "./audit-download.ts";
 import { updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
 import { SOURCE_COMPRESSED_MAX_BYTES } from "../../update-source/src/model.ts";
 import { REPOSITORY_LIMITS } from "neutron-tools/src/repository.ts";
+import { MediaDetailReply } from "./media-wire.ts";
 
 const operation = IDL.Record({ requestId: IDL.Text });
 const TrustedInfo = IDL.Record({ canister: IDL.Principal, fees: IDL.Record({ version: IDL.Nat }), trustedPublishingPrincipal: IDL.Opt(IDL.Principal) });
@@ -29,6 +30,7 @@ export const TrustedBatch = IDL.Record({
 type Method = { args: [] | [IDL.Type]; reply: IDL.Type; query: boolean };
 const methods: Record<string, Method> = {
   marketplace_info: { args: [], reply: TrustedInfo, query: true },
+  app_detail: { args: [IDL.Text], reply: MediaDetailReply, query: true },
   listing_save: { args: [Listing], reply: ListingReply, query: false },
   upload_begin: { args: [UploadBegin], reply: UploadReply, query: false },
   upload_chunk: { args: [UploadChunk], reply: UploadReply, query: false },
@@ -113,13 +115,13 @@ async function createConnection(options: FirstPartyTransportOptions, dependencie
     },
     publishBatch: async request => unwrap(await actor.trusted_publish_batch!(request) as { ok: BatchReceipt } | { err: { code: string; message: string } }),
   };
-  return { transport, actor, feeVersion: info.fees.version };
+  return { transport, actor, target, staging, feeVersion: info.fees.version };
 }
 
 /** The same request-bound verifier works against mainnet and an explicitly
  * trusted local replica. Private proof headers are kept private, never relabeled
  * as public-cacheable gateway output. */
-export function certifiedQueryFetch(options: { canister: string; actor: HttpReader; rootKey: Uint8Array; authorize: (path: string) => Promise<string> }): CertifiedFetch {
+export function certifiedQueryFetch(options: { canister: string; actor: HttpReader; rootKey: Uint8Array; authorize: (path: string) => Promise<string>; mediaFiles?: ReadonlyMap<string, number> }): CertifiedFetch {
   const origin = updateSourceOrigin({ canisterId: options.canister });
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -127,10 +129,12 @@ export function certifiedQueryFetch(options: { canister: string; actor: HttpRead
     if (url.origin !== origin || url.search || url.hash || url.username || url.password || method !== "GET" || init?.body) throw new Error("The certified publication reader only accepts same-source repository GET requests.");
     const packageMatch = /^\/repo\/v1\/packages\/([0-9a-f]{64})\.neutron$/.exec(url.pathname);
     const sourceMatch = /^\/repo\/v1\/sources\/([0-9a-f]{64})\.source\.v1\.msgpack\.gz$/.exec(url.pathname);
+    const mediaMatch = /^\/repo\/v1\/media\/([0-9a-f]{64})$/.exec(url.pathname);
     const releaseMatch = /^\/repo\/v1\/releases\/[a-z0-9_-]+\.json$/.test(url.pathname);
-    if (!packageMatch && !sourceMatch && !releaseMatch) throw new Error("The certified publication reader requires a canonical package, source or release path.");
-    const maximum = packageMatch ? REPOSITORY_LIMITS.packageBytes : sourceMatch ? SOURCE_COMPRESSED_MAX_BYTES : REPOSITORY_LIMITS.releaseJsonBytes;
-    const expectedDigest = packageMatch?.[1] ?? sourceMatch?.[1];
+    const mediaSize = mediaMatch ? options.mediaFiles?.get(url.pathname) : undefined;
+    if (!packageMatch && !sourceMatch && !releaseMatch && mediaSize === undefined) throw new Error("The certified publication reader requires a canonical package, source, release or explicitly selected media path.");
+    const maximum = packageMatch ? REPOSITORY_LIMITS.packageBytes : sourceMatch ? SOURCE_COMPRESSED_MAX_BYTES : mediaSize ?? REPOSITORY_LIMITS.releaseJsonBytes;
+    const expectedDigest = packageMatch?.[1] ?? sourceMatch?.[1] ?? mediaMatch?.[1];
     const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     const wait = async <T>(promise: Promise<T>): Promise<T> => {
       if (!signal) return promise;
@@ -180,12 +184,26 @@ export function certifiedQueryFetch(options: { canister: string; actor: HttpRead
       return new Response(Uint8Array.from(verified.response.body), { status: first.status_code, headers });
     };
     const publicResponse = await read();
-    if (publicResponse.status !== 403 || releaseMatch) return publicResponse;
+    if (publicResponse.status !== 403 || releaseMatch || mediaMatch) return publicResponse;
     signal?.throwIfAborted();
     const credential = await wait(options.authorize(url.pathname));
     signal?.throwIfAborted();
     return read(credential);
   }) as CertifiedFetch;
+}
+
+/** Media-only publication uses the same verified Blast identity and ordinary
+ * upload/listing ABI. Public image verification never requests download grants. */
+export async function createFirstPartyMediaEnvironment(options: FirstPartyTransportOptions, mediaFiles: ReadonlyMap<string, number>, dependencies: Dependencies = {}) {
+  const connection = await createConnection(options, dependencies);
+  const http = await (dependencies.httpReader ?? reader)(options.canister, options.host, options.rootKeyFile);
+  return {
+    caller: connection.transport.caller, target: connection.target,
+    transport: connection.staging, feeVersion: connection.feeVersion,
+    fetch: certifiedQueryFetch({ canister: options.canister, actor: http.actor, rootKey: http.rootKey, mediaFiles,
+      authorize: async () => { throw new Error("Storefront media must be publicly readable; no download grant was requested."); },
+    }),
+  };
 }
 
 export async function createFirstPartyEnvironment(options: FirstPartyTransportOptions, dependencies: Dependencies = {}): Promise<{ transport: TrustedPublishTransport; fetch: CertifiedFetch }> {

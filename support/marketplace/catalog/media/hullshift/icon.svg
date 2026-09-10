@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Hullshift</title>
+  <rect width="64" height="64" rx="5" fill="#071014"/>
+  <path fill="#182a30" d="M8 10h48v44H8z"/>
+  <path fill="#071014" d="M14 16h11v11H14zm25 0h11v11H39zM14 37h11v11H14zm25 0h11v11H39z"/>
+  <path fill="#5fd5e8" d="M29 9h6v17h-6zm0 29h6v17h-6zM9 29h17v6H9zm29 0h17v6H38z"/>
+  <path fill="#f2d45c" d="M25 25h14v14H25z"/>
+  <path fill="#0b1114" d="m32 27 5 5-5 5-5-5z"/>
+  <path fill="#7ee787" d="M30 30h4v4h-4z"/>
+</svg>

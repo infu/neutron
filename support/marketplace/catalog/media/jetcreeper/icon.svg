@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title">
+  <title id="title">Jetfreeper fighter icon</title>
+  <rect width="96" height="96" fill="#06121a"/>
+  <path d="M48 9 68 62 54 58 48 85 42 58 28 62Z" fill="#73e1ff"/>
+  <path d="m48 20 7 38-7 14-7-14Z" fill="#d9fbff"/>
+  <path d="M22 73h18v8H22zm34 0h18v8H56z" fill="#ffbd66"/>
+  <circle cx="48" cy="48" r="44" fill="none" stroke="#1d5262" stroke-width="3"/>
+</svg>

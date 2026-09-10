@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { AppListing, InstallationQuote, MarketplaceClient } from "../view-types.ts";
 import { InstallControl } from "./install.tsx";
-import { AppIcon, ErrorNote, Icon, Loading, Modal, Principal, dateLabel, errorMessage, usd, useRead } from "./primitives.tsx";
+import { AppIcon, ErrorNote, Icon, Loading, Modal, Principal, acquisitionStats, dateLabel, errorMessage, usd, useRead } from "./primitives.tsx";
 
 export function AppDetailDialog({ client, app, close, acquire, install, connected, connect, installing = false }: {
   client: MarketplaceClient; app: AppListing; close: () => void; acquire: (app: AppListing) => void;
@@ -11,6 +11,7 @@ export function AppDetailDialog({ client, app, close, acquire, install, connecte
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const read = useRead(app.id, () => client.detail(app.id), revision);
   const detail = read.data, shown = detail ?? app;
+  const acquisitions = acquisitionStats(shown);
   const installed = "installedVersion" in app && typeof app.installedVersion === "string";
   async function saveRating() {
     if (!rating) return;
@@ -21,7 +22,7 @@ export function AppDetailDialog({ client, app, close, acquire, install, connecte
   }
   return <Modal title={shown.title} close={close} wide footer={<><span className="mp-muted mp-footer-note">{installed ? "Installed. Manage app updates in Settings." : shown.owned ? "Owned by this Neutron · Future updates included" : "One acquisition. All future approved updates."}</span>{shown.owned || installed ? <InstallControl client={client} appIds={[shown.id]} disabled={installed} busy={installing} label={installed ? "Installed" : "Install app"} onInstall={install} className="mp-primary" /> : <button className="mp-primary" type="button" onClick={() => acquire(shown)}>{BigInt(shown.priceUsdMicros) === 0n ? "Get app" : `Get · ${usd(shown.priceUsdMicros)}`}</button>}</>}>
     <div className="mp-detail-hero"><AppIcon app={shown} large /><div><span className="mp-eyebrow">{shown.category}</span><h2>{shown.title}</h2><p>{shown.summary}</p></div></div>
-    <div className="mp-detail-stats"><div><strong>{shown.rating === null ? "New" : `${shown.rating.toFixed(1)} ★`}</strong><span>{shown.ratingCount ? `${shown.ratingCount.toLocaleString()} ratings` : "No ratings yet"}</span></div><div><strong>{usd(shown.priceUsdMicros)}</strong><span>Future updates included</span></div><div><strong>{shown.version}</strong><span>Latest approved version</span></div></div>
+    <div className="mp-detail-stats"><div><strong>{shown.rating === null ? "New" : `${shown.rating.toFixed(1)} ★`}</strong><span>{shown.ratingCount ? `${shown.ratingCount.toLocaleString()} ratings` : "No ratings yet"}</span></div><div><strong>{usd(shown.priceUsdMicros)}</strong><span>Future updates included</span></div><div><strong>{shown.version}</strong><span>Latest approved version</span></div>{acquisitions && <div><strong>{acquisitions.count}</strong><span>{acquisitions.label === "added" ? "Added · All time" : "Purchases · All time"}</span></div>}</div>
     <ErrorNote error={read.error} retry={() => setRevision((v) => v + 1)} />
     {read.loading && !detail && <Loading label="Loading app details…" />}
     {detail && <div className="mp-stack">

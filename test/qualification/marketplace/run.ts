@@ -35,12 +35,13 @@ function option(name: string): string | undefined {
   assert.ok(value && !value.startsWith("--"), `${name} needs a value`);
   return value;
 }
-const expectedVersion = negativeControl ? 107 : Number(option("--version") ?? 111);
+const expectedVersion = negativeControl ? 107 : Number(option("--version") ?? 112);
 assert.ok(Number.isSafeInteger(expectedVersion) && expectedVersion >= 107);
 const expectedArchiveHash = option("--sha256") ?? (!negativeControl ? ({
   109: "8bdeb24571521f33ef4a91a684dcea89e7085a569f8ef7726f03769c1a0c6db2",
   110: "67ff1d6b3cf7a40ad621e3ea2c89be2837dd55e192a5136980205ba0b8b460f6",
   111: "e2f861cc3147ed0933216730999d5f74272a988a1e63fb3470faf64d687931be",
+  112: "6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21",
 } as Record<number, string>)[expectedVersion] : undefined);
 assert.ok(negativeControl || expectedArchiveHash, "An unpinned Marketplace release needs --sha256");
 if (expectedArchiveHash) assert.match(expectedArchiveHash, /^[a-f0-9]{64}$/);
@@ -57,7 +58,7 @@ assert.match(kernelHash, /^[a-f0-9]{64}$/);
 const manifestReservations = !negativeControl && expectedVersion >= 110;
 const expectRuntimeGrant = !manifestReservations || customTarget;
 const predecessorHash = "03ef7d67e3c7314474049da7ee9ede6678b5a8e291b3ed85e55fc5feddb7f785";
-const protocolHash = "2bde4755ae504b96706c48b752daa681a19a5b0aa302da764c41529c00789143";
+const protocolHash = "26feaa471ee6fbd2c86afffd6de80448f3e0c60ba8dc6dd11068b07540699c00";
 const timeout = 90_000;
 const loginSeed = 0xc7;
 const blob = IDL.Vec(IDL.Nat8);
@@ -411,12 +412,15 @@ async function installFixtureApps(page: Page, frame: Frame, runtime: Runtime, ob
   const beforePrepare = relayCount("install_prepare"), beforeGrant = relayCount("repo_access_v1");
   async function review(reopen = false) {
     if (reopen) {
-      // After preparation the app clears its selection toolbar and retains a
-      // named saved operation. Reopen that exact operation without selecting
-      // apps again or starting a fresh preparation.
-      const saved = frame.locator(".mp-operation").filter({ hasText: "Ready to install" });
-      await saved.getByText("Ready · No additional access charge", { exact: true }).waitFor({ state: "visible", timeout });
-      await saved.getByRole("button", { name: "Install", exact: true }).click();
+      if (expectedVersion >= 112) {
+        // Reopen the retained selection from its original Install control.
+        assert.equal(await frame.locator(".mp-operation").count(), 0);
+        await frame.locator(".mp-selection-bar").getByText("Ready · No additional access charge", { exact: true }).waitFor({ state: "visible", timeout });
+        await install.click();
+      } else {
+        const saved = frame.locator(".mp-operation").filter({ hasText: "Ready to install" });
+        await saved.getByRole("button", { name: "Install", exact: true }).click();
+      }
     } else await install.click();
     const dialog = page.locator('[data-tid="repository-setup-dialog"]');
     const confirm = dialog.locator('[data-tid="repository-install"]');
