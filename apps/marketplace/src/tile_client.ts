@@ -1,5 +1,5 @@
-import { callTool, type JsonObject } from "neutron-tools/app";
-import type { MarketplaceClient, PublicationInput, PublicationQuote } from "./view-types.ts";
+import { callTool, type JsonObject, type EthereumProviderConnection } from "neutron-tools/app";
+import type { MarketplaceClient, PublicationInput, PublicationQuote, PurchaseQuote, OperationResult } from "./view-types.ts";
 import { base64, preparePublication, publicationFiles, UPLOAD_CHUNK_BYTES, type PublicationPlan } from "./publication.ts";
 
 async function invoke<T>(write: boolean, method: string, args: unknown = {}): Promise<T> {
@@ -7,6 +7,40 @@ async function invoke<T>(write: boolean, method: string, args: unknown = {}): Pr
   if (typeof value.resultJson !== "string") throw new Error("Marketplace returned an invalid response.");
   return JSON.parse(value.resultJson) as T;
 }
+import { executeBrowserFundingStep, pollEthereumFundingReceipt, readEthereumFundingState, type EthereumFundingPlan, type EthereumFundingJournal, type EthereumFundingRecord } from "./ethereum.ts";
+
+async function browserPurchase(connection: EthereumProviderConnection, quote?: PurchaseQuote, operationId?: string): Promise<OperationResult> {
+  const prepared = await invoke<{ plan: EthereumFundingPlan; result: OperationResult; fundingRequired?: boolean }>(true, "ethereumPrepareBrowser", { ...(quote ? { quote } : {}), ...(operationId ? { operationId } : {}) });
+  if (prepared.result.entitled || prepared.result.nextAction !== "resume") return prepared.result;
+  const id = prepared.plan.invoice.operationId;
+  if (prepared.fundingRequired === false) return invoke(true, "ethereumVerifyBrowser", { operationId: id });
+  const journal: EthereumFundingJournal = {
+    read: kind => invoke(false, "ethereumJournalRead", { operationId: id, kind }),
+    claim: record => invoke(true, "ethereumJournalClaim", { operationId: id, record }),
+    record: (previous, next) => invoke(true, "ethereumJournalRecord", { operationId: id, previous, next }),
+  };
+  async function step(kind: "approval" | "deposit"): Promise<EthereumFundingRecord> {
+    let record = await executeBrowserFundingStep(prepared.plan, kind, connection, journal);
+    if (record.state === "submitted" && record.transactionHash) {
+      const observed = await pollEthereumFundingReceipt(connection.provider, record, { timeoutMs: 30_000 });
+      record = await journal.record(record, observed);
+    }
+    return record;
+  }
+  const existingDeposit = await journal.read("deposit");
+  if (!existingDeposit) {
+    const existingApproval = await journal.read("approval");
+    // An exact existing allowance needs no redundant approval transaction.
+    if (existingApproval || (await readEthereumFundingState(prepared.plan, connection.provider)).approvalRequired) {
+      const approval = await step("approval");
+      if (approval.state !== "confirmed") return invoke(false, "operation", { operationId: id });
+    }
+  }
+  const deposit = await step("deposit");
+  if (deposit.state !== "confirmed") return invoke(false, "operation", { operationId: id });
+  return invoke(true, "ethereumVerifyBrowser", { operationId: id });
+}
+
 async function publish(input: PublicationInput, quote: PublicationQuote, progress: (percent: number) => void): Promise<{ message: string }> {
   const plan = quote.opaque as PublicationPlan, files = publicationFiles(input);
   if (files.length !== plan.artifacts.length) throw new Error("The selected files changed. Review the upload again.");
@@ -42,8 +76,10 @@ export function createMarketplaceClient(): MarketplaceClient {
     catalog: args => invoke(false, "catalog", args), detail: appId => invoke(false, "detail", { appId }),
     library: cursor => invoke(false, "library", cursor ? { cursor } : {}), publisherApps: cursor => invoke(false, "publisherApps", cursor ? { cursor } : {}),
     earnings: () => invoke(false, "earnings"), createReferralCode: () => invoke(true, "createReferralCode"),
-    quotePurchase: args => invoke(false, "quotePurchase", args), purchase: quote => invoke(true, "purchase", { quote }),
-    operation: operationId => invoke(false, "operation", { operationId }), recentOperations: () => invoke(false, "recentOperations"), resumeOperation: operationId => invoke(true, "resumeOperation", { operationId }),
+    quotePurchase: args => invoke(false, "quotePurchase", args), purchase: (quote, connection) => quote.ethereum?.wallet === "browser" ? connection ? browserPurchase(connection, quote) : Promise.reject(new Error("Connect the original browser wallet before paying.")) : invoke(true, "purchase", { quote }),
+    operation: operationId => invoke(false, "operation", { operationId }), recentOperations: () => invoke(false, "recentOperations"), resumeOperation: (operationId, connection) => connection ? browserPurchase(connection, undefined, operationId) : invoke(true, "resumeOperation", { operationId }),
+    cancelEthereumCheckout: operationId => invoke(true, "ethereumCancel", { operationId }),
+    verifyEthereumTransaction: (operationId, transactionHash) => invoke(true, "ethereumVerifyOriginal", { operationId, transactionHash }),
     install: appIds => invoke(true, "install", { appIds }), rate: (appId, stars, text) => invoke(true, "rate", { appId, stars, text }),
     quoteWithdrawal: args => invoke(false, "quoteWithdrawal", args), withdraw: quote => invoke(true, "withdraw", { quote }),
     quotePublication: async input => invoke(false, "quotePublication", { plan: await preparePublication(input) }), publish,

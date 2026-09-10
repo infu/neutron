@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 100,
+  "version": 101,
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
   "backend": {
@@ -40,6 +40,19 @@
             "wallet_fund_v1",
             "wallet_add_ledger_v1"
           ]
+        },
+        {
+          "app": "evm_wallet",
+          "tools": [
+            "evm_accounts_v1",
+            "evm_balances_v1",
+            "evm_call_contract_v1",
+            "evm_read_contract_v1",
+            "evm_estimate_transaction_v1",
+            "evm_transaction_v1",
+            "evm_operation_status_v1",
+            "evm_send_transaction_v1"
+          ]
         }
       ]
     },
@@ -62,6 +75,22 @@
         "marketplace_drafts",
         "marketplace_save_draft",
         "marketplace_revise_draft"
+      ]
+    },
+    "ethereum_provider": {
+      "api": 1,
+      "chains": [
+        1
+      ],
+      "methods": [
+        "eth_requestAccounts",
+        "eth_accounts",
+        "eth_chainId",
+        "wallet_switchEthereumChain",
+        "eth_call",
+        "eth_getCode",
+        "eth_sendTransaction",
+        "eth_getTransactionReceipt"
       ]
     }
   },

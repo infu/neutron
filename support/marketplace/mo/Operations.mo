@@ -78,6 +78,7 @@ module {
       switch (Store.getWithdrawal(db, owner, requestId)) { case null null; case (?value) ?withdrawalResult(value) };
     };
     public func purchaseQuote(owner : Principal, request : API.PurchaseRequest) : API.Result<API.CheckoutQuote> {
+      if (Store.getEvmInvoiceByRequest(db, owner, request.requestId) != null) return error("payment_rail", "This purchase uses Ethereum. Resume its original Ethereum invoice.");
       switch (Store.getOrder(db, owner, request.requestId)) {
         case (?saved) {
           if (saved.intentHash != Quotes.purchaseIntent(request)) return error("request_mismatch", "This purchase ID belongs to another selection. Retain its original request to recover it.");
@@ -108,6 +109,7 @@ module {
       };
     };
     public func purchase(owner : Principal, supplied : API.CheckoutQuote) : async* API.Result<API.PurchaseResult> {
+      if (Store.getEvmInvoiceByRequest(db, owner, supplied.request.requestId) != null) return error("payment_rail", "This purchase uses Ethereum. Resume its original Ethereum invoice.");
       if (supplied.buyer != owner) return error("owner_mismatch", "The purchase review belongs to another Neutron.");
       let expected = switch (purchaseQuote(owner, supplied.request)) { case (#err(value)) return #err(value); case (#ok(value)) value };
       // Query timestamps do not expire a purchase. Every financial, permission,

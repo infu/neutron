@@ -17,6 +17,9 @@ module {
             order.amount, order.fee, order.affiliate, order.rateId, order.items));
     };
     public func prepare(db : Store.DB, proposed : Types.CreateOrder) : Result<Types.Order> {
+        if (Store.getEvmInvoiceByRequest(db, proposed.owner, proposed.requestId) != null) {
+            return #err("This purchase uses Ethereum. Resume its saved Ethereum invoice; an IC allowance cannot fund it.");
+        };
         if (proposed.affiliate == ?proposed.owner) return #err("You cannot use your own affiliate code");
         var total = 0;
         let apps = Set.empty<Text>();
@@ -59,6 +62,7 @@ module {
         public func isActive(id : Nat64) : Bool { Set.contains(active, Nat64.compare, id) };
         public func run(id : Nat64) : async* Result<Types.Order> {
             let ?initial = db.orders.get(id) else return #err("Purchase not found");
+            if (Store.getEvmInvoiceByOrder(db, id) != null) return #err("Resume this purchase through its Ethereum invoice.");
             if (initial.state == #complete or isActive(id)) return #ok(initial);
             Set.add(active, Nat64.compare, id);
             // Catch traps in the inner message, including a local finalization

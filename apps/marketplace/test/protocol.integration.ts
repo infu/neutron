@@ -7,12 +7,16 @@ import { CONTRACT, checkoutType, encodeOpaque, decodeOpaque, first, type Checkou
 import { makeTransport, type QueryAgent } from "../src/transport.ts";
 import { response, operationView, cycleView } from "../src/client.ts";
 import type { Kernel } from "../src/store.ts";
+import type { EthereumFees, EthereumInvoiceResult } from "../src/ethereum_protocol.ts";
+import { buildEthereumFundingPlan, principalToEthereumWord } from "../src/ethereum.ts";
+import { installAt } from "../../../support/marketplace/test/host/evm-fixture-helpers.ts";
 
 const env = await session();
 try {
   const publisher = await installFixture(env.pic, "relay", "test/fixtures/Relay.mo");
   const buyer = await installFixture(env.pic, "relay", "test/fixtures/Relay.mo");
-  const ledger = await installFixture(env.pic, "fake_ledger", "test/fixtures/FakeLedger.mo", [{ symbol: "ckUSDC", decimals: 6, fee: 10n }]);
+  const ledger = await installAt(env.pic, "evm_sdk_ledger", "test/fixtures/FakeLedger.mo", [{ symbol: "ckUSDC", decimals: 6, fee: 10n }], "xevnm-gaaaa-aaaar-qafnq-cai");
+  await installAt(env.pic, "evm_sdk_minter", "test/fixtures/FakeEvmMinter.mo", [], "sv3dd-oaaaa-aaaar-qacoa-cai");
   const oracle = await installFixture(env.pic, "oracle", "test/fixtures/Oracle.mo");
   const identity = Ed25519KeyIdentity.generate(new Uint8Array(32).fill(93));
   const auditorIdentity = Ed25519KeyIdentity.generate(new Uint8Array(32).fill(94));
@@ -69,5 +73,40 @@ try {
   assert.equal(history.purchases.length, 1); assert.ok("done" in history.nextWithdrawalCursor);
   assert.ok(browserQueries >= 5, "SDK reads used the direct query adapter");
   assert.equal((await ledger.actor.stats()).appliedTransactions, 0n, "Free SDK purchase never dispatched a ledger mutation");
+  // Exercise the Ethereum quote through the same Candid transport as the app.
+  // Only local fixture actors occupy canonical IDs. Queries and invoice
+  // preparation do not send an Ethereum payment or an RPC request.
+  const paidListing = { ...listing, appId: "ethereum_client_fixture", priceUsdMicros: 1_000_000n };
+  await charged(publisherClient, "listing_save", paidListing);
+  const paidUpload = { ...upload, appId: paidListing.appId, requestId: "sdk-ethereum-upload" };
+  await charged(publisherClient, "upload_begin", paidUpload, BigInt(bytes.length));
+  await charged(publisherClient, "upload_chunk", { requestId: paidUpload.requestId, offset: 0n, bytes });
+  const paidArtifact = await charged(publisherClient, "upload_finish", { requestId: paidUpload.requestId });
+  const paidCandidate = await charged(publisherClient, "candidate_submit", { requestId: "sdk-ethereum-candidate", appId: paidListing.appId, version: 100n, artifactId: paidArtifact.artifactId[0], sourceArtifactId: [], dependencies: [] });
+  response(await auditor.audit_stamp({ requestId: "sdk-ethereum-audit", candidateId: paidCandidate.id, expectedDigest: paidCandidate.digest, expectedSourceDigest: paidCandidate.sourceDigest, decision: { approved: null }, analysis: "Local Ethereum SDK quote fixture", reason: [] }));
+  response(await relayCall(publisher, marketplace, "rates_refresh", [{ feeVersion: fees.version }], 1_000_000_000n));
+  const ethereumFees = await buyerClient.query<EthereumFees>("ethereum_fees");
+  assert.equal(ethereumFees.prepare.totalCycles, fees.purchase);
+  assert.equal(ethereumFees.verify.totalCycles - ethereumFees.prepare.totalCycles, 50_000_000_000n);
+  const ethereumQuote = response<Checkout>(await buyerClient.query("ethereum_quote", [{ requestId: "e1".repeat(16), appIds: [paidListing.appId], ledger: ledger.canisterId, referralCode: [] }]));
+  assert.equal(ethereumQuote.amount, 1_000_000n);
+  assert.equal(ethereumQuote.fee, 10n);
+  assert.equal(ethereumQuote.buyer.toText(), buyer.canisterId.toText());
+  assert.deepEqual(decodeOpaque<Checkout>(checkoutType, encodeOpaque(checkoutType, ethereumQuote)), ethereumQuote);
+  assert.deepEqual(response(await buyerClient.query("ethereum_status", [{ requestId: ethereumQuote.request.requestId }])), []);
+  assert.deepEqual(response(await buyerClient.query("ethereum_history", [{ cursor: [], limit: 24n }])), { invoices: [], nextCursor: [] });
+  assert.equal((await ledger.actor.stats()).appliedTransactions, 0n, "Ethereum read quotes never fund or prepare an invoice");
+  const payer = "0x3333333333333333333333333333333333333333";
+  const invoice = response<EthereumInvoiceResult>(await buyerClient.update("ethereum_prepare", [{ quote: ethereumQuote, payer, feeVersion: fees.version }], ethereumFees.prepare.totalCycles));
+  assert.equal(invoice.invoice.grossAtoms, 1_000_010n);
+  assert.equal(invoice.entitled, false);
+  assert.equal(invoice.invoice.owner.toText(), buyer.canisterId.toText());
+  const route = { chainId: String(invoice.invoice.route.chainId), tokenAddress: invoice.invoice.route.token, helperAddress: invoice.invoice.route.helper, minterAddress: invoice.invoice.route.minterAddress, recipientPrincipal: marketplace.canisterId.toText() };
+  const funding = buildEthereumFundingPlan({ operationId: ethereumQuote.request.requestId, payerAddress: payer, amountAtoms: String(invoice.invoice.grossAtoms), principalWord: principalToEthereumWord(marketplace.canisterId.toText()), subaccountWord: `0x${Buffer.from(invoice.invoice.subaccount).toString("hex")}`, route }, route, { approval: "e2".repeat(16), deposit: "e3".repeat(16) });
+  assert.equal(invoice.payment.approve.data, funding.steps.approval.transaction.data, "Protocol and app encode the same exact bounded approval");
+  assert.equal(invoice.payment.deposit.data, funding.steps.deposit.transaction.data, "Protocol and app encode the same invoice-bound deposit");
+  assert.deepEqual(first(response<[] | [EthereumInvoiceResult]>(await buyerClient.query("ethereum_status", [{ requestId: ethereumQuote.request.requestId }]))), invoice);
+  assert.equal((await ledger.actor.stats()).appliedTransactions, 0n, "Invoice preparation never dispatches a token transfer");
+
   console.log("Marketplace client: real Candid, direct queries, exact attached cycle quotes, uploads and same-ID acquisition passed via Ash/PocketIC.");
 } finally { await env.shutdown(); }

@@ -56,8 +56,31 @@ module {
   public type Withdrawal = { id : Nat64; owner : Principal; requestId : Text; intentHash : Blob; ledger : Principal; to : { owner : Principal; subaccount : ?Blob }; totalDebit : Nat; fee : Nat; isBurn : Bool; state : { #prepared; #funding_required; #dispatched; #outcome_unknown; #failed; #complete }; currentAttempt : ?Nat64; createdAtNs : Int; updatedAtNs : Int; finalizedAtNs : ?Int; lastError : ?Text };
   public type CreateWithdrawal = Generated.Types.CreateWithdrawal;
 
-  public type Attempt = { id : Nat64; owner : Principal; operationKind : { #purchase; #withdrawal }; operationId : Nat64; ordinal : Nat64; request : { kind : { #transfer; #transfer_from }; ledger : Principal; spenderSubaccount : ?Blob; to : { owner : Principal; subaccount : ?Blob }; amount : Nat; fee : Nat; memo : Blob; createdAtTimeNs : Nat64; fromAccount : { owner : Principal; subaccount : ?Blob } }; state : { #prepared; #dispatched; #outcome_unknown; #no_effect; #succeeded }; hadUnknown : Bool; block : ?Nat; duplicate : Bool; lastLedgerError : ?Blob; lastError : ?Text; createdAtNs : Int; updatedAtNs : Int };
+  public type Attempt = { id : Nat64; owner : Principal; operationKind : { #purchase; #withdrawal; #evm_sweep }; operationId : Nat64; ordinal : Nat64; request : { kind : { #transfer; #transfer_from }; ledger : Principal; spenderSubaccount : ?Blob; to : { owner : Principal; subaccount : ?Blob }; amount : Nat; fee : Nat; memo : Blob; createdAtTimeNs : Nat64; fromAccount : { owner : Principal; subaccount : ?Blob } }; state : { #prepared; #dispatched; #outcome_unknown; #no_effect; #succeeded }; hadUnknown : Bool; block : ?Nat; duplicate : Bool; lastLedgerError : ?Blob; lastError : ?Text; createdAtNs : Int; updatedAtNs : Int };
   public type CreateAttempt = Generated.Types.CreateAttempt;
+
+  public type EvmRoute = { chainId : Nat; minter : Principal; helper : Text; minterAddress : Text; token : Text; ledger : Principal; decimals : Nat8 };
+  public type EvmInvoice = {
+    id : Nat64; owner : Principal; requestId : Text; orderId : Nat64; subaccount : Blob; route : EvmRoute;
+    payer : Text; quoteContent : Blob; saleAtoms : Nat; grossAtoms : Nat; sweepFee : Nat;
+    canceledAtNs : ?Int; acceptedReceiptId : ?Nat64; entitlementGrantedAtNs : ?Int;
+    revenueFinalizedAtNs : ?Int; currentSweepId : ?Nat64; nextSweepOrdinal : Nat64;
+    creditedBuyerAtoms : Nat; lastBalance : ?Nat; lastBalanceAtNs : ?Int; workClass : Nat8; nextCheckAtNs : Int;
+    createdAtNs : Int; updatedAtNs : Int; lastError : ?Text;
+  };
+  public type CreateEvmInvoice = Generated.Types.CreateEvmInvoice;
+
+  public type EvmReceipt = {
+    id : Nat64; invoiceId : Nat64; eventKey : Text; transactionHash : Text; logIndex : Nat;
+    blockNumber : Nat; blockHash : Text; payer : Text; amount : Nat; observedAtNs : Int;
+  };
+  public type CreateEvmReceipt = Generated.Types.CreateEvmReceipt;
+
+  public type EvmSweep = {
+    id : Nat64; invoiceId : Nat64; ordinal : Nat64; purpose : { #sale; #buyer_credit };
+    amount : Nat; fee : Nat; attemptId : Nat64; finalizedAtNs : ?Int; createdAtNs : Int; updatedAtNs : Int;
+  };
+  public type CreateEvmSweep = Generated.Types.CreateEvmSweep;
 
   public type Credit = { id : Nat64; ledger : Principal; owner : Principal; isBurn : Bool; available : Nat; reserved : Nat; updatedAtNs : Int };
   public type CreateCredit = Generated.Types.CreateCredit;

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { connectEthereumFundingBrowser } from "./ethereum.ts";
 import { createMarketplaceClient } from "./tile_client.ts";
 import type { AppListing, AppTier, LibraryApp, MarketplaceClient, OperationResult, Page, RankingWindow, Session } from "./view-types.ts";
 import { Checkout } from "./components/checkout.tsx";
@@ -20,6 +21,7 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
   const [detail, setDetail] = useState<AppListing | null>(null), [checkout, setCheckout] = useState<AppListing[] | null>(null);
   const [active, setActive] = useState<ActiveOperation | null>(null), [tracking, setTracking] = useState(false), [installing, setInstalling] = useState(false);
   const [publisherOpened, setPublisherOpened] = useState(false);
+  const [recoveryHash, setRecoveryHash] = useState("");
   const saved = useRead(session?.connected ? `${session.canisterId}:operations` : null, () => client.recentOperations(), revision);
   useEffect(() => { let alive = true; void client.initialize().then((value) => { if (alive) setSession(value); }, (cause) => { if (alive) setError(errorMessage(cause)); }); return () => { alive = false; }; }, [client]);
   useEffect(() => {
@@ -62,6 +64,29 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
     setRevision((v) => v + 1);
     if (result.state === "complete") setNotice(result.message);
   }
+  async function resumeSaved(item: OperationResult) {
+    if (item.ethereumWallet !== "browser") return client.resumeOperation(item.operationId);
+    const connection = await connectEthereumFundingBrowser();
+    try { return await client.resumeOperation(item.operationId, connection); }
+    finally { await connection.close().catch(() => undefined); }
+  }
+  async function cancelCheckout() {
+    if (!active || tracking) return;
+    setTracking(true); setError("");
+    try { onOperation(await client.cancelEthereumCheckout(active.result.operationId)); }
+    catch (cause) { setError(errorMessage(cause)); }
+    finally { setTracking(false); }
+  }
+  async function verifyOriginalPayment() {
+    if (!active || tracking) return;
+    setTracking(true); setError("");
+    try {
+      const result = await client.verifyEthereumTransaction(active.result.operationId, recoveryHash.trim());
+      onOperation(result, active.resume);
+      if (result.entitled) { setTab("library"); setRecoveryHash(""); }
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setTracking(false); }
+  }
   async function track(resume = false) {
     if (!active || tracking) return;
     setTracking(true); setError("");
@@ -79,11 +104,12 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
     <div className="mp-body">
       <ErrorNote error={error} />
       {notice && <div className="mp-success" role="status"><Icon name="check" /><span>{notice}</span><button type="button" className="mp-icon-button" aria-label="Dismiss message" onClick={() => setNotice("")}><Icon name="close" /></button></div>}
-      {active && active.result.state !== "complete" && <section className="mp-operation" aria-live="polite"><div><strong>{active.result.state === "pending" ? "Waiting for confirmation" : active.result.state === "approval_required" ? "Approval needed" : active.result.state === "review_required" ? "Review needed" : "Action stopped"}</strong><p>{active.result.message}</p><details><summary>Saved request</summary><code>{active.result.operationId}</code></details></div><div className="mp-button-row"><button type="button" className="mp-secondary" disabled={tracking} onClick={() => void track()}>{tracking ? "Checking…" : "Check status"}</button>{(active.result.nextAction === "resume" || active.result.nextAction === "review") && active.resume && <button type="button" className="mp-primary" disabled={tracking} onClick={() => void track(true)}>{active.result.nextAction === "review" ? "Review updated costs" : "Continue"}</button>}</div></section>}
+      {active?.result.entitled && active.result.settlement?.state === "pending" && <div className="mp-notice" role="status"><strong>Payment conversion processing</strong><p>{active.result.settlement.message}</p></div>}
+      {active && active.result.state !== "complete" && <section className="mp-operation" aria-live="polite"><div><strong>{active.result.state === "pending" ? "Waiting for confirmation" : active.result.state === "approval_required" ? "Approval needed" : active.result.state === "review_required" ? "Review needed" : "Action stopped"}</strong><p>{active.result.message}</p><details><summary>Saved request</summary><code>{active.result.operationId}</code>{(active.result.ethereumWallet || active.result.paymentRail === "ethereum") && <div className="mp-stack"><label>Original Ethereum payment hash<input value={recoveryHash} onChange={event => setRecoveryHash(event.target.value)} placeholder="0x…" spellCheck={false} autoComplete="off" disabled={tracking} /></label><p className="mp-muted">If your wallet sent the deposit but the reply was lost, verify that original transaction. This does not send another payment.</p><button type="button" className="mp-secondary" disabled={tracking || !/^0x[0-9a-fA-F]{64}$/.test(recoveryHash.trim())} onClick={() => void verifyOriginalPayment()}>Review & verify original payment</button><button type="button" className="mp-secondary" disabled={tracking} onClick={() => void cancelCheckout()}>Cancel checkout</button></div>}</details></div><div className="mp-button-row"><button type="button" className="mp-secondary" disabled={tracking} onClick={() => void track()}>{tracking ? "Checking…" : "Check status"}</button>{(active.result.nextAction === "resume" || active.result.nextAction === "review") && active.resume && <button type="button" className="mp-primary" disabled={tracking} onClick={() => void track(true)}>{active.result.ethereumWallet === "browser" ? "Connect wallet & continue" : active.result.nextAction === "review" ? "Review" : "Continue"}</button>}</div></section>}
       {!session && !error && <Loading label="Opening marketplace…" />}
       {session && !session.configured && <EmptyState title="Connect your marketplace" icon="store" action={<button type="button" className="mp-primary" onClick={() => setSettings(true)}>Set up marketplace <Icon name="arrow" /></button>}>Choose the marketplace canister to browse apps and restore this Neutron’s purchases.</EmptyState>}
       {tab === "library" && <ErrorNote error={saved.error ? `Saved action history unavailable: ${saved.error}` : ""} retry={() => setRevision((v) => v + 1)} />}
-      {tab === "library" && saved.data && saved.data.filter((item) => item.state !== "complete" && item.operationId !== active?.result.operationId).map((item) => <section className="mp-operation" key={item.operationId}><strong>Saved action</strong><p>{item.message}</p><button className="mp-secondary" type="button" onClick={() => setActive({ result: item, resume: () => client.resumeOperation(item.operationId) })}>View saved progress</button></section>)}
+      {tab === "library" && saved.data && saved.data.filter((item) => item.state !== "complete" && item.operationId !== active?.result.operationId).map((item) => <section className="mp-operation" key={item.operationId}><strong>Saved action</strong><p>{item.message}</p><button className="mp-secondary" type="button" onClick={() => setActive({ result: item, resume: () => resumeSaved(item) })}>View saved progress</button></section>)}
       {session?.configured && (tab === "explore" ? <Explore key={session.canisterId} client={client} refresh={revision} select={setDetail} acquire={(app) => void acquire(app)} /> : tab === "library" ? <Library key={session.canisterId} client={client} connected={session.connected} connect={connectQuietly} refresh={revision} select={setDetail} install={(ids) => void install(ids)} installing={installing} explore={() => setTab("explore")} /> : tab === "earnings" ? <EarningsPanel key={session.canisterId} client={client} connected={session.connected} connect={connectQuietly} refresh={revision} onOperation={onOperation} /> : null)}
       {session?.configured && publisherOpened && <div hidden={tab !== "publish"}><PublisherPanel key={session.canisterId} client={client} connected={session.connected} connect={connect} refresh={revision} onChanged={() => setRevision((v) => v + 1)} /></div>}
     </div>

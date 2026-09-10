@@ -12,7 +12,7 @@ import { join } from "node:path";
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const output = process.env.MARKETPLACE_BROWSER_ARTIFACTS || "/tmp/neutron-marketplace-ui/browser";
 await mkdir(output, { recursive: true });
-const transport = `export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler}); export const removeExposedTool=name=>window.marketplaceTools.delete(name);`;
+const transport = `export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler}); export const removeExposedTool=name=>window.marketplaceTools.delete(name); export const connectEthereumProvider=()=>{throw Error('Unexpected browser wallet connection in IC checkout regression')};`;
 const fixture = `
 import React from 'react';
 import {createRoot} from 'react-dom/client';

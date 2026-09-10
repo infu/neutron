@@ -14,6 +14,10 @@ export const cases: IntegrationCase[] = [{
       assert.equal(await actor.validateIndexesAndBytes(), true);
       // Paid upload bytes remain available beyond its prepaid first year and an actual same-principal upgrade, with no replacement upload.
       await pic.advanceTime(367 * 24 * 60 * 60 * 1_000);
+      // Advancing PocketIC's clock does not execute subnet rounds. Allow rounds
+      // to repay the fixture's prior install-code instruction debit before the
+      // real upgrade, as a running subnet would over the elapsed year.
+      await pic.tick(100);
       await pic.upgradeCanister({ canisterId, wasm: wasmPath, arg: new Uint8Array(), upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
       assert.deepEqual(Uint8Array.from(await actor.snapshot()), before);
       assert.equal(await actor.validateIndexesAndBytes(), true);

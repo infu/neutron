@@ -13,7 +13,8 @@ There is no bundled production marketplace ID. The default IC gateway is
 `https://icp-api.io`; a local deployment can use its localhost replica origin.
 Save settings, then **Connect** to authorize this Neutron's browser read identity.
 
-Use IC Wallet for ICP, ckBTC or ckUSDC purchases. Review the app's requested
+Use IC Wallet for ICP, ckBTC or ckUSDC purchases. Ethereum USDC checkout
+uses EVM Wallet or a connected MetaMask/browser wallet. Review the app's requested
 permissions, including Wallet access and the protocol's fixed cycle charges.
 Changing the configured marketplace changes the catalog shown; it does not
 delete purchases held by the previous protocol.
@@ -58,6 +59,8 @@ before calling them; atomic amounts are decimal strings.
 | `marketplace_library_v1`, `marketplace_earnings_v1` | Read owned apps and earnings |
 | `marketplace_connect_v1` | Authorize browser reads through this Neutron |
 | `marketplace_quote_v1`, `marketplace_purchase_v1` | Review costs and acquire apps |
+| `marketplace_ethereum_quote_v1`, `marketplace_ethereum_purchase_v1` | Review and pay Ethereum USDC through EVM Wallet |
+| `marketplace_ethereum_continue_v1`, `marketplace_ethereum_verify_v1`, `marketplace_ethereum_settle_v1`, `marketplace_ethereum_cancel_v1` | Resume or verify the original Ethereum invoice, collect converted credit, or cancel before entitlement |
 | `marketplace_operation_v1`, `marketplace_history_v1` | Read original outcomes and recover their IDs |
 | `marketplace_withdraw_v1` | Review and withdraw earnings |
 | `marketplace_install_v1`, `marketplace_rate_v1` | Offer installation and rate acquired apps |
@@ -74,6 +77,18 @@ agents use the existing root permission judge. For a paid root purchase:
    `marketplace_purchase_v1` with the **same operation ID and inputs**.
 4. Read the original operation's outcome. Wallet approval alone does not mean
    the apps were purchased.
+
+Ethereum purchases disclose the app payment, one ckUSDC collection fee,
+Ethereum gas and separate invoice/receipt-verification cycle costs. The invoice
+retains the payer, current official subaccount helper and marketplace subaccount.
+EVM Wallet handles agent signing through its existing Normal/Root authorization;
+browser wallets require an owner click in the Marketplace tile and are not an
+agent signing route. Approval is never payment. Once the protocol independently
+verifies the successful mined Ethereum deposit, the apps can be installed while
+conversion and revenue settlement finish in the background. Use **Saved request → Original Ethereum payment hash** or
+`marketplace_ethereum_verify_v1` if the wallet sent the deposit but its response
+was lost; this verifies the existing payment and never sends it again. A canceled checkout
+can still receive an already-sent deposit as recoverable ckUSDC credit.
 
 Pending or unknown outcomes retain their original IDs and reviewed terms. Read
 status/history before continuing; do not create a replacement payment to recover

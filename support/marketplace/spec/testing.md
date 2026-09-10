@@ -98,6 +98,38 @@ Assert conservation separately for every token: available credits, reservations,
 confirmed payouts, burn allocation and charged ledger fees. Do not mix USD price
 units with token liabilities or subsidize one account's withdrawal from another.
 
+## Ethereum checkout suites
+
+The Ethereum extension has three layers of executable coverage:
+
+- `evm-minter.test.mo`, `evm-rpc.test.mo` and `evm-evidence.test.mo` validate the
+  official route, deployed Candid shapes, provider agreement, canonical blocks,
+  and exact helper-event fields. Negative cases reject reverted, removed,
+  inconsistent, wrong-recipient and wrong-amount evidence; unrelated events in
+  the same transaction do not prevent finding the unique matching deposit.
+- `host/evm-fixtures.integration.ts` calls the production clients through actual
+  PocketIC canisters installed at the canonical fixture principals.
+  `host/evm-payments.integration.ts` exercises early grants, locked earnings,
+  shared IC/EVM claims, cancellation during awaits, blocked-payer changes,
+  duplicate proofs, fee shortfalls, extra deposits, and funded fallback recovery.
+  Real upgrades cover a saved Ethereum receipt before entitlement finalization
+  and saved sweep receipts before sale or buyer-credit accounting, with no
+  second RPC verification or transfer required after the saved success.
+- `host/evm-marketplace.integration.ts` drives the actual public actor through
+  a Neutron relay with attached cycles. It independently checks payment ABI
+  fields, verifies a certified private download while the invoice's ckUSDC
+  balance is zero, upgrades during conversion, and verifies collection and
+  earnings once. Canceled-invoice deposits become buyer credit recoverable by
+  the ordinary withdrawal endpoint. IC status/history cannot misclassify these
+  invoices as ordinary IC purchases.
+
+Client suites separately verify original-hash recovery, concurrent journal
+updates, reviewed cycle charges, scoped Wallet authorization and numeric browser
+wallet rejection codes. The app's PocketIC adapter test compares independently
+encoded Motoko and TypeScript payment calldata. Browser fixtures exercise the
+checkout at compact and wide tile sizes. These checks establish local protocol
+and client behavior, not live wallet connectivity or mainnet financial delivery.
+
 ## Neutron identity, cycles and direct reads
 
 Use a Neutron relay fixture to attach native cycles to every non-auditor update.

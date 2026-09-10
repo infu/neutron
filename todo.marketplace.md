@@ -112,10 +112,38 @@ reserved earnings, daily jobs across upgrades, hash-bound audit decisions,
 private streaming and retained bytes beyond the prepaid year. See the
 [testing specification](support/marketplace/spec/testing.md) for their limits.
 
+The final IC/Ethereum protocol validation passed 37 unit tests and 82 Ash tests
+with no skips. The 40 PocketIC host cases have passing results: the aggregate
+passed 39, and its storage-upgrade fixture passed a focused rerun after adding
+subnet rounds following the simulated year-long clock jump. That correction
+changes test scheduling, not production behavior. The normal build's Wasm
+SHA-256 is `18def141b7ed5cb081e18b4e58cb1bd11ece899985987e62d97a8d3b8799fe0f`,
+matching the public-actor integration fixture.
+
+Marketplace 101 passes 86 client tests, Motoko initialization/restoration checks,
+real protocol adapter tests, responsive browser suites, typecheck and complete
+packaging. Its archive SHA-256 is
+`f3286df1e087f09c950964adf84202038a0e09d440b6e77adb7f7bb1043c70c1`.
+The shared SDK passes 402 tests, including preserved browser-wallet error codes.
+
+A broader `neutron-scripts` sweep reports 72 passes and an existing collection-
+style failure in `apps/evm_wallet/test/concurrency_await_wallet.mo` (`Array.concat`
+assignment). That unrelated fixture is unchanged; this is not a claim that the
+entire repository test suite passes.
+
 The existing Kernel `kernel` v4 and `kernel_activation` v1 roots and the released
 v3→v4 migration are unchanged. Generic acquisition uses transient state; no fake
-memory migration was introduced. Kernel release 351 and marketplace release 100
-are local candidates. Package construction and qualification are not publication.
+memory migration was introduced. Kernel release 352 and marketplace release 101
+are local candidates; the preceding local artifacts remain immutable. Package
+construction and qualification are not publication.
+
+Kernel 352 passes all 840 TypeScript tests and 33 Motoko suites, complete
+packaging, fresh certified-assets qualification and its final candidate-binding
+check. The compiler suite passes 370 tests with 165 documented opt-in/environment
+skips. The Kernel archive SHA-256 is
+`b8f5fc3e0dd79fcb950e8ae3c1197ef48deccbc07dcaac922854acc61a498c13`;
+its retained offered-source artifact is
+`a657ab49014433e5074d7e1b6b958e9560839d0bccd330dc3454a94ec482e008`.
 
 Browser fixtures and local ledger tests do not establish mainnet behavior or
 complete live Wallet/installation acceptance. Those require a separately
@@ -164,14 +192,18 @@ must remain unavailable until the converted funds have actually been collected.
 - [x] Verify the deployed EVM RPC receipt interface and current minter mapping
   using anonymous metadata queries; no personal RPC token or archive-state
   requests are required.
-- [ ] Complete the exact-receipt adapter and negative evidence tests.
-- [ ] Add durable invoices, replay protection, early entitlements and separate
-  conversion/collection status. The pending-versus-mined unlock decision remains
-  with the owner; browser-provided transaction data is never payment authority.
-- [ ] Integrate browser-wallet and Neutron EVM Wallet checkout and agent tools.
-- [ ] Collect converted ckUSDC with the retained original ledger request, then
+- [x] Complete the exact-receipt adapter and negative evidence tests.
+- [x] Add durable invoices, replay protection, early entitlements and separate
+  conversion/collection status. Unlock on a successful mined payment, without
+  waiting for wrapping; a pending submission or browser-provided transaction
+  data alone is never payment authority.
+- [x] Integrate browser-wallet and Neutron EVM Wallet checkout and agent tools.
+- [x] Collect converted ckUSDC with the retained original ledger request, then
   release the ordinary developer, affiliate and burn allocations exactly once.
-- [ ] Cover failed/replaced transactions, duplicate/concurrent verification,
+- [x] Cover failed/replaced transactions, duplicate/concurrent verification,
   wrapping delays, interrupted settlement and upgrades in PocketIC.
 
-This extension is not yet included in the IC-only validation evidence above.
+The Ethereum suites include a public-actor test that downloads an owned package
+before any ckUSDC mint, and actual upgrades between retained receipts and local
+finalization. Conversion releases earnings only after the original collection
+succeeds. This is local validation; no mainnet payment was submitted.

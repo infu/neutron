@@ -5,18 +5,18 @@ import { loadIntent, listIntents, saveIntent, reviseIntent } from "./store.ts";
 import { createPurchaseFundingRequest, parseFundingResult, requestFunding, rootFundingInstruction, spenderAccountText, type PurchaseFundingRequest, type FundingInstruction } from "./wallet.ts";
 import type { OperationResult, PurchaseQuote, WithdrawalQuote } from "./view-types.ts";
 
-type Scope = { canister: string; owner: string; callerApp: string; installation: string; root: boolean };
+export type Scope = { canister: string; owner: string; callerApp: string; installation: string; root: boolean };
 export type SavedIntent = { version: 1; scope: Scope; kind: "purchase"; quote: PurchaseQuote; funding: PurchaseFundingRequest | null } | { version: 1; scope: Scope; kind: "withdrawal"; quote: WithdrawalQuote };
 export type ActionResult = OperationResult & { fundingInstructions?: FundingInstruction[] };
-function scope(context: MsgBusToolContext, canister: string, owner: string): Scope {
+export function scope(context: MsgBusToolContext, canister: string, owner: string): Scope {
   const caller = context.caller;
   if (!caller?.appId || !caller.installationUid) throw new Error("This action needs an authenticated Neutron application caller.");
   return { canister, owner, callerApp: caller.appId, installation: caller.installationUid, root: !!context.agentMode };
 }
-function assertScope(saved: Scope, current: Scope): void {
+export function assertScope(saved: Scope, current: Scope): void {
   if (JSON.stringify(saved) !== JSON.stringify(current)) throw new Error("Resume this saved operation from the original application, Neutron, marketplace and agent mode.");
 }
-async function authorize(context: MsgBusToolContext, review: JsonObject, changedTerms = false): Promise<void> {
+export async function authorize(context: MsgBusToolContext, review: JsonObject, changedTerms = false): Promise<void> {
   context.signal?.throwIfAborted();
   if (context.agentMode) {
     if (!context.requestApproval) throw new Error("Exact agent review is unavailable. Update the Neutron before executing this action.");

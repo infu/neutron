@@ -14,9 +14,16 @@ import Audits "./Audits";
 import Billing "./Billing";
 import Catalog "./Catalog";
 import Certification "./Certification";
+import EvmAPI "./EvmAPI";
+import EvmBilling "./EvmBilling";
+import EvmEvidence "./EvmEvidence";
+import EvmMinter "./EvmMinter";
+import EvmPayments "./EvmPayments";
+import EvmRpc "./EvmRpc";
 import Http "./Http";
 import Initialization "./Initialization";
 import Jobs "./Jobs";
+import Ledger "./Ledger";
 import Operations "./Operations";
 import Publishing "./Publishing";
 import Rankings "./Rankings";
@@ -52,6 +59,8 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   transient let jobs = Jobs.Engine(db, operations.withdrawals, source, Time.now, Rates.client());
   transient var timer : ?Timer.TimerId = null;
   transient var maintenanceActive = false;
+  transient var ethereumTimer : ?Timer.TimerId = null;
+  transient var ethereumMaintenanceActive = false;
 
   func failure<T>(code : Text, message : Text) : API.Result<T> { #err({ code; message }) };
   func writer(caller : Principal) : API.Result<Principal> {
@@ -72,6 +81,27 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     repository.refreshApp(http, appId);
     certificates.refreshApp(appId);
   };
+  transient let ethereum = EvmPayments.Service(db, source, Time.now, {
+    ledger = Ledger.client();
+    minter = EvmMinter.client();
+    verify = func(expected : EvmEvidence.Expected) : async* EvmRpc.Result<EvmEvidence.Proof> {
+      await* EvmEvidence.verifyWith(
+        EvmRpc.client(Principal.fromText("7hfb6-caaaa-aaaar-qadga-cai")),
+        EvmBilling.rpcOptions,
+        expected,
+      );
+    };
+  }, func(order : Types.Order, block : ?Nat, now : Int) {
+    for (item in order.items.vals()) {
+      ignore Rankings.recordAcquisition(db, {
+        owner = order.owner; appId = item.appId; orderId = order.id;
+        kind = if (item.priceUsdMicros == 0) #free else #paid;
+        atNs = now; paidAtoms = item.paidAtoms;
+        ledger = if (item.paidAtoms == 0) null else ?order.ledger; block;
+      });
+      changedApp(item.appId);
+    };
+  });
   func validateConfig() {
     let config = Store.config(db);
     if (config.admins.size() == 0) Runtime.trap("Configure at least one marketplace administrator.");
@@ -111,10 +141,28 @@ persistent actor class Marketplace(initial : Types.Init) = this {
       armTimer<system>();
     });
   };
+  func armEthereumTimer<system>(seconds : Nat) {
+    ethereumTimer := ?Timer.setTimer<system>(#seconds seconds, func() : async () {
+      ethereumTimer := null;
+      var moreDue = false;
+      if (not ethereumMaintenanceActive) {
+        ethereumMaintenanceActive := true;
+        // Keep durable settlement separate from daily oracle/forwarding work.
+        // The outer message restores driver liveness after a local trap; the
+        // invoice and exact ledger attempt remain the source of recovery truth.
+        try { moreDue := await async { await* ethereum.tick() } } catch (_) {};
+        ethereumMaintenanceActive := false;
+      };
+      // Drain due work without delaying buyer-initiated updates. Idle invoices
+      // retain their own persisted next-check time; this is only scheduling.
+      armEthereumTimer<system>(if (moreDue) 1 else 30);
+    });
+  };
   validateConfig();
   http.initialize();
   repository.initialize(http);
   armTimer<system>();
+  armEthereumTimer<system>(1);
   system func postupgrade() {
     // Timers and in-flight driver flags are intentionally disposable. Durable
     // jobs and immutable ledger attempts decide what can resume after upgrade.
@@ -185,7 +233,46 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   };
   public shared query ({ caller }) func purchase_status(request : API.OperationRequest) : async API.Result<?API.PurchaseResult> {
     let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    if (Store.getEvmInvoiceByRequest(db, owner, request.requestId) != null) {
+      return failure("payment_rail", "Use ethereum_status for this invoice's app access, conversion and saved payment evidence.");
+    };
     #ok(operations.purchaseStatus(owner, request.requestId));
+  };
+  public query func ethereum_fees() : async EvmBilling.Fees {
+    EvmBilling.quote(Store.config(db).fees);
+  };
+  public shared query ({ caller }) func ethereum_quote(request : API.PurchaseRequest) : async API.Result<API.CheckoutQuote> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    ethereum.quote(owner, request);
+  };
+  public shared ({ caller }) func ethereum_prepare(request : EvmAPI.PrepareRequest) : async API.Result<EvmAPI.InvoiceResult> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (Billing.accept<system>(EvmBilling.quote(Store.config(db).fees).prepare, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    await* ethereum.prepare(owner, request.quote, request.payer);
+  };
+  public shared ({ caller }) func ethereum_verify(request : EvmAPI.VerifyRequest) : async API.Result<EvmAPI.InvoiceResult> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (Billing.accept<system>(EvmBilling.quote(Store.config(db).fees).verify, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    await* ethereum.verify(owner, request.requestId, request.transactionHash);
+  };
+  public shared ({ caller }) func ethereum_settle(request : EvmAPI.OperationRequest) : async API.Result<EvmAPI.InvoiceResult> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (Billing.accept<system>(EvmBilling.quote(Store.config(db).fees).settle, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    await* ethereum.settle(owner, request.requestId);
+  };
+  public shared ({ caller }) func ethereum_cancel(request : EvmAPI.OperationRequest) : async API.Result<EvmAPI.InvoiceResult> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (Billing.accept<system>(EvmBilling.quote(Store.config(db).fees).cancel, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    ethereum.cancel(owner, request.requestId);
+  };
+  public shared query ({ caller }) func ethereum_status(request : API.OperationRequest) : async API.Result<?EvmAPI.InvoiceResult> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    #ok(ethereum.status(owner, request.requestId));
+  };
+  public shared query ({ caller }) func ethereum_history(request : EvmAPI.HistoryRequest) : async API.Result<EvmAPI.InvoicePage> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    if (request.limit == 0) return failure("invalid_page", "Choose a positive invoice history page size.");
+    #ok(ethereum.history(owner, request.cursor, request.limit));
   };
   public shared query ({ caller }) func withdraw_quote(request : API.WithdrawalRequest) : async API.Result<API.WithdrawalQuote> {
     let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
@@ -203,7 +290,11 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   public shared query ({ caller }) func operation_history(request : API.OperationHistoryRequest) : async API.Result<API.OperationHistory> {
     let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     let page = switch (Views.operationRows(db, owner, request)) { case (#err(value)) return #err(value); case (#ok(value)) value };
-    let purchases = Array.map<Types.Order, API.PurchaseResult>(page.purchases, func(row) {
+    // Ethereum invoices have independent access and settlement states. Do not
+    // expose them as unfinished IC collections with misleading retry guidance.
+    // Keep the underlying page cursor; ethereum_history exposes those invoices.
+    let icPurchases = Array.filter<Types.Order>(page.purchases, func(row) { Store.getEvmInvoiceByOrder(db, row.id) == null });
+    let purchases = Array.map<Types.Order, API.PurchaseResult>(icPurchases, func(row) {
       let ?result = operations.purchaseStatus(owner, row.requestId) else Runtime.trap("Retained purchase is unavailable");
       result;
     });

@@ -377,10 +377,45 @@ module {
     };
   };
   public func putAttempt(db : DB, value : Types.CreateAttempt) : Result.Result<Types.Attempt, Error> {
-    let kind : Nat8 = switch (value.operationKind) { case (#purchase) 0; case (#withdrawal) 1 };
+    let kind : Nat8 = switch (value.operationKind) { case (#purchase) 0; case (#withdrawal) 1; case (#evm_sweep) 2 };
     switch (db.attempts.by_operation_ordinal.lookup((value.owner, kind, value.operationId, value.ordinal))) {
       case (?current) db.attempts.update({ value with id = current.id });
       case null insertAttempt(db, value);
+    };
+  };
+
+  public func getEvmInvoice(db : DB, id : Nat64) : ?Types.EvmInvoice { db.evmInvoices.get(id) };
+  public func getEvmInvoiceByOrder(db : DB, orderId : Nat64) : ?Types.EvmInvoice { db.evmInvoices.by_order.lookup(orderId) };
+  public func getEvmInvoiceByRequest(db : DB, owner : Principal, requestId : Text) : ?Types.EvmInvoice { db.evmInvoices.by_request.lookup((owner, requestId)) };
+  public func insertEvmInvoice(db : DB, value : Types.CreateEvmInvoice) : Result.Result<Types.EvmInvoice, Error> {
+    switch (db.evmInvoices.insert(value)) {
+      case (#err(error)) #err(error);
+      case (#ok(id)) {
+        let ?stored = db.evmInvoices.get(id) else Runtime.trap("Inserted Ethereum invoice is missing");
+        #ok(stored);
+      };
+    };
+  };
+  public func getEvmReceipt(db : DB, id : Nat64) : ?Types.EvmReceipt { db.evmReceipts.get(id) };
+  public func getEvmReceiptByEvent(db : DB, eventKey : Text) : ?Types.EvmReceipt { db.evmReceipts.by_event.lookup(eventKey) };
+  public func insertEvmReceipt(db : DB, value : Types.CreateEvmReceipt) : Result.Result<Types.EvmReceipt, Error> {
+    switch (db.evmReceipts.insert(value)) {
+      case (#err(error)) #err(error);
+      case (#ok(id)) {
+        let ?stored = db.evmReceipts.get(id) else Runtime.trap("Inserted Ethereum receipt is missing");
+        #ok(stored);
+      };
+    };
+  };
+  public func getEvmSweep(db : DB, id : Nat64) : ?Types.EvmSweep { db.evmSweeps.get(id) };
+  public func getEvmSweepByOrdinal(db : DB, invoiceId : Nat64, ordinal : Nat64) : ?Types.EvmSweep { db.evmSweeps.by_invoice_ordinal.lookup((invoiceId, ordinal)) };
+  public func insertEvmSweep(db : DB, value : Types.CreateEvmSweep) : Result.Result<Types.EvmSweep, Error> {
+    switch (db.evmSweeps.insert(value)) {
+      case (#err(error)) #err(error);
+      case (#ok(id)) {
+        let ?stored = db.evmSweeps.get(id) else Runtime.trap("Inserted Ethereum sweep is missing");
+        #ok(stored);
+      };
     };
   };
 

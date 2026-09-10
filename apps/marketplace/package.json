@@ -16,7 +16,7 @@
     "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "test": "bun test && npm run test:motoko",
     "test:motoko": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/backend.test.mo",
-    "test:browser": "node test/browser/app.mjs && node test/browser/publisher.mjs",
+    "test:browser": "node test/browser/app.mjs && node test/browser/publisher.mjs && node test/browser/ethereum.mjs",
     "test:protocol": "bun test/protocol.integration.ts",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "watch": "bun build.ts watch"
@@ -31,7 +31,8 @@
     "neutron-tools": "^1.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-icons": "^5.7.0"
+    "react-icons": "^5.7.0",
+    "viem": "2.55.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

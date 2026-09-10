@@ -1,3 +1,4 @@
+import type { EthereumProviderConnection } from "neutron-tools/app";
 /** Browser view models. Monetary atomic values remain exact decimal strings. */
 export type RankingWindow = "week" | "month" | "all";
 export type AppTier = "free" | "paid";
@@ -23,12 +24,19 @@ export type PublishedApp = AppListing & {
 export type Session = { configured: boolean; canisterId: string; host: string; account: string | null; connected: boolean };
 export type CycleEstimate = { total: string; processing: string; storage?: string; schedule: string };
 export type Allocation = { kind: "developer" | "affiliate" | "burn"; principal: string | null; amount: Money; label?: string };
+export type EthereumWalletSource = "evm_wallet" | "browser";
+export type EthereumPurchaseSelection = { wallet: EthereumWalletSource; payerAddress?: string };
+export type EthereumPurchaseTerms = {
+  wallet: EthereumWalletSource; chainId: "1"; payerAddress: string; tokenAddress: string;
+  helperAddress?: string; minterAddress?: string; recipientPrincipal: string;
+  wrappingFee: Money; prepareCycles: CycleEstimate; verifyCycles: CycleEstimate;
+};
 export type PurchaseQuote = {
   operationId: string; commitment: string; appIds: string[]; items: AppListing[];
   token: PaymentToken; subtotalUsdMicros: string; discountUsdMicros: string;
   payment: Money; approvalFee: Money; collectionFee: Money; totalDebit: Money;
   allocations: Allocation[]; cycles: CycleEstimate; affiliateCode: string;
-  priceObservedAt?: string; warnings: string[];
+  priceObservedAt?: string; warnings: string[]; ethereum?: EthereumPurchaseTerms;
   /** Preserves the exact protocol quote for same-ID execution and recovery. */
   opaque: unknown;
 };
@@ -37,6 +45,8 @@ export type OperationResult = {
   message: string; nextAction: "none" | "resume" | "review"; appIds?: string[];
   /** Ledger-confirmed block returned for the retained attempt, when available. */
   ledgerBlock?: string;
+  paymentRail?: "ethereum"; entitled?: boolean; ethereumTransactionHash?: string; ethereumWallet?: EthereumWalletSource;
+  settlement?: { state: "pending" | "complete" | "failed"; message: string };
 };
 export type Earnings = {
   referralCode: string | null; affiliateDiscountBps: number; affiliateShareBps: number;
@@ -62,11 +72,13 @@ export interface MarketplaceClient {
   publisherApps(cursor?: string): Promise<Page<PublishedApp>>;
   earnings(): Promise<Earnings>;
   createReferralCode(): Promise<string>;
-  quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode: string }): Promise<PurchaseQuote>;
-  purchase(quote: PurchaseQuote): Promise<OperationResult>;
+  quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode: string; ethereum?: EthereumPurchaseSelection }): Promise<PurchaseQuote>;
+  purchase(quote: PurchaseQuote, browserConnection?: EthereumProviderConnection): Promise<OperationResult>;
   operation(operationId: string): Promise<OperationResult>;
   recentOperations(): Promise<OperationResult[]>;
-  resumeOperation(operationId: string): Promise<OperationResult>;
+  resumeOperation(operationId: string, browserConnection?: EthereumProviderConnection): Promise<OperationResult>;
+  cancelEthereumCheckout(operationId: string): Promise<OperationResult>;
+  verifyEthereumTransaction(operationId: string, transactionHash: string): Promise<OperationResult>;
   install(appIds: string[]): Promise<{ message: string }>;
   rate(appId: string, stars: number, text: string): Promise<void>;
   quoteWithdrawal(input: { token: PaymentToken; amountAtoms: string; destination: string }): Promise<WithdrawalQuote>;

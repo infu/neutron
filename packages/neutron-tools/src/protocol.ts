@@ -1024,7 +1024,7 @@ export function toError(value: unknown, fallback = "Request failed"): Error {
     if (typeof value.stack === "string" && value.stack.trim()) {
       error.stack = value.stack;
     }
-    if (typeof value.code === "string") {
+    if (typeof value.code === "string" || (typeof value.code === "number" && Number.isSafeInteger(value.code))) {
       Object.defineProperty(error, "code", {
         configurable: true,
         enumerable: true,
@@ -1104,7 +1104,7 @@ export function serializeError(error: unknown): JsonValue {
       name: error.name,
       message: error.message,
       stack: error.stack ?? "",
-      ...(isRecord(error) && typeof error.code === "string"
+      ...(isRecord(error) && (typeof error.code === "string" || (typeof error.code === "number" && Number.isSafeInteger(error.code)))
         ? { code: error.code }
         : {}),
       ...(isRecord(error) &&

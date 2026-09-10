@@ -27,6 +27,23 @@ const order = rec({ requestId: text, state: operationState, lastError: opt(text)
 const attempt = rec({ block: opt(nat), state: variant("prepared", "dispatched", "outcome_unknown", "no_effect", "succeeded"), hadUnknown: bool });
 const nextAction = IDL.Variant({ none: IDL.Null, await_current_call: IDL.Null, funding_required: IDL.Null, review_fee: IDL.Null, wait_ledger_time: nat64, review_terms: IDL.Null, retry_same_attempt: IDL.Null, review_required: IDL.Null });
 const purchaseResult = rec({ order, attempt: opt(attempt), quote: opt(checkoutType), active: bool, nextAction });
+const ethereumRoute = rec({ chainId: nat, minter: principal, helper: text, minterAddress: text, token: text, ledger: principal, decimals: IDL.Nat8 });
+export const ethereumInvoiceType = rec({
+  id: nat64, owner: principal, requestId: text, orderId: nat64, subaccount: blob, route: ethereumRoute,
+  payer: text, quoteContent: blob, saleAtoms: nat, grossAtoms: nat, sweepFee: nat,
+  canceledAtNs: opt(int), acceptedReceiptId: opt(nat64), entitlementGrantedAtNs: opt(int),
+  revenueFinalizedAtNs: opt(int), currentSweepId: opt(nat64), nextSweepOrdinal: nat64,
+  creditedBuyerAtoms: nat, lastBalance: opt(nat), lastBalanceAtNs: opt(int), nextCheckAtNs: int,
+  createdAtNs: int, updatedAtNs: int, lastError: opt(text),
+});
+const ethereumReceipt = rec({ id: nat64, invoiceId: nat64, eventKey: text, transactionHash: text, logIndex: nat, blockNumber: nat, blockHash: text, payer: text, amount: nat, observedAtNs: int });
+const ethereumSweep = rec({ id: nat64, invoiceId: nat64, ordinal: nat64, purpose: variant("sale", "buyer_credit"), amount: nat, fee: nat, attemptId: nat64, finalizedAtNs: opt(int), createdAtNs: int, updatedAtNs: int });
+const ethereumTransaction = rec({ chainId: nat, from: text, to: text, value: nat, data: text });
+export const ethereumInvoiceResultType = rec({ order, invoice: ethereumInvoiceType, receipt: opt(ethereumReceipt), sweep: opt(ethereumSweep), attempt: opt(attempt), quote: checkoutType,
+  payment: rec({ amountAtoms: nat, saleAtoms: nat, sweepFeeAtoms: nat, approve: ethereumTransaction, deposit: ethereumTransaction }),
+  active: bool, nextAction: variant("pay_ethereum", "verify_ethereum", "wait_wrapping", "settle", "fee_shortfall", "review_required", "none"), entitled: bool, earningsAvailable: bool,
+});
+export const ethereumFeesType = rec({ prepare: feeType, verify: feeType, settle: feeType, cancel: feeType });
 const withdrawalRequest = rec({ requestId: text, ledger: principal, to: account, totalDebit: nat });
 export const withdrawalType = rec({ request: withdrawalRequest, owner: principal, fee: nat, netAmount: nat, available: nat, commitment: blob, cycles: feeType });
 const withdrawal = rec({ requestId: text, state: operationState, lastError: opt(text) });
@@ -46,6 +63,14 @@ export const CONTRACT: Contract = {
   library_query: read([pageRequest], result(rec({ apps: vec(app), nextCursor: opt(nat64) }))),
   publisher_apps: read([pageRequest], result(rec({ apps: vec(app), nextCursor: opt(nat64) }))),
   earnings_query: read([], result(rec({ credits: vec(rec({ ledger: principal, owner: principal, available: nat, reserved: nat })), referral: opt(rec({ code: text })) }))),
+  ethereum_fees: read([], ethereumFeesType),
+  ethereum_quote: read([purchaseRequest], result(checkoutType)),
+  ethereum_prepare: update([rec({ quote: checkoutType, payer: text, feeVersion: nat })], ethereumInvoiceResultType),
+  ethereum_verify: update([rec({ requestId: text, transactionHash: text, feeVersion: nat })], ethereumInvoiceResultType),
+  ethereum_settle: update([rec({ requestId: text, feeVersion: nat })], ethereumInvoiceResultType),
+  ethereum_cancel: update([rec({ requestId: text, feeVersion: nat })], ethereumInvoiceResultType),
+  ethereum_status: read([opRequest], result(opt(ethereumInvoiceResultType))),
+  ethereum_history: read([pageRequest], result(rec({ invoices: vec(ethereumInvoiceResultType), nextCursor: opt(nat64) }))),
   purchase_quote: read([purchaseRequest], result(checkoutType)),
   purchase_status: read([opRequest], result(opt(purchaseResult))),
   withdraw_quote: read([withdrawalRequest], result(withdrawalType)),

@@ -24,6 +24,11 @@ configuration are tracked in [todo.marketplace.md](../../todo.marketplace.md).
   journals. Repeating the same request resumes its retained outcome. Quotes show
   ledger fees, the developer and affiliate shares, and the allocation forwarded
   toward burning NTN. A forwarding receipt does not prove the external burn.
+- Ethereum USDC checkout works with the Neutron EVM Wallet and browser wallets.
+  A verified successful mined payment grants app access before wrapping. The
+  official minter converts the deposit into ckUSDC in a separate invoice
+  subaccount; collection then releases earnings. Saved invoices preserve payment
+  and conversion progress independently of browser state.
 - Listing prices are free or USD $1–$50 inclusive, before discounts. Daily rate
   refresh retains the last successful rate when the XRC request fails and exposes
   freshness diagnostics. Fixed cycle charges and first-year storage coverage are
@@ -71,6 +76,10 @@ fixtures have distinct limits:
 - Same-build upgrades exercise retained state at the same canister principal.
   They do not establish migration from a previously released marketplace schema;
   no production marketplace version exists yet.
+- Ethereum fixtures exercise the deployed RPC and minter interfaces, exact
+  helper-event verification, early certified downloads with zero minted balance,
+  deferred earnings, concurrent recovery, and upgrades during conversion. They
+  do not submit a mainnet Ethereum transaction or establish provider availability.
 - Client and Kernel tests cover their local integrations. Browser fixtures are
   separate from live mainnet installation, wallet, or financial testing.
 
@@ -99,6 +108,7 @@ change; there is no marketplace-specific Kernel update resolver.
 - [Architecture, domains and browser authentication](spec/architecture.md)
 - [Query-first access and caller-funded updates](spec/cycles-and-queries.md)
 - [Purchase, withdrawal and ledger recovery](spec/ledger-flows.md)
+- [Ethereum USDC invoices, early access and conversion](spec/ethereum-usdc.md)
 - [Prices, acquisition records and rankings](spec/catalog-rankings.md)
 - [Admin-assigned auditors and review stamps](spec/audits.md)
 - [Certified HTTP package delivery](spec/certified-http.md)
