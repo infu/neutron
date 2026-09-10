@@ -147,6 +147,9 @@ try {
   assert.equal(await page.evaluate(() => window.fixture.discarded.length), 0);
   await page.evaluate(() => window.fixture.finish());
   await page.waitForFunction(() => window.fixture.discarded.length === 1);
+  // The reply can precede React's commit. Include unmount cleanup before
+  // checking that discarding the draft did not schedule another save.
+  await body.waitFor({ state: "detached" });
   assert.equal(await page.evaluate(() => window.fixture.pending.length), 0, "discard does not trigger another unmount save");
   assert.equal(await body.count(), 0);
   assert.deepEqual(errors, []);

@@ -23,6 +23,7 @@ test("the app identity is stable and installable", async () => {
   expect(String(manifest.id).length).toBeGreaterThanOrEqual(4);
   expect(manifest.format).toBe(3);
   expect(manifest.name).toBe("SNS Governance");
+  expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
 });
 
 test("it declares a tile and a resident background", async () => {

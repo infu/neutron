@@ -4,9 +4,8 @@ import type { SelfCallValue } from "neutron-tools/src/protocol.ts";
 /**
  * The self-call wire between the background and this app's own backend.
  *
- * `preapproved_self_calls` carries complete live Candid, so an `opt` is a
- * zero-or-one element array and a `variant` is a one-key object. Getting either
- * shape wrong is silent: the call succeeds and the key is simply not there.
+ * The Kernel normalizes Candid options and Results. The transport integration
+ * suite separately drives the real SDK and Candid adapter without these mocks.
  */
 
 const calls: Array<{ kind: "query" | "update"; method: string; args: SelfCallValue[] }> = [];
@@ -77,6 +76,18 @@ describe("reading the stored account", () => {
     });
   });
 
+  test("reads omitted Candid options and a normalized Nat revision", async () => {
+    reply = { created_at: "0", updated_at: "0", revision: "0" };
+    expect(await store.readStored()).toEqual({ secretKey: null, canister: null, domain: null, revision: 0 });
+  });
+
+  test("an incomplete record is not proof of an empty identity store", async () => {
+    for (const invalid of [{}, { revision: "0" }, state({ revision: "invalid" }), state({ created_at: null })]) {
+      reply = invalid as SelfCallValue;
+      await expect(store.readStored()).rejects.toThrow(/unexpected identity record/);
+    }
+  });
+
   test("accepts an already-unwrapped option, so a decoder change cannot silently empty the store", async () => {
     reply = state({ secret_key: seed, canister_id: "abc", domain: null }) as unknown as SelfCallValue;
     const result = await store.readStored();
@@ -104,7 +115,7 @@ describe("reading the stored account", () => {
   });
 
   test("never treats an undecodable present key as an empty store", async () => {
-    for (const secret_key of [undefined, "bad", {}, [null], [seed, seed], [[1, -1]], [[]]]) {
+    for (const secret_key of ["bad", {}, [null], [seed, seed], [[1, -1]], [[]]]) {
       reply = state({ secret_key }) as unknown as SelfCallValue;
       await expect(store.readStored()).rejects.toThrow(store.IdentityStoreError);
     }
@@ -112,6 +123,13 @@ describe("reading the stored account", () => {
 });
 
 describe("writing the stored account", () => {
+  test("accepts the Kernel's already-unwrapped successful writes", async () => {
+    reply = state({ secret_key: seed, revision: "3" }) as unknown as SelfCallValue;
+    expect((await store.initializeStoredIdentity(seed)).secretKey).toEqual(seed);
+    expect((await store.writeStoredIdentity(seed)).secretKey).toEqual(seed);
+    expect((await store.writeStoredSettings({ canister: "abc", domain: null })).revision).toBe(3);
+  });
+
   test("sends the raw seed to the update method", async () => {
     reply = { ok: state() } as unknown as SelfCallValue;
     await store.writeStoredIdentity(seed);
@@ -151,13 +169,13 @@ describe("writing the stored account", () => {
     await expect(store.writeStoredIdentity(seed)).rejects.toThrow("A Taggr key is 32 bytes");
   });
 
-  test("encodes a pinned domain as an option and an unpinned one as absent", async () => {
+  test("encodes a pinned domain directly and an unpinned one as null", async () => {
     reply = { ok: state() } as unknown as SelfCallValue;
     await store.writeStoredSettings({ canister: "abc", domain: "taggr.link" });
     await store.writeStoredSettings({ canister: "abc", domain: null });
     expect(calls.map((call) => call.args[0])).toEqual([
-      { canister_id: "abc", domain: ["taggr.link"] },
-      { canister_id: "abc", domain: [] },
+      { canister_id: "abc", domain: "taggr.link" },
+      { canister_id: "abc", domain: null },
     ]);
   });
 

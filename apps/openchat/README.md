@@ -48,6 +48,11 @@ test/                   msgpack round-trip + manifest/tool tests
 
 ## Develop
 
+Release 0.1.23 adds the production update source. Install this package once over
+an older copy marked **Manual** to enable future Settings updates, using the
+state-preserving [package update workflow](../../doc/package-updates.md).
+The existing browser account session and storage are retained.
+
 ```sh
 npm --workspace neutron-openchat run build     # esbuild + mogen
 npm --workspace neutron-openchat test          # complete package + tests

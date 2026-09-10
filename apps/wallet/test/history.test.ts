@@ -132,8 +132,9 @@ test("Wallet history preserves exact amounts and structured cursors", () => {
       kind_order: 1,
     },
     limit: "40",
+    include_logos: false,
   });
-  expect(historyPageRequest(null, null)).toEqual({ limit: "40" });
+  expect(historyPageRequest(null, null)).toEqual({ limit: "40", include_logos: false });
 });
 
 test("Wallet history rejects legacy and malformed blob projections", () => {

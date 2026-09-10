@@ -2,52 +2,84 @@
   "format": 1,
   "kernel": {
     "id": "kernel",
-    "path": "../../apps/kernel/kernel.v0.3.15.neutron"
+    "path": "../../apps/kernel/kernel.v0.3.50.neutron"
   },
   "apps": [
     {
       "id": "files",
-      "path": "../../apps/vfs/files.v0.4.6.neutron"
+      "path": "../../apps/vfs/files.v0.4.10.neutron"
     },
     {
       "id": "contacts",
-      "path": "../../apps/contacts/contacts.v0.3.4.neutron"
-    },
-    {
-      "id": "kitchensink",
-      "path": "../../apps/kitchensink/kitchensink.v0.3.4.neutron"
-    },
-    {
-      "id": "wagyu",
-      "path": "../../apps/wagyu/wagyu.v0.3.5.neutron"
+      "path": "../../apps/contacts/contacts.v0.3.6.neutron"
     },
     {
       "id": "agent",
-      "path": "../../apps/agent/agent.v0.3.4.neutron"
+      "path": "../../apps/agent/agent.v0.3.20.neutron"
     },
     {
-      "id": "jetcreeper",
-      "path": "../../apps/jetcreeper/jetcreeper.v0.3.4.neutron"
+      "id": "blast",
+      "path": "../../apps/blast/blast.v0.1.2.neutron"
+    },
+    {
+      "id": "wallet",
+      "path": "../../apps/wallet/wallet.v0.3.24.neutron"
+    },
+    {
+      "id": "evm_wallet",
+      "path": "../../apps/evm_wallet/evm_wallet.v0.1.25.neutron"
+    },
+    {
+      "id": "icpswap",
+      "path": "../../apps/icpswap/icpswap.v0.2.9.neutron"
+    },
+    {
+      "id": "uniswap",
+      "path": "../../apps/uniswap/uniswap.v0.1.18.neutron"
+    },
+    {
+      "id": "curve",
+      "path": "../../apps/curve/curve.v0.1.6.neutron"
+    },
+    {
+      "id": "aave",
+      "path": "../../apps/aave/aave.v0.1.7.neutron"
+    },
+    {
+      "id": "hyperliquid",
+      "path": "../../apps/hyperliquid/hyperliquid.v0.1.7.neutron"
+    },
+    {
+      "id": "wagyu",
+      "path": "../../apps/wagyu/wagyu.v0.3.6.neutron"
     },
     {
       "id": "mail",
       "path": "../../apps/mail/mail.v0.3.5.neutron"
     },
     {
-      "id": "mysubnet",
-      "path": "../../apps/mysubnet/mysubnet.v0.3.4.neutron"
+      "id": "taggr",
+      "path": "../../apps/taggr/taggr.v0.1.8.neutron"
     },
     {
-      "id": "wallet",
-      "path": "../../apps/wallet/wallet.v0.3.5.neutron"
+      "id": "openchat",
+      "path": "../../apps/openchat/openchat.v0.1.23.neutron"
+    },
+    {
+      "id": "nuance",
+      "path": "../../apps/nuance/nuance.v0.1.10.neutron"
+    },
+    {
+      "id": "snsgov",
+      "path": "../../apps/snsgov/snsgov.v0.1.12.neutron"
     },
     {
       "id": "spreadsheet",
       "path": "../../apps/spreadsheet/spreadsheet.v0.3.4.neutron"
     },
     {
-      "id": "chess",
-      "path": "../../apps/chess/chess.v0.3.4.neutron"
+      "id": "mysubnet",
+      "path": "../../apps/mysubnet/mysubnet.v0.3.4.neutron"
     }
   ]
 }

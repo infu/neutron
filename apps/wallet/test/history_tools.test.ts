@@ -68,7 +68,7 @@ test("history refresh invokes only the existing sync once and retains the return
   const ctx = context(), handlers = createHistoryToolHandlers();
   const result = await handlers.history({ refresh: true, ledger: LEDGER }, ctx.value);
   expect(ctx.calls).toEqual([["wallet_history_sync", [null], 180],
-    ["wallet_history_page", [{ ledger: LEDGER, limit: "50" }]], ["wallet_history_status", [null]]]);
+    ["wallet_history_page", [{ ledger: LEDGER, limit: "50", include_logos: false }]], ["wallet_history_status", [null]]]);
   expect(result.sync).toEqual({ requested: true, report: { startedAt: "1", finishedAt: "2", skippedOverlap: false, results: [] }, error: null });
   expect(result.error).toBeNull(); expect(result.statusError).toBeNull();
 });
@@ -77,4 +77,26 @@ test("invalid block identities are rejected before a ledger or account read", as
   const ctx = context(), handlers = createHistoryToolHandlers();
   for (const blockIndex of ["01", "-1", "1e3", 12, null]) await expect(handlers.transaction({ ledger: LEDGER, blockIndex } as JsonObject, ctx.value)).rejects.toThrow();
   expect(ctx.calls).toEqual([]);
+});
+
+test("adaptive agent history reads keep invocation context, sync once, and return the exact continuation", async () => {
+  const ctx = context(), handlers = createHistoryToolHandlers();
+  const original = ctx.value.kernel.querySelf;
+  const cursor = { ledger: LEDGER, timestamp_ns: "1788900000000000000", kind_order: "0", id: ID };
+  ctx.value.kernel.querySelf = async (method, args) => {
+    if (method !== "wallet_history_page") return original(method, args);
+    ctx.calls.push([method, args]);
+    const request = args[0] as JsonObject;
+    if (Number(request.limit) > 12) throw new Error("Self-call result exceeds the metadata byte limit");
+    return { records: [], next: { ...cursor, kind_order: 0, id: "100" }, has_more: true, inspected: "1000" };
+  };
+  const result = await handlers.history({ refresh: true, ledger: LEDGER, cursor }, ctx.value);
+  expect(result.error).toBeNull();
+  expect(result.hasMore).toBe(true);
+  expect(result.nextCursor).toEqual({ ...cursor, id: "100" });
+  expect(ctx.calls.filter(call => call[0] === "wallet_history_sync")).toHaveLength(1);
+  const pageCalls = ctx.calls.filter(call => call[0] === "wallet_history_page");
+  expect(pageCalls.map(call => call[1])).toEqual([50, 25, 12].map(limit => [{
+    ledger: LEDGER, before: { ...cursor, kind_order: 0 }, limit: String(limit), include_logos: false,
+  }]));
 });

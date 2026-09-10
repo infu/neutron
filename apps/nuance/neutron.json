@@ -2,7 +2,8 @@
   "format": 3,
   "name": "Nuance",
   "id": "nuance",
-  "version": 109,
+  "version": 110,
+  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "description": "Read, write, and collaboratively draft Nuance articles",
   "src": "main.mo",
   "backend": {

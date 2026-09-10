@@ -86,6 +86,10 @@ module {
 
         public func page(request : Types.PageRequest) : Types.Page {
             let limit = if (request.limit == 0) 40 else Nat.min(request.limit, MAX_PAGE_LIMIT);
+            // Existing direct callers retain their optional artwork. The UI
+            // and agent readers reuse token metadata instead of transmitting
+            // the same data URL in every activity row.
+            let includeLogos = request.include_logos != ?false;
             let records = List.empty<Types.Record>();
             var inspected = 0;
             var dangling = 0;
@@ -111,7 +115,7 @@ module {
                                 ledger = value.ledger;
                                 symbol = ledgerSymbol(value.ledger);
                                 decimals = ledgerDecimals(value.ledger);
-                                logo = ledgerLogo(value.ledger);
+                                logo = if (includeLogos) ledgerLogo(value.ledger) else null;
                                 value = value.value;
                             }));
                         };
@@ -119,7 +123,7 @@ module {
                             List.add(records, #adjustment({
                                 symbol = ledgerSymbol(value.ledger);
                                 decimals = ledgerDecimals(value.ledger);
-                                logo = ledgerLogo(value.ledger);
+                                logo = if (includeLogos) ledgerLogo(value.ledger) else null;
                                 value;
                             }));
                         };

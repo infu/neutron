@@ -131,7 +131,7 @@ test("Wallet tool projections omit repeated images without changing balances, ac
     3,
     { ...snapshot, ledgers: snapshot.ledgers.map((ledger) => ({ ...ledger, logo })) },
     catalog,
-    [{ ...activity, logo }],
+    [activity],
     { capturedAt: 1_700_000_000_000 },
   );
   const compact = walletProjectionForTool(projection);

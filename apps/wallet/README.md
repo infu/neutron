@@ -448,6 +448,15 @@ to be scanned. Disabling a token hides it from Assets and stops sync without
 erasing its retained history. Settings can disable the Wallet task globally, and
 Activity exposes a manual refresh plus source errors.
 
+Activity, overview, and agent history readers request pages without repeated
+token logos; the UI reuses artwork from its token snapshot. When transaction
+details make a page exceed the Kernel transport limit, the reader requests a
+smaller page with the same ledger and exclusive cursor. All records remain
+reachable through the returned cursor; it never skips an oversized record or
+retries a financial operation. A sync-status error does not hide a successfully
+loaded activity page. Direct `wallet_history_page` callers can set
+`include_logos: false`; omitting the option preserves the older response.
+
 ## Approvals
 
 Approvals lists live outstanding approvals only for selected ledgers for which

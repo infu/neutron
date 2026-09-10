@@ -292,6 +292,17 @@ own does:
 
 ## Build
 
+Release 0.1.7 adds the production update source. Install this package once over
+an older copy marked **Manual** to enable future Settings updates, using the
+state-preserving [package update workflow](../../doc/package-updates.md).
+The existing identity and browser storage are retained.
+
+Release 0.1.8 corrects the identity adapter for the Kernel's normalized self-call
+format: absent optional keys are omitted, successful writes are already unwrapped,
+and optional settings take a direct value or null. Existing saved keys restore
+without replacement. Malformed records remain errors; they cannot initialize a
+new identity. A decoding error is reported separately from a connection failure.
+
 ```sh
 cd apps/taggr
 npm run package        # validate, build, mopack, schema, metadata, pack
@@ -316,6 +327,11 @@ npm test               # package, Bun suites, and Motoko memory tests
   account into a browser that has never seen it, adopting the key an older
   installation already had, and never minting a new account when the Neutron is
   unreachable;
+- `test/identity_transport.ts` — the real private MessagePort, SDK binary codec,
+  and Kernel Candid adapter, using the backend's current type declarations in an
+  isolated process. Checks empty state, restoration with the same principal and
+  no update, browser-only accounts, concurrent initialization, settings, and
+  preserving an invalid present key;
 - `test/domain.test.ts` — domain resolution against the entries mainnet Taggr
   actually returns, and the suppression rules from Taggr's own `postAllowed`;
 - `test/wire.test.ts` — reply parsers against `serde_json`-shaped fixtures;
