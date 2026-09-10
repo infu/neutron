@@ -148,6 +148,17 @@ argument handling, alongside the broader retained-data PocketIC suites. It is
 not a production installation or a financial test. The disposable network was
 stopped after the check.
 
+A subsequent local check used the final protocol build with public Candid
+metadata, SHA-256
+`0d9af11fa662a51da3ff9200070fe04db1838cc064c01998400d85b47bc2debc`.
+Blast 4.2.0 discovered the interface and called all four exempt admin methods
+from an assigned identity that was not a controller. Auditor assignment/removal,
+unauthorized-call rejection and ordinary publisher identity checks passed.
+Configuration and roles remained intact after a same-canister keep upgrade.
+This disposable network was also stopped. The deployment controller identity
+and the configured Blast admin/auditor identities are separate roles and need
+not be the same principal.
+
 References:
 
 - [icp 1.0.2 command reference](https://github.com/dfinity/icp-cli/blob/v1.0.2/docs/reference/cli.md)

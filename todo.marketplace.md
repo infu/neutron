@@ -32,8 +32,9 @@ is [apps/marketplace](apps/marketplace/README.md).
   conversion/burn service. Missing destinations retain funds. A forwarding
   receipt proves delivery to that service, not the subsequent NTN burn.
 - Public and authenticated private queries and certified HTTP are browser-direct.
-  All non-auditor updates travel through Neutron with native cycles attached.
-  Assigned auditors' review updates are exempt; their other updates are not.
+  Ordinary updates travel through Neutron with native cycles attached. Assigned
+  auditors' review updates and the four assigned-admin endpoints are exempt;
+  these roles do not exempt ordinary purchases, publishing or withdrawals.
 - Fixed cycle estimates cover processing and one prepaid storage year for uploads.
   There is no automatic protocol tariff adjustment. The operator funds storage
   after the first year; packages, unfinished uploads and entitlements do not expire.
