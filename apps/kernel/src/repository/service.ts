@@ -1,4 +1,4 @@
-import type { RepositoryAccessApproval } from "../repository_access/client.ts";
+import type { RepositoryAccessApproval, RepositoryPreparedAccess } from "../repository_access/client.ts";
 import {
   KERNEL_INSTALL_MAX_COPIES,
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
@@ -13,6 +13,7 @@ import {
   readPendingRepositorySetup,
   stagePendingRepositorySetup,
   type RepositorySetupReference,
+  type RepositoryStorage,
 } from "neutron-tools/repository";
 import { normalizeManifestDependencies } from "neutron-tools/src/schema.js";
 import { formatAppVersionLabel } from "neutron-tools/src/version.js";
@@ -50,6 +51,14 @@ let activeDeployment: PreparedBrowserDeployment | null = null;
 let compiledPackageIds: readonly string[] = [];
 let activeExpiryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 let generation = 0;
+// An app's already-authorized credential and unapproved handoff are transient.
+// After a reload, the app can reopen its saved grant; the Kernel must not turn
+// an interrupted prepared handoff into another paid source-access workflow.
+let preparedRequest: {
+  roots: readonly string[];
+  access?: RepositoryPreparedAccess;
+  storage: RepositoryStorage;
+} | null = null;
 
 export function refreshPendingRepositorySetup({
   freshCapture = false,
@@ -107,6 +116,36 @@ export function startRepositorySetupFromOffer(
   void loadRepositorySetup({ approvedAccess });
 }
 
+/** An installed app supplies its own download access; deployment still needs
+ * the exact compiled manifest review. This path never asks Kernel to buy access. */
+export function startPreparedRepositorySetup(
+  reference: RepositorySetupReference,
+  offeredBy: AttestedInstallOfferRequester,
+  roots: readonly string[],
+  access?: RepositoryPreparedAccess,
+): void {
+  const state = useRepositorySetupStore.getState();
+  if (state.phase !== "idle" || state.reference || readPendingRepositorySetup(kernelSetupStorage)) {
+    throw new Error("Another repository setup is already active");
+  }
+  abandonActiveAttempt(false);
+  const values = new Map<string, string>();
+  const storage: RepositoryStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => { values.set(key, value); },
+    removeItem: (key) => { values.delete(key); },
+  };
+  preparedRequest = {
+    roots: Object.freeze([...roots]),
+    storage,
+    ...(access ? { access: Object.freeze({ ...access, paths: Object.freeze([...access.paths]) }) } : {}),
+  };
+  const pending = stagePendingRepositorySetup(storage, reference, Date.now());
+  repositorySetupState.pending(pending.reference, offeredBy, true);
+  schedulePendingExpiry(pending.reference, pending.capturedAt);
+  void loadRepositorySetup();
+}
+
 export async function loadRepositorySetup(
   clientOptions: RepositoryClientOptions = {},
 ): Promise<void> {
@@ -138,6 +177,13 @@ export async function loadRepositorySetup(
     activeSession = session;
     const fetched = await loadRepositorySetupBytes(reference, {
       ...clientOptions,
+      ...(preparedRequest ? {
+        // This remains read-only even when an interrupted ordinary download
+        // left a cached grant request awaiting a charged reconciliation.
+        allowAccessAcquisition: false,
+        approvedAccess: [],
+        ...(preparedRequest.access ? { preparedAccess: preparedRequest.access } : {}),
+      } : {}),
       signal: abort.signal,
       onProgress(progress) {
         if (attempt === generation) repositorySetupState.progress(progress);
@@ -258,6 +304,23 @@ export async function loadRepositorySetup(
       },
       selection,
     );
+    if (preparedRequest) {
+      const advertised = new Set(packages.map(({ id }) => id));
+      if (preparedRequest.roots.some((id) => !advertised.has(id))) {
+        throw new Error("The prepared app selection differs from its verified repository manifest.");
+      }
+      setRoots(new Set(preparedRequest.roots));
+      const chosen = useRepositorySetupStore.getState().selection!;
+      if (chosen.blockers.length) throw new Error(chosen.blockers.join(" "));
+      if (chosen.selected.size === 0) {
+        session.cancel();
+        activeSession = null;
+        clearExpiryTimer();
+        repositorySetupState.nothingToInstall();
+        return;
+      }
+      await reviewRepositorySelection();
+    }
     if (availableRepositoryPackageIds(packages, reconciliation).length === 0) {
       session.cancel();
       activeSession = null;
@@ -445,7 +508,7 @@ export async function installRepositorySelection(): Promise<void> {
       provenance,
     });
     if (attempt !== generation) return;
-    clearPendingRepositorySetup(kernelSetupStorage);
+    clearPendingRepositorySetup(preparedRequest?.storage ?? kernelSetupStorage);
     activeCompiled = null;
     activeDeployment = null;
     compiledPackageIds = [];
@@ -535,6 +598,7 @@ function abandonActiveAttempt(
   if (incrementGeneration) {
     generation += 1;
     clearExpiryTimer();
+    preparedRequest = null;
   }
   activeAbort?.abort();
   activeAbort = null;
@@ -610,7 +674,7 @@ function repositoryValidationTarget(
 function requireCurrentPendingReference(
   reference: RepositorySetupReference,
 ): void {
-  const pending = readPendingRepositorySetup(kernelSetupStorage);
+  const pending = readPendingRepositorySetup(preparedRequest?.storage ?? kernelSetupStorage);
   const pendingReference = pending?.reference ?? null;
   if (!pendingReference || !referencesEqual(reference, pendingReference)) {
     throw new Error(

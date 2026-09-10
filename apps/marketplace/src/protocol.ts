@@ -87,6 +87,7 @@ export const CONTRACT: Contract = {
   upload_finish: update([rec({ requestId: text, feeVersion: nat })], upload),
   candidate_submit: update([rec({ requestId: text, appId: text, version: nat, artifactId: nat64, sourceArtifactId: opt(nat64), dependencies: vec(rec({ appId: text, minVersion: nat })), feeVersion: nat })], candidate),
   install_prepare: update([rec({ requestId: text, appIds: vec(text), feeVersion: nat })], rec({ canister: principal, manifestId: text, digest: text, setupUrl: text, appIds: vec(text) })),
+  repo_access_v1: update([rec({ request_id: text, token: text, paths: vec(text), fee_version: nat })], rec({ request_id: text, paths: vec(text), accepted_cycles: nat })),
 };
 export type Option<T> = [] | [T];
 export const some = <T>(value: T | null | undefined): Option<T> => value === null || value === undefined ? [] : [value];

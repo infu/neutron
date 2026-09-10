@@ -21,7 +21,16 @@ test("the installed-browser observer decodes Playwright Buffer bodies without lo
   }
   request(owner, runtime.relayMethod, new Uint8Array(IDL.encode([relay], [{ canister: protocol, method: "read_delegate_set", args: new Uint8Array(), cycles: 1_000_000n }])), "call");
   request(protocol, "library_query", new Uint8Array(IDL.encode([], [])), "query", true);
+  const grant = IDL.Record({ request_id: IDL.Text, token: IDL.Text, paths: IDL.Vec(IDL.Text), fee_version: IDL.Nat });
+  const paths = [`/repo/v1/packages/${"e4".repeat(32)}.neutron`];
+  const token = "c2".repeat(32);
+  const granting = new Uint8Array(IDL.encode([relay], [{ canister: protocol, method: "repo_access_v1", args: new Uint8Array(IDL.encode([grant], [{ request_id: "a1".repeat(16), token, paths, fee_version: 1n }])), cycles: 3_000_000n }]));
+  request(owner, runtime.relayMethod, granting, "call");
+  request(owner, runtime.relayMethod, granting, "call");
   expect(result.errors).toEqual([]);
-  expect([...result.relays.values()]).toEqual(["read_delegate_set"]);
+  expect([...result.relays.values()]).toEqual(["read_delegate_set", "repo_access_v1"]);
   expect(result.privateQueries).toEqual([{ method: "library_query", canisterId: protocol.toText(), sender: sender.toText(), delegationTargets: [[protocol.toText()]] }]);
+  expect(result.sourceGrantRequests).toHaveLength(1);
+  expect(result.sourceGrantRequests[0]).toMatchObject({ source: protocol.toText(), paths });
+  expect(JSON.stringify(result.sourceGrantRequests)).not.toContain(token);
 });

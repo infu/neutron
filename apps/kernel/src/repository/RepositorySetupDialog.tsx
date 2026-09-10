@@ -151,6 +151,12 @@ export function RepositorySetupDialog() {
         ) : null}
         {state.phase === "error" ? <RepositoryError uiMode={uiMode} /> : null}
         {state.phase === "success" ? <RepositorySuccess /> : null}
+        {state.phase === "nothing" ? (
+          <div className="call">
+            <p>The selected applications are already installed. Nothing was changed.</p>
+            <div className="btn-actions"><button className="btn" data-repository-initial-focus data-tid="repository-done" onClick={() => void finishRepositorySetup()} type="button">Done</button></div>
+          </div>
+        ) : null}
       </div>
     </>
   );
@@ -409,11 +415,11 @@ function RepositoryReview({
             <button
               className="btn btn-sec"
               data-repository-initial-focus
-              data-tid="repository-back"
-              onClick={backToRepositorySelection}
+              data-tid={state.prepared ? "repository-dismiss" : "repository-back"}
+              onClick={state.prepared ? () => void dismissRepositorySetup() : backToRepositorySelection}
               type="button"
             >
-              Back
+              {state.prepared ? "Cancel" : "Back"}
             </button>
           </>
         ) : (
@@ -740,9 +746,9 @@ function repositoryCapabilityAuthorityConfig(
 }
 
 function RepositoryError({ uiMode }: { uiMode: KernelUiMode }) {
-  const { error, errorStage, reference } = useRepositorySetupStore();
+  const { error, errorStage, reference, prepared } = useRepositorySetupStore();
   const access = useRepositoryAccessApprovals(
-    errorStage !== "compile" && reference ? [reference.repo] : [],
+    !prepared && errorStage !== "compile" && reference ? [reference.repo] : [],
     error ?? "",
   );
   return (
@@ -755,11 +761,13 @@ function RepositoryError({ uiMode }: { uiMode: KernelUiMode }) {
         {error ?? "Repository setup failed"}
       </div>
       <p>
-        {uiMode === "developer"
+        {prepared
+          ? "Retry uses the same prepared download access without another source charge. You can also return to the app to reopen its saved installation."
+          : uiMode === "developer"
           ? "Neutron checks the current source access cost before another download and reconciles any interrupted install journal before the next attempt."
           : "You can try again. Neutron will check any interrupted installation first."}
       </p>
-      <RepositoryAccessCost {...access} onRetry={access.refresh} />
+      {!prepared && <RepositoryAccessCost {...access} onRetry={access.refresh} />}
       <div className="btn-actions">
         <button
           className="btn"
@@ -895,6 +903,7 @@ function dialogTitle(phase: string): string {
   if (phase === "compiling") return "Compiling applications";
   if (phase === "review") return "Approve application setup";
   if (phase === "success") return "Applications installed";
+  if (phase === "nothing") return "Already installed";
   if (phase === "error") return "Application setup failed";
   return "Choose applications";
 }

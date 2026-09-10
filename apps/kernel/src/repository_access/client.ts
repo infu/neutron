@@ -23,6 +23,12 @@ export type RepositoryAccessApproval = Readonly<{
   source: string;
   descriptor: RepositoryAccessDescriptor;
 }>;
+/** An app's already-authorized download capability. It never grants spending authority. */
+export type RepositoryPreparedAccess = Readonly<{
+  source: string;
+  token: string;
+  paths: readonly string[];
+}>;
 
 export class RepositoryAccessError extends Error {
   constructor(readonly code: string, message: string) {
@@ -38,6 +44,9 @@ export type RepositoryAccessOptions = Readonly<{
   /** Existing caller HTTP timeout; never applied to a signed access update. */
   timeoutMs?: number;
   approvedAccess?: readonly RepositoryAccessApproval[] | undefined;
+  preparedAccess?: RepositoryPreparedAccess | undefined;
+  /** False permits public reads or the supplied capability, never a new access update. */
+  allowAccessAcquisition?: boolean | undefined;
 }>;
 
 export type RepositoryAccessDependencies = Readonly<{
@@ -82,11 +91,18 @@ export function createRepositoryAccessFetcher(deps: RepositoryAccessDependencies
     options: Omit<RepositoryAccessOptions, "fetch"> = {},
   ): Promise<Response> {
     const raw = input instanceof Request ? input.url : String(input);
-    const url = new URL(raw);
+    let url: URL;
+    try { url = new URL(raw); }
+    catch (error) {
+      if (options.preparedAccess === undefined) throw error;
+      throw new RepositoryAccessError("invalid_prepared_access", "The prepared source resource URL is invalid.");
+    }
     const method = (init.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
     const source = !url.search && !url.hash && !url.username && !url.password &&
       isRepositoryResourcePath(url.pathname) && (method === "GET" || method === "HEAD")
       ? deps.resolveSource(url) : null;
+    const prepared = options.preparedAccess === undefined ? undefined :
+      validatePreparedAccess(options.preparedAccess, source, url);
     if (!source || source.origin !== url.origin) return deps.fetch(input, init);
     const signal = options.signal ?? init.signal ?? undefined;
     const fetch = options.timeoutMs === undefined ? deps.fetch : timedFetch(deps.fetch, options.timeoutMs);
@@ -94,24 +110,62 @@ export function createRepositoryAccessFetcher(deps: RepositoryAccessDependencies
     if (!paths.includes(url.pathname) || paths.some((path) => !isRepositoryResourcePath(path))) {
       throw new RepositoryAccessError("invalid_paths", "Source access must name the exact canonical resource paths.");
     }
+    if (prepared && paths.some((path) => !prepared.paths.includes(path))) {
+      throw new RepositoryAccessError("prepared_access_scope", "The prepared source access does not cover every requested resource.");
+    }
     const read = async (token?: string): Promise<Response> => {
       assertNotAborted(signal);
       const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
       headers.delete("authorization");
       if (token) headers.set("authorization", `Bearer ${token}`);
-      const response = await fetch(url.href, {
-        ...init, method, headers, body: null, ...(signal ? { signal } : {}),
-        credentials: "omit", cache: token ? "no-store" : (init.cache ?? "no-store"), redirect: "error",
-        mode: "cors", referrerPolicy: "no-referrer",
-      });
+      let response: Response;
+      try {
+        response = await fetch(url.href, {
+          ...init, method, headers, body: null, ...(signal ? { signal } : {}),
+          credentials: "omit", cache: token ? "no-store" : (init.cache ?? "no-store"), redirect: "error",
+          mode: "cors", referrerPolicy: "no-referrer",
+        });
+      } catch (error) {
+        if (!prepared) throw error;
+        // A transport may echo request headers. Do not retain its exception or
+        // cause when an app supplied a bearer capability.
+        if (signal?.aborted || (error instanceof Error && error.name === "AbortError")) {
+          throw new DOMException("The download was canceled.", "AbortError");
+        }
+        if (error instanceof RepositoryAccessError && error.code === "timed_out") {
+          throw new RepositoryAccessError("timed_out", "The package source took too long to respond.");
+        }
+        throw new RepositoryAccessError("prepared_access_failed", "The prepared source download could not be reached. Retry the same prepared installation.");
+      }
       assertExactResponse(response, url);
       if (token && response.ok) assertPrivateResponse(response);
       return response;
     };
 
+    if (prepared) {
+      // A prepared batch may mix public and private packages. Public sources
+      // correctly return a public certificate even when a bearer is supplied,
+      // so follow the ordinary anonymous-first read before using the grant.
+      const publicResponse = await read();
+      if (publicResponse.status !== 401 && publicResponse.status !== 403) return publicResponse;
+      assertGatewayProof(publicResponse, true);
+      await publicResponse.body?.cancel().catch(() => undefined);
+      assertNotAborted(signal);
+      const response = await read(prepared.token);
+      if (response.status === 401 || response.status === 403) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new RepositoryAccessError("prepared_access_denied", "The source no longer accepts this prepared download access. Return to the app to prepare the installation again.");
+      }
+      return response;
+    }
+
     // No session access or backend call is needed for public resources.
     let response = await read();
     if (response.status !== 401 && response.status !== 403) return response;
+    if (options.allowAccessAcquisition === false) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new RepositoryAccessError("prepared_access_required", "This source requires prepared download access. Return to the app to prepare the installation again.");
+    }
     assertGatewayProof(response, true);
     await response.body?.cancel();
     assertNotAborted(signal);
@@ -200,6 +254,27 @@ export function createRepositoryAccessFetcher(deps: RepositoryAccessDependencies
     for (const [key, grant] of grants) if (grant === first) grants.delete(key);
     throw new RepositoryAccessError("access_denied", "The source no longer authorizes this download. Start the download again to request current access.");
   };
+}
+
+function validatePreparedAccess(
+  access: RepositoryPreparedAccess,
+  source: RepositorySource | null,
+  url: URL,
+): RepositoryPreparedAccess {
+  const invalid = () => {
+    throw new RepositoryAccessError("invalid_prepared_access", "The prepared source access is invalid.");
+  };
+  if (!access || typeof access.source !== "string" || typeof access.token !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(access.token) || !Array.isArray(access.paths) || access.paths.length === 0 ||
+    access.paths.some((path) => typeof path !== "string" || !isRepositoryResourcePath(path))) invalid();
+  try { if (Principal.fromText(access.source).toText() !== access.source) invalid(); }
+  catch { invalid(); }
+  if (!source || source.origin !== url.origin || source.canisterId !== access.source || !access.paths.includes(url.pathname)) {
+    throw new RepositoryAccessError("prepared_access_scope", "The prepared source access does not cover this exact source and resource.");
+  }
+  // Copy before the first asynchronous read so a caller cannot mutate the
+  // capability's scope while a group of packages is being acquired.
+  return Object.freeze({ source: access.source, token: access.token, paths: Object.freeze([...access.paths]) });
 }
 
 function validateReply(reply: RepositoryAccessReply, grant: Grant): void {

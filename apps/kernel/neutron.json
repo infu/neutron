@@ -2,7 +2,7 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 356,
+  "version": 359,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "src": "main.mo",
   "init_arg": [

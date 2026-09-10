@@ -12,7 +12,7 @@ import { join } from "node:path";
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const output = process.env.MARKETPLACE_BROWSER_ARTIFACTS || "/tmp/neutron-marketplace-ui/browser";
 await mkdir(output, { recursive: true });
-const transport = `export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler}); export const removeExposedTool=name=>window.marketplaceTools.delete(name); export const connectEthereumProvider=()=>{throw Error('Unexpected browser wallet connection in IC checkout regression')};`;
+const transport = `export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler}); export const removeExposedTool=name=>window.marketplaceTools.delete(name); export const copyToClipboard=text=>{const state=window.marketplaceFixture;state.copies.push({text,active:navigator.userActivation.isActive});return state.copyFailure?Promise.reject(Error('Clipboard temporarily unavailable.')):Promise.resolve();}; export const connectEthereumProvider=()=>{throw Error('Unexpected browser wallet connection in IC checkout regression')};`;
 const fixture = `
 import React from 'react';
 import {createRoot} from 'react-dom/client';
@@ -21,7 +21,7 @@ import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const principal='3rurp-vyaaa-aaaay-aacua-cai';
 const scenario=new URL(location.href).searchParams;
-const state=window.marketplaceFixture={initializations:0,connections:0,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[]};
+const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[]};
 const entries=[
  ['notes','Quiet Notes','A little space for your biggest ideas.','0'],
  ['garden','Garden','A clearer view of your day.','0'],
@@ -147,6 +147,23 @@ try {
   checks.push("Already installed apps are excluded from install selection, updates point to Settings, and restored requests resume their original identity.");
 
   await page.getByRole("button", { name: "Earnings", exact: true }).click();
+  await page.evaluate(() => {
+    window.marketplaceFixture.copyFailure = true;
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: () => { throw Error('Direct iframe clipboard access is blocked by Permissions Policy'); },
+    } });
+  });
+  await page.getByRole("button", { name: "Copy", exact: true }).click();
+  await page.getByText("Clipboard temporarily unavailable.", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Copied", exact: true }).count(), 0);
+  await page.evaluate(() => { window.marketplaceFixture.copyFailure = false; });
+  await page.getByRole("button", { name: "Copy", exact: true }).click();
+  await page.getByRole("button", { name: "Copied", exact: true }).waitFor();
+  assert.equal(await page.getByText("Clipboard temporarily unavailable.", { exact: true }).count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.copies), [
+    { text: 'QUIET-CODE', active: true }, { text: 'QUIET-CODE', active: true },
+  ]);
+  checks.push("Referral Copy uses the shared Kernel clipboard API within the click activation, works with direct iframe clipboard access blocked, and clears a failed-copy message after retry.");
   await page.getByRole("button", { name: "Withdraw", exact: true }).click();
   const withdraw = page.getByRole("dialog", { name: "Withdraw ckUSDC", exact: true });
   await withdraw.getByRole("button", { name: "Max", exact: true }).click();

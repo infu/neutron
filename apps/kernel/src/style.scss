@@ -4299,14 +4299,17 @@ button:focus-visible,
     }
 }
 
-.settings-app-updates-toolbar > .repository-access-cost {
-    flex-basis: 100%;
-}
+.repository-access-disclosure {
+    align-self: center;
 
-.settings-app-update-with-access {
-    display: grid;
-    gap: 4px;
-    justify-items: end;
+    > summary {
+        font-size: 10px;
+        padding: 6px 9px;
+    }
+
+    .repository-access-cost {
+        margin-top: 0;
+    }
 }
 
 .settings-app-updates-feedback {

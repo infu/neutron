@@ -44,6 +44,7 @@ Object.defineProperty(globalThis, "window", {
 const [
   {
     AppUpdateCell,
+    AppUpdateAccess,
     AppUpdatesBulkAction,
     AppUpdatesCoordinator,
     AppUpdatesFeedback,
@@ -528,13 +529,14 @@ function renderSurface(
     <>
       {apps.map((app) => (
         <div data-app-id={app.appId} key={app.appId}>
-          {AppUpdateCell({
+          {AppUpdateAccess({ appId: app.appId, children: (access) => AppUpdateCell({
+            access,
             appId: app.appId,
             appName: app.appName,
             disabled,
             returnFocusRef,
             ...(app.updateSource ? { updateSource: app.updateSource } : {}),
-          })}
+          }) })}
         </div>
       ))}
       {AppUpdatesBulkAction({

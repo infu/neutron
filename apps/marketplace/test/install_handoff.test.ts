@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { InstallationQuote, OperationResult } from "../src/view-types.ts";
 
 if (process.env.NEUTRON_MARKETPLACE_INSTALL_HANDOFF_CHILD !== "1") {
-  test("installation hands a retained offer directly from the active tile to the Kernel", async () => {
+  test("installation prepares once and hands private access to the generic installer", async () => {
     try {
       const result = await promisify(execFile)(process.execPath, ["test", fileURLToPath(import.meta.url)], {
         env: { ...process.env, NEUTRON_MARKETPLACE_INSTALL_HANDOFF_CHILD: "1" }, timeout: 30_000,
@@ -18,48 +18,53 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_HANDOFF_CHILD !== "1") {
   }, 35_000);
 } else {
   type Data = Record<string, any>;
-  type Call = { endpoint: "tile" | "background"; target: string; name: string; args: Data };
+  type Call = { target: string; name: string; args: Data };
   const OPERATION = "12".repeat(16), OWNER = "3rurp-vyaaa-aaaay-aacua-cai", CANISTER = "rrkah-fqaaa-aaaaa-aaaaq-cai";
   const URL = `https://${OWNER}.icp0.io/#repo=${CANISTER}&manifest=${"ab".repeat(32)}&digest=${"cd".repeat(32)}`;
+  const TOKEN = "private-download-access-token";
   const quoted: InstallationQuote = {
     operationId: OPERATION, appIds: ["editor"], canisterId: CANISTER, owner: OWNER,
-    cycles: { total: "1200000", processing: "1200000", storage: "0", schedule: "1" },
+    cycles: { total: "251200000", processing: "251200000", storage: "0", schedule: "1" },
     fee: { feeVersion: "1", processingCycles: "1200000", storageCycles: "0", totalCycles: "1200000", processingBytes: "100", newStorageBytes: "0" },
+    sourceAccess: { source: CANISTER, feeVersion: "1", cycles: "250000000" },
   };
   const ready: InstallationQuote = {
     ...quoted, setupUrl: URL,
     cycles: { ...quoted.cycles, total: "0", processing: "0" },
     fee: { ...quoted.fee, processingCycles: "0", totalCycles: "0", processingBytes: "0" },
+    sourceAccess: { ...quoted.sourceAccess!, cycles: "0" },
   };
   const prepared: OperationResult = { operationId: OPERATION, appIds: ["editor"], state: "pending", nextAction: "resume", message: "Ready for the installer.", installation: ready };
+  const complete: OperationResult = { ...prepared, state: "complete", nextAction: "none", message: "Installer opened." };
+  const handoff = { url: URL, appIds: ["editor"], access: { source: CANISTER, token: TOKEN, paths: ["/private/editor.neutron"] } };
   const calls: Call[] = [];
-  let activation = false, focused = true, preparationCount = 0, openedFailure: Error | null = null;
-  let approve: (() => void) | null = null, decline: ((reason: Error) => void) | null = null;
+  let preparationFailure: Error | null = null, openedFailure: Error | null = null, kernelFailure: Error | null = null;
+  let delayPreparation = false, releasePreparation: (() => void) | null = null;
+  let privateReply: Data, freshQuote: InstallationQuote, presented = true;
 
-  // This boundary mirrors the physical endpoint/focus/activation rule exercised
-  // by Kernel's real msg_bus.isolated.ts install-offer routing tests. A nested
-  // background request does not inherit the originating tile's endpoint role.
-  function kernelOffer(endpoint: Call["endpoint"], args: Data): Promise<Data> {
-    calls.push({ endpoint, target: "kernel", name: "apps.install_offer", args });
-    if (endpoint !== "tile" || !focused || !activation) return Promise.reject(Object.assign(new Error("An install offer must come from a focused app button or an active agent invocation"), { code: "USER_INTERACTION_REQUIRED" }));
-    return new Promise((resolve, reject) => {
-      approve = () => resolve({ presented: true, requestId: "kernel-offer" });
-      decline = reject;
-    });
-  }
   mock.module("neutron-tools/app", () => ({
     connectEthereumProvider: async () => { throw new Error("Unexpected browser wallet access"); },
-    callTool: (call: Data): Promise<Data> => {
-      if (call.target === "kernel") return kernelOffer("tile", call.arguments);
-      const args = JSON.parse(call.arguments.paramsJson), method = call.arguments.method;
-      calls.push({ endpoint: "tile", target: call.target, name: method, args });
-      if (call.target !== "app:marketplace:background") throw new Error("Unexpected app endpoint");
-      if (method === "install") { preparationCount++; return Promise.resolve({ resultJson: JSON.stringify(prepared) }); }
-      if (method === "installationOpened") {
-        if (openedFailure) return Promise.reject(openedFailure);
-        return Promise.resolve({ resultJson: JSON.stringify({ operationId: OPERATION, state: "complete", nextAction: "none", message: "Installer opened." }) });
+    callTool: async (call: Data): Promise<Data> => {
+      if (call.target === "kernel") {
+        calls.push({ target: "kernel", name: call.name, args: call.arguments });
+        if (call.name !== "apps.install_prepared") throw new Error("Expected the manifest-authorized prepared installer capability");
+        if (kernelFailure) throw kernelFailure;
+        return { presented, requestId: "kernel-installer" };
       }
-      throw new Error(`Unexpected call before installation handoff: ${method}`);
+      const args = JSON.parse(call.arguments.paramsJson), method = call.arguments.method;
+      calls.push({ target: call.target, name: method, args });
+      if (call.target !== "app:marketplace:background") throw new Error("Unexpected app endpoint");
+      if (method === "quoteInstallation") return { resultJson: JSON.stringify(freshQuote) };
+      if (method === "install") {
+        if (delayPreparation) await new Promise<void>(resolve => { releasePreparation = resolve; });
+        if (preparationFailure) throw preparationFailure;
+        return { resultJson: JSON.stringify(privateReply) };
+      }
+      if (method === "installationOpened") {
+        if (openedFailure) throw openedFailure;
+        return { resultJson: JSON.stringify(complete) };
+      }
+      throw new Error(`Unexpected call during installation: ${method}`);
     },
   }));
   mock.module("../src/publication.ts", () => ({
@@ -70,87 +75,103 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_HANDOFF_CHILD !== "1") {
   const { createMarketplaceClient } = await import("../src/tile_client.ts");
   const client = createMarketplaceClient();
   beforeEach(() => {
-    calls.length = 0; activation = false; focused = true; preparationCount = 0; openedFailure = null; approve = null; decline = null;
+    calls.length = 0; preparationFailure = null; openedFailure = null; kernelFailure = null;
+    delayPreparation = false; releasePreparation = null; presented = true;
+    privateReply = { result: structuredClone(prepared), handoff: structuredClone(handoff) };
+    freshQuote = structuredClone(quoted);
   });
 
-  test("the same Kernel boundary rejects a non-agent background offer even during a tile gesture", async () => {
-    activation = true;
-    await expect(kernelOffer("background", { kind: "repository_setup_url", url: URL })).rejects.toMatchObject({ code: "USER_INTERACTION_REQUIRED" });
-    expect(approve).toBeNull();
-  });
-
-  test("charged preparation returns ready without trying an invalid background offer", async () => {
-    const result = await client.install(["editor"], quoted);
-    expect(result).toEqual(prepared);
-    expect(calls).toEqual([{ endpoint: "tile", target: "app:marketplace:background", name: "install", args: { appIds: ["editor"], quote: quoted } }]);
-    expect(preparationCount).toBe(1);
-    expect(approve).toBeNull();
-  });
-
-  test("Open installer dispatches the exact retained URL before its first await", async () => {
-    activation = true;
-    const pending = client.openInstallation(ready);
-    activation = false;
-    expect(calls).toEqual([{ endpoint: "tile", target: "kernel", name: "apps.install_offer", args: { kind: "repository_setup_url", url: URL } }]);
-    expect(approve).not.toBeNull();
-    expect(preparationCount).toBe(0);
-    approve!();
-    await pending;
-    expect(calls[1]?.name).toBe("installationOpened");
-    expect(preparationCount).toBe(0);
-  });
-
-  test("a ready Install control also dispatches directly instead of quoting or preparing again", async () => {
-    activation = true;
-    const pending = client.install(["editor"], ready);
-    activation = false;
-    expect(calls[0]).toEqual({ endpoint: "tile", target: "kernel", name: "apps.install_offer", args: { kind: "repository_setup_url", url: URL } });
+  test("one Install invocation awaits charged preparation then opens the generic installer automatically", async () => {
+    delayPreparation = true;
+    const pending = client.install(["editor"], quoted);
     expect(calls).toHaveLength(1);
-    approve!();
-    await pending;
-    expect(preparationCount).toBe(0);
+    expect(calls[0]).toEqual({ target: "app:marketplace:background", name: "install", args: { appIds: ["editor"], quote: quoted } });
+    expect(releasePreparation).not.toBeNull();
+    // The async preparation has no transient browser gesture to preserve.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    releasePreparation!();
+    const result = await pending;
+    expect(calls.map(call => call.name)).toEqual(["install", "apps.install_prepared", "installationOpened"]);
+    expect(calls[1]?.args).toEqual(handoff);
+    expect(calls[2]?.args).toEqual({ quote: ready });
+    expect(result).toEqual(complete);
+    expect(JSON.stringify(result)).not.toContain(TOKEN);
+    expect(JSON.stringify(calls.filter(call => call.target !== "kernel"))).not.toContain(TOKEN);
   });
 
-  test("the ready shortcut still rejects a changed selection before opening the original offer", async () => {
-    activation = true;
+  test("resuming a prepared selection obtains its private handoff using the original request", async () => {
+    await client.openInstallation(ready);
+    expect(calls.map(call => call.name)).toEqual(["install", "apps.install_prepared", "installationOpened"]);
+    expect(calls[0]?.args).toEqual({ appIds: ["editor"], quote: ready });
+    expect(calls[1]?.args.url).toBe(URL);
+  });
+
+  test("a changed selection rejects before preparing or presenting anything", async () => {
     await expect(client.install(["wallet"], ready)).rejects.toThrow("selected apps changed");
     expect(calls).toEqual([]);
-    expect(preparationCount).toBe(0);
   });
 
-  test("declining Kernel review retains the original offer for another explicit tile click", async () => {
+  test("a private preparation failure cannot open or acknowledge an installer", async () => {
+    preparationFailure = new Error("Preparation response interrupted");
+    await expect(client.install(["editor"], quoted)).rejects.toThrow("interrupted");
+    expect(calls.map(call => call.name)).toEqual(["install"]);
+  });
+
+  test("a non-ready response returns its public state without handoff", async () => {
+    privateReply = { result: { ...prepared, state: "review_required", installation: quoted } };
+    const result = await client.install(["editor"], quoted);
+    expect(result).toEqual(privateReply.result);
+    expect(calls.map(call => call.name)).toEqual(["install"]);
+  });
+
+  test("an unsuccessful handoff preserves the same saved request for retry", async () => {
+    kernelFailure = new Error("The installer is unavailable");
     const original = structuredClone(ready);
-    activation = true;
-    const first = client.openInstallation(ready);
-    decline!(new Error("The install offer was dismissed"));
-    await expect(first).rejects.toThrow("dismissed");
+    await expect(client.openInstallation(ready)).rejects.toThrow("unavailable");
     expect(calls.some(call => call.name === "installationOpened")).toBe(false);
+    kernelFailure = null;
+    await client.openInstallation(ready);
+    expect(calls.filter(call => call.name === "install").map(call => call.args.quote.operationId)).toEqual([OPERATION, OPERATION]);
+    expect(calls.filter(call => call.name === "apps.install_prepared").map(call => call.args.url)).toEqual([URL, URL]);
     expect(ready).toEqual(original);
-    activation = true;
-    const retry = client.openInstallation(ready);
-    expect(calls.filter(call => call.name === "apps.install_offer").map(call => call.args.url)).toEqual([URL, URL]);
-    approve!(); await retry;
-    expect(preparationCount).toBe(0);
   });
 
-  test("an interrupted local opened acknowledgement cannot create another preparation", async () => {
+  test("a lost opened acknowledgement resumes the original handoff without a new intent", async () => {
     openedFailure = new Error("Saved acknowledgement was interrupted");
-    activation = true;
-    const first = client.openInstallation(ready);
-    approve!();
-    await expect(first).rejects.toThrow("interrupted");
+    await expect(client.openInstallation(ready)).rejects.toThrow("interrupted");
     openedFailure = null;
-    activation = true;
-    const retry = client.openInstallation(ready);
-    approve!(); await retry;
-    expect(calls.filter(call => call.name === "apps.install_offer").map(call => call.args.url)).toEqual([URL, URL]);
-    expect(preparationCount).toBe(0);
+    await client.openInstallation(ready);
+    expect(calls.filter(call => call.name === "install").map(call => call.args.quote.operationId)).toEqual([OPERATION, OPERATION]);
+    expect(calls.filter(call => call.name === "apps.install_prepared").map(call => call.args.url)).toEqual([URL, URL]);
   });
 
-  test("missing activation still rejects before marking the saved offer opened", async () => {
-    await expect(client.openInstallation(ready)).rejects.toMatchObject({ code: "USER_INTERACTION_REQUIRED" });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.name).toBe("apps.install_offer");
-    expect(preparationCount).toBe(0);
+  test("an unpresented installer is not marked opened", async () => {
+    presented = false;
+    await expect(client.openInstallation(ready)).rejects.toThrow("did not open");
+    expect(calls.map(call => call.name)).toEqual(["install", "apps.install_prepared"]);
+  });
+
+  test("legacy saved quotes display newly required access cost before any charged resume", async () => {
+    const { sourceAccess: _, ...legacy } = ready;
+    freshQuote = { ...ready, sourceAccess: quoted.sourceAccess, cycles: { ...ready.cycles, total: "250000000", processing: "250000000" } };
+    const result = await client.openInstallation(legacy);
+    expect(calls.map(call => call.name)).toEqual(["quoteInstallation"]);
+    expect(calls[0]?.args).toEqual({ appIds: ["editor"], operationId: OPERATION });
+    expect(result.state).toBe("review_required");
+    expect(result.installation).toEqual(freshQuote);
+  });
+
+  test("legacy saved quotes with already-paid access resume using the refreshed zero-cost quote", async () => {
+    const { sourceAccess: _, ...legacy } = ready;
+    freshQuote = ready;
+    await client.openInstallation(legacy);
+    expect(calls.map(call => call.name)).toEqual(["quoteInstallation", "install", "apps.install_prepared", "installationOpened"]);
+    expect(calls[1]?.args.quote).toEqual(ready);
+  });
+
+  test("mismatched private handoff cannot open a different selection", async () => {
+    privateReply.handoff.appIds = ["wallet"];
+    await expect(client.install(["editor"], quoted)).rejects.toThrow("does not match");
+    expect(calls.map(call => call.name)).toEqual(["install"]);
   });
 }

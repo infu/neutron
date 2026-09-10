@@ -15,7 +15,7 @@ const output = process.env.MARKETPLACE_ETHEREUM_BROWSER_ARTIFACTS || "/tmp/neutr
 await mkdir(output, { recursive: true });
 const transport = `
   export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler});
-  export const removeExposedTool=name=>window.marketplaceTools.delete(name);
+  export const removeExposedTool=name=>window.marketplaceTools.delete(name);export const copyToClipboard=()=>Promise.reject(Error('Unexpected clipboard action in this regression'));
   export const connectEthereumProvider=()=>window.ethereumFixture.connectBrowser();
 `;
 const fixture = `

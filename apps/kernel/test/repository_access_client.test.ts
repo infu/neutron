@@ -140,3 +140,274 @@ test("native rejected calls retain unknown charge and original request for recon
   expect((await fetcher(`${origin}${path}`)).ok).toBe(true);
   expect(requests[0]).toBe(requests[1]);
 });
+
+const preparedToken = "d".repeat(64);
+const offeredSource = `/repo/v1/sources/${"e".repeat(64)}.source.v1.msgpack.gz`;
+function preparedAccess(paths: readonly string[] = [path, second, offeredSource]) {
+  return { source, token: preparedToken, paths };
+}
+function withoutAcquisition(fetch: RepositoryFetch) {
+  const invoked: string[] = [];
+  const fail = (method: string): never => { invoked.push(method); throw new Error(`${method} must not run`); };
+  return {
+    invoked,
+    fetcher: createRepositoryAccessFetcher(deps(fetch, {
+      requireApprovedAccess: true,
+      ownerKey: () => fail("ownerKey"),
+      authorize: async () => fail("authorize"),
+      reviewCharge: async () => fail("reviewCharge"),
+      randomBytes: () => fail("randomBytes"),
+    })),
+  };
+}
+
+test("prepared access downloads exact package and source paths without acquiring authority", async () => {
+  const requests: Array<{ url: string; authorization: string | null }> = [];
+  const { fetcher, invoked } = withoutAcquisition(async (input, init) => {
+    const authorization = new Headers(init?.headers).get("authorization");
+    requests.push({ url: String(input), authorization });
+    if (authorization === null) return denied();
+    expect(authorization).toBe(`Bearer ${preparedToken}`);
+    expect(init).toMatchObject({ credentials: "omit", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer", mode: "cors" });
+    return privateBytes();
+  });
+  await Promise.all([path, second, offeredSource].map(async (resource) => {
+    const response = await fetcher(`${origin}${resource}`, { headers: { authorization: "Bearer unrelated" }, credentials: "include" }, {
+      preparedAccess: preparedAccess(), resourcePaths: [path, second, offeredSource],
+    });
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  }));
+  for (const resource of [path, second, offeredSource]) {
+    expect(requests.filter(({ url }) => url === `${origin}${resource}`).map(({ authorization }) => authorization)).toEqual([null, `Bearer ${preparedToken}`]);
+  }
+  expect(invoked).toEqual([]);
+});
+
+test("prepared free packages remain anonymous and accept the source's certified public response", async () => {
+  const requests: Array<string | null> = [];
+  const { fetcher, invoked } = withoutAcquisition(async (_input, init) => {
+    requests.push(new Headers(init?.headers).get("authorization"));
+    return new Response(new Uint8Array([7, 8, 9]), { headers: { ...proof, "cache-control": "public, max-age=60" } });
+  });
+  const response = await fetcher(`${origin}${path}`, { headers: { authorization: "Bearer ambient" } }, {
+    preparedAccess: preparedAccess(), allowAccessAcquisition: false,
+  });
+  expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([7, 8, 9]));
+  expect(requests).toEqual([null]);
+  expect(response.headers.get("cache-control")).toBe("public, max-age=60");
+  expect(invoked).toEqual([]);
+});
+
+test("prepared reads preserve non-challenge failures without presenting credentials", async () => {
+  for (const status of [404, 429, 503]) {
+    const requests: Array<string | null> = [];
+    const { fetcher, invoked } = withoutAcquisition(async (_input, init) => {
+      requests.push(new Headers(init?.headers).get("authorization"));
+      return new Response(null, { status, headers: proof });
+    });
+    expect((await fetcher(`${origin}${path}`, {}, { preparedAccess: preparedAccess() })).status).toBe(status);
+    expect(requests).toEqual([null]);
+    expect(invoked).toEqual([]);
+  }
+});
+
+test("a prepared batch can read public and challenged private packages under one existing grant", async () => {
+  const requests: Array<{ url: string; authorization: string | null }> = [];
+  const { fetcher, invoked } = withoutAcquisition(async (input, init) => {
+    const url = String(input), authorization = new Headers(init?.headers).get("authorization");
+    requests.push({ url, authorization });
+    if (url.endsWith(second)) return new Response("free", { headers: { ...proof, "cache-control": "public, max-age=60" } });
+    return authorization ? privateBytes() : denied();
+  });
+  const [paid, free] = await Promise.all([path, second].map(resource => fetcher(`${origin}${resource}`, {}, {
+    preparedAccess: preparedAccess(), resourcePaths: [path, second], allowAccessAcquisition: false,
+  })));
+  expect(await free!.text()).toBe("free");
+  expect(new Uint8Array(await paid!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  expect(requests.filter(({ authorization }) => authorization !== null)).toEqual([{ url: `${origin}${path}`, authorization: `Bearer ${preparedToken}` }]);
+  expect(invoked).toEqual([]);
+});
+
+test("only a certified challenge can cause prepared bearer disclosure", async () => {
+  for (const status of [401, 403]) {
+    const requests: Array<string | null> = [];
+    const { fetcher, invoked } = withoutAcquisition(async (_input, init) => {
+      requests.push(new Headers(init?.headers).get("authorization"));
+      return new Response(null, { status });
+    });
+    await expect(fetcher(`${origin}${path}`, {}, { preparedAccess: preparedAccess() })).rejects.toThrow("not certified");
+    expect(requests).toEqual([null]);
+    expect(invoked).toEqual([]);
+  }
+});
+
+test("canceling after the anonymous challenge does not send the prepared bearer", async () => {
+  const controller = new AbortController();
+  const requests: Array<string | null> = [];
+  const { fetcher, invoked } = withoutAcquisition(async (_input, init) => {
+    requests.push(new Headers(init?.headers).get("authorization"));
+    controller.abort();
+    return denied();
+  });
+  await expect(fetcher(`${origin}${path}`, {}, { preparedAccess: preparedAccess(), signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+  expect(requests).toEqual([null]);
+  expect(invoked).toEqual([]);
+});
+
+test("prepared access cannot escape its source, canonical paths or read methods", async () => {
+  let downloads = 0;
+  const { fetcher, invoked } = withoutAcquisition(async () => { downloads++; return privateBytes(); });
+  for (const [url, init] of [
+    [`https://external.example${path}`, {}],
+    [`https://ryjl3-tyaaa-aaaaa-aaaba-cai.icp0.io${path}`, {}],
+    [`https://${source}.raw.icp0.io${path}`, {}],
+    [`${origin}:8443${path}`, {}],
+    [`${origin}${path}?download=1`, {}],
+    [`${origin}${path}#fragment`, {}],
+    [`https://user:secret@${source}.icp0.io${path}`, {}],
+    [`${origin}/repo/v1/access.json`, {}],
+    [`${origin}${second}`, {}],
+    [`${origin}${path}`, { method: "POST" }],
+  ] as const) {
+    await expect(fetcher(url, init, { preparedAccess: preparedAccess([path]) })).rejects.toThrow("exact source and resource");
+  }
+  await expect(fetcher(`${origin}${path}`, {}, {
+    preparedAccess: preparedAccess([path]), resourcePaths: [path, second],
+  })).rejects.toThrow("every requested resource");
+  expect(downloads).toBe(0);
+  expect(invoked).toEqual([]);
+});
+
+test("malformed prepared capabilities fail before contacting a source", async () => {
+  let downloads = 0;
+  const { fetcher, invoked } = withoutAcquisition(async () => { downloads++; return privateBytes(); });
+  for (const invalid of [
+    null,
+    { ...preparedAccess(), source: source.toUpperCase() },
+    { ...preparedAccess(), source: "not-a-principal" },
+    { ...preparedAccess(), token: preparedToken.toUpperCase() },
+    { ...preparedAccess(), token: "too-short" },
+    { ...preparedAccess(), token: `${preparedToken}\r\nother: header` },
+    { ...preparedAccess(), paths: [] },
+    { ...preparedAccess(), paths: [path, `${offeredSource}?token=secret`] },
+    { ...preparedAccess(), paths: [path, 2] },
+  ]) {
+    await expect(fetcher(`${origin}${path}`, {}, { preparedAccess: invalid as ReturnType<typeof preparedAccess> })).rejects.toThrow("prepared source access is invalid");
+  }
+  expect(downloads).toBe(0);
+  expect(invoked).toEqual([]);
+});
+
+test("denied prepared capabilities never renew, self-authorize or expose remote bodies", async () => {
+  for (const status of [401, 403]) {
+    let downloads = 0;
+    const { fetcher, invoked } = withoutAcquisition(async (_input, init) => {
+      downloads++;
+      return new Headers(init?.headers).has("authorization") ? new Response(`Revoked ${preparedToken}`, { status }) : denied();
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const error = await fetcher(`${origin}${path}`, {}, { preparedAccess: preparedAccess() }).catch((error: Error) => error);
+      expect(error).toBeInstanceOf(RepositoryAccessError);
+      expect((error as Error).message).toContain("no longer accepts");
+      expect((error as Error).message).not.toContain(preparedToken);
+      expect((error as Error).cause).toBeUndefined();
+    }
+    expect(downloads).toBe(4);
+    expect(invoked).toEqual([]);
+  }
+});
+
+test("prepared downloads still require exact URL and private authorization-bound certification", async () => {
+  for (const variant of ["redirect", "different-url", "missing-proof", "unbound", "public-cache", "no-vary"] as const) {
+    const { fetcher, invoked } = withoutAcquisition(async (_input, init) => {
+      if (!new Headers(init?.headers).has("authorization")) return denied();
+      const response = privateBytes();
+      if (variant === "redirect") Object.defineProperty(response, "redirected", { value: true });
+      if (variant === "different-url") Object.defineProperty(response, "url", { value: `${origin}${second}` });
+      if (variant === "missing-proof") response.headers.delete("ic-certificate");
+      if (variant === "unbound") response.headers.set("ic-certificateexpression", proof["ic-certificateexpression"]);
+      if (variant === "public-cache") response.headers.set("cache-control", "public, max-age=60");
+      if (variant === "no-vary") response.headers.delete("vary");
+      return response;
+    });
+    await expect(fetcher(`${origin}${path}`, {}, { preparedAccess: preparedAccess() })).rejects.toBeInstanceOf(RepositoryAccessError);
+    expect(invoked).toEqual([]);
+  }
+});
+
+test("prepared transport failures do not expose bearer credentials or retain their causes", async () => {
+  const requests: Array<string | null> = [];
+  const { fetcher, invoked } = withoutAcquisition(async (_input, init) => {
+    const authorization = new Headers(init?.headers).get("authorization");
+    requests.push(authorization);
+    if (!authorization) return denied();
+    throw new Error(`Request failed with Authorization: Bearer ${preparedToken}`);
+  });
+  const error = await fetcher(`${origin}${path}`, {}, { preparedAccess: preparedAccess() }).catch((error: Error) => error);
+  expect(error).toBeInstanceOf(RepositoryAccessError);
+  expect((error as Error).message).toContain("prepared source download");
+  expect((error as Error).message).not.toContain(preparedToken);
+  expect((error as Error).cause).toBeUndefined();
+  expect(requests).toEqual([null, `Bearer ${preparedToken}`]);
+  expect(invoked).toEqual([]);
+});
+
+test("prepared access snapshots its scope and does not populate the ordinary grant cache", async () => {
+  const capability = { ...preparedAccess(), paths: [path] };
+  const authorizations: RepositoryAccessRequest[] = [];
+  let token = "";
+  const fetcher = createRepositoryAccessFetcher(deps(async (input, init) => {
+    const sent = new Headers(init?.headers).get("authorization");
+    if (sent === `Bearer ${preparedToken}`) {
+      token = sent;
+      capability.token = "0".repeat(64);
+      capability.paths[0] = second;
+      await Promise.resolve();
+      return privateBytes();
+    }
+    return privateFetch(input, init);
+  }, { authorize: async ({ request }) => { authorizations.push(request); return ok(request); } }));
+  expect((await fetcher(`${origin}${path}`, {}, { preparedAccess: capability })).ok).toBe(true);
+  expect(token).toBe(`Bearer ${preparedToken}`);
+  expect(authorizations).toEqual([]);
+  expect((await fetcher(`${origin}${path}`)).ok).toBe(true);
+  expect(authorizations).toHaveLength(1);
+  expect(authorizations[0]!.token).not.toBe(preparedToken);
+});
+
+test("public-only acquisition cannot reconcile or pay a cached interrupted access request", async () => {
+  let authorizations = 0;
+  let owners = 0;
+  let descriptors = 0;
+  const fetcher = createRepositoryAccessFetcher(deps(async (input, init) => {
+    if (String(input).endsWith("/access.json")) descriptors++;
+    return privateFetch(input, init);
+  }, {
+    ownerKey: () => { owners++; return "neutron:owner:1"; },
+    authorize: async () => {
+      authorizations++;
+      throw new Error("The original authorization reply was interrupted");
+    },
+  }));
+  await expect(fetcher(`${origin}${path}`)).rejects.toThrow("same access request");
+  expect(authorizations).toBe(1);
+  const ownersBefore = owners;
+  const descriptorsBefore = descriptors;
+  await expect(fetcher(`${origin}${path}`, {}, { allowAccessAcquisition: false, approvedAccess: [] })).rejects.toThrow("requires prepared download access");
+  expect(authorizations).toBe(1);
+  expect(owners).toBe(ownersBefore);
+  expect(descriptors).toBe(descriptorsBefore);
+});
+
+test("disabling acquisition preserves public reads and explicit prepared access", async () => {
+  let publicReads = 0;
+  const { fetcher, invoked } = withoutAcquisition(async (input, init) => {
+    if (String(input).endsWith(second)) { publicReads++; return new Response("public"); }
+    return privateFetch(input, init);
+  });
+  expect(await (await fetcher(`${origin}${second}`, {}, { allowAccessAcquisition: false })).text()).toBe("public");
+  expect((await fetcher(`${origin}${path}`, {}, { allowAccessAcquisition: false, preparedAccess: preparedAccess() })).ok).toBe(true);
+  await expect(fetcher(`${origin}${path}`, {}, { allowAccessAcquisition: false })).rejects.toThrow("requires prepared download access");
+  expect(publicReads).toBe(1);
+  expect(invoked).toEqual([]);
+});

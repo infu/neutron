@@ -62,6 +62,8 @@ import {
   rejectInstallOffer,
 } from "../src/install_offers/service.ts";
 import { useInstallOfferStore } from "../src/install_offers/store.ts";
+import { dismissRepositorySetup } from "../src/repository/service.ts";
+import { useRepositorySetupStore } from "../src/repository/store.ts";
 import {
   approveAgentGrant,
   beginAgentRoot,
@@ -7001,6 +7003,63 @@ test("install offers expose only the closed URL union and redact invalid-call au
   });
   expect(JSON.stringify(audit)).not.toContain("audit-secret");
   expect(JSON.stringify(audit)).not.toContain("caller-supplied-digest");
+});
+
+test("prepared installs require an install-declared exact tool grant and redact credentials", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const source = { postMessage() {} } as unknown as Window;
+  const caller = registerScopedBackgroundEndpoint(source, "app_catalog", "81", undefined, {
+    frontendTools: [{ app: "kernel", tools: ["apps.install_offer"] }],
+  });
+  const token = "d".repeat(64);
+  const request = {
+    target: "kernel" as const, name: "apps.install_prepared",
+    arguments: {
+      url: `https://aaaaa-aa.icp0.io/#repo=rrkah-fqaaa-aaaaa-aaaaq-cai&manifest=chosen&digest=${"a".repeat(64)}`,
+      appIds: ["hello"],
+      access: { source: "rrkah-fqaaa-aaaaa-aaaaq-cai", token, paths: [`/repo/v1/packages/${"b".repeat(64)}.neutron`] },
+    },
+  };
+  await expect(routeToolCall(request, caller)).rejects.toThrow("Declare access to kernel/apps.install_prepared");
+  expect(useInstallOfferStore.getState().pending).toBeNull();
+  expect(useRepositorySetupStore.getState().phase).toBe("idle");
+  const audit = listMsgBusAudit().at(-1);
+  expect(audit?.arguments).toHaveProperty("metadataBytes");
+  expect(JSON.stringify(audit)).not.toContain(token);
+  expect(JSON.stringify(audit)).not.toContain(request.arguments.url);
+});
+
+test("prepared installs accept asynchronous app preparation but retain final Kernel review", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  setTransientUserActivation(false);
+  const source = { postMessage() {} } as unknown as Window;
+  const caller = registerScopedBackgroundEndpoint(source, "app_catalog", "82", undefined, {
+    frontendTools: [{ app: "kernel", tools: ["apps.install_prepared"] }],
+  });
+  const token = "e".repeat(64);
+  const request = {
+    target: "kernel" as const, name: "apps.install_prepared",
+    arguments: {
+      url: `https://aaaaa-aa.icp0.io/#repo=rrkah-fqaaa-aaaaa-aaaaq-cai&manifest=chosen&digest=${"a".repeat(64)}`,
+      appIds: ["hello"],
+      access: { source: "ryjl3-tyaaa-aaaaa-aaaba-cai", token, paths: [`/repo/v1/packages/${"b".repeat(64)}.neutron`] },
+    },
+  };
+  await expect(routeToolCall(request, caller)).rejects.toThrow("selected repository");
+  request.arguments.access.source = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+  try {
+    const result = await routeToolCall(request, caller);
+    expect(result).toMatchObject({ presented: true });
+    expect(useInstallOfferStore.getState().pending).toBeNull();
+    expect(useRepositorySetupStore.getState()).toMatchObject({ prepared: true, reference: { manifest: "chosen" } });
+    expect(JSON.stringify(useRepositorySetupStore.getState())).not.toContain(token);
+    expect(JSON.stringify(listMsgBusAudit().at(-1))).not.toContain(token);
+    expect(useAppsStore.getState().list.hello).toBeUndefined();
+  } finally {
+    await dismissRepositorySetup();
+  }
 });
 
 test("direct install offers require focus and activation before presenting owner UI", async () => {

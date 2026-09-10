@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 109,
+  "version": 111,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
@@ -63,6 +63,12 @@
             "evm_operation_status_v1",
             "evm_send_transaction_v1"
           ]
+        },
+        {
+          "app": "kernel",
+          "tools": [
+            "apps.install_prepared"
+          ]
         }
       ]
     },
@@ -74,7 +80,89 @@
       ],
       "max_concurrency": 1,
       "max_cycles_per_call": 1000000000000,
-      "max_cycles_per_day": 10000000000000
+      "max_cycles_per_day": 10000000000000,
+      "install_reservations": [
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "read_delegate_set"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "purchase"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "withdraw"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "referral_get_or_create"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "rating_set"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "listing_save"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "upload_begin"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "upload_chunk"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "upload_finish"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "candidate_submit"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "install_prepare"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_prepare"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_verify"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_settle"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_cancel"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "repo_access_v1"
+        }
+      ]
     },
     "preapproved_self_calls": {
       "api": 1,

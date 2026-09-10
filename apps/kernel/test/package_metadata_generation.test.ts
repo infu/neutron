@@ -47,7 +47,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v356 NPL package metadata", () => {
+describe("Kernel v359 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -108,7 +108,7 @@ describe("Kernel v356 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(356);
+    expect(packagedManifest.version).toBe(359);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -129,7 +129,7 @@ describe("Kernel v356 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 356");
+    ).toThrow("restricted to Kernel version 359");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -344,7 +344,7 @@ describe("Kernel v356 NPL package metadata", () => {
       }),
     );
 
-    await installKernelInstalledArtifactInventory(root, 356);
+    await installKernelInstalledArtifactInventory(root, 359);
     const inventoryPath = path.join(
       root,
       KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
@@ -357,7 +357,7 @@ describe("Kernel v356 NPL package metadata", () => {
       parsed.artifacts.map((file) => [file.package_path, file] as const),
     );
 
-    expect(parsed.package).toEqual({ id: "kernel", version: 356 });
+    expect(parsed.package).toEqual({ id: "kernel", version: 359 });
     expect(byPackagePath.has("neutron.did")).toBe(false);
     expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
     expect(
@@ -382,7 +382,7 @@ describe("Kernel v356 NPL package metadata", () => {
     }
 
     await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
-    await installKernelInstalledArtifactInventory(root, 356);
+    await installKernelInstalledArtifactInventory(root, 359);
     expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
       firstBytes,
     );

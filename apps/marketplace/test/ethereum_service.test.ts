@@ -52,7 +52,7 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
     ethereumInvoiceStatus: async () => original,
     ethereumHistory: async (...args: any[]) => { calls.push({ name: "ethHistory", args }); return { items: ethereum ? [ethereum] : [], nextCursor: ethereumCursor }; },
   }));
-  mock.module("../src/install.ts", () => ({ quoteInstallation: invoke("installQuote"), installApplications: invoke("installApps"), installationStatus: async () => null, recentInstallations: async () => [], markInstallationOpened: invoke("installationOpened"), resumeInstallation: async () => null }));
+  mock.module("../src/install.ts", () => ({ quoteInstallation: invoke("installQuote"), installApplications: invoke("installApps"), prepareInstallationForTile: invoke("installTile"), installationStatus: async () => null, recentInstallations: async () => [], markInstallationOpened: invoke("installationOpened"), resumeInstallation: async () => null }));
   mock.module("../src/publishing.ts", () => Object.fromEntries(["beginPublication", "beginArtifact", "writeArtifact", "finishPublication", "quotePublication"].map(name => [name, invoke(name)])));
   await import("../src/service.ts");
   const tile = { agentMode: false, caller: { appId: "marketplace", role: "tile" }, kernel: {} };

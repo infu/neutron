@@ -194,6 +194,43 @@ test("URL package fetch rejects HTTP failures and declared oversized bodies", as
   expect(body.locked).toBe(false);
 });
 
+test("prepared package downloads retain byte bounds and hide stream errors containing the bearer", async () => {
+  const source = "233tv-xiaaa-aaaay-aacta-cai";
+  const path = `/repo/v1/packages/${"a".repeat(64)}.neutron`;
+  const token = "c".repeat(64);
+  const headers = {
+    "ic-certificate": "certificate=:AA==:, tree=:AA==:, expr_path=:AA==:, version=2",
+    "ic-certificateexpression": 'default_certification(ValidationArgs{certification:Certification{request_certification:RequestCertification{certified_request_headers:["authorization"],certified_query_parameters:[]},response_certification:ResponseCertification{response_header_exclusions:ResponseHeaderList{headers:[]}}}})',
+    "cache-control": "private, no-store", vary: "Authorization",
+  };
+  for (const variant of ["oversized", "stream-error"] as const) {
+    let canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        if (variant === "oversized") controller.enqueue(new Uint8Array(5));
+        else controller.error(new Error(`Remote error ${token}`, { cause: token }));
+      },
+      cancel() { canceled = true; },
+    });
+    const error = await fetchPackageFromUrl(`https://${source}.icp0.io${path}`, {
+      maxBytes: 4,
+      preparedAccess: { source, token, paths: [path] },
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (!new Headers(init?.headers).has("authorization")) return new Response(null, { status: 401, headers });
+        expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
+        return new Response(body, { headers });
+      }) as unknown as typeof fetch,
+    }).catch((error: Error) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain(token);
+    expect((error as Error).cause).toBeUndefined();
+    if (variant === "oversized") {
+      expect((error as Error).message).toContain("4 bytes URL-install limit");
+      expect(canceled).toBe(true);
+    } else expect((error as Error).message).toBe("Package download was interrupted");
+  }
+});
+
 test("URL package fetch cancels a stream that exceeds its actual byte limit", async () => {
   let cancelled = false;
   const body = new ReadableStream<Uint8Array>({

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { copyToClipboard } from "neutron-tools/app";
 import type { Earnings, MarketplaceClient, OperationResult, PaymentToken, WithdrawalQuote } from "../view-types.ts";
 import { CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, Principal, decimalAmount, errorMessage, parseAmount, quantity, useRead } from "./primitives.tsx";
 
@@ -18,7 +19,13 @@ export function EarningsPanel({ client, connected, refresh, onOperation }: {
     finally { setBusy(false); }
   }
   return <div className="mp-stack"><div className="mp-section-title"><div><h2>Earnings</h2><p>Publisher and affiliate income, ready to withdraw.</p></div></div><ErrorNote error={read.error || error} retry={() => setRevision((v) => v + 1)} />{read.loading && !earnings && <Loading label="Loading earnings…" />}{earnings && <>
-    <section className="mp-referral-card"><span className="mp-eyebrow">SHARE SOMETHING GOOD</span><h3>Give {earnings.affiliateDiscountBps / 100}% off. Earn {earnings.affiliateShareBps / 100}%.</h3><p>Your code works across the marketplace. You earn a share of the amount paid when another Neutron uses it.</p>{earnings.referralCode ? <div className="mp-code-row"><code>{earnings.referralCode}</code><button className="mp-secondary" type="button" onClick={() => { void navigator.clipboard.writeText(earnings.referralCode!).then(() => { setCopied(true); }, (cause) => setError(errorMessage(cause))); }}><Icon name="copy" />{copied ? "Copied" : "Copy"}</button></div> : <button className="mp-primary" disabled={busy} onClick={() => void getCode()} type="button">{busy ? "Creating…" : "Get my affiliate code"}</button>}<small>Codes apply to one checkout. Self-referrals are not eligible.</small></section>
+    <section className="mp-referral-card"><span className="mp-eyebrow">SHARE SOMETHING GOOD</span><h3>Give {earnings.affiliateDiscountBps / 100}% off. Earn {earnings.affiliateShareBps / 100}%.</h3><p>Your code works across the marketplace. You earn a share of the amount paid when another Neutron uses it.</p>{earnings.referralCode ? <div className="mp-code-row"><code>{earnings.referralCode}</code><button className="mp-secondary" type="button" onClick={() => {
+      // Dispatch in the click's activation task through the shared Kernel API;
+      // sandboxed tiles cannot write to the browser clipboard themselves.
+      const copying = copyToClipboard(earnings.referralCode!);
+      setError(""); setCopied(false);
+      void copying.then(() => setCopied(true), (cause) => setError(errorMessage(cause)));
+    }}><Icon name="copy" />{copied ? "Copied" : "Copy"}</button></div> : <button className="mp-primary" disabled={busy} onClick={() => void getCode()} type="button">{busy ? "Creating…" : "Get my affiliate code"}</button>}<small>Codes apply to one checkout. Self-referrals are not eligible.</small></section>
     <div className="mp-balance-grid">{earnings.balances.map((balance) => <section className="mp-balance-card" key={balance.token}><div className="mp-section-title"><h3>{balance.token}</h3><span className="mp-badge">Available</span></div><strong className="mp-balance-value">{quantity(balance.available)}</strong><dl className="mp-facts"><div><dt>Reserved for withdrawals</dt><dd>{quantity(balance.reserved)}</dd></div>{balance.earned && <div><dt>Total earned</dt><dd>{quantity(balance.earned)}</dd></div>}</dl><button className="mp-secondary" type="button" disabled={BigInt(balance.available.atoms) === 0n} onClick={() => setToken(balance.token)}>Withdraw <Icon name="arrow" /></button></section>)}</div>
   </>}{token && earnings && <WithdrawDialog client={client} token={token} earnings={earnings} close={() => setToken(null)} onOperation={(result, resume) => { onOperation(result, resume); setRevision((v) => v + 1); }} />}</div>;
 }

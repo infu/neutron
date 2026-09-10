@@ -235,7 +235,10 @@ import type {
   AttestedInstallOfferRequester,
   NormalizedInstallOffer,
 } from "./install_offers/types.ts";
-import { startRepositorySetupFromOffer } from "./repository/service.ts";
+import { startRepositorySetupFromOffer, startPreparedRepositorySetup } from "./repository/service.ts";
+import { REPOSITORY_LIMITS } from "neutron-tools/repository";
+import { isRepositoryResourcePath } from "neutron-tools/src/repository_access.js";
+import type { RepositoryPreparedAccess } from "./repository_access/client.ts";
 import { useRepositorySetupStore } from "./repository/store.ts";
 import {
   SOURCE_FILES_TOOL_OPTIONS,
@@ -1437,6 +1440,78 @@ for (const [name, options, operation] of [
     },
   );
 }
+
+defineKernelTool(
+  "apps.install_prepared",
+  {
+    title: "Review Prepared App Installation",
+    description: "Load and compile an app-prepared certified repository selection, then show one final package and permission review. Requires install-declared access to this exact Kernel tool. Supplied download access is used without another source charge; approval is still required to install.",
+    inputSchema: {
+      type: "object",
+      required: ["url", "appIds"],
+      properties: {
+        url: { type: "string", minLength: 1, maxLength: 2_048 },
+        appIds: { type: "array", minItems: 1, maxItems: REPOSITORY_LIMITS.packagesPerManifest, uniqueItems: true, items: { type: "string", minLength: 1 } },
+        access: {
+          type: "object", required: ["source", "token", "paths"], additionalProperties: false,
+          properties: {
+            source: { type: "string", minLength: 1 },
+            token: { type: "string", pattern: "^[0-9a-f]{64}$" },
+            paths: { type: "array", minItems: 1, uniqueItems: true, items: { type: "string", minLength: 1 } },
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: "object", required: ["presented", "requestId"], additionalProperties: false,
+      properties: { presented: { const: true }, requestId: { type: "string" } },
+    },
+    annotations: { "neutron:effects": ["user_visible_ui", "network", "write"], "neutron:audit": "metadata_only" },
+  },
+  async (args, caller, invocation) => {
+    const auth = useAuthStore.getState();
+    if (auth.loading || !auth.logged || !auth.authorized) {
+      throw new KernelPolicyError("OWNER_REQUIRED", "An authorized owner session is required to prepare an installation");
+    }
+    assertCurrentEndpointVersion(caller);
+    const app = useAppsStore.getState().list[caller.context.appId];
+    if (!app) throw new Error("The requesting app is no longer installed");
+    const declared = declaredCapability(app, "frontend_tools");
+    if (!declared?.targets.some((target) => target.app === "kernel" && target.tools.includes("apps.install_prepared"))) {
+      throw new KernelPolicyError("INVALID_REQUEST", "Declare access to kernel/apps.install_prepared in frontend_tools before preparing installations");
+    }
+    assertInstallOfferFlowsIdle();
+    const offer = normalizeInstallOffer("repository_setup_url", String(args.url));
+    if (offer.kind !== "repository_setup_url") throw new Error("A prepared installation requires a repository setup URL");
+    const roots = args.appIds as string[];
+    if (roots.some((id) => !isValidAppId(id) || id === "kernel")) {
+      throw new Error("Select application IDs; upgrade the Kernel through Settings");
+    }
+    const access = args.access as RepositoryPreparedAccess | undefined;
+    if (access && (access.source !== offer.reference.repo || access.paths.some((path) => !isRepositoryResourcePath(path)))) {
+      throw new Error("Prepared download access must cover canonical paths at the selected repository");
+    }
+    let requester: AttestedInstallOfferRequester = {
+      kind: "app", appId: caller.context.appId, appName: safeDiscoveryText(app.name, 120), surface: caller.context.role,
+    };
+    if (invocation) {
+      const root = useAgentModeStore.getState().activeRoot;
+      const rootApp = root ? useAppsStore.getState().list[root.appId] : null;
+      if (!root || root.id !== invocation.rootId || !rootApp) throw new KernelPolicyError("INVOCATION_INVALID", "The agent root is no longer active");
+      requester = {
+        kind: "agent", appId: caller.context.appId, appName: safeDiscoveryText(app.name, 120),
+        rootAppId: root.appId, rootAppName: safeDiscoveryText(rootApp.name, 120), entrypoint: root.entrypoint,
+        tool: invocation.tool, rootId: root.id,
+      };
+    }
+    // Manifest-declared preparation survives asynchronous app work. It grants
+    // no deployment authority: the exact compiled permissions are approved in
+    // RepositorySetupDialog, after certified downloads have been validated.
+    startPreparedRepositorySetup(offer.reference, requester, roots, access);
+    return { presented: true, requestId: crypto.randomUUID() };
+  },
+);
 
 defineKernelTool(
   "apps.install_offer",

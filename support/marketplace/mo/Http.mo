@@ -227,7 +227,7 @@ module {
       ("Cache-Control", if (privateResponse) "private, no-store" else if (artifact.immutable) "public, max-age=31536000, immutable, no-transform" else "public, max-age=0, must-revalidate, no-transform"),
       ("Vary", "Authorization"),
       ("Access-Control-Allow-Origin", "*"),
-      ("Access-Control-Expose-Headers", "IC-Certificate, IC-CertificateExpression, Content-Length, Content-Digest, ETag, WWW-Authenticate"),
+      ("Access-Control-Expose-Headers", "IC-Certificate, IC-CertificateExpression, Content-Length, Content-Digest, ETag, WWW-Authenticate, Vary"),
       ("Cross-Origin-Resource-Policy", "cross-origin"),
       ("X-Content-Type-Options", "nosniff"),
       ("IC-CertificateExpression", if (privateResponse) PRIVATE_EXPRESSION else PUBLIC_EXPRESSION),
@@ -242,7 +242,7 @@ module {
       ("Access-Control-Allow-Origin", "*"),
       ("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS"),
       ("Access-Control-Allow-Headers", "Authorization"),
-      ("Access-Control-Expose-Headers", "IC-Certificate, IC-CertificateExpression, Content-Length, WWW-Authenticate"),
+      ("Access-Control-Expose-Headers", "IC-Certificate, IC-CertificateExpression, Content-Length, WWW-Authenticate, Vary"),
       ("WWW-Authenticate", if (status == 403) "Bearer realm=\"repository\"" else "Bearer"),
       ("Cross-Origin-Resource-Policy", "cross-origin"),
       ("X-Content-Type-Options", "nosniff"),
@@ -262,6 +262,13 @@ module {
       let path : [Blob] = ["http_expr", "<*>"];
       putEmpty(path, 404);
       putEmpty(path, 204);
+    };
+    // Response headers are part of every v2 response hash. Upgrades that change
+    // them rebuild this derived branch before recertifying retained resources.
+    // The repository's separate certified Candid assets branch is untouched.
+    public func resetResponses() {
+      cert.delete(["http_expr"]);
+      initialize();
     };
     // Updating a path removes all older response hashes and private grants.
     // Callers can then reinsert only grants that remain currently eligible.

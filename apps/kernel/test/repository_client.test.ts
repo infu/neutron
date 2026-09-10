@@ -247,6 +247,100 @@ describe("repository byte verification", () => {
 });
 
 describe("repository package byte channels", () => {
+  test("public-only repository preparation cannot acquire missing private access", async () => {
+    const value = fixture();
+    const calls: string[] = [];
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async () => undefined, {
+      allowAccessAcquisition: false,
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push(String(input));
+        expect(new Headers(init?.headers).has("authorization")).toBe(false);
+        return new Response("Access required", { status: 401 });
+      }) as unknown as typeof fetch,
+    });
+    const digest = value.manifest.packages[0]!.sha256;
+    await expect(readPackage(digest)).rejects.toThrow("requires prepared download access");
+    expect(calls).toEqual([`https://${value.reference.repo}.icp0.io${repositoryPackagePath(digest)}`]);
+  });
+
+  test("prepared grants reach only certified-absent pinned HTTP packages and preserve hash checks", async () => {
+    const value = fixture();
+    const token = "c".repeat(64);
+    const paths = value.manifest.packages.map(({ sha256 }) => repositoryPackagePath(sha256));
+    for (const corrupt of [false, true]) {
+      const requests: string[] = [];
+      const readPackage = createRepositoryPackageReader(value.reference.repo, async () => undefined, {
+        preparedAccess: { source: value.reference.repo, token, paths },
+        fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          requests.push(url);
+          const authorization = new Headers(init?.headers).get("authorization");
+          if (authorization === null) return new Response(null, { status: 401, headers: {
+            "ic-certificate": "certificate=:AA==:, tree=:AA==:, expr_path=:AA==:, version=2",
+            "ic-certificateexpression": "default_certification(ValidationArgs{certification:Certification{}})",
+          } });
+          expect(authorization).toBe(`Bearer ${token}`);
+          const index = paths.findIndex((path) => url === `https://${value.reference.repo}.icp0.io${path}`);
+          expect(index).toBeGreaterThanOrEqual(0);
+          const bytes = value.packageBytes[index]!;
+          return new Response(corrupt ? new Uint8Array(bytes.byteLength) : bytes, { headers: {
+            "ic-certificate": "certificate=:AA==:, tree=:AA==:, expr_path=:AA==:, version=2",
+            "ic-certificateexpression": 'default_certification(ValidationArgs{certification:Certification{request_certification:RequestCertification{certified_request_headers:["authorization"],certified_query_parameters:[]},response_certification:ResponseCertification{response_header_exclusions:ResponseHeaderList{headers:[]}}}})',
+            "cache-control": "private, no-store", vary: "Authorization",
+          } });
+        }) as unknown as typeof fetch,
+      });
+      const loading = verifyRepositorySetupBytes(value.reference, {
+        readInfo: async () => value.infoBytes,
+        readManifest: async () => value.manifestBytes,
+        readPackage,
+      });
+      if (corrupt) await expect(loading).rejects.toThrow("digest mismatch");
+      else expect((await loading).packages.map(({ bytes }) => bytes)).toEqual(value.packageBytes);
+      expect(requests.sort()).toEqual(paths.flatMap((path) => Array(2).fill(`https://${value.reference.repo}.icp0.io${path}`)).sort());
+    }
+  });
+
+  test("prepared free HTTP packages retain certified manifest size and digest verification", async () => {
+    const value = fixture();
+    const paths = value.manifest.packages.map(({ sha256 }) => repositoryPackagePath(sha256));
+    for (const corrupt of [false, true]) {
+      const authorizations: Array<string | null> = [];
+      const readPackage = createRepositoryPackageReader(value.reference.repo, async () => undefined, {
+        allowAccessAcquisition: false,
+        preparedAccess: { source: value.reference.repo, token: "c".repeat(64), paths },
+        fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+          authorizations.push(new Headers(init?.headers).get("authorization"));
+          const index = paths.findIndex(path => String(input).endsWith(path));
+          const bytes = value.packageBytes[index]!;
+          return new Response(corrupt ? new Uint8Array(bytes.byteLength) : bytes, { headers: {
+            "ic-certificate": "certificate=:AA==:, tree=:AA==:, expr_path=:AA==:, version=2",
+            "ic-certificateexpression": "default_certification(ValidationArgs{certification:Certification{}})",
+            "cache-control": "public, max-age=60",
+          } });
+        }) as unknown as typeof fetch,
+      });
+      const loading = verifyRepositorySetupBytes(value.reference, {
+        readInfo: async () => value.infoBytes, readManifest: async () => value.manifestBytes, readPackage,
+      });
+      if (corrupt) await expect(loading).rejects.toThrow("digest mismatch");
+      else expect((await loading).packages.map(({ bytes }) => bytes)).toEqual(value.packageBytes);
+      expect(authorizations).toEqual(paths.map(() => null));
+    }
+  });
+
+  test("a prepared grant never bypasses a failed certified package read", async () => {
+    const value = fixture();
+    const failure = new Error("Invalid certified absence");
+    let httpReads = 0;
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async () => { throw failure; }, {
+      preparedAccess: { source: value.reference.repo, token: "c".repeat(64), paths: value.manifest.packages.map(({ sha256 }) => repositoryPackagePath(sha256)) },
+      fetch: (async () => { httpReads++; throw new Error("No HTTP fallback"); }) as unknown as typeof fetch,
+    });
+    await expect(readPackage(value.manifest.packages[0]!.sha256)).rejects.toBe(failure);
+    expect(httpReads).toBe(0);
+  });
+
   test("preserves public certified Candid bytes without contacting HTTP", async () => {
     const value = fixture();
     const bytes = value.packageBytes[0]!;

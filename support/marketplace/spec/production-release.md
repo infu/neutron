@@ -11,7 +11,7 @@ installation remains a separate action.
 | --- | --- |
 | Network | Internet Computer mainnet |
 | Canister | `sj2r4-haaaa-aaaay-aadgq-cai` |
-| Installed Wasm SHA-256 | `1bd60e9e252c7372d2e6939d3a3896fd0566c18abf4022bd4a49c8542f633d8b` |
+| Initial Wasm SHA-256 | `1bd60e9e252c7372d2e6939d3a3896fd0566c18abf4022bd4a49c8542f633d8b` |
 | Installation CLI | `icp 1.0.2` |
 | Initial publisher and assigned roles | Existing Blast ID 0, verified through authenticated queries |
 | Reserved app IDs | 27, owned by the configured first-party publisher |
@@ -74,10 +74,10 @@ Publication to both sources is verified. Existing users choose
 **Settings → Upgrade all**. The compatible Kernel and app transition updates
 preserve installed state and switch their normal update source to the
 marketplace. Users then install
-[Marketplace version 109](https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/packages/8bdeb24571521f33ef4a91a684dcea89e7085a569f8ef7726f03769c1a0c6db2.neutron)
+[Marketplace version 111](https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/packages/e2f861cc3147ed0933216730999d5f74272a988a1e63fb3470faf64d687931be.neutron)
 separately; publishing does not add that app automatically. This public package
 was verified by publication postflight with SHA-256
-`8bdeb24571521f33ef4a91a684dcea89e7085a569f8ef7726f03769c1a0c6db2`.
+`e2f861cc3147ed0933216730999d5f74272a988a1e63fb3470faf64d687931be`.
 
 No existing Neutron has been upgraded by this deployment record. No Dispenser
 starter change or Git push is included. The missing burn-service destinations
@@ -109,3 +109,58 @@ automatic setup, reload, fresh-browser access, checked uninstall/reinstall with
 the same principal and a new browser seed, and a subsequent nonfinancial update.
 Kernel 356 and the protocol module are unchanged; no existing production Neutron
 was installed or reinstalled by these tests or by publication.
+
+## Certified download header upgrade
+
+The protocol was upgraded in place to Wasm
+`2bde4755ae504b96706c48b752daa681a19a5b0aa302da764c41529c00789143`
+using `icp --mode upgrade --wasm-memory-persistence keep`. Its running module
+and unchanged controllers were verified afterward. This is the current protocol
+module; the initial deployment above remains historical evidence.
+
+The upgrade exposes the existing `Vary` header to browser clients and rebuilds
+the affected certified responses. Database roots and Candid remain unchanged.
+Both the exact deployed-module upgrade test and the portable regression passed
+13 certified HTTP cases, including existing grants, streaming continuations,
+public downloads, private downloads and denial responses. Representative
+ownership, audit, upload and configuration records were retained.
+
+## Kernel 359 and Marketplace 111 installation follow-up
+
+Marketplace batch **3** publishes Kernel 359 and Marketplace 111 together.
+The other 25 selected packages and offered sources are unchanged. Request:
+`3713dda7aafaef623186309083f521c238f6878ac05722cfea34105878825ecd`.
+The receipt-v2 postflight matches the reviewed versions, archive SHA-256 and
+size, and offered-source URL, path, SHA-256 and size for all 27 selected apps.
+Repeating the identical publication returned `batch_id: null`, with all 27
+packages and offered sources verified `unchanged` against the same frozen
+files. No archive or source artifact was rebuilt between those calls.
+
+| App | Archive bytes | Archive SHA-256 | Offered-source SHA-256 |
+| --- | ---: | --- | --- |
+| Kernel 359 | 2,466,756 | `6b506590ab9160a6e8e31859a791d40e60b797f06e9fde28781b8f0beb89574d` | `99072d19ee84b078585d7b4c00597b934e18ad2558795ca652d465d47e73ddde` |
+| Marketplace 111 | 476,894 | `e2f861cc3147ed0933216730999d5f74272a988a1e63fb3470faf64d687931be` | `130a7314ee7928ce726d437c2a769dcc6d8c5042668928740b9e2894a57a85e4` |
+
+Installed users choose **Settings → Upgrade all** to obtain the compatible
+pair. Marketplace's Install action prepares the selected apps and opens one
+Kernel review of their packages and manifest permissions. One approval installs
+the selection. Canceling changes no installation, and reopening the saved
+selection reuses its preparation and source access without another charge.
+The Kernel exposes this workflow through a generic manifest-declared capability.
+Marketplace also declares its update permissions at installation, uses the
+shared clipboard capability, and exposes the combined preparation cost on
+Install. Kernel Settings keeps update source-cost details expandable.
+
+Kernel validation passed 860 TypeScript tests, 33 Motoko suites, complete
+packaging and fresh 12-case certified-assets qualification. Marketplace passed
+its complete package command, 123 Bun tests plus isolated suites, backend memory
+restoration, typecheck, five browser suites and protocol integration. The exact
+359/111 installed-browser gate verified automatic access across reload, a fresh
+browser profile and checked reinstall, clipboard copying, and two-app
+installation with one final review. Cancellation and retry used exactly one
+preparation and one source grant. Its disposable ledger counters stayed zero.
+
+All managed-memory schema and migration sources and lock lineages are unchanged.
+The emitted, unpublished Kernel 357/358 and Marketplace 110 archives remain
+preserved. Publication does not install into an existing production Neutron;
+the old source and Dispenser starter were not changed.

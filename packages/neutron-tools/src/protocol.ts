@@ -89,6 +89,13 @@ export type AppInstallOfferResult = {
   requestId: string;
 };
 
+/** App-owned preparation and download access; never authorizes deployment. */
+export type PreparedAppInstallRequest = {
+  url: string;
+  appIds: string[];
+  access?: { source: string; token: string; paths: string[] };
+};
+
 export type TrayState = {
   badge: number | null;
 };

@@ -28,6 +28,7 @@ import {
   onAppStateChange,
   onTileViewRequest,
   offerAppInstall,
+  reviewPreparedAppInstall,
   openAppTile,
   publishAppStateChange,
   removeExposedTool,
@@ -3907,6 +3908,22 @@ test("app install offer helper uses the discoverable kernel tool", async () => {
     presented: true,
     requestId: "offer-repository",
   });
+});
+
+test("prepared install helper forwards exact source access only to the Kernel", async () => {
+  const fakeWindow = installFakeWindow();
+  const argumentsValue = {
+    url: `https://neutron.example/#repo=aaaaa-aa&manifest=chosen&digest=${"a".repeat(64)}`,
+    appIds: ["notes", "calendar"],
+    access: { source: "aaaaa-aa", token: "b".repeat(64), paths: [`/repo/v1/packages/${"c".repeat(64)}.neutron`] },
+  };
+  const pending = reviewPreparedAppInstall(argumentsValue, 0.2);
+  const request = fakeWindow.parent.messages[0]?.message as { id: number; payload: unknown };
+  expect(request).toMatchObject({
+    type: "exec", payload: { action: "tools.call", payload: { target: "kernel", name: "apps.install_prepared", arguments: argumentsValue } },
+  });
+  fakeWindow.dispatch({ type: "response", id: request.id, ok: { presented: true, requestId: "prepared-selection" } });
+  await expect(pending).resolves.toEqual({ presented: true, requestId: "prepared-selection" });
 });
 
 test("tile view requests are accepted only from the kernel peer", async () => {

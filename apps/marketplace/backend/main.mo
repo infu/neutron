@@ -40,7 +40,7 @@ module {
     // Explicit mutation contract. Reads never use this broker.
     public func allowed(method : Text) : Bool {
         switch (method) {
-            case ("read_delegate_set" or "purchase" or "withdraw" or "referral_get_or_create" or "rating_set" or "listing_save" or "upload_begin" or "upload_chunk" or "upload_finish" or "candidate_submit" or "install_prepare" or "ethereum_prepare" or "ethereum_verify" or "ethereum_settle" or "ethereum_cancel" or "admin_auditor_set" or "admin_reserve_app" or "admin_set_burn_account" or "rates_refresh") true;
+            case ("read_delegate_set" or "purchase" or "withdraw" or "referral_get_or_create" or "rating_set" or "listing_save" or "upload_begin" or "upload_chunk" or "upload_finish" or "candidate_submit" or "install_prepare" or "repo_access_v1" or "ethereum_prepare" or "ethereum_verify" or "ethereum_settle" or "ethereum_cancel" or "admin_auditor_set" or "admin_reserve_app" or "admin_set_burn_account" or "rates_refresh") true;
             case (_) false;
         };
     };

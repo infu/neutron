@@ -23,7 +23,7 @@ const owner='3rurp-vyaaa-aaaay-aacua-cai',canisterId='rrkah-fqaaa-aaaaa-aaaaq-ca
 const initialMode=new URL(location.href).searchParams.get('mode')??'control';
 const state=window.installFixture={requests:[],installed:[],prepared:[],handoffs:[],acquired:[],reviews:[],mode:initialMode,rejectInstall:false};
 const listing={id:'alpha',title:'Canvas Studio',summary:'Create a canvas.',category:'Creativity',publisher:owner,priceUsdMicros:'0',version:'101',rating:null,ratingCount:0,owned:true};
-const quote=(appIds,index,operationId)=>{const total=String(5000000007n+BigInt(index));return {operationId:operationId??'installation-'+index,appIds:[...appIds],canisterId,owner,cycles:{total,processing:total,schedule:'fixed-fixture'},fee:{feeVersion:'1',processingCycles:total,storageCycles:'0',totalCycles:total,processingBytes:'128',newStorageBytes:'0'}};};
+const quote=(appIds,index,operationId)=>{const total=String(5000000007n+BigInt(index)),processing=String(BigInt(total)-250000000n);return {operationId:operationId??'installation-'+index,appIds:[...appIds],canisterId,owner,cycles:{total,processing,schedule:'fixed-fixture'},sourceAccess:{source:canisterId,feeVersion:'1',cycles:'250000000'},fee:{feeVersion:'1',processingCycles:processing,storageCycles:'0',totalCycles:processing,processingBytes:'128',newStorageBytes:'0'}};};
 const client={
  quoteInstallation:(appIds,operationId)=>new Promise((resolve,reject)=>{const index=state.requests.length,saved=state.prepared.find(quote=>operationId?quote.operationId===operationId:JSON.stringify(quote.appIds)===JSON.stringify(appIds));const exact=saved?{...saved,appIds:[...saved.appIds]}:quote(appIds,index,operationId);state.requests.push({appIds:[...appIds],operationId,quote:exact,resolve,reject});if(saved)resolve(exact);}),
  detail:async()=>({...listing,owned:state.mode!=='public',description:'A local installation fixture.',screenshots:[],audit:null}),
@@ -32,10 +32,11 @@ const client={
 const install=async(ids,quote)=>{
  state.installed.push({ids,operationId:quote.operationId,retained:state.requests.some(request=>request.quote===quote),total:quote.cycles.total});
  if(state.rejectInstall){state.rejectInstall=false;throw Error('Installation fee changed. Refresh the cost before installing.');}
- if(quote.setupUrl)state.handoffs.push({operationId:quote.operationId,setupUrl:quote.setupUrl});
- else state.prepared.push({...quote,setupUrl:'https://marketplace-fixture.invalid/install/'+quote.operationId});
+ if(!quote.setupUrl)state.prepared.push({...quote,cycles:{...quote.cycles,total:'0',processing:'0'},sourceAccess:{...quote.sourceAccess,cycles:'0'},fee:{...quote.fee,totalCycles:'0',processingCycles:'0'},setupUrl:'https://marketplace-fixture.invalid/install/'+quote.operationId});
  const saved=state.prepared.find(item=>item.operationId===quote.operationId);
- return {operationId:quote.operationId,state:'pending',nextAction:'review',message:'Installation prepared; open the saved installer.',appIds:ids,installation:{setupUrl:saved.setupUrl,prepared:true}};
+ await new Promise(resolve=>setTimeout(resolve,10));
+ state.handoffs.push({operationId:quote.operationId,setupUrl:saved.setupUrl});
+ return {operationId:quote.operationId,state:'complete',nextAction:'none',message:'Installer opened.',appIds:ids};
 };
 function Fixture(){
  const [appIds,setAppIds]=useState(['alpha']),[mode,setMode]=useState(initialMode);
@@ -50,7 +51,7 @@ createRoot(document.getElementById('root')).render(<Fixture/>);
 await build({ stdin: { contents: fixture, loader: "tsx", resolveDir: root }, bundle: true, format: "esm", jsx: "automatic", outfile: join(output, "fixture.js"), plugins: [
   { name: "local-only-transport", setup(builder) {
     builder.onResolve({ filter: /^neutron-tools\/app$/ }, () => ({ path: "transport", namespace: "fixture" }));
-    builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: "export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler});export const removeExposedTool=name=>window.marketplaceTools.delete(name);export const connectEthereumProvider=()=>{throw Error('Unexpected wallet connection')};", loader: "js" }));
+    builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: "export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler});export const removeExposedTool=name=>window.marketplaceTools.delete(name);export const copyToClipboard=()=>Promise.reject(Error('Unexpected clipboard action in this regression'));export const connectEthereumProvider=()=>{throw Error('Unexpected wallet connection')};", loader: "js" }));
   } }, sassPlugin(),
 ] });
 const server = createServer(async (req, res) => {
@@ -76,48 +77,48 @@ try {
   assert.equal(await button.isDisabled(), true);
   assert.deepEqual(await installed(), []);
   await resolveQuote(0);
-  await page.getByText('Prepare · 5,000,000,007 cycles', { exact: true }).waitFor();
+  await page.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
   assert.equal(await button.isEnabled(), true);
-  assert.equal(await page.locator('.mp-install-cost').getAttribute('title'), 'Neutron reviews download access and installation costs next.');
+  assert.equal(await page.locator('.mp-install-cost').getAttribute('title'), 'Includes selection preparation and private download access. Neutron reviews app permissions and installation costs next.');
   await button.click();
   await waitRequests(2);
-  await page.getByRole('button', { name: 'Open installer', exact: true }).waitFor();
+  await page.getByText('Ready · No additional access charge', { exact: true }).waitFor();
   assert.deepEqual(await installed(), [{ids:['alpha'],operationId:'installation-0',retained:true,total:'5000000007'}]);
   assert.equal(await page.getByRole('dialog').count(), 0, 'the existing Install click must not add another owner confirmation');
   assert.equal(await page.evaluate(()=>window.installFixture.requests[1].operationId),'installation-0','successful preparation refreshes only the original request');
-  await page.getByText('Prepared · No additional preparation charge', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Open installer', exact: true }).click();
+  await page.getByText('Ready · No additional access charge', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Open installer', exact: true }).count(),0,'normal installation never requires an additional Open installer click');
   assert.deepEqual(await page.evaluate(()=>window.installFixture.handoffs),[{operationId:'installation-0',setupUrl:'https://marketplace-fixture.invalid/install/installation-0'}]);
-  assert.equal(await page.evaluate(()=>window.installFixture.prepared.length),1,'opening the saved handoff must not repeat preparation');
+  assert.equal(await page.evaluate(()=>window.installFixture.prepared.length),1,'one Install click prepares once and opens its handoff');
   await page.evaluate(()=>window.installFixture.setMode('review'));
   // Wait for React to commit the unmount before requesting the next mode;
   // consecutive browser evaluations can otherwise batch into one render.
   await page.locator('.mp-install-control').waitFor({ state: 'detached' });
   await page.evaluate(()=>window.installFixture.setMode('control'));
   await waitRequests(3);
-  await page.getByRole('button', { name: 'Open installer', exact: true }).waitFor();
+  await page.getByText('Ready · No additional access charge', { exact: true }).waitFor();
   assert.equal(await page.evaluate(()=>window.installFixture.requests[2].operationId),undefined);
   assert.equal(await page.evaluate(()=>window.installFixture.requests[2].quote.operationId),'installation-0','a remounted control discovers the durable prepared request');
-  checks.push('Exact cost is visible before preparation; its same-ID follow-up read reveals Open installer without another charge, and a remounted control discovers the saved handoff.');
+  checks.push('Combined preparation and source-access cost is visible before installation; one click opens its handoff, and a remounted control recovers the same ID without another charge.');
 
   await page.goto(url);
   await waitRequests(1);
   await resolveQuote(0);
-  await page.getByText('Prepare · 5,000,000,007 cycles', { exact: true }).waitFor();
+  await page.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
   await page.evaluate(() => window.installFixture.select(['beta']));
   await waitRequests(2);
   assert.equal(await page.evaluate(()=>window.installFixture.requests[1].operationId),undefined,'a different selection starts its own request identity');
   assert.equal(await button.isDisabled(), true);
-  assert.equal(await page.getByText('Prepare · 5,000,000,007 cycles', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('5,000,000,007 cycles', { exact: true }).count(), 0);
   await page.evaluate(() => window.installFixture.select(['alpha','beta']));
   await waitRequests(3);
   await resolveQuote(1);
   assert.equal(await button.isDisabled(), true, 'an older selection resolving late cannot enable installation');
   await resolveQuote(2);
-  await page.getByText('Prepare · 5,000,000,009 cycles', { exact: true }).waitFor();
+  await page.getByText('5,000,000,009 cycles', { exact: true }).waitFor();
   await button.click();
   await waitRequests(4);
-  await page.getByRole('button', { name: 'Open installer', exact: true }).waitFor();
+  await page.getByText('Ready · No additional access charge', { exact: true }).waitFor();
   assert.deepEqual(await installed(), [{ids:['alpha','beta'],operationId:'installation-2',retained:true,total:'5000000009'}]);
   assert.equal(await page.evaluate(()=>window.installFixture.requests[3].operationId),'installation-2');
   checks.push('Changed selections clear the old quote immediately; late earlier responses cannot install the wrong apps or attach their fee.');
@@ -130,16 +131,16 @@ try {
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await waitRequests(2);
   await resolveQuote(1);
-  await page.getByText('Prepare · 5,000,000,008 cycles', { exact: true }).waitFor();
+  await page.getByText('5,000,000,008 cycles', { exact: true }).waitFor();
   assert.equal(await button.isEnabled(), true);
   assert.deepEqual(await installed(),[]);
   await page.getByRole('button', { name: 'Refresh installation cost', exact: true }).click();
   assert.equal(await button.isDisabled(),true,'refresh invalidates the old fee before another dispatch can occur');
   await waitRequests(3);
-  assert.equal(await page.getByText('Prepare · 5,000,000,008 cycles', { exact: true }).count(),0);
+  assert.equal(await page.getByText('5,000,000,008 cycles', { exact: true }).count(),0);
   assert.equal(await page.evaluate(()=>window.installFixture.requests[2].operationId),'installation-1');
   await resolveQuote(2);
-  await page.getByText('Prepare · 5,000,000,009 cycles', { exact: true }).waitFor();
+  await page.getByText('5,000,000,009 cycles', { exact: true }).waitFor();
   assert.deepEqual(await installed(),[]);
   await button.click();
   await waitRequests(4);
@@ -152,7 +153,7 @@ try {
   const detailInstall = detail.getByRole('button', { name: 'Install app', exact: true });
   assert.equal(await detailInstall.isDisabled(), true);
   await resolveQuote(0);
-  await detail.getByText('Prepare · 5,000,000,007 cycles', { exact: true }).waitFor();
+  await detail.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
   for (const width of [320,380,960]) {
     await page.setViewportSize({width,height:760});
     const layout = await detail.evaluate(node=>({right:node.getBoundingClientRect().right,overflow:node.scrollWidth>node.clientWidth,footerOverflow:node.querySelector('.mp-modal-footer').scrollWidth>node.querySelector('.mp-modal-footer').clientWidth}));
@@ -161,13 +162,13 @@ try {
   }
   await detailInstall.click();
   await waitRequests(2);
-  await detail.getByRole('button', { name: 'Open installer', exact: true }).waitFor();
+  await detail.getByText('Ready · No additional access charge', { exact: true }).waitFor();
   assert.deepEqual(await installed(), [{ids:['alpha'],operationId:'installation-0',retained:true,total:'5000000007'}]);
   await page.evaluate(() => window.installFixture.setMode('public'));
   await page.getByRole('dialog', { name: 'Canvas Studio', exact: true }).getByRole('button', { name: 'Get app', exact: true }).click();
   assert.deepEqual(await page.evaluate(()=>window.installFixture.acquired),['alpha']);
   assert.equal(await page.evaluate(()=>window.installFixture.requests.length),2,'public acquisition does not quote installation before ownership');
-  checks.push('Owned app details share the cost-aware Install and prepared-handoff controls at narrow and wide tile sizes; public Get retains acquisition behavior.');
+  checks.push('Owned app details share the cost-aware one-click Install control at narrow and wide tile sizes; public Get retains acquisition behavior.');
 
   await page.goto(url);
   await waitRequests(1);
@@ -186,7 +187,8 @@ try {
   assert.match(contents,/5,000,000,008 cycles/);
   assert.match(contents,/rrkah-fqaaa-aaaaa-aaaaq-cai/);
   assert.match(contents,/3rurp-vyaaa-aaaay-aacua-cai/);
-  assert.match(contents,/Kernel will review app permissions and its installation costs separately/);
+  assert.match(contents,/includes selection preparation and private download access/);
+  assert.match(contents,/Neutron will review app permissions and installation costs in the installer/);
   await review.getByRole('button', { name: 'Decline', exact: true }).click();
   assert.deepEqual(await page.evaluate(()=>window.installFixture.reviewResult),{approved:false});
   assert.deepEqual(await installed(),[]);
@@ -200,7 +202,7 @@ try {
   await page.goto(url+'/?mode=owned');
   await waitRequests(1);
   await resolveQuote(0);
-  await detail.getByText('Prepare · 5,000,000,007 cycles', { exact: true }).waitFor();
+  await detail.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
   await page.evaluate(() => window.installFixture.rejectInstall=true);
   await detailInstall.evaluate(button=>{button.click();button.click();});
   await detail.getByRole('alert').getByText('Installation fee changed. Refresh the cost before installing.', { exact: true }).waitFor();
@@ -212,12 +214,12 @@ try {
   await waitRequests(2);
   assert.equal(await page.evaluate(()=>window.installFixture.requests[1].operationId),'installation-0');
   await resolveQuote(1);
-  await detail.getByText('Prepare · 5,000,000,008 cycles', { exact: true }).waitFor();
+  await detail.getByText('5,000,000,008 cycles', { exact: true }).waitFor();
   assert.equal((await installed()).length,1,'reviewing a fresh fee must not redispatch installation');
   assert.equal(await detail.getByRole('alert').count(),0);
   await detailInstall.click();
   await waitRequests(3);
-  await detail.getByRole('button', { name: 'Open installer', exact: true }).waitFor();
+  await detail.getByText('Ready · No additional access charge', { exact: true }).waitFor();
   assert.deepEqual((await installed()).at(-1),{ids:['alpha'],operationId:'installation-0',retained:true,total:'5000000008'});
   assert.equal((await installed()).length,2);
   assert.equal(await page.evaluate(()=>window.installFixture.prepared.length),1);

@@ -4,10 +4,55 @@
 
 ## Status
 
-Implemented. Installed apps and active Agent Mode invocations can now ask the
-Kernel to present a package or repository-group offer. The caller can nominate
-only a URL. The authenticated owner retains both the pre-contact decision and
-the existing exact package or group installation approval.
+Implemented. Installed apps and active Agent Mode invocations can ask the
+Kernel to present a package or repository-group offer. URL offers retain the
+pre-contact decision and exact installation approval. Apps that declare the
+prepared-install capability can instead supply an already prepared repository
+selection for one final package and permission review.
+
+## Prepared Selections
+
+An app that manages its own package selection and source access declares:
+
+```json
+{"frontend_tools":{"api":1,"targets":[{"app":"kernel","tools":["apps.install_prepared"]}]}}
+```
+
+After its user chooses Install, it can use `reviewPreparedAppInstall()` from
+`neutron-tools/app`, or call `apps.install_prepared`, with this input:
+
+```ts
+{
+  url: setupUrl,
+  appIds: ["notes", "calendar"],
+  access: { source: repositoryPrincipal, token: privateBearer, paths: packagePaths }
+}
+```
+
+`access` is optional for public packages. The caller owns any source preparation
+and download-grant charges under its installed capabilities and should disclose
+those costs on its Install action. The grant must cover every package in the
+pinned repository manifest, including dependencies; it is restricted to the
+canonical source and exact resource paths. The Kernel never buys or renews
+access for this prepared flow, including after a denied or interrupted fetch.
+It does not forward the bearer to other hosts or retain it in audit records,
+application provenance, or browser storage.
+
+The Kernel obtains certified metadata and package bytes, validates their hashes
+and package manifests, selects the requested apps and required dependencies,
+and compiles the combined deployment automatically. It then shows one final
+review containing the actual packages and their manifest permissions. Only
+approving that review installs anything; cancellation makes no installation.
+The declared capability authorizes preparation and presentation, not deployment.
+An asynchronous caller does not need a second physical click after preparing
+the source request.
+
+The reply `{ presented: true, requestId }` acknowledges the review handoff, not
+installation success. The prepared review is transient: page reload abandons
+an unapproved review, and the app can reopen its original saved source grant.
+It must not create another charged preparation simply because handoff returned
+or the review was canceled. Ordinary URL offers and external repository links
+retain their existing selection and approval behavior.
 
 ## Installation Before Install Offers
 
@@ -145,7 +190,7 @@ means only that the Kernel presents an owner decision. The tool must never let
 an agent approve its own installation request, grant reusable install
 authority, or bypass the existing final package/setup review.
 
-## Consent Sequence
+## URL Offer Consent Sequence
 
 1. The caller submits a closed, bounded offer to the discoverable Kernel tool.
 2. The Kernel validates and canonicalizes the URL locally, derives the exact
@@ -176,7 +221,11 @@ The tool response acknowledges that the owner accepted the request for
 inspection. It does not promise installation success over an app endpoint
 that may disappear while the Kernel-owned workflow continues.
 
-## Enforced Policy
+## URL Offer Policy
+
+The following rules describe `apps.install_offer`. Prepared selections use the
+install-declared preparation authority described above, while retaining the
+same final deployment approval and package validation.
 
 - The tool is discoverable to Agent Mode and callable by ordinary installed
   apps.

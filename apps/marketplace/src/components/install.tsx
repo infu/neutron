@@ -11,7 +11,7 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   label?: string;
   onInstall: (ids: string[], quote: InstallationQuote) => Promise<void> | void;
   className?: string;
-  /** Saved ready offer permits immediate tile handoff without a background read. */
+  /** A saved selection resumes the original installation request. */
   preparedQuote?: InstallationQuote | undefined;
 }) {
   const [revision, setRevision] = useState(0);
@@ -23,7 +23,7 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   const retained = useRef<{ selection: string; operationId?: string }>({ selection, ...(initial ? { operationId: initial.operationId } : {}) });
   if (retained.current.selection !== selection) retained.current = { selection };
   const key = !disabled && appIds.length ? JSON.stringify([selection, revision]) : null;
-  const usePrepared = revision === 0 && initial?.operationId === retained.current.operationId && !!initial;
+  const usePrepared = revision === 0 && initial?.operationId === retained.current.operationId && !!initial?.sourceAccess;
   const read = useRead(usePrepared ? null : key, async () => {
     const requested = [...appIds];
     const identity = retained.current;
@@ -31,7 +31,7 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
     const quote = await client.quoteInstallation(requested, operationId);
     if (JSON.stringify(quote.appIds) !== JSON.stringify(requested)) throw new Error("The installation quote does not match the selected apps.");
     if (operationId && quote.operationId !== operationId) throw new Error("The refreshed quote changed the original installation request.");
-    if (BigInt(quote.cycles.total) !== BigInt(quote.fee.totalCycles)) throw new Error("The installation quote has inconsistent cycle costs.");
+    if (BigInt(quote.cycles.total) !== BigInt(quote.fee.totalCycles) + BigInt(quote.sourceAccess?.cycles ?? "0")) throw new Error("The installation quote has inconsistent cycle costs.");
     if (retained.current === identity) identity.operationId = quote.operationId;
     return quote;
   });
@@ -54,9 +54,7 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
     const identity = retained.current;
     dispatching.current = true; setDispatchBusy(true); setFailure(null);
     try {
-      // Keep a prepared installer handoff inside the original click gesture.
-      const handoff = onInstall([...quote.appIds], quote);
-      await handoff;
+      await onInstall([...quote.appIds], quote);
       if (!quote.setupUrl && retained.current === identity) setRevision((value) => value + 1);
     }
     catch (cause) { setFailure({ key, error: errorMessage(cause) }); }
@@ -64,9 +62,9 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   }
   return <div className="mp-install-control">
     <div className="mp-button-row">
-      {!disabled && appIds.length > 0 && <span className="mp-muted mp-install-cost" aria-live="polite" title="Neutron reviews download access and installation costs next.">{quote ? quote.unavailableReason ? "Selection no longer available" : quote.setupUrl ? "Prepared · No additional preparation charge" : `Prepare · ${BigInt(quote.cycles.total).toLocaleString("en-US")} cycles` : read.error || dispatchError ? "Refresh cost to continue" : "Checking cost…"}</span>}
+      {!disabled && appIds.length > 0 && <span className="mp-muted mp-install-cost" aria-live="polite" title="Includes selection preparation and private download access. Neutron reviews app permissions and installation costs next.">{quote ? quote.unavailableReason ? "Selection no longer available" : BigInt(quote.cycles.total) === 0n ? "Ready · No additional access charge" : `${BigInt(quote.cycles.total).toLocaleString("en-US")} cycles` : read.error || dispatchError ? "Refresh cost to continue" : "Checking cost…"}</span>}
       {!disabled && appIds.length > 0 && <button type="button" className="mp-text-button" aria-label="Refresh installation cost" title="Refresh cost" disabled={working || read.loading} onClick={() => setRevision((value) => value + 1)}><Icon name="refresh" /></button>}
-      <button type="button" className={className} disabled={disabled || working || !quote || !!unavailableReason} onClick={() => void install()}>{working ? "Opening install…" : quote?.setupUrl ? "Open installer" : label}</button>
+      <button type="button" className={className} disabled={disabled || working || !quote || !!unavailableReason} onClick={() => void install()}>{working ? "Opening install…" : label}</button>
     </div>
     {!disabled && canPrepareLatest && <button type="button" className="mp-text-button" disabled={working || read.loading} onClick={prepareLatest} title="Review a new preparation request for the latest approved releases. Your previous request remains in saved history.">Prepare latest selection</button>}
     <ErrorNote error={dispatchError || read.error || unavailableReason || null} retry={!dispatchError && !unavailableReason && !working ? () => setRevision((value) => value + 1) : undefined} />

@@ -23,7 +23,7 @@ import { hashContent } from "neutron-tools/src/hash.js";
 import { canisterOrigin } from "neutron-tools/src/runtime.js";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
 import { fetchPackageFromUrl } from "../tools/package_url.ts";
-import type { RepositoryAccessApproval } from "../repository_access/client.ts";
+import type { RepositoryAccessApproval, RepositoryPreparedAccess } from "../repository_access/client.ts";
 
 export type FetchedRepositoryPackage = {
   metadata: RepositoryManifestPackage;
@@ -54,6 +54,8 @@ export type RepositoryLoadProgress = {
 
 export type RepositoryClientOptions = {
   approvedAccess?: readonly RepositoryAccessApproval[];
+  preparedAccess?: RepositoryPreparedAccess;
+  allowAccessAcquisition?: boolean;
   signal?: AbortSignal;
   fetch?: typeof fetch;
   onProgress?: (progress: RepositoryLoadProgress) => void;
@@ -302,6 +304,8 @@ export function createRepositoryPackageReader(
       ...(options.signal ? { signal: options.signal } : {}),
       ...(resourcePaths ? { resourcePaths } : {}),
       ...(options.approvedAccess ? { approvedAccess: options.approvedAccess } : {}),
+      ...(options.preparedAccess !== undefined ? { preparedAccess: options.preparedAccess } : {}),
+      ...(options.allowAccessAcquisition !== undefined ? { allowAccessAcquisition: options.allowAccessAcquisition } : {}),
     });
   };
 }

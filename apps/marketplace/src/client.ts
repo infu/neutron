@@ -83,8 +83,8 @@ export async function protocolClient(context: MsgBusToolContext) {
   async function update<T>(name: string, request: Record<string, unknown>, quote?: Fee): Promise<T> {
     const estimate = quote ?? await estimateUpdate(name, request);
     context.signal?.throwIfAborted();
-    // Reinstall restores the permanent read principal, but installation-scoped
-    // update routes must be granted again at the first actual mutation.
+    // Production routes are reviewed and granted during installation. Keep
+    // the runtime path for a custom protocol or explicitly revoked access.
     await transport.reserve();
     context.signal?.throwIfAborted();
     if (generation !== clientGeneration) throw new Error("Marketplace settings changed during setup. Retry using the current marketplace.");
@@ -96,6 +96,20 @@ export async function protocolClient(context: MsgBusToolContext) {
     const args = { ...request, feeVersion: info.fees.version };
     const count = BigInt(IDL.encode(method.args, [args]).byteLength);
     return fee(name === "upload_begin" ? "upload" : "update", count, newStorageBytes);
+  }
+  async function grantSourceAccess(request: { request_id: string; token: string; paths: string[]; fee_version: bigint }, cycles: bigint): Promise<void> {
+    context.signal?.throwIfAborted();
+    await transport.reserve();
+    context.signal?.throwIfAborted();
+    if (generation !== clientGeneration) throw new Error("Marketplace settings changed during setup. Resume using the original marketplace.");
+    // Never expose a private bearer or remote transport text in diagnostics.
+    // An interrupted reply retains this exact request for reconciliation.
+    try {
+      const result = response<{ request_id: string; paths: string[]; accepted_cycles: bigint }>(await transport.update("repo_access_v1", [request], cycles));
+      if (result.request_id !== request.request_id || JSON.stringify(result.paths) !== JSON.stringify(request.paths) || typeof result.accepted_cycles !== "bigint" || result.accepted_cycles < 0n || result.accepted_cycles > cycles) throw new Error("Invalid source access receipt");
+    } catch {
+      throw new Error("Source access could not be confirmed. Continue this same installation to reconcile its saved access request.");
+    }
   }
   function artifactUrl(value: string): string {
     const replica = new URL(state.host);
@@ -148,7 +162,7 @@ export async function protocolClient(context: MsgBusToolContext) {
     if (!selected) throw new Error("The saved withdrawal names an unavailable payment token.");
     return { operationId: quote.request.requestId, token: selected.symbol as PaymentToken, destination: quote.request.to.owner.toText(), debit: money(selected, quote.request.totalDebit), fee: money(selected, quote.fee), receive: money(selected, quote.netAmount), cycles: cycleView(quote.cycles), warnings: [], opaque: encodeOpaque(withdrawalType, quote) };
   }
-  return { state, transport, info, token, query, fee, update, estimateUpdate, listing, detailWire, detail, purchaseView, withdrawalView,
+  return { state, transport, info, token, query, fee, update, estimateUpdate, grantSourceAccess, listing, detailWire, detail, purchaseView, withdrawalView,
     async catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>> {
       const parsed = input.cursor ? JSON.parse(input.cursor) as { generation: string; offset: string } : null;
       const value = await query<{ apps: WireApp[]; nextCursor: Option<{ generation: bigint; offset: bigint }>; asOfNs: bigint; refreshing: boolean }>("catalog_query", [{ search: input.search, tier: { [input.tier]: null }, window: { [input.window]: null }, cursor: parsed ? [{ generation: BigInt(parsed.generation), offset: BigInt(parsed.offset) }] : [], limit: 24n }]);

@@ -70,12 +70,40 @@ async function publish(input: PublicationInput, quote: PublicationQuote, progres
   progress(100);
   return result;
 }
+type PrivateInstallation = {
+  result: OperationResult;
+  handoff?: { url: string; appIds: string[]; access?: { source: string; token: string; paths: string[] } };
+};
+
+async function install(appIds: string[], quote: InstallationQuote): Promise<OperationResult> {
+  if (JSON.stringify(appIds) !== JSON.stringify(quote.appIds)) throw new Error("The selected apps changed. Refresh the installation quote.");
+  if (!quote.sourceAccess) {
+    const refreshed = await invoke<InstallationQuote>(false, "quoteInstallation", { appIds, operationId: quote.operationId });
+    if (refreshed.operationId !== quote.operationId || JSON.stringify(refreshed.appIds) !== JSON.stringify(appIds)) throw new Error("The refreshed quote does not match the saved installation request.");
+    if (BigInt(refreshed.cycles.total) !== BigInt(quote.cycles.total) || BigInt(refreshed.sourceAccess?.cycles ?? "0") > 0n) return {
+      operationId: quote.operationId, appIds, state: "review_required", nextAction: "review", installation: refreshed,
+      message: "Review the current installation and download access cost before continuing with this saved request.",
+    };
+    quote = refreshed;
+  }
+  // Preparation and private download access complete before opening the generic
+  // installer. Its manifest capability does not depend on click activation
+  // surviving asynchronous canister calls.
+  const response = await invoke<PrivateInstallation>(true, "install", { appIds, quote });
+  const { result, handoff } = response;
+  if (!result || result.operationId !== quote.operationId) throw new Error("The installation reply does not match the saved request.");
+  if (!handoff) return result;
+  const prepared = result.installation;
+  if (!prepared || prepared.operationId !== quote.operationId || handoff.url !== prepared.setupUrl || JSON.stringify(handoff.appIds) !== JSON.stringify(appIds)) throw new Error("The installer handoff does not match the selected apps.");
+  const opened = await callTool<{ presented: boolean; requestId: string }>({ target: "kernel", name: "apps.install_prepared", arguments: handoff }, { timeout: 0 });
+  if (opened.presented !== true) throw new Error("The installer did not open. Resume the saved installation request.");
+  // Only the public retained quote is acknowledged or returned to UI/history;
+  // the download token remains private to this tile-to-Kernel handoff.
+  return invoke(true, "installationOpened", { quote: prepared });
+}
+
 async function openInstallation(quote: InstallationQuote): Promise<OperationResult> {
-  if (!quote.setupUrl) throw new Error("Prepare this saved selection before opening the installer.");
-  // Dispatch from the physical tile before the first await. A background
-  // round-trip would lose both endpoint provenance and the click activation.
-  await callTool({ target: "kernel", name: "apps.install_offer", arguments: { kind: "repository_setup_url", url: quote.setupUrl } }, { timeout: 0 });
-  return invoke(true, "installationOpened", { quote });
+  return install(quote.appIds, quote);
 }
 
 export function createMarketplaceClient(): MarketplaceClient {
@@ -89,10 +117,7 @@ export function createMarketplaceClient(): MarketplaceClient {
     cancelEthereumCheckout: operationId => invoke(true, "ethereumCancel", { operationId }),
     verifyEthereumTransaction: (operationId, transactionHash) => invoke(true, "ethereumVerifyOriginal", { operationId, transactionHash }),
     quoteInstallation: (appIds, operationId) => invoke(false, "quoteInstallation", { appIds, ...(operationId ? { operationId } : {}) }),
-    install: (appIds, quote) => {
-      if (JSON.stringify(appIds) !== JSON.stringify(quote.appIds)) return Promise.reject(new Error("The selected apps changed. Refresh the installation quote."));
-      return quote.setupUrl ? openInstallation(quote) : invoke(true, "install", { appIds, quote });
-    }, openInstallation, rate: (appId, stars, text) => invoke(true, "rate", { appId, stars, text }),
+    install, openInstallation, rate: (appId, stars, text) => invoke(true, "rate", { appId, stars, text }),
     quoteWithdrawal: args => invoke(false, "quoteWithdrawal", args), withdraw: quote => invoke(true, "withdraw", { quote }),
     quotePublication: async input => invoke(false, "quotePublication", { plan: await preparePublication(input) }), publish,
   };

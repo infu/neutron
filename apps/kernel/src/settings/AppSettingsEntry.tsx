@@ -94,6 +94,7 @@ export function AppSettingsEntry({
   selectionTitle,
   transitiveDependentIds,
   update,
+  updateDetails,
 }: {
   backendReservations: BackendCallReservation[];
   capabilityActionsDisabled: boolean;
@@ -123,6 +124,7 @@ export function AppSettingsEntry({
   selectionTitle: string;
   transitiveDependentIds: string[];
   update: ReactNode;
+  updateDetails?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const isKernel = id === "kernel";
@@ -284,6 +286,7 @@ export function AppSettingsEntry({
       >
         <td colSpan={7}>
           <div className="settings-app-details">
+        {updateDetails}
         {legalInspection ? (
           <InstalledPackageLegalDetails
             appId={id}

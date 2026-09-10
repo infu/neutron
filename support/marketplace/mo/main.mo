@@ -173,8 +173,9 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   system func postupgrade() {
     // Timers and in-flight driver flags are intentionally disposable. Durable
     // jobs and immutable ledger attempts decide what can resume after upgrade.
+    http.resetResponses();
     repository.initialize(http);
-    certificates.refreshAllGrants();
+    certificates.refreshAllArtifacts();
   };
 
   public query func marketplace_info() : async API.Info {

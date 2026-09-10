@@ -3,6 +3,7 @@ import {
   fetchWithRepositoryAccess,
   RepositoryAccessError,
   type RepositoryAccessApproval,
+  type RepositoryPreparedAccess,
 } from "../repository_access/client.ts";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
 
@@ -15,6 +16,8 @@ export type FetchPackageUrlOptions = {
   maxBytes?: number;
   resourcePaths?: readonly string[];
   approvedAccess?: readonly RepositoryAccessApproval[];
+  preparedAccess?: RepositoryPreparedAccess;
+  allowAccessAcquisition?: boolean;
   signal?: AbortSignal;
 };
 
@@ -49,6 +52,8 @@ export async function fetchPackageFromUrl(
         fetch: options.fetch,
         resourcePaths: options.resourcePaths,
         approvedAccess: options.approvedAccess,
+        preparedAccess: options.preparedAccess,
+        allowAccessAcquisition: options.allowAccessAcquisition,
         signal: options.signal,
       },
     );
@@ -103,6 +108,13 @@ export async function fetchPackageFromUrl(
       chunks.push(value);
     }
   } catch (error) {
+    if (options.preparedAccess) {
+      if (isAbortError(error)) throw new DOMException("The download was canceled.", "AbortError");
+      if (isPackageUrlError(error) && error instanceof Error && !error.message.includes(options.preparedAccess.token)) {
+        throw new Error(error.message);
+      }
+      throw new Error("Package download was interrupted");
+    }
     if (isAbortError(error) || isPackageUrlError(error)) throw error;
     throw new Error("Package download was interrupted", { cause: error });
   } finally {

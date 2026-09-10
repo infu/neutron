@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getNeutronId } from "../config.ts";
+import { ConsentTechnicalDetails } from "../consent/ConsentPresentation.tsx";
 import type { RepositoryAccessApproval } from "./client.ts";
 import {
   currentRepositoryAccessApprovalSnapshot,
@@ -57,13 +58,29 @@ export function RepositoryAccessCost({
   error = null,
   neutronPrincipal,
   onRetry,
+  collapsible = false,
 }: {
   approvals: readonly RepositoryAccessApproval[];
   loading?: boolean;
   error?: string | null;
   neutronPrincipal?: string;
   onRetry?: () => void;
+  collapsible?: boolean;
 }) {
+  if (collapsible) {
+    if (!loading && !error && approvals.length === 0) return null;
+    return (
+      <ConsentTechnicalDetails className="repository-access-disclosure" summary="Download access">
+        <RepositoryAccessCost
+          approvals={approvals}
+          loading={loading}
+          error={error}
+          {...(neutronPrincipal === undefined ? {} : { neutronPrincipal })}
+          {...(onRetry === undefined ? {} : { onRetry })}
+        />
+      </ConsentTechnicalDetails>
+    );
+  }
   if (loading) {
     return <small className="repository-access-cost">Checking source access cost…</small>;
   }

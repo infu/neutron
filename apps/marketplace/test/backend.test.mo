@@ -101,6 +101,7 @@ assert custom.marketplace_state(()).revision == 10;
 assert custom.marketplace_state(()).seed == ?seed;
 assert custom.marketplace_draft("legacy-request") == ?"legacy-data";
 assert App.allowed("purchase");
+assert App.allowed("repo_access_v1");
 assert App.allowed("ethereum_prepare");
 assert App.allowed("ethereum_verify");
 assert App.allowed("ethereum_settle");

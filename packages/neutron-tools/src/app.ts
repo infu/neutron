@@ -53,6 +53,7 @@ import type {
   AgentModeStatus,
   AppInstallOfferRequest,
   AppInstallOfferResult,
+  PreparedAppInstallRequest,
   AppStateChange,
   AppStateChangeEnvelope,
   AppStateChangeListener,
@@ -1528,6 +1529,21 @@ export function offerAppInstall(
     },
     timeout,
   );
+}
+
+/**
+ * Open one final review for a prepared repository selection. Declare exact
+ * frontend_tools access to kernel/apps.install_prepared at app installation.
+ * The supplied source grant is private and never grants install permission.
+ * Resolving means review was opened, not that the apps have been installed.
+ */
+export function reviewPreparedAppInstall(
+  request: PreparedAppInstallRequest,
+  timeout = MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS,
+): Promise<AppInstallOfferResult> {
+  return callTool<AppInstallOfferResult>({
+    target: "kernel", name: "apps.install_prepared", arguments: request,
+  }, timeout);
 }
 
 /**

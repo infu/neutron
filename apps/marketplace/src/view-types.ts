@@ -65,8 +65,10 @@ export type PublicationInput = {
 export type PublicationQuote = { cycles: CycleEstimate; bytes: number; coverageEndsAt: string; warnings: string[]; opaque: unknown };
 export type InstallationQuote = {
   operationId: string; appIds: string[]; canisterId: string; owner: string; cycles: CycleEstimate;
-  /** Saved installer handoff; opening it does not repeat charged preparation. */
+  /** Saved installer selection; resuming it does not repeat charged preparation. */
   setupUrl?: string;
+  /** Download access included in cycles.total; absent on legacy saved quotes. */
+  sourceAccess?: { source: string; feeVersion: string; cycles: string };
   /** Definitive protocol reply; an interrupted preparation is not unavailable. */
   unavailableReason?: string;
   fee: { feeVersion: string; processingCycles: string; storageCycles: string; totalCycles: string; processingBytes: string; newStorageBytes: string };

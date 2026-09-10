@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
 import { IDL } from "@dfinity/candid";
+import {
+  buildCapabilityPlan,
+  installBackendCallReservationActions,
+  projectCapabilityInstallDisclosures,
+  toCapabilityPlanWireV1,
+} from "neutron-tools/capabilities";
+import type { NeutronManifest } from "neutron-tools/src/schema.js";
+import manifest from "../neutron.json";
 import { makeTransport, UPDATE_METHODS, type QueryAgent } from "../src/transport.ts";
 import type { Kernel } from "../src/store.ts";
 
@@ -26,6 +34,26 @@ const canisterId = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 const grant = (method: string, principal = canisterId) => ({ scopeKind: "exact", principal, method });
 const allGrants = () => ({ reservations: UPDATE_METHODS.map(method => grant(method)) });
 
+test("production install review grants every update route so fresh and reinstalled apps do not prompt on opening", async () => {
+  const plan = toCapabilityPlanWireV1(buildCapabilityPlan(manifest as NeutronManifest));
+  const actions = installBackendCallReservationActions(plan);
+  const reviewed = projectCapabilityInstallDisclosures(plan).entries.find(entry => entry.id === "backend_calls");
+  expect(reviewed?.entry).toEqual(plan.entries.find(entry => entry.id === "backend_calls"));
+  expect(actions.map(action => action.scope).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual(
+    UPDATE_METHODS.map(method => ({ kind: "exact", principal: manifest.update_source, method })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+  );
+
+  // Use the compiler's normalized install grants, not a hand-maintained list:
+  // omitting a newly used route from the manifest must expose the extra prompt.
+  for (const installation of ["fresh", "reinstalled"]) {
+    const transport = makeTransport({ canisterId: manifest.update_source, agent: {} as QueryAgent, contract: {},
+      kernel: { callTool: async () => ({ reservations: actions.map(({ scope }) => ({ scopeKind: scope.kind, ...scope })) }) } as unknown as Kernel,
+      requestReservations: async () => { throw new Error(`${installation} app requested an already reviewed permission`); },
+    });
+    await transport.reserve();
+  }
+});
+
 test("existing exact access needs only a context-scoped read and no consent request", async () => {
   const calls: unknown[] = [];
   let requests = 0;
@@ -35,7 +63,7 @@ test("existing exact access needs only a context-scoped read and no consent requ
   });
   await transport.reserve();
   await transport.reserve();
-  expect(UPDATE_METHODS).toHaveLength(15);
+  expect(UPDATE_METHODS).toHaveLength(16);
   expect(calls).toEqual(Array.from({ length: 2 }, () => ({ target: "kernel", name: "backend_calls.list", arguments: {} })));
   expect(requests).toBe(0);
 });

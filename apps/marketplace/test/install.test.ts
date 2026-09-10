@@ -22,9 +22,12 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
   const actualClient = await import("../src/client.ts");
   const OPERATION = "ab".repeat(16), OWNER = "3rurp-vyaaa-aaaay-aacua-cai", PROTOCOL = "233tv-xiaaa-aaaay-aacta-cai";
   const SETUP = "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/install/original-grant/setup.json";
-  let latestSetup: string;
+  const PATHS = [`/repo/v1/packages/${"ef".repeat(32)}.neutron`];
+  let latestSetup: string, installerAvailable: boolean;
+  let sourceCycles: string, sourceFeeVersion: string, grantError: Error | null, afterPrepare: (() => void) | null;
+  const grants: Data[] = [], descriptorReads: Data[] = [], selectionReads: Data[] = [];
   let afterReview: (() => void) | null, prepareGate: Promise<void> | null, prepareStarted: (() => void) | null, revisionReplyError: Error | null;
-  let fee: Fee, state: { owner: string; canisterId: string }, prepareError: Error | null, installerError: Error | null, approved: boolean, reviewError: Error | null, counter: number;
+  let fee: Fee, state: { owner: string; canisterId: string; host?: string }, prepareError: Error | null, installerError: Error | null, approved: boolean, reviewError: Error | null, counter: number;
   const stored = new Map<string, Uint8Array>(), events: string[] = [], reviews: Data[] = [], offers: Data[] = [], estimates: Data[] = [], updates: Data[] = [];
   const client = {
     get state() { return state; },
@@ -33,11 +36,31 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
       updates.push({ name, request: structuredClone(request), fee: structuredClone(charged) }); events.push("prepare");
       prepareStarted?.(); if (prepareGate) await prepareGate;
       if (prepareError) throw prepareError;
-      return { setupUrl: latestSetup };
+      afterPrepare?.(); return { setupUrl: latestSetup };
+    },
+    grantSourceAccess: async (request: Data, cycles: bigint) => {
+      grants.push({ request: structuredClone(request), cycles }); events.push("grant");
+      const saved = [...stored.entries()].filter(([key]) => key.startsWith("installation:")).map(([, value]) => JSON.parse(new TextDecoder().decode(value))).find(value => value.access?.requestId === request.request_id);
+      expect(saved?.access).toBeDefined();
+      if (saved?.access) {
+        expect(saved.access.token).toBe(request.token);
+        expect(saved.access.paths).toEqual(request.paths);
+      }
+      if (grantError) throw grantError;
     },
   };
+  mock.module("../src/install_access.ts", () => ({
+    readInstallAccessDescriptor: async (source: string, options: Data) => {
+      descriptorReads.push({ source, options }); events.push("source-quote");
+      return { protocol: "neutron-repo-access-v1", fee_version: sourceFeeVersion, cycles: sourceCycles };
+    },
+    readInstallAccessSelection: async (url: string, source: string, appIds: string[], options: Data) => {
+      selectionReads.push({ url, source, appIds, options }); events.push("source-selection");
+      return { url, source, paths: [...PATHS] };
+    },
+  }));
   mock.module("../src/client.ts", () => ({ ...actualClient, protocolClient: async () => client, randomId: () => (++counter).toString(16).padStart(32, "0") }));
-  const { quoteInstallation, installApplications, installationStatus, recentInstallations, markInstallationOpened, resumeInstallation } = await import("../src/install.ts");
+  const { quoteInstallation, installApplications, installationStatus, recentInstallations, markInstallationOpened, resumeInstallation, prepareInstallationForTile } = await import("../src/install.ts");
   function context(mode: "owner" | "external" | "agent" = "owner", signal = new AbortController().signal): MsgBusToolContext {
     const isOwner = mode === "owner", isExternal = mode === "external";
     return {
@@ -46,6 +69,7 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
       requestApproval: async (review: Data) => { events.push("agent-review"); reviews.push(review); if (reviewError) throw reviewError; afterReview?.(); },
       presentUserInterface: async (request: Data) => { events.push("external-review"); reviews.push(JSON.parse(request.arguments.reviewJson)); afterReview?.(); return { approved }; },
       kernel: {
+        listTools: async (target: string) => { expect(target).toBe("kernel"); events.push("installer-capability"); return installerAvailable ? [{ name: "apps.install_prepared" }] : []; },
         querySelf: async (name: string, args: any[]) => {
           if (name === "marketplace_drafts") {
             const request = args[0], matching = [...stored.entries()].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).filter(([id]) => !request.cursor || id > request.cursor);
@@ -71,7 +95,7 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
         },
         callTool: async (call: Data) => {
           if (call.name === "marketplace_owner_review_v1") { events.push("owner-review"); reviews.push(JSON.parse(call.arguments.reviewJson)); return { approved }; }
-          expect(call.target).toBe("kernel"); expect(call.name).toBe("apps.install_offer");
+          expect(call.target).toBe("kernel"); expect(call.name).toBe("apps.install_prepared");
           offers.push(call); events.push("installer");
           if (installerError) throw installerError;
           return { accepted: true };
@@ -81,7 +105,8 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
   }
   beforeEach(() => {
     fee = { feeVersion: 7n, processingCycles: 1100000000n, storageCycles: 900000000n, totalCycles: 2000000000n, processingBytes: 1024n, newStorageBytes: 512n };
-    latestSetup = SETUP;
+    latestSetup = SETUP; installerAvailable = true; sourceCycles = "0"; sourceFeeVersion = "3"; grantError = null; afterPrepare = null;
+    grants.length = 0; descriptorReads.length = 0; selectionReads.length = 0;
     state = { owner: OWNER, canisterId: PROTOCOL }; prepareError = null; installerError = null; reviewError = null; approved = true; counter = 0; afterReview = null; prepareGate = null; prepareStarted = null; revisionReplyError = null;
     stored.clear(); events.length = 0; reviews.length = 0; offers.length = 0; estimates.length = 0; updates.length = 0;
   });
@@ -121,9 +146,9 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
   });
   test("an invocation-scoped agent reviews the exact fee then opens Kernel with its context", async () => {
     const result = await installApplications(context("agent"), ["editor"]);
-    expect(result).toMatchObject({ state: "complete", nextAction: "none" });
+    expect(result).toMatchObject({ state: "pending", nextAction: "resume" });
     expect(offers).toHaveLength(1);
-    expect(offers[0]!.arguments).toEqual({ kind: "repository_setup_url", url: SETUP });
+    expect(offers[0]!.arguments).toEqual({ url: SETUP, appIds: ["editor"], access: { source: PROTOCOL, token: expect.any(String), paths: PATHS } });
     expect(reviews).toHaveLength(1);
     expect(reviews[0]).toMatchObject({ kind: "installation", quote: { owner: OWNER, canisterId: PROTOCOL, appIds: ["editor"], cycles: { total: "2000000000" } } });
     expect(events.indexOf("agent-review")).toBeLessThan(events.indexOf("prepare"));
@@ -282,12 +307,32 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
     expect(recovered).toMatchObject({ operationId: OPERATION, setupUrl: SETUP, cycles: { total: "0" } });
     expect(updates).toHaveLength(1);
   });
-  test("opening the exact saved handoff marks it complete without another prepare", async () => {
+  test("opening the exact handoff records a presented review, not an installation receipt", async () => {
     const ctx = context(), prepared = await installApplications(ctx, ["editor"], await quoteInstallation(ctx, ["editor"], OPERATION));
     expect(prepared.installation).toBeDefined();
     await markInstallationOpened(ctx, prepared.installation!);
-    expect(await installationStatus(ctx, OPERATION)).toMatchObject({ operationId: OPERATION, state: "complete", nextAction: "none" });
+    expect(await installationStatus(ctx, OPERATION)).toMatchObject({ operationId: OPERATION, state: "pending", nextAction: "resume" });
     expect(updates).toHaveLength(1); expect(offers).toEqual([]);
+    expect((await quoteInstallation(ctx, ["editor"])).operationId).toBe(OPERATION);
+  });
+  test("a presented review can be reopened after remount with the same zero-cost private access", async () => {
+    sourceCycles = "250000000";
+    const ctx = context(), prepared = await prepareInstallationForTile(ctx, ["editor"], await quoteInstallation(ctx, ["editor"], OPERATION));
+    await markInstallationOpened(ctx, prepared.result.installation!);
+    const remounted = context(), quote = await quoteInstallation(remounted, ["editor"]);
+    expect(quote).toMatchObject({ operationId: OPERATION, setupUrl: SETUP, cycles: { total: "0" } });
+    const reopened = await prepareInstallationForTile(remounted, ["editor"], quote);
+    expect(reopened.handoff).toEqual(prepared.handoff);
+    expect(reopened.result).toMatchObject({ state: "pending", nextAction: "resume" });
+    expect(updates).toHaveLength(1); expect(grants).toHaveLength(1);
+  });
+  test("legacy already-presented records preserve their historical completion marker", async () => {
+    const ctx = context(), prepared = await installApplications(ctx, ["editor"], await quoteInstallation(ctx, ["editor"], OPERATION));
+    await markInstallationOpened(ctx, prepared.installation!);
+    const key = `installation:${OPERATION}`, saved = JSON.parse(new TextDecoder().decode(stored.get(key)!));
+    delete saved.access; delete saved.quote.sourceAccess;
+    stored.set(key, new TextEncoder().encode(JSON.stringify(saved)));
+    expect(await installationStatus(ctx, OPERATION)).toMatchObject({ state: "complete", nextAction: "none" });
     expect((await quoteInstallation(ctx, ["editor"])).operationId).not.toBe(OPERATION);
   });
   test("opened-marker cannot substitute another URL or selected apps", async () => {
@@ -306,8 +351,8 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
     const resumed = await installApplications(context("agent"), ["editor"]);
     expect(resumed.operationId).toBe(originalId);
     expect(updates).toHaveLength(1); expect(offers).toHaveLength(2);
-    expect(offers[1]!.arguments).toEqual({ kind: "repository_setup_url", url: SETUP });
-    expect(await installationStatus(ctx, originalId)).toMatchObject({ state: "complete", nextAction: "none" });
+    expect(offers[1]!.arguments).toEqual({ url: SETUP, appIds: ["editor"], access: { source: PROTOCOL, token: expect.any(String), paths: PATHS } });
+    expect(await installationStatus(ctx, originalId)).toMatchObject({ state: "pending", nextAction: "resume" });
   });
   test("external non-agent continuation returns its prepared handoff without a background Kernel call", async () => {
     const ctx = context("external"), prepared = await installApplications(ctx, ["editor"]);
@@ -396,6 +441,103 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
     await expect(installApplications(context(), appIds, quote)).rejects.toThrow("interrupted");
     expect((await quoteInstallation(context(), appIds)).unavailableReason).toBeUndefined();
     expect(await installationStatus(context(), OPERATION)).toMatchObject({ state: "review_required", operationId: OPERATION });
+  });
+  test("the reviewed total includes both preparation and exact source access costs", async () => {
+    sourceCycles = "250000000";
+    const ctx = context("agent"), quote = await quoteInstallation(ctx, ["editor"], OPERATION);
+    expect(quote).toMatchObject({ sourceAccess: { source: PROTOCOL, feeVersion: "3", cycles: "250000000" }, cycles: { total: "2250000000" } });
+    expect(grants).toEqual([]); expect(stored.size).toBe(0);
+    await installApplications(ctx, ["editor"], quote);
+    expect(reviews[0]?.quote.cycles.total).toBe("2250000000");
+    expect(grants).toHaveLength(1);
+    expect(grants[0]).toMatchObject({ cycles: 250000000n, request: { fee_version: 3n, paths: PATHS } });
+    expect(updates[0]!.fee.totalCycles).toBe(2000000000n);
+    expect(events.indexOf("installer-capability")).toBeLessThan(events.indexOf("save"));
+    expect(events.indexOf("prepare")).toBeLessThan(events.indexOf("grant"));
+    expect(events.indexOf("grant")).toBeLessThan(events.indexOf("installer"));
+    expect((await quoteInstallation(ctx, ["editor"], OPERATION)).cycles.total).toBe("0");
+  });
+  test("a Kernel without the generic prepared installer cannot charge or save an install", async () => {
+    installerAvailable = false;
+    const ctx = context("agent");
+    expect((await quoteInstallation(ctx, ["editor"], OPERATION)).operationId).toBe(OPERATION);
+    await expect(installApplications(ctx, ["editor"], undefined, OPERATION)).rejects.toThrow("Update Neutron");
+    expect(stored.size).toBe(0); expect(updates).toEqual([]); expect(grants).toEqual([]); expect(offers).toEqual([]);
+  });
+  test("changed source charges stop before any preparation or grant dispatch", async () => {
+    sourceCycles = "250000000";
+    const ctx = context(), quote = await quoteInstallation(ctx, ["editor"], OPERATION);
+    sourceCycles = "250000001";
+    await expect(installApplications(ctx, ["editor"], quote)).rejects.toThrow(/fee|cost|changed/i);
+    expect(updates).toEqual([]); expect(grants).toEqual([]);
+  });
+  test("a source fee change during preparation requires grant-only review and never repeats preparation", async () => {
+    sourceCycles = "250000000";
+    const ctx = context(), quote = await quoteInstallation(ctx, ["editor"], OPERATION);
+    afterPrepare = () => { sourceCycles = "300000000"; sourceFeeVersion = "4"; };
+    await expect(installApplications(ctx, ["editor"], quote)).rejects.toThrow(/fee|cost|changed/i);
+    expect(updates).toHaveLength(1); expect(grants).toEqual([]);
+    const fresh = await quoteInstallation(ctx, ["editor"], OPERATION);
+    expect(fresh).toMatchObject({ setupUrl: SETUP, sourceAccess: { feeVersion: "4", cycles: "300000000" }, cycles: { total: "300000000" } });
+    await installApplications(ctx, ["editor"], fresh);
+    expect(updates).toHaveLength(1); expect(grants).toHaveLength(1); expect(grants[0]!.cycles).toBe(300000000n);
+  });
+  test("interrupted source access retains and replays exactly one bearer and request without preparing again", async () => {
+    sourceCycles = "250000000";
+    const ctx = context("agent"), quote = await quoteInstallation(ctx, ["editor"], OPERATION);
+    grantError = new Error("Source access could not be confirmed");
+    await expect(installApplications(ctx, ["editor"], quote)).rejects.toThrow("could not be confirmed");
+    expect(updates).toHaveLength(1); expect(grants).toHaveLength(1); expect(offers).toEqual([]);
+    const saved = JSON.parse(new TextDecoder().decode(stored.get(`installation:${OPERATION}`)!));
+    expect(saved.access).toMatchObject({ requestId: grants[0]!.request.request_id, token: grants[0]!.request.token, paths: PATHS, ready: false });
+    expect(saved.access.token).toMatch(/^[0-9a-f]{64}$/);
+    sourceCycles = "300000000"; sourceFeeVersion = "4";
+    const resumeQuote = await quoteInstallation(ctx, ["editor"], OPERATION);
+    expect(resumeQuote.sourceAccess).toMatchObject({ feeVersion: "3", cycles: "250000000" });
+    expect(resumeQuote.cycles.total).toBe("250000000");
+    grantError = null;
+    await installApplications(ctx, ["editor"], resumeQuote);
+    expect(updates).toHaveLength(1); expect(grants).toHaveLength(2);
+    expect(grants[1]).toEqual(grants[0]);
+    expect(offers[0]!.arguments.access.token).toBe(saved.access.token);
+  });
+  test("private source access never appears in public status, history, quotes or approval reviews", async () => {
+    const ctx = context("agent"), quote = await quoteInstallation(ctx, ["editor"], OPERATION);
+    installerError = new Error("Installer window interrupted");
+    await expect(installApplications(ctx, ["editor"], quote)).rejects.toThrow("interrupted");
+    const token = grants[0]!.request.token;
+    expect(token).toEqual(expect.any(String));
+    const visible = [await installationStatus(ctx, OPERATION), await recentInstallations(ctx), await quoteInstallation(ctx, ["editor"], OPERATION), reviews];
+    expect(JSON.stringify(visible)).not.toContain(token);
+    const privateSaved = new TextDecoder().decode(stored.get(`installation:${OPERATION}`)!);
+    expect(privateSaved).toContain(token);
+  });
+  test("only this app's owner tile receives the private prepared handoff", async () => {
+    const ctx = context(), quote = await quoteInstallation(ctx, ["editor"], OPERATION);
+    const prepared = await prepareInstallationForTile(ctx, ["editor"], quote);
+    expect(prepared.handoff).toEqual({ url: SETUP, appIds: ["editor"], access: { source: PROTOCOL, paths: PATHS, token: grants[0]!.request.token } });
+    expect(JSON.stringify(prepared.result)).not.toContain(grants[0]!.request.token);
+    for (const other of [context("external"), context("agent")]) {
+      await expect(prepareInstallationForTile(other, ["editor"], quote)).rejects.toThrow();
+    }
+    expect(grants).toHaveLength(1); expect(offers).toEqual([]);
+  });
+  test("a legacy prepared URL is preserved while its newly required access cost is reviewed", async () => {
+    const ctx = context(), quote = await quoteInstallation(ctx, ["editor"], OPERATION);
+    await installApplications(ctx, ["editor"], quote);
+    const key = `installation:${OPERATION}`, saved = JSON.parse(new TextDecoder().decode(stored.get(key)!));
+    delete saved.access; delete saved.quote.sourceAccess;
+    stored.set(key, new TextEncoder().encode(JSON.stringify(saved)));
+    const originalGrantCount = grants.length;
+    sourceCycles = "250000000";
+    const fresh = await quoteInstallation(ctx, ["editor"], OPERATION);
+    expect(fresh).toMatchObject({ operationId: OPERATION, setupUrl: SETUP, cycles: { total: "250000000" } });
+    expect(updates).toHaveLength(1); expect(grants).toHaveLength(originalGrantCount);
+    await expect(installApplications(ctx, ["editor"], quote)).rejects.toThrow();
+    await installApplications(ctx, ["editor"], fresh);
+    expect(updates).toHaveLength(1); expect(grants).toHaveLength(originalGrantCount + 1);
+    expect(grants.at(-1)!.cycles).toBe(250000000n);
+    expect((await installationStatus(ctx, OPERATION))?.installation?.cycles.total).toBe("0");
   });
   test("an aborted agent request cannot prepare an install", async () => {
     const abort = new AbortController(); abort.abort(new Error("Canceled invocation"));

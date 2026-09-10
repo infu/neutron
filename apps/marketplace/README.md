@@ -10,8 +10,12 @@ current Neutron principal and survive uninstalling this app or an acquired app.
 Install the package through Neutron's normal installer. New and previously
 unconfigured installations select the production marketplace
 `sj2r4-haaaa-aaaay-aadgq-cai` at `https://icp-api.io` automatically. Read access
-is prepared automatically, without a Connect button. Neutron's ordinary
-permission review still applies when installing or granting a missing route.
+is prepared automatically, without a Connect button. The manifest declares the
+production protocol's exact update routes, so the ordinary install or upgrade
+review grants them together with the app's cycle budget. Opening the installed
+app or reinstalling it does not require another route permission. Selecting a
+custom protocol or restoring explicitly revoked access uses the normal runtime
+permission review.
 Existing explicit configuration, browser signing seeds and saved requests
 remain intact on upgrade.
 **Marketplace settings** can select another deployed protocol; a local
@@ -48,22 +52,17 @@ Uninstall still removes app-local journals and browser signing data.
   including its actual auditor and analysis. Checkout
   shows the token price, ledger fees, referral discount, developer/affiliate
   shares and allocation toward burning NTN before purchase.
-- **My Apps:** select one or several acquired apps and open the standard Neutron
-  install review. Each Install action displays its exact preparation cycle cost
-  before any update; **Refresh cost** rechecks that quote for the same selection.
-  Once prepared, **Open installer** presents the saved selection from the tile
-  without charging preparation again. Saved preparations remain available after
-  navigating away or reloading. If a saved selection refers to an older or
-  unavailable release, **Prepare latest selection** reviews a new request and
-  its current cost; the earlier request remains saved. This also recovers a
-  lost preparation reply if the protocol later confirms that release is
-  unavailable. An interrupted reply alone does not mark a release unavailable.
-  Ordinary refresh and
-  retry retain the original request. Neutron separately reviews subsequent
-  download-access and installation costs. Installed apps update through Neutron
-  Settings. Revocation
-  blocks downloads of the affected release while preserving ownership for a
-  later approved replacement.
+- **My Apps:** select one or several acquired apps and choose **Install**.
+  The control shows selection preparation and private download access costs
+  together. After preparing the saved selection, the app opens Neutron's single
+  package review with the selected apps, dependencies and manifest permissions.
+  Approving that review installs the selection. Packages download directly from
+  the source; the access credential is passed privately to the installer.
+  Closing or reloading the review keeps the original preparation and access in
+  Marketplace, so reopening the same selection does not charge them again.
+  **Refresh cost** retains the original request. **Prepare latest selection**
+  explicitly reviews a new request if the old release is unavailable or newer
+  releases are wanted. Installed apps update through Neutron Settings.
 - **Publish:** create or edit a listing, attach a `.neutron` package and matching
   offered source, and add an icon or screenshots. List prices are free or
   $1–$50 before discounts. Review upload costs before submitting; uploads prepay
@@ -96,10 +95,12 @@ before calling them; atomic amounts are decimal strings.
 | `marketplace_install_quote_v1`, `marketplace_install_v1` | Quote exact preparation cycles and offer installation with scoped owner/Root review |
 | `marketplace_rate_v1` | Rate acquired apps |
 
-Installation history also retains the original selection and prepared installer
-URL. Resume that request rather than preparing the same selection under another
-ID. A completed installer handoff means the selection was presented to Neutron;
-check My Apps or the installer for the actual installation outcome.
+Installation history retains the original selection and prepared installer URL.
+Its private draft also retains the exact source-access request for interrupted
+reply recovery. Public tools and history never return that access credential.
+Resume the original request instead of preparing the same selection under another
+ID. An installer handoff only means package review was presented; it remains
+reopenable until installation is checked separately in My Apps or Neutron.
 
 Normal agents open an exact owner review for purchases and withdrawals. Root
 agents use the existing root permission judge. For a paid root purchase:

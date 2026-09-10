@@ -122,6 +122,12 @@ module {
       for (id in Set.values(ids)) refreshOne(id);
       http.commitCertification();
     };
+    public func refreshAllArtifacts() {
+      // A header change also affects public files and denial responses for
+      // uploaded files that have never had a grant. Rebuild every live row.
+      for ((id, _) in db.artifacts.iterPrimary(#fwd, null)) refreshOne(id);
+      http.commitCertification();
+    };
     public func refreshOwnerGrants(owner : Principal) {
       let ids = Set.empty<Nat64>();
       let range = { gt = null; gte = ?owner; lt = null; lte = ?owner; dir = #fwd };

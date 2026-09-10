@@ -44,7 +44,7 @@ export function AgentReviewHost() {
       if (review.kind === "installation") {
         if (!Array.isArray(review.quote.appIds) || !review.quote.appIds.length || review.quote.appIds.some((id) => typeof id !== "string" || !id)) throw new Error("The installation review has no valid app selection.");
         if (typeof review.quote.canisterId !== "string" || !review.quote.canisterId || typeof review.quote.owner !== "string" || !review.quote.owner) throw new Error("The installation review has an invalid marketplace or Neutron.");
-        if (BigInt(review.quote.fee.totalCycles) !== BigInt(review.quote.cycles.total)) throw new Error("The installation review has inconsistent cycle costs.");
+        if (BigInt(review.quote.fee.totalCycles) + BigInt(review.quote.sourceAccess?.cycles ?? "0") !== BigInt(review.quote.cycles.total)) throw new Error("The installation review has inconsistent cycle costs.");
       } else if (review.kind !== "withdrawal") {
         usd(review.quote.subtotalUsdMicros); usd(review.quote.discountUsdMicros);
         [review.quote.payment, review.quote.totalDebit, ...review.quote.allocations.map((item) => item.amount)].forEach(quantity);
@@ -81,7 +81,7 @@ export function AgentReviewHost() {
       <div className="mp-destination"><span className="mp-muted">Marketplace</span><Principal value={review.quote.canisterId} /></div>
       <div className="mp-destination"><span className="mp-muted">Your Neutron</span><Principal value={review.quote.owner} /></div>
       <CycleCost value={review.quote.cycles} />
-      <p className="mp-muted">This covers marketplace installation preparation. The Kernel will review app permissions and its installation costs separately.</p>
+      <p className="mp-muted">This includes selection preparation and private download access. Neutron will review app permissions and installation costs in the installer.</p>
     </div> : isInvoiceReview(review) ? <div className="mp-stack">
       <p className="mp-notice">{review.kind === "ethereum_verify" ? "Check this Ethereum transaction against the original invoice and ask the protocol to verify it independently. This does not send another Ethereum payment." : review.kind === "ethereum_cancel" ? "Cancel this checkout. This cannot stop an Ethereum payment already sent; a late payment remains recoverable as ckUSDC credit. It does not refund a completed app purchase or send another Ethereum payment." : "Collect the converted ckUSDC assigned to this invoice. This finalizes protocol accounting without another Ethereum payment or another app purchase."}</p>
       <div className="mp-destination"><span className="mp-muted">Marketplace</span><Principal value={review.quote.ethereum!.recipientPrincipal} /></div>

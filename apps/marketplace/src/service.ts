@@ -1,7 +1,7 @@
 import { exposeTool, publishAppStateChange, type JsonObject, type JsonValue, type MsgBusToolContext } from "neutron-tools/app";
 import { initialize, configured, connect, protocolClient, randomId } from "./client.ts";
 import { runPurchase, runWithdrawal, operationStatus, operationHistory, recentOperations, resumeOperation, type SavedIntent } from "./actions.ts";
-import { quoteInstallation, installApplications, installationStatus, recentInstallations, markInstallationOpened, resumeInstallation } from "./install.ts";
+import { quoteInstallation, installApplications, installationStatus, recentInstallations, markInstallationOpened, resumeInstallation, prepareInstallationForTile } from "./install.ts";
 import { loadIntent } from "./store.ts";
 import {
   quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, ethereumSavedStatus, recentEthereumPurchases,
@@ -111,7 +111,7 @@ async function uiWrite(context: MsgBusToolContext, method: string, args: JsonObj
       return runWithdrawal(context, quote);
     }
     case "resumeOperation": return resume(context, String(args.operationId));
-    case "install": return installApplications(context, args.appIds as string[], args.quote as unknown as InstallationQuote);
+    case "install": return prepareInstallationForTile(context, args.appIds as string[], args.quote as unknown as InstallationQuote);
     case "installationOpened": return markInstallationOpened(context, args.quote as unknown as InstallationQuote);
     case "rate": await client.update("rating_set", { appId: String(args.appId), stars: BigInt(Number(args.stars)), review: String(args.text) }); return null;
     case "createReferralCode": return (await client.update<{ code: string }>("referral_get_or_create", {})).code;
@@ -124,7 +124,7 @@ async function uiWrite(context: MsgBusToolContext, method: string, args: JsonObj
 }
 for (const [name, handler, effects] of [["ui_query", uiRead, reads], ["ui_update", uiWrite, writes]] as const) exposeTool(name, {
   title: "Marketplace tile interface", description: "Internal marketplace view interface.",
-  inputSchema: object({ method: string, paramsJson: string }), outputSchema: object({ resultJson: string }), annotations: { ...effects, ...sameApp },
+  inputSchema: object({ method: string, paramsJson: string }), outputSchema: object({ resultJson: string }), annotations: { ...effects, ...sameApp, ...(name === "ui_update" ? { "neutron:audit": "metadata_only" } : {}) },
 }, async (args, context) => {
   const parsed: unknown = JSON.parse(text(args.paramsJson, "{}"));
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid marketplace request.");
@@ -204,8 +204,8 @@ register("marketplace_withdraw_v1", "Withdraw marketplace earnings", "Withdraw a
   const quote = await client.quoteWithdrawal({ operationId: text(args.operationId), token: args.token as PaymentToken, amountAtoms: text(args.amountAtoms), destination: text(args.destination) });
   return runWithdrawal(context, quote);
 });
-register("marketplace_install_quote_v1", "Review installation preparation cost", "Read the exact cycle cost of preparing the selected apps for Neutron's installer. This quote performs no charged update. The later repository grant and installation costs are reviewed separately by Neutron.", { appIds: { type: "array", items: string }, operationId: id }, ["appIds"], reads, async (args, context) => quoteInstallation(context, args.appIds as string[], typeof args.operationId === "string" ? args.operationId : undefined));
-register("marketplace_install_v1", "Install acquired apps", "Review the exact preparation cycle cost and prepare the latest approved entitled apps for the generic Neutron installer. Normal agents open owner review; Root agents use scoped authorization. The Kernel separately reviews later repository grant and installation costs. Retain operationId after an interrupted reply; this does not purchase missing apps.", { appIds: { type: "array", items: string }, operationId: id, quote: { type: "object", additionalProperties: true } }, ["appIds"], reviewed, async (args, context) => installApplications(context, args.appIds as string[], args.quote as unknown as InstallationQuote | undefined, typeof args.operationId === "string" ? args.operationId : undefined));
+register("marketplace_install_quote_v1", "Review installation preparation cost", "Read the combined cycle cost of preparing selected apps and their private download access. No charged update occurs. Neutron presents one final package-permission and installation review.", { appIds: { type: "array", items: string }, operationId: id }, ["appIds"], reads, async (args, context) => quoteInstallation(context, args.appIds as string[], typeof args.operationId === "string" ? args.operationId : undefined));
+register("marketplace_install_v1", "Install acquired apps", "Review the combined preparation and source-access cycle cost, then open the generic Neutron package review with the selected entitled apps. Normal agents use owner approval; Root agents use scoped authorization. Retain operationId after an interrupted reply or closed review; access is reused and no apps are purchased.", { appIds: { type: "array", items: string }, operationId: id, quote: { type: "object", additionalProperties: true } }, ["appIds"], reviewed, async (args, context) => installApplications(context, args.appIds as string[], args.quote as unknown as InstallationQuote | undefined, typeof args.operationId === "string" ? args.operationId : undefined));
 register("marketplace_rate_v1", "Rate an acquired app", "Save one editable 1–5 star review for an app this Neutron acquired free or paid. Charges the fixed protocol update estimate through Neutron.", { appId: string, stars: { type: "integer", minimum: 1, maximum: 5 }, review: string }, ["appId", "stars", "review"], writes, async (args, context) => {
   const client = await protocolClient(context);
   await client.update("rating_set", { appId: text(args.appId), stars: BigInt(Number(args.stars)), review: text(args.review) });
