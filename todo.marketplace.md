@@ -19,6 +19,13 @@ deployment, or production financial action is part of this PR.
 - With an affiliate code, the default discount is 10%. Affiliate and developer
   each receive 30% of the **actual amount paid**; the remainder is allocated to
   burning NTN. Without a code, developer receives 30% and burning receives 70%.
+- An existing external service converts the proceeds and burns NTN. The
+  marketplace forwards each token's daily allocation to its own destination:
+  one for ICP, one for ckBTC, and one for ckUSDC. The owner will supply these
+  three addresses later.
+- Buyers pay approval and collection fees on top of the app price. Developers
+  and affiliates pay their own withdrawal fees, and each token's burn allocation
+  covers its forwarding fee.
 - The Kernel remains marketplace-neutral. Reuse its installation, permission
   review, and Settings update workflows. Add only generic acquisition support
   where authenticated downloads require it; no commerce or entitlement checks
@@ -158,6 +165,9 @@ References: [repository codec](packages/neutron-tools/src/repository.ts),
   forwarding. Preserve unknown results and reconcile the original transfers.
 - [ ] Persist daily jobs, re-register timers after upgrade, and carry forward
   amounts that cannot yet cover their own transfer fee.
+- [ ] Configure the three owner-supplied forwarding accounts by ledger. Retain
+  allocations until the corresponding destination is configured, and record
+  each forwarding transfer's exact ledger receipt.
 
 Confirmed example, before ledger fees:
 
@@ -170,9 +180,15 @@ Credits stay denominated in the token actually received. Integer allocations
 must sum exactly to the collected sale amount. The treasury contains user
 liabilities: the daily job cannot sweep the entire balance.
 
-Forwarding ICP/ckBTC/ckUSDC does not itself burn NTN. Configure the downstream
-converter/burner and distinguish allocated, forwarded and verified burned
-amounts. Its accounts and the operating-cost budget remain open decisions.
+The sale split excludes the buyer-paid approval and collection fees. Withdrawal
+previews show the fee charged to that beneficiary and the net amount received.
+Daily forwarding deducts its transfer fee from that token's burn allocation.
+
+The existing external service handles conversion and NTN burning; implementing
+that service is outside this project. The marketplace records allocation and
+daily forwarding to the three supplied destinations. Its transfer receipt proves
+delivery to that service, not the service's subsequent burn. Destination addresses
+are pending owner input; the operating-cost budget remains an open decision.
 
 References: [Wallet adapter](apps/wallet/src/funding.ts),
 [existing consumer](apps/icpswap/src/funding.ts),
@@ -266,8 +282,8 @@ configuration and documentation; this planning PR changes neither.
 
 | Decision | What needs agreement |
 |---|---|
-| Burner | Receiving account for each token; existing NTN conversion/burn service or separate implementation; evidence it supplies |
-| Fees and operating budget | Buyer pays approval/collection fees? Beneficiary pays withdrawal fee? How are cycles, storage and audits funded when all remainder is allocated to burn? |
+| Forwarding destinations | Existing conversion/burn service confirmed; owner will supply separate ICP, ckBTC and ckUSDC receiving accounts later |
+| Operating budget | Transfer-fee allocation is confirmed above. How are cycles, storage and audits funded when all remaining sale proceeds are allocated to burn? |
 | Referral configuration | Global or publisher-selected X/Y; universal or per-app code; per-checkout or remembered; self-referral behavior |
 | Roles and audit policy | Initial administrators/auditors; open or approved publisher registration; approval count; revoked-release access for existing owners |
 | Purchase terms | Future updates included; refunds and paid-major/free-to-paid changes; remedy after a paid release is revoked |
