@@ -615,6 +615,55 @@ let authoritativeTransfer : Memory.HistoryTransaction = {
     verification = #verified;
 };
 
+// Compact pages omit repeated artwork at the backend, before Candid crosses
+// the Kernel boundary. The retained history and legacy response stay intact.
+let pageMem = Memory.init();
+let pageLedger = { testLedger(1, icpLedger) with logo = ?"data:image/png;base64,AA==" };
+Map.add(pageMem.ledgers, Principal.compare, icpLedger, pageLedger);
+Map.add(pageMem.ledgers, Principal.compare, ckbtcLedger, testLedger(2, ckbtcLedger));
+assert Store.putTransaction(pageMem, icpLedger, authoritativeTransfer);
+assert Store.putTransaction(pageMem, ckbtcLedger, { authoritativeTransfer with block_index = 801 });
+let pageAdjustment : Memory.HistoryAdjustment = {
+    id = 0; ledger = icpLedger; kind = #opening_balance; timestamp_ns = 89;
+    balance_effect = 500; previous_balance = 0; observed_balance = 500;
+    from_tip_exclusive = 0; to_tip_exclusive = 800; detail = "Opening balance";
+};
+Map.add(pageLedger.history.adjustments, Nat.compare, 0, pageAdjustment);
+Map.add(pageMem.activity_order, Store.compareOrderKey,
+    Store.adjustmentOrderKey(pageAdjustment), #adjustment({ ledger = icpLedger; adjustment_id = 0 }));
+let pageHistory = Reconcile.Service(pageMem, historyCalls);
+let pageRequest : HistoryTypes.PageRequest = { ledger = ?icpLedger; before = null; limit = 1; include_logos = null };
+var pageCursor : ?Memory.HistoryOrderKey = null;
+var pageRows = 0;
+label allPages loop {
+    let request = { pageRequest with before = pageCursor };
+    let legacy = pageHistory.page(request);
+    let explicitLogos = pageHistory.page({ request with include_logos = ?true });
+    let compact = pageHistory.page({ request with include_logos = ?false });
+    assert (legacy == explicitLogos);
+    assert (compact.next == legacy.next and compact.inspected == legacy.inspected);
+    assert (compact.has_more == legacy.has_more and compact.warning == legacy.warning);
+    assert (compact.records == Array.map<HistoryTypes.Record, HistoryTypes.Record>(legacy.records, func(record) {
+        switch (record) {
+            case (#transaction(row)) {
+                assert (row.ledger == icpLedger and row.logo == pageLedger.logo);
+                #transaction({ row with logo = null });
+            };
+            case (#adjustment(row)) {
+                assert (row.value.ledger == icpLedger and row.logo == pageLedger.logo);
+                #adjustment({ row with logo = null });
+            };
+        };
+    }));
+    pageRows += compact.records.size();
+    if (not compact.has_more) break allPages;
+    assert (compact.next != null and compact.next != pageCursor);
+    pageCursor := compact.next;
+};
+assert (pageRows == 2);
+assert (transactionAt(pageLedger, 800) == authoritativeTransfer);
+assert (pageLedger.logo == ?"data:image/png;base64,AA==");
+
 func recordAuthoritativeTransfer(memo : ?Blob) : HistoryTypes.Result<()> {
     history.recordTransfer(
         ckbtcLedger,

@@ -144,9 +144,8 @@ import {
 } from "./reservations.ts";
 import {
   historyAddressText,
-  historyPageRequest,
   historyRecordKey,
-  parseHistoryPage,
+  queryHistoryPage,
   parseHistoryStatus,
   parseHistorySyncReport,
   type HistoryCursor,
@@ -1020,21 +1019,25 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       else setHistoryLoading(true);
       setHistoryError(null);
       try {
-        const [pageValue, statusValue] = await Promise.all([
-          querySelf("wallet_history_page", [
-            historyPageRequest(append ? historyCursor : null, historyLedger),
-          ]),
-          querySelf("wallet_history_status", [null]),
+        const [pageResult, statusResult] = await Promise.allSettled([
+          queryHistoryPage(append ? historyCursor : null, historyLedger),
+          querySelf("wallet_history_status", [null]).then(parseHistoryStatus),
         ]);
         if (requestId !== historyRequest.current) return;
-        const page = parseHistoryPage(pageValue);
+        if (pageResult.status === "rejected") throw pageResult.reason;
+        const page = pageResult.value;
         setHistoryRecords((current) =>
           append ? mergeHistoryRecords(current, page.records) : page.records,
         );
         setHistoryCursor(page.next);
         setHistoryHasMore(page.hasMore && page.next !== null);
         setHistoryWarning(page.warning);
-        setHistoryStatus(parseHistoryStatus(statusValue));
+        if (statusResult.status === "fulfilled") {
+          setHistoryStatus(statusResult.value);
+        } else {
+          setHistoryStatus(null);
+          setHistoryError(`Activity sync details unavailable: ${errorMessage(statusResult.reason)}`);
+        }
       } catch (reason) {
         if (requestId === historyRequest.current) {
           setHistoryError(errorMessage(reason));
@@ -2997,6 +3000,7 @@ function WalletActivity({
     "all" | "incoming" | "outgoing" | "adjustments"
   >("all");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const logos = new Map(ledgers.map((item) => [item.principal, item.logo]));
   const reviewedLedgers = new Set(catalog.map((item) => item.principal));
   const available = new Set([
     ...ledgers.map((item) => item.principal),
@@ -3136,7 +3140,7 @@ function WalletActivity({
                         {historyIcon(record)}
                       </span>
                       <TokenMark
-                        logo={record.logo}
+                        logo={record.logo ?? logos.get(record.ledger) ?? null}
                         symbol={record.symbol ?? "?"}
                       />
                       <span className="wallet-activity-main">

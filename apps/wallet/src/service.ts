@@ -18,8 +18,7 @@ import {
   type JsonObject,
 } from "neutron-tools/app";
 import {
-  historyPageRequest,
-  parseHistoryPage,
+  queryHistoryPage,
   parseHistoryStatus,
   parseHistorySyncReport,
 } from "./history.ts";
@@ -247,9 +246,7 @@ async function loadProjection(
   const catalogPromise = querySelf("wallet_catalog", [null]).then(
     parseWalletCatalog,
   );
-  const historyPromise = querySelf("wallet_history_page", [
-    historyPageRequest(null, null, WALLET_PROJECTION_ACTIVITY_LIMIT + 1),
-  ]).then(parseHistoryPage);
+  const historyPromise = queryHistoryPage(null, null, WALLET_PROJECTION_ACTIVITY_LIMIT + 1);
   const historyStatusPromise = querySelf("wallet_history_status", [null]).then(parseHistoryStatus);
 
   const [snapshot, catalog, historyResult, historyStatusResult] = await Promise.all([

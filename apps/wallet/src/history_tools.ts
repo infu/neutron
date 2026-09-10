@@ -1,7 +1,7 @@
 import { Principal } from "@dfinity/principal";
 import { exposeTool, isJsonObject, type JsonObject, type MsgBusToolContext } from "neutron-tools/app";
 import { createHistoryReader, type HistoryAccount } from "./history_reads.ts";
-import { historyPageRequest, historyStatusSchema, historySyncReportSchema, parseHistoryPage, parseHistoryStatus, parseHistorySyncReport, type HistoryCursor } from "./history.ts";
+import { historyStatusSchema, historySyncReportSchema, queryHistoryPage, parseHistoryStatus, parseHistorySyncReport, type HistoryCursor } from "./history.ts";
 
 const text: JsonObject = { type: "string" }, flag: JsonObject = { type: "boolean" };
 const nat: JsonObject = { type: "string", pattern: "^0$|^[1-9][0-9]*$" };
@@ -79,7 +79,7 @@ export function createHistoryToolHandlers(reader = createHistoryReader()) {
         catch (error) { context.signal?.throwIfAborted(); syncError = message(error); }
       }
       const [pageResult, statusResult] = await Promise.allSettled([
-        context.kernel.querySelf("wallet_history_page", [historyPageRequest(before, ledger, pageLimit)]).then(parseHistoryPage),
+        queryHistoryPage(before, ledger, pageLimit, context.kernel.querySelf, context.signal),
         context.kernel.querySelf("wallet_history_status", [null]).then(parseHistoryStatus),
       ]);
       context.signal?.throwIfAborted();

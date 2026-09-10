@@ -779,6 +779,7 @@ module {
         ledger : ?Principal;
         before : ?WalletHistoryOrderKey;
         limit : Nat;
+        include_logos : ?Bool;
     };
     public type WalletHistoryRecord = {
         #transaction : {

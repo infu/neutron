@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonObject } from "neutron-tools/app";
+import { isJsonObject, querySelf, type JsonObject, type SelfCallValue } from "neutron-tools/app";
 import {
   bytesToHex,
   parseCandidIcrcAccount,
@@ -374,7 +374,7 @@ export function historyPageRequest(
   ledger: string | null,
   limit = 40,
 ): JsonObject {
-  const request: JsonObject = { limit: String(limit) };
+  const request: JsonObject = { limit: String(limit), include_logos: false };
   if (ledger !== null) request.ledger = ledger;
   if (before !== null) {
     const kindOrder = Number(before.kind_order);
@@ -387,6 +387,44 @@ export function historyPageRequest(
     };
   }
   return request;
+}
+
+type HistoryQuery = (method: string, args: SelfCallValue[]) => Promise<unknown>;
+const historyResponseSizeErrors = new Set([
+  "Self-call result exceeds the metadata byte limit",
+  "Self-call Candid reply exceeds the raw metadata limit",
+  "Self-call Candid reply exceeds the raw byte limit",
+  "Candid reply exceeds the container element limit",
+  "Candid reply exceeds the decoder allocation limit",
+  "Self-call value exceeds the Candid container element limit",
+  "Self-call result exceeds the binary field count limit",
+  "Self-call result exceeds the aggregate binary byte limit",
+]);
+
+/** Reduce only the requested read page; retain its exact ledger and cursor. */
+export async function queryHistoryPage(
+  before: HistoryCursor | null,
+  ledger: string | null,
+  limit = 40,
+  query: HistoryQuery = querySelf,
+  signal?: AbortSignal,
+): Promise<HistoryPage> {
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("History page limit must be a positive integer");
+  let pageSize = limit;
+  for (;;) {
+    signal?.throwIfAborted();
+    try {
+      const value = await query("wallet_history_page", [historyPageRequest(before, ledger, pageSize)]);
+      signal?.throwIfAborted();
+      return parseHistoryPage(value);
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (!(error instanceof Error) || !historyResponseSizeErrors.has(error.message) || pageSize <= 1) throw error;
+      // No mutation is retried, and no oversized record is skipped. An
+      // unrelated error or a single unreadable record stays an explicit error.
+      pageSize = Math.max(1, Math.floor(pageSize / 2));
+    }
+  }
 }
 
 export function historyRecordKey(record: HistoryRecord): string {

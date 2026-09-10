@@ -272,6 +272,7 @@ export function createWalletProjection(
   const catalogByPrincipal = new Map(
     catalog.map((ledger) => [ledger.principal, ledger]),
   );
+  const logos = new Map(snapshot.ledgers.map((ledger) => [ledger.principal, ledger.logo]));
   const assets = snapshot.ledgers
     .slice(0, WALLET_PROJECTION_ASSET_LIMIT)
     .map((ledger) => projectAsset(ledger, catalogByPrincipal.get(ledger.principal)));
@@ -285,7 +286,7 @@ export function createWalletProjection(
     assets,
     activity: records
       .slice(0, WALLET_PROJECTION_ACTIVITY_LIMIT)
-      .map(projectActivity),
+      .map((record) => projectActivity({ ...record, logo: record.logo ?? logos.get(record.ledger) ?? null })),
     hasMoreActivity:
       Boolean(options.hasMoreActivity) ||
       records.length > WALLET_PROJECTION_ACTIVITY_LIMIT,

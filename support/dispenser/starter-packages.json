@@ -23,7 +23,7 @@
     },
     {
       "id": "wallet",
-      "path": "../../apps/wallet/wallet.v0.3.23.neutron"
+      "path": "../../apps/wallet/wallet.v0.3.24.neutron"
     },
     {
       "id": "evm_wallet",

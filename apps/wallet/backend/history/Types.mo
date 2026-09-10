@@ -42,6 +42,7 @@ module {
         ledger : ?Principal;
         before : ?Memory.HistoryOrderKey;
         limit : Nat;
+        include_logos : ?Bool;
     };
 
     public type Record = {
