@@ -29,7 +29,7 @@ test("kernel generated artifacts restore V4 and activation V1", async () => {
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.50.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.51.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -38,7 +38,7 @@ test("kernel generated artifacts restore V4 and activation V1", async () => {
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(350);
+  expect(manifest.version).toBe(351);
   expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   expect(manifest.memory.kernel.version).toBe(4);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3", "4"]);
@@ -62,7 +62,7 @@ test("kernel generated artifacts restore V4 and activation V1", async () => {
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(350);
+  expect(packagedManifest.version).toBe(351);
   expect(packagedManifest.update_source).toBe(
     "233tv-xiaaa-aaaay-aacta-cai",
   );
@@ -73,10 +73,10 @@ test("kernel generated artifacts restore V4 and activation V1", async () => {
   expect(packagedManifest.memory.kernel_activation.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(4);
-  expect(packagedArchive.manifest.version).toBe(350);
+  expect(packagedArchive.manifest.version).toBe(351);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 350 },
+    package: { id: "kernel", version: 351 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });
@@ -132,14 +132,14 @@ test("kernel generated artifacts restore V4 and activation V1", async () => {
   }
 });
 
-test("release 350 preserves deployed Kernel 336/343/344/346/347/348/349 lineage and the complete 349 backend", async () => {
+test("release 351 preserves deployed Kernel 336/343/344/346/347/348/349/350 memory lineage and public methods", async () => {
   const currentFiles = unpackNeutronPackage(
-    await readFile(new URL("../kernel.v0.3.50.neutron", import.meta.url)),
+    await readFile(new URL("../kernel.v0.3.51.neutron", import.meta.url)),
   );
   const current = preparePackageInstall(currentFiles).manifest;
   const decode = (content: Uint8Array) => new TextDecoder().decode(content);
   const currentLock = JSON.parse(decode(currentFiles["neutron.lock.json"]!));
-  expect(current.version).toBe(350);
+  expect(current.version).toBe(351);
   expect(hashContent(currentFiles["neutron.lock.json"]!)).toBe("ef6f809aadfbdc10e76c5e5f37bd5d796ef8f38ae0974dd84033ddc412040585");
   expect(current.memory?.kernel?.version).toBe(4);
   assert(current.memory?.kernel?.migrations, "Current Kernel migrations must be packaged");
@@ -172,6 +172,7 @@ test("release 350 preserves deployed Kernel 336/343/344/346/347/348/349 lineage 
     { release: "0.3.47", version: 347, schema: 4, sha256: "9bbc1df41fb3b7fe062616972e4947c9c7f72b86fb96dbacddf9443daf7418a1" },
     { release: "0.3.48", version: 348, schema: 4, sha256: "60a9136ccd01fb51d487d807139dcacb85d993d3cb8e7e83fc2626f9cdc428da" },
     { release: "0.3.49", version: 349, schema: 4, sha256: "4396f85d6c6b2cd7afbeff34510a4489586905d063df038476e5212f80b11415" },
+    { release: "0.3.50", version: 350, schema: 4, sha256: "1ab07b0ab644cf65b285046b85cf531e455b0cccef8bf5cf1b930f66c2f4f920" },
   ]) {
     const previousBytes = await readFile(new URL(`../kernel.v${predecessor.release}.neutron`, import.meta.url));
     // The published archives are immutable fixtures, never regenerated from current source.
@@ -180,6 +181,7 @@ test("release 350 preserves deployed Kernel 336/343/344/346/347/348/349 lineage 
     if (predecessor.version === 347) expect(previousBytes.byteLength).toBe(2_450_538);
     if (predecessor.version === 348) expect(previousBytes.byteLength).toBe(2_456_591);
     if (predecessor.version === 349) expect(previousBytes.byteLength).toBe(2_456_553);
+    if (predecessor.version === 350) expect(previousBytes.byteLength).toBe(2_456_540);
     const previousFiles = unpackNeutronPackage(previousBytes);
     const previous = preparePackageInstall(previousFiles).manifest;
     const previousLock = JSON.parse(decode(previousFiles["neutron.lock.json"]!));
@@ -223,12 +225,13 @@ test("release 350 preserves deployed Kernel 336/343/344/346/347/348/349 lineage 
         preserveModuleClosure(migration.entry);
       }
     }
-    if (predecessor.version === 346 || predecessor.version === 347 || predecessor.version === 348 || predecessor.version === 349) {
-      // This successor changes browser behavior only. Every live backend and
-      // retained memory module must match the published predecessor exactly.
-      expect(current.entry).toBe(previous.entry);
+    if (predecessor.schema === 4) {
+      // V351 adds the fixed owner-only repository broker. Preserve every
+      // released memory closure and existing public method while adding it.
       expect(currentFiles["neutron.lock.json"]).toEqual(previousFiles["neutron.lock.json"]);
-      preserveModuleClosure(previous.entry);
+      expect(current.func).toMatchObject(previous.func ?? {});
+      expect(current.init_arg).toEqual(previous.init_arg);
+      expect(current.func?.kernel_repository_access_v1).toMatchObject({ type: "update", async: "async*", arg: ["caller"] });
     }
     expect(checkedModules.size).toBeGreaterThan(2);
     expect(planMemoryMigrations({ kernel: previous }, { kernel: current })).toEqual({

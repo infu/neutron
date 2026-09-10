@@ -11,6 +11,7 @@ import {
   loadReleaseCatalog,
   resolveReleaseCatalogPackageFiles,
 } from "../src/release_catalog.ts";
+import { loadSourceTransition } from "../src/source_transition.ts";
 
 const repositoryRoot = path.resolve(import.meta.dir, "../../..");
 const defaultPublisherIdentity = path.join(
@@ -20,7 +21,7 @@ const defaultPublisherIdentity = path.join(
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const parsed = parseArguments(argv, {
-    valueFlags: COMMON_VALUE_FLAGS,
+    valueFlags: [...COMMON_VALUE_FLAGS, "transition"],
   });
   if (parsed.positional.length !== 1) {
     throw new Error(
@@ -45,7 +46,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     parsed.values.set("identity-file", defaultPublisherIdentity);
   }
 
-  const packageFiles = await resolveReleaseCatalogPackageFiles(catalog);
+  const transitionFile = parsed.values.get("transition");
+  const transition = transitionFile ? await loadSourceTransition(transitionFile) : undefined;
+  const packageFiles = await resolveReleaseCatalogPackageFiles(catalog, { ...(transition ? { transition } : {}) });
   const { canisterId, origin, port } = await createCliContext(parsed, {
     requireIdentity: true,
   });
@@ -53,6 +56,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     canisterId,
     origin,
     port,
+    ...(transition ? { transition } : {}),
     progress: (message) => process.stderr.write(`${message}\n`),
   });
   printJson(receipt);

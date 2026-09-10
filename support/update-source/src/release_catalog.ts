@@ -4,6 +4,8 @@ import { preparePackageInstall } from "neutron-compiler/src/install.ts";
 import { isValidAppId } from "neutron-tools/src/app_ids.ts";
 import { packageArchiveFilename } from "neutron-tools/src/package_archive.ts";
 import { normalizeUpdateSourcePrincipal } from "neutron-tools/src/schema.ts";
+import { assertTransitionPackage, assertTransitionScope, expectedPackageSource, type SourceTransition } from "./source_transition.ts";
+import { sha256Hex } from "./model.ts";
 
 const RELEASE_CATALOG_FORMAT = 1;
 const MAX_RELEASE_CATALOG_BYTES = 256 * 1024;
@@ -96,9 +98,12 @@ export async function loadReleaseCatalog(
 
 export async function resolveReleaseCatalogPackageFiles(
   catalog: ReleaseCatalog,
+  options: { transition?: SourceTransition } = {},
 ): Promise<string[]> {
+  if (options.transition) assertTransitionScope(options.transition, catalog.updateSource, catalog.packages.map(({ id }) => id));
   return Promise.all(
     catalog.packages.map(async ({ directory, id }) => {
+      const expectedSource = expectedPackageSource(options.transition, id, catalog.updateSource);
       const manifestPath = path.join(directory, "neutron.json");
       let manifest: {
         id?: unknown;
@@ -127,9 +132,9 @@ export async function resolveReleaseCatalogPackageFiles(
           `Release manifest ${manifestPath} has an invalid version`,
         );
       }
-      if (manifest.update_source !== catalog.updateSource) {
+      if (manifest.update_source !== expectedSource) {
         throw new Error(
-          `Release manifest ${manifestPath} must use update source ${catalog.updateSource}`,
+          `Release manifest ${manifestPath} must use update source ${expectedSource}`,
         );
       }
 
@@ -142,12 +147,13 @@ export async function resolveReleaseCatalogPackageFiles(
       if (
         prepared.manifest.id !== id ||
         prepared.manifest.version !== manifest.version ||
-        prepared.manifest.update_source !== catalog.updateSource
+        prepared.manifest.update_source !== expectedSource
       ) {
         throw new Error(
           `Release archive ${archivePath} does not match its source manifest`,
         );
       }
+      if (options.transition) assertTransitionPackage(options.transition, { bytes: archive, record: { protocol: "neutron-repo-v1", id, version: manifest.version, sha256: sha256Hex(archive), size: archive.byteLength } });
       return archivePath;
     }),
   );

@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "updateBase": "100000000",
+  "updateByte": "5000",
+  "storageByteYear": "4000",
+  "purchase": "100000000",
+  "withdraw": "100000000",
+  "grant": "250000000",
+  "xrc": "1000000000"
+}

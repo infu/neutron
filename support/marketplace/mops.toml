@@ -1,0 +1,4 @@
+[dependencies]
+core = "https://github.com/dfinity/motoko-core#v2.6.0"
+sha2 = "0.1.6"
+ic-certification = "1.1.0"

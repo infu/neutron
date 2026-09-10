@@ -838,3 +838,14 @@ test("cancelling a check rejects late work without a final summary", async () =>
   controller.abort();
   await expect(checking).rejects.toMatchObject({ name: "AbortError" });
 });
+
+test("a canceled package update performs no source reads or access authorization", async () => {
+  const abort = new AbortController();
+  abort.abort();
+  let reads = 0;
+  await expect(fetchUpdatePackage(SOURCE, release("mail"), {
+    signal: abort.signal,
+    fetch: (async () => { reads++; return new Response(null, { status: 401, headers: certifiedHeaders() }); }) as unknown as typeof fetch,
+  })).rejects.toMatchObject({ name: "AbortError" });
+  expect(reads).toBe(0);
+});

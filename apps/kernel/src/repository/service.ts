@@ -1,3 +1,4 @@
+import type { RepositoryAccessApproval } from "../repository_access/client.ts";
 import {
   KERNEL_INSTALL_MAX_COPIES,
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
@@ -84,6 +85,7 @@ export function refreshPendingRepositorySetup({
 export function startRepositorySetupFromOffer(
   reference: RepositorySetupReference,
   offeredBy: AttestedInstallOfferRequester,
+  approvedAccess: readonly RepositoryAccessApproval[] = [],
 ): void {
   const state = useRepositorySetupStore.getState();
   if (state.phase !== "idle" || state.reference) {
@@ -102,7 +104,7 @@ export function startRepositorySetupFromOffer(
   );
   repositorySetupState.pending(pending.reference, offeredBy);
   schedulePendingExpiry(pending.reference, pending.capturedAt);
-  void loadRepositorySetup();
+  void loadRepositorySetup({ approvedAccess });
 }
 
 export async function loadRepositorySetup(
@@ -470,12 +472,13 @@ export async function installRepositorySelection(): Promise<void> {
 
 export async function retryRepositorySetup(
   stage: "load" | "compile" | "install" | null,
+  clientOptions: RepositoryClientOptions = {},
 ): Promise<void> {
   if (stage === "compile" && activeSession) {
     await reviewRepositorySelection();
     return;
   }
-  await loadRepositorySetup();
+  await loadRepositorySetup(clientOptions);
 }
 
 export async function dismissRepositorySetup(): Promise<void> {

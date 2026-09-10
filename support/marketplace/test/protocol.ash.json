@@ -1,0 +1,5 @@
+{
+  "canisters": [
+    { "name": "pricing_tests", "src": "pricing.test.mo" }
+  ]
+}

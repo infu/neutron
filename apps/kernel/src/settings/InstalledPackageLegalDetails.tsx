@@ -1,3 +1,11 @@
+import {
+  RepositoryAccessCost,
+  useRepositoryAccessApprovals,
+} from "../repository_access/RepositoryAccessCost.tsx";
+import {
+  RepositoryAccessError,
+  resolveRepositoryAccessSource,
+} from "../repository_access/client.ts";
 import { useRef, useState } from "react";
 import {
   isNeutronPackageArchiveOnlyPath,
@@ -389,15 +397,23 @@ function VerifiedHttpsSourceDownload({
   const [state, setState] = useState<EmbeddedDownloadState>({ status: "idle" });
   const active = useRef(false);
   const working = state.status === "working";
+  const accessSource = resolveRepositoryAccessSource(source.url)?.canisterId;
+  const access = useRepositoryAccessApprovals(accessSource ? [accessSource] : []);
 
   const download = async () => {
-    if (active.current) return;
+    if (active.current || access.loading) return;
     active.current = true;
     setState({ status: "working" });
     try {
-      await downloadAndVerifyHttpsSourceOffer({ source });
+      await downloadAndVerifyHttpsSourceOffer({
+        source,
+        approvedAccess: access.approvals,
+      });
       setState({ status: "success" });
     } catch (error) {
+      if (error instanceof RepositoryAccessError && error.code === "access_review_required") {
+        access.refresh();
+      }
       setState({ status: "error", message: downloadErrorMessage(error) });
     } finally {
       active.current = false;
@@ -405,17 +421,18 @@ function VerifiedHttpsSourceDownload({
   };
 
   return (
-    <span className="settings-app-legal-download">
+    <div className="settings-app-legal-download">
       <button
         aria-label="Download and verify source code"
-        disabled={working}
+        disabled={working || access.loading}
         onClick={() => void download()}
         type="button"
       >
         {working ? "Verifying…" : "Download source code"}
       </button>
+      <RepositoryAccessCost {...access} onRetry={access.refresh} />
       <InstalledPackageDownloadFeedback state={state} />
-    </span>
+    </div>
   );
 }
 

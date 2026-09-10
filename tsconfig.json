@@ -89,6 +89,9 @@
     },
     {
       "path": "./apps/icpswap"
+    },
+    {
+      "path": "./apps/marketplace"
     }
   ]
 }

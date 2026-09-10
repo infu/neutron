@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { KernelPolicyError } from "neutron-tools";
+import type { RepositoryAccessApproval } from "../src/repository_access/client.ts";
 import {
   approveInstallOffer,
   clearInstallOffer,
@@ -80,6 +81,40 @@ test("approval re-attests then releases the prompt before handoff", async () => 
     `approve:${handle.requestId}`,
   ]);
   expect(useInstallOfferStore.getState().pending).toBeNull();
+});
+
+test("owner approval hands off the exact displayed access fee and freezes it before async work", async () => {
+  const descriptor = { protocol: "neutron-repo-access-v1" as const, fee_version: "7", cycles: "123456789" };
+  const approvals: RepositoryAccessApproval[] = [{ source: "233tv-xiaaa-aaaay-aacta-cai", descriptor }];
+  let delivered: readonly RepositoryAccessApproval[] | undefined;
+  const handle = requestInstallOffer(appPackageInput((approval) => {
+    delivered = approval.approvedAccess;
+  }));
+
+  approveInstallOffer(handle.requestId, approvals);
+  descriptor.cycles = "999999999";
+  approvals.length = 0;
+  const approved = await handle.completion;
+
+  expect(delivered).toEqual([{
+    source: "233tv-xiaaa-aaaay-aacta-cai",
+    descriptor: { protocol: "neutron-repo-access-v1", fee_version: "7", cycles: "123456789" },
+  }]);
+  expect(approved.approvedAccess).toBe(delivered);
+  expect(Object.isFrozen(delivered)).toBe(true);
+  expect(Object.isFrozen(delivered?.[0]?.descriptor)).toBe(true);
+});
+
+test("canceling a priced install offer never starts acquisition", async () => {
+  let acquisitions = 0;
+  const handle = requestInstallOffer(appPackageInput(() => { acquisitions += 1; }));
+  rejectInstallOffer(handle.requestId);
+  approveInstallOffer(handle.requestId, [{
+    source: "233tv-xiaaa-aaaay-aacta-cai",
+    descriptor: { protocol: "neutron-repo-access-v1", fee_version: "1", cycles: "100" },
+  }]);
+  await expect(handle.completion).rejects.toThrow("dismissed");
+  expect(acquisitions).toBe(0);
 });
 
 test("reconciliation cancels a stale request without handoff", async () => {

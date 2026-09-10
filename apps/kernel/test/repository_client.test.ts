@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import {
+  REPOSITORY_LIMITS,
+  repositoryPackagePath,
   serializeRepositoryInfo,
   serializeRepositoryManifest,
   type RepositoryManifest,
@@ -8,9 +10,13 @@ import {
 import { hashContent } from "neutron-tools/src/hash.js";
 import {
   createRepositoryFetch,
+  createRepositoryPackageReader,
   verifyRepositorySetupBytes,
   type RepositoryByteSource,
 } from "../src/repository/client.ts";
+import { loadIcRuntimeFixture } from "./runtime_fixture.ts";
+
+beforeAll(loadIcRuntimeFixture);
 
 const encoder = new TextEncoder();
 
@@ -61,8 +67,11 @@ describe("repository byte verification", () => {
         reads.push(`manifest:${id}`);
         return value.manifestBytes;
       },
-      async readPackage(digest) {
+      async readPackage(digest, resourcePaths) {
         reads.push(`package:${digest}`);
+        expect(resourcePaths).toEqual(
+          value.manifest.packages.map(({ sha256 }) => repositoryPackagePath(sha256)),
+        );
         return packages.get(digest);
       },
     };
@@ -234,6 +243,137 @@ describe("repository byte verification", () => {
     const readsAtRejection = reads.length;
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(reads).toHaveLength(readsAtRejection);
+  });
+});
+
+describe("repository package byte channels", () => {
+  test("preserves public certified Candid bytes without contacting HTTP", async () => {
+    const value = fixture();
+    const bytes = value.packageBytes[0]!;
+    const digest = value.manifest.packages[0]!.sha256;
+    let reads = 0;
+    let httpReads = 0;
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async (sha256) => {
+      reads += 1;
+      expect(sha256).toBe(digest);
+      return bytes;
+    }, {
+      fetch: (async () => {
+        httpReads += 1;
+        throw new Error("HTTP must not be used for these certified bytes");
+      }) as unknown as typeof fetch,
+    });
+    expect(await readPackage(digest)).toBe(bytes);
+    expect(reads).toBe(1);
+    expect(httpReads).toBe(0);
+  });
+
+  test("fetches certified-absent packages at the exact source paths and verifies manifest pins", async () => {
+    const value = fixture();
+    const calls: string[] = [];
+    const packageByUrl = new Map(value.manifest.packages.map((metadata, index) => [
+      `https://${value.reference.repo}.icp0.io${repositoryPackagePath(metadata.sha256)}`,
+      value.packageBytes[index]!,
+    ]));
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async () => undefined, {
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        calls.push(url);
+        expect(init).toMatchObject({
+          cache: "no-store",
+          credentials: "omit",
+          redirect: "error",
+          referrerPolicy: "no-referrer",
+        });
+        const bytes = packageByUrl.get(url);
+        if (!bytes) throw new Error("Unexpected resource path");
+        return new Response(bytes);
+      }) as unknown as typeof fetch,
+    });
+    const loaded = await verifyRepositorySetupBytes(value.reference, {
+      readInfo: async () => value.infoBytes,
+      readManifest: async () => value.manifestBytes,
+      readPackage,
+    });
+    expect(loaded.packages.map(({ bytes }) => bytes)).toEqual(value.packageBytes);
+    expect(calls.sort()).toEqual([...packageByUrl.keys()].sort());
+  });
+
+  test("a failed Candid proof or transport never selects HTTP", async () => {
+    const value = fixture();
+    const failure = new Error("Certified asset witness is invalid");
+    let httpReads = 0;
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async () => {
+      throw failure;
+    }, {
+      fetch: (async () => {
+        httpReads += 1;
+        return new Response(value.packageBytes[0]!);
+      }) as unknown as typeof fetch,
+    });
+    await expect(readPackage(value.manifest.packages[0]!.sha256)).rejects.toBe(failure);
+    expect(httpReads).toBe(0);
+  });
+
+  test("an HTTP failure does not replay Candid or fetch a different resource", async () => {
+    const value = fixture();
+    let candidReads = 0;
+    let httpReads = 0;
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async () => {
+      candidReads += 1;
+      return undefined;
+    }, {
+      fetch: (async () => {
+        httpReads += 1;
+        return new Response("Unavailable", { status: 503 });
+      }) as unknown as typeof fetch,
+    });
+    await expect(readPackage(value.manifest.packages[0]!.sha256)).rejects.toThrow("HTTP 503");
+    expect(candidReads).toBe(1);
+    expect(httpReads).toBe(1);
+  });
+
+  test("HTTP bytes still require the pinned package hash, not just the expected length", async () => {
+    const value = fixture();
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async () => undefined, {
+      fetch: (async (input: RequestInfo | URL) => {
+        const index = value.manifest.packages.findIndex(({ sha256 }) => String(input).includes(sha256));
+        return new Response(new Uint8Array(value.packageBytes[index]!.byteLength));
+      }) as unknown as typeof fetch,
+    });
+    await expect(verifyRepositorySetupBytes(value.reference, {
+      readInfo: async () => value.infoBytes,
+      readManifest: async () => value.manifestBytes,
+      readPackage,
+    })).rejects.toThrow("digest mismatch");
+  });
+
+  test("HTTP packages retain the existing repository byte bound", async () => {
+    const value = fixture();
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async () => undefined, {
+      fetch: (async () => new Response("too large", {
+        headers: { "content-length": String(REPOSITORY_LIMITS.packageBytes + 1) },
+      })) as unknown as typeof fetch,
+    });
+    await expect(readPackage(value.manifest.packages[0]!.sha256)).rejects.toThrow("Package is larger than");
+  });
+
+  test("cancellation after certified absence prevents the HTTP grant and download", async () => {
+    const value = fixture();
+    const controller = new AbortController();
+    let httpReads = 0;
+    const readPackage = createRepositoryPackageReader(value.reference.repo, async () => {
+      controller.abort();
+      return undefined;
+    }, {
+      signal: controller.signal,
+      fetch: (async () => {
+        httpReads += 1;
+        return new Response(value.packageBytes[0]!);
+      }) as unknown as typeof fetch,
+    });
+    await expect(readPackage(value.manifest.packages[0]!.sha256)).rejects.toThrow("cancelled");
+    expect(httpReads).toBe(0);
   });
 });
 

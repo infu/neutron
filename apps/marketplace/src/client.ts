@@ -1,0 +1,205 @@
+import { Ed25519KeyIdentity } from "@dfinity/identity";
+import { Principal } from "@dfinity/principal";
+import { IDL } from "@dfinity/candid";
+import { isJsonObject, type MsgBusToolContext } from "neutron-tools/app";
+import { readIdentity, readState, configureState, type StoredState } from "./store.ts";
+import { makeAgent, makeTransport } from "./transport.ts";
+import { CONTRACT, first, some, encodeOpaque, checkoutType, withdrawalType, type Info, type WireApp, type Fee, type Checkout, type WithdrawQuote, type WireResult, type Option, type Token } from "./protocol.ts";
+import { readWalletTokenInfo } from "./wallet.ts";
+import type { AppDetail, AppListing, Page, LibraryApp, PublishedApp, Earnings, Session, Money, CycleEstimate, OperationResult, PurchaseQuote, WithdrawalQuote, PaymentToken, AppTier, RankingWindow } from "./view-types.ts";
+
+export class ProtocolError extends Error { constructor(public readonly code: string, message: string) { super(message); } }
+export function response<T>(value: { ok: T } | { err: { code: string; message: string } }): T {
+  if ("err" in value) throw new ProtocolError(value.err.code, value.err.message);
+  return value.ok;
+}
+export function randomId(): string { return [...crypto.getRandomValues(new Uint8Array(16))].map(x => x.toString(16).padStart(2, "0")).join(""); }
+export function date(ns: bigint): string { return new Date(Number(ns / 1_000_000n)).toISOString(); }
+export function hex(value: Uint8Array): string { return [...value].map(x => x.toString(16).padStart(2, "0")).join(""); }
+export function cycleView(fee: Fee): CycleEstimate { return { total: String(fee.totalCycles), processing: String(fee.processingCycles), storage: String(fee.storageCycles), schedule: String(fee.feeVersion) }; }
+export function money(token: Token, value: bigint): Money { return { atoms: String(value), decimals: token.decimals, symbol: token.symbol }; }
+export function operationView(result: WireResult): OperationResult {
+  const operation = result.order ?? result.withdrawal;
+  if (!operation) throw new Error("The protocol returned no operation record.");
+  const block = first(result.attempt)?.block[0];
+  const identity = { operationId: operation.requestId, ...(block !== undefined ? { ledgerBlock: String(block) } : {}) };
+  const state = Object.keys(operation.state)[0];
+  const next = Object.keys(result.nextAction ?? {})[0];
+  const detail = first(operation.lastError);
+  if (state === "complete") return { ...identity, state: "complete", nextAction: "none", message: result.order ? "Your apps are in My Apps and can be installed anytime." : "Withdrawal confirmed.", ...(operation.items ? { appIds: operation.items.map(i => i.appId) } : {}) };
+  if (result.active || next === "await_current_call") return { ...identity, state: "pending", nextAction: "none", message: detail ?? "The original ledger call is still active. Status will refresh without sending another payment." };
+  if (next === "review_required") return { ...identity, state: "pending", nextAction: "none", message: `${detail ?? "The original ledger outcome is unresolved and needs operator review."} Do not send another payment; retain this operation ID.` };
+  if (state === "failed") return { ...identity, state: "failed", nextAction: "review", message: detail ?? "The operation was not completed. Review the saved request before trying again." };
+  return { ...identity, state: "pending", nextAction: "resume", message: detail ?? "The original operation is still being reconciled. Resume this request without starting another payment." };
+}
+type Detail = { app: WireApp; candidate: Option<{ id: bigint; version: bigint; digest: Uint8Array; state: Record<string, null>; createdAtNs: bigint }>; audit: Option<{ auditor: Principal; decision: Record<string, null>; analysis: string; reason: Option<string>; createdAtNs: bigint }>; rating: Option<{ stars: bigint; review: string }> };
+let savedState: StoredState | null = null;
+let stateFlight: Promise<StoredState> | null = null;
+let connected = false;
+let agentCache: { key: string; agent: Awaited<ReturnType<typeof makeAgent>> } | null = null;
+let infoCache: { key: string; info: Promise<Info> } | null = null;
+
+async function currentState(context: MsgBusToolContext): Promise<StoredState> {
+  if (savedState) return savedState;
+  if (!stateFlight) stateFlight = readState(context.kernel).then(s => { savedState = s; return s; }).finally(() => { stateFlight = null; });
+  return stateFlight;
+}
+export function session(state: StoredState): Session { return { configured: state.canisterId !== null, canisterId: state.canisterId ?? "", host: state.host, account: state.owner, connected }; }
+export function clearClient(): void { savedState = null; stateFlight = null; connected = false; agentCache = null; infoCache = null; }
+export async function configured(context: MsgBusToolContext, input: { canisterId: string; host: string }): Promise<Session> {
+  const state = await configureState(context.kernel, input); clearClient(); savedState = state; return session(state);
+}
+export async function protocolClient(context: MsgBusToolContext) {
+  const state = await currentState(context);
+  if (!state.canisterId) throw new Error("Connect this app to the marketplace protocol in Settings.");
+  const key = `${state.host}:${state.canisterId}:${state.revision}`;
+  if (!agentCache || agentCache.key !== key) agentCache = { key, agent: await makeAgent(state, state.seed ? Ed25519KeyIdentity.generate(state.seed) : undefined) };
+  const transport = makeTransport({ canisterId: state.canisterId, agent: agentCache.agent, contract: CONTRACT, kernel: context.kernel });
+  if (!infoCache || infoCache.key !== key) infoCache = { key, info: transport.query<Info>("marketplace_info").catch(error => { if (infoCache?.key === key) infoCache = null; throw error; }) };
+  const info = await infoCache.info;
+  if (info.canister.toText() !== state.canisterId) throw new Error("The marketplace returned a different canister identity.");
+  const token = (symbol: PaymentToken | string): Token => {
+    const value = info.tokens.find(t => t.symbol === symbol);
+    if (!value) throw new Error(`${symbol} is not accepted by this marketplace.`);
+    return value;
+  };
+  async function query<T>(name: string, args: unknown[] = []): Promise<T> { return response(await transport.query(name, args)); }
+  async function fee(operation = "update", processingBytes = 0n, newStorageBytes = 0n): Promise<Fee> {
+    const schedule = info.fees;
+    const base = ["purchase", "withdraw", "grant"].includes(operation) ? schedule[operation] : schedule.updateBase;
+    if (base === undefined || schedule.version === undefined || schedule.updateByte === undefined || schedule.storageByteYear === undefined) throw new Error("The marketplace fixed cycle schedule is incomplete.");
+    const processingCycles = base + processingBytes * schedule.updateByte, storageCycles = newStorageBytes * schedule.storageByteYear;
+    return { feeVersion: schedule.version, processingCycles, storageCycles, totalCycles: processingCycles + storageCycles, processingBytes, newStorageBytes };
+  }
+  async function update<T>(name: string, request: Record<string, unknown>, quote?: Fee): Promise<T> {
+    const estimate = quote ?? await estimateUpdate(name, request);
+    context.signal?.throwIfAborted();
+    return response(await transport.update(name, [{ ...request, feeVersion: estimate.feeVersion }], estimate.totalCycles));
+  }
+  async function estimateUpdate(name: string, request: Record<string, unknown>, newStorageBytes = 0n): Promise<Fee> {
+    const method = CONTRACT[name];
+    if (!method?.update) throw new Error("No marketplace update contract exists for this method.");
+    const args = { ...request, feeVersion: info.fees.version };
+    const count = BigInt(IDL.encode(method.args, [args]).byteLength);
+    return fee(name === "upload_begin" ? "upload" : "update", count, newStorageBytes);
+  }
+  function artifactUrl(value: string): string {
+    const replica = new URL(state.host);
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(replica.hostname);
+    const base = local ? `${replica.protocol}//${state.canisterId}.localhost${replica.port ? `:${replica.port}` : ""}` : `https://${state.canisterId}.icp0.io`;
+    const url = new URL(value, base);
+    if (url.origin !== new URL(base).origin) throw new Error("A marketplace image referenced another origin.");
+    return url.toString();
+  }
+  function listing(value: WireApp): AppListing {
+    const icon = first(value.iconUrl);
+    return { id: value.appId, title: value.title, summary: value.summary, category: "Apps", publisher: value.publisher.toText(), priceUsdMicros: String(value.priceUsdMicros), ...(icon ? { iconUrl: artifactUrl(icon) } : {}), version: String(first(value.version) ?? 0n), rating: value.ratingCount ? Number(value.ratingTotal) / Number(value.ratingCount) : null, ratingCount: Number(value.ratingCount), owned: value.owned };
+  }
+  async function detailWire(appId: string): Promise<Detail> { return query("app_detail", [appId]); }
+  async function detail(appId: string): Promise<AppDetail> {
+    const value = await detailWire(appId), review = first(value.audit), candidate = first(value.candidate), rating = first(value.rating);
+    return { ...listing(value.app), description: value.app.description, screenshots: value.app.screenshots.map(url => ({ url: artifactUrl(url) })), audit: review ? { auditor: review.auditor.toText(), verdict: Object.keys(review.decision)[0] as "approved" | "rejected" | "revoked", analysis: first(review.reason) ?? review.analysis, date: date(review.createdAtNs), packageHash: candidate ? hex(candidate.digest) : "" } : null, ownRating: rating ? { stars: Number(rating.stars), text: rating.review } : null };
+  }
+  async function purchaseView(quote: Checkout, includeWallet = false): Promise<PurchaseQuote> {
+    const selected = info.tokens.find(t => t.ledger.toText() === quote.request.ledger.toText());
+    if (!selected) throw new Error("The saved purchase names an unavailable payment token.");
+    const items: AppListing[] = [], warnings: string[] = [];
+      for (const item of quote.items) {
+        try {
+          items.push({ ...listing((await detailWire(item.appId)).app), publisher: item.publisher.toText(), priceUsdMicros: String(item.priceUsdMicros) });
+        } catch {
+          context.signal?.throwIfAborted();
+          // A revoked release or an unavailable catalog must not prevent the
+          // original quote and ledger attempt from being recovered. The exact
+          // release digest remains in opaque; no current version is inferred.
+          items.push({ id: item.appId, title: item.appId, summary: "Saved purchase", category: "Apps", publisher: item.publisher.toText(), priceUsdMicros: String(item.priceUsdMicros), version: "", rating: null, ratingCount: 0 });
+          warnings.push(`Current listing details for ${item.appId} are unavailable. This review uses the saved purchase; current release availability is not confirmed.`);
+        }
+      }
+      const wallet = includeWallet && quote.amount ? await readWalletTokenInfo(context.kernel, selected.ledger.toText(), state.owner) : null;
+      const approvalFee = quote.amount ? quote.fee : 0n;
+      const listUsd = quote.items.reduce((total, item) => total + item.priceUsdMicros, 0n);
+      const affiliate = first(quote.affiliate);
+      const discount = affiliate ? listUsd * info.referralTerms.discountBps / 10000n : 0n;
+      const allocations: PurchaseQuote["allocations"] = quote.items.map(item => ({ kind: "developer", principal: item.publisher.toText(), amount: money(selected, item.developerAtoms), label: items.find(app => app.id === item.appId)?.title ?? item.appId }));
+      if (affiliate) allocations.push({ kind: "affiliate", principal: affiliate.toText(), amount: money(selected, quote.items.reduce((sum, item) => sum + item.affiliateAtoms, 0n)) });
+      allocations.push({ kind: "burn", principal: first(selected.burnAccount)?.owner.toText() ?? null, amount: money(selected, quote.items.reduce((sum, item) => sum + item.burnAtoms, 0n)), label: "Burning NTN" });
+      const rate = first(quote.rate);
+      if (rate && (first(rate.lastError) || BigInt(Date.now()) * 1_000_000n - rate.observedAtNs > 86_400_000_000_000n)) warnings.push("Using the last known token price. Review its observation time before paying.");
+      if (wallet && BigInt(wallet.balanceAtoms) < quote.amount + quote.fee + approvalFee) warnings.push("Wallet's current balance is below the price plus estimated ledger fees.");
+      return { operationId: quote.request.requestId, commitment: hex(quote.commitment), appIds: quote.request.appIds, items, token: selected.symbol as PaymentToken, subtotalUsdMicros: String(listUsd), discountUsdMicros: String(discount), payment: money(selected, quote.amount), approvalFee: money(selected, approvalFee), collectionFee: money(selected, quote.amount ? quote.fee : 0n), totalDebit: money(selected, quote.amount + (quote.amount ? quote.fee : 0n) + approvalFee), allocations, cycles: cycleView(quote.cycles), affiliateCode: first(quote.request.referralCode) ?? "", ...(rate ? { priceObservedAt: date(rate.observedAtNs) } : {}), warnings, opaque: encodeOpaque(checkoutType, quote) };
+  }
+  function withdrawalView(quote: WithdrawQuote): WithdrawalQuote {
+    const selected = info.tokens.find(t => t.ledger.toText() === quote.request.ledger.toText());
+    if (!selected) throw new Error("The saved withdrawal names an unavailable payment token.");
+    return { operationId: quote.request.requestId, token: selected.symbol as PaymentToken, destination: quote.request.to.owner.toText(), debit: money(selected, quote.request.totalDebit), fee: money(selected, quote.fee), receive: money(selected, quote.netAmount), cycles: cycleView(quote.cycles), warnings: [], opaque: encodeOpaque(withdrawalType, quote) };
+  }
+  return { state, transport, info, token, query, fee, update, estimateUpdate, listing, detailWire, detail, purchaseView, withdrawalView,
+    async catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>> {
+      const parsed = input.cursor ? JSON.parse(input.cursor) as { generation: string; offset: string } : null;
+      const value = await query<{ apps: WireApp[]; nextCursor: Option<{ generation: bigint; offset: bigint }>; asOfNs: bigint; refreshing: boolean }>("catalog_query", [{ search: input.search, tier: { [input.tier]: null }, window: { [input.window]: null }, cursor: parsed ? [{ generation: BigInt(parsed.generation), offset: BigInt(parsed.offset) }] : [], limit: 24n }]);
+      const next = first(value.nextCursor);
+      return { items: value.apps.map(listing), nextCursor: next ? JSON.stringify({ generation: String(next.generation), offset: String(next.offset) }) : null, asOf: date(value.asOfNs), ...(value.refreshing ? { warning: "Rankings are refreshing. These results share the displayed snapshot time." } : {}) };
+    },
+    async library(cursor?: string): Promise<Page<LibraryApp>> {
+      const value = await query<{ apps: WireApp[]; nextCursor: Option<bigint> }>("library_query", [{ cursor: cursor ? [BigInt(cursor)] : [], limit: 24n }]);
+      const installed = new Map<string, string>();
+      let warning: string | undefined;
+      try {
+        const apps = await context.kernel.listApps();
+        if (!isJsonObject(apps) || !Array.isArray(apps.apps)) throw new Error("Installed app information is unavailable.");
+        const ids = new Set(apps.apps.flatMap(app => isJsonObject(app) && typeof app.id === "string" ? [app.id] : []));
+        for (const app of value.apps) if (ids.has(app.appId)) {
+          const detail = await context.kernel.describeApp(app.appId);
+          if (!isJsonObject(detail) || typeof detail.version !== "number" || !Number.isSafeInteger(detail.version)) throw new Error("An installed app version is unavailable.");
+          installed.set(app.appId, String(detail.version));
+        }
+      } catch { warning = "Installed-app status is unavailable. Neutron will check existing installations before installing."; }
+      return { items: value.apps.map(app => ({ ...listing(app), acquiredAt: "", installedVersion: installed.get(app.appId) ?? null, available: app.visible, ...(!app.visible ? { unavailableReason: "No approved release is currently available. Your ownership is retained." } : {}) })), nextCursor: first(value.nextCursor)?.toString() ?? null, ...(warning ? { warning } : {}) };
+    },
+    async publisherApps(cursor?: string): Promise<Page<PublishedApp>> {
+      const value = await query<{ apps: WireApp[]; nextCursor: Option<bigint> }>("publisher_apps", [{ cursor: cursor ? [BigInt(cursor)] : [], limit: 24n }]);
+      const items: PublishedApp[] = [];
+      for (const app of value.apps) {
+        const details = await detailWire(app.appId), candidate = first(details.candidate), review = first(details.audit);
+        const state = candidate ? Object.keys(candidate.state)[0] : "draft";
+        items.push({ ...listing(app), status: (state === "pending" ? "in_review" : state) as PublishedApp["status"], ...(review && first(review.reason) ? { rejectionReason: first(review.reason)! } : {}) });
+      }
+      return { items, nextCursor: first(value.nextCursor)?.toString() ?? null };
+    },
+    async earnings(): Promise<Earnings> {
+      const value = await query<{ credits: Array<{ ledger: Principal; available: bigint; reserved: bigint }>; referral: Option<{ code: string }> }>("earnings_query");
+      return { referralCode: first(value.referral)?.code ?? null, affiliateDiscountBps: Number(info.referralTerms.discountBps), affiliateShareBps: Number(info.referralTerms.affiliateBps), balances: info.tokens.map(t => {
+        const balance = value.credits.find(c => c.ledger.toText() === t.ledger.toText());
+        return { token: t.symbol as PaymentToken, available: money(t, balance?.available ?? 0n), reserved: money(t, balance?.reserved ?? 0n), earned: null };
+      }) };
+    },
+    async quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode: string; operationId?: string }): Promise<PurchaseQuote> {
+      const selected = token(input.token);
+      const quote = await query<Checkout>("purchase_quote", [{ requestId: input.operationId ?? randomId(), appIds: input.appIds, ledger: selected.ledger, referralCode: some(input.affiliateCode.trim() || null) }]);
+      return purchaseView(quote, true);
+    },
+    async quoteWithdrawal(input: { token: PaymentToken; amountAtoms: string; destination: string; operationId?: string }): Promise<WithdrawalQuote> {
+      const selected = token(input.token);
+      const quote = await query<WithdrawQuote>("withdraw_quote", [{ requestId: input.operationId ?? randomId(), ledger: selected.ledger, to: { owner: Principal.fromText(input.destination), subaccount: [] }, totalDebit: BigInt(input.amountAtoms) }]);
+      return withdrawalView(quote);
+    },
+  };
+}
+export type Client = Awaited<ReturnType<typeof protocolClient>>;
+export async function initialize(context: MsgBusToolContext): Promise<Session> {
+  const state = await currentState(context);
+  if (state.canisterId && state.seed) {
+    try { await (await protocolClient(context)).earnings(); connected = true; }
+    catch { connected = false; }
+  }
+  return session(state);
+}
+export async function connect(context: MsgBusToolContext): Promise<Session> {
+  const identity = await readIdentity(context.kernel); savedState = identity.state; agentCache = null; infoCache = null;
+  const client = await protocolClient(context);
+  await client.transport.reserve();
+  await client.update("read_delegate_set", { browser: identity.identity.getPrincipal(), active: true });
+  connected = true;
+  return session(identity.state);
+}

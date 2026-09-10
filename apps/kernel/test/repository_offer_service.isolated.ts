@@ -56,6 +56,7 @@ class MemoryStorage implements RepositoryStorage {
 }
 
 type RepositoryClientOptions = {
+  approvedAccess?: readonly { source: string; descriptor: { protocol: "neutron-repo-access-v1"; fee_version: string; cycles: string } }[];
   signal?: AbortSignal;
   onProgress?(progress: {
     label: string;
@@ -209,6 +210,19 @@ test("stages the exact trusted reference and immediately enters the existing loa
     phase: "loading",
     reference: offeredReference,
   });
+});
+
+test("bundle acquisition receives the source cost approved on the existing offer", async () => {
+  const approvals = Object.freeze([Object.freeze({
+    source: offeredReference.repo,
+    descriptor: Object.freeze({ protocol: "neutron-repo-access-v1" as const, fee_version: "9", cycles: "987654321" }),
+  })]);
+  startRepositorySetupFromOffer(offeredReference, offeredBy, approvals);
+  await loadStarted.promise;
+  expect(loadCalls[0]?.options.approvedAccess).toEqual(approvals);
+  expect(loadCalls[0]?.options.signal?.aborted).toBe(false);
+  await dismissRepositorySetup();
+  expect(loadCalls[0]?.options.signal?.aborted).toBe(true);
 });
 
 test("rejects a same-tab capture race without replacing or loading it", () => {

@@ -9,6 +9,7 @@ import {
   type Identity,
 } from "@dfinity/agent";
 import type { Principal } from "@dfinity/principal";
+import type { RepositoryAccessReply, RepositoryAccessRequest } from "neutron-tools/src/repository_access.js";
 import { clearPendingRepositorySetup } from "neutron-tools/repository";
 import { getNeutronId } from "../config.ts";
 import type {
@@ -54,6 +55,11 @@ type IcblastPreset = string | IDL.InterfaceFactory;
 type IcblastClient = (canister: string, preset?: IcblastPreset) => Promise<any>;
 
 export type KernelActor = CertifiedAssetsSettingsActor & {
+  kernel_repository_access_v1(req: {
+    source: Principal;
+    cycles: bigint;
+    request: RepositoryAccessRequest;
+  }): Promise<RepositoryAccessReply>;
   kernel_check_authorized(req: null): Promise<boolean>;
   kernel_install_code(req: {
     wasm: Uint8Array;
@@ -1060,6 +1066,19 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
 
   return IDL.Service({
     ...CertifiedAssetsSettings.methods,
+    kernel_repository_access_v1: IDL.Func([
+      IDL.Record({
+        source: IDL.Principal,
+        cycles: IDL.Nat,
+        request: IDL.Record({ request_id: IDL.Text, token: IDL.Text, paths: IDL.Vec(IDL.Text), fee_version: IDL.Nat }),
+      }),
+    ], [IDL.Record({
+      charged_cycles: IDL.Opt(IDL.Nat),
+      result: IDL.Variant({
+        ok: IDL.Record({ request_id: IDL.Text, paths: IDL.Vec(IDL.Text), accepted_cycles: IDL.Nat }),
+        err: IDL.Record({ code: IDL.Text, message: IDL.Text }),
+      }),
+    })], []),
     kernel_capabilities_page: IDL.Func(
       [IDL.Record({ after: IDL.Opt(IDL.Text), limit: IDL.Nat })],
       [CapabilityPage],

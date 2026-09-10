@@ -1,20 +1,100 @@
 # Marketplace protocol project
 
-This folder currently contains specifications and reference material. The
-canister implementation and deployment configuration have not been created.
-Implementation work is tracked in [todo.marketplace.md](../../todo.marketplace.md).
+This directory contains the standalone Motoko marketplace and package-source
+canister, operator tools, deployment configuration, and local acceptance tests.
+The client is [apps/marketplace](../../apps/marketplace/README.md). The same change
+adds generic authenticated repository acquisition to the Kernel so purchases
+remain installable and updatable without depending on the marketplace client.
 
-The planned standalone Motoko canister combines marketplace and package-source
-responsibilities with one internal database. Deployment uses `icp` CLI and
-protocol tests use Ash with PocketIC. Its Neutron UI will be a separate app in
-`apps/marketplace/`.
+The implementation is being validated locally. No production marketplace has
+been deployed, existing apps have not been imported, and no production source
+transition or marketplace payment has been performed. Release work and remaining
+configuration are tracked in [todo.marketplace.md](../../todo.marketplace.md).
 
-The protocol's original material is [all rights reserved](LICENSE). The Neutron
-app will use the shared [standard NSAL 1.1](../../LICENSE.APP) packaging workflow.
-Third-party references retain their accompanying licenses. Private database
-configuration is excluded from Git; these specs describe protocol behavior.
+## Implemented behavior
 
-## Specifications
+- The catalog combines reviewed app listings, immutable package/source artifacts,
+  screenshots, publisher ownership, ratings, and Top free/Top paid charts for
+  rolling 7 days, 30 days, and all time. Rankings count distinct Neutron
+  acquisitions, not downloads or retries.
+- A purchase belongs to the Neutron canister principal. Free claims and paid
+  purchases grant enduring access to approved updates. Paid bytes use
+  authenticated certified HTTP; browser read credentials do not authorize writes.
+- ICP, ckBTC, and ckUSDC payments share durable collection and withdrawal
+  journals. Repeating the same request resumes its retained outcome. Quotes show
+  ledger fees, the developer and affiliate shares, and the allocation forwarded
+  toward burning NTN. A forwarding receipt does not prove the external burn.
+- Listing prices are free or USD $1–$50 inclusive, before discounts. Daily rate
+  refresh retains the last successful rate when the XRC request fails and exposes
+  freshness diagnostics. Fixed cycle charges and first-year storage coverage are
+  separate from token fees; the operator funds storage after that year.
+- Publishers submit exact artifacts for an assigned auditor to approve, reject,
+  or revoke. An audit binds the candidate ID and inspected package/source hashes.
+  Pending releases do not replace an approved version, and revocation preserves
+  ownership while blocking ordinary downloads of revoked bytes.
+- Domain modules isolate catalog, audit, access, assets, ranking, ledger, payment,
+  and accounting behavior. `main.mo` wires these to authenticated actor methods,
+  certified responses, and scheduled maintenance.
+
+The marketplace app supports browsing, checkout, My Apps, publisher submissions,
+ratings, referrals, earnings, and agent tools. Public and signed private reads
+are browser-direct. Non-auditor updates use the Neutron with native cycles; the
+app's approved call budgets are 1 trillion cycles per call and 10 trillion per
+day. These budgets do not set the protocol's initial fee coefficients, which
+remain an operator configuration decision.
+
+## Local build and validation
+
+From the repository root, with the reviewed build inputs prepared:
+
+```sh
+npm --workspace neutron-marketplace-protocol run build
+npm --workspace neutron-marketplace-protocol run test
+npm --workspace neutron-marketplace run test
+npm --workspace neutron-marketplace run test:browser
+npm --workspace neutron-marketplace run package
+```
+
+The test harness uses the pinned Motoko compiler, Ash, and PocketIC. Tests cover
+pure/domain behavior, inter-canister ledger recovery, the public protocol actor,
+certified HTTP, and actual same-canister upgrades. The ledger and upgrade
+fixtures have distinct limits:
+
+- Scripted ledger canisters exercise lost replies, duplicates, concurrent
+  continuation, and interrupted local finalization.
+- Official ICRC ledger Wasm exercises six- and eight-decimal payment flows. This
+  is not comprehensive legacy ICP-ledger compatibility coverage. No ledger-history
+  or archive adapter is used by the protocol.
+- HTTP fixtures use the response verifier against actual canister certificates,
+  including private delivery and streaming. This is local verification, not a
+  production gateway test.
+- Same-build upgrades exercise retained state at the same canister principal.
+  They do not establish migration from a previously released marketplace schema;
+  no production marketplace version exists yet.
+- Client and Kernel tests cover their local integrations. Browser fixtures are
+  separate from live mainnet installation, wallet, or financial testing.
+
+See [acceptance tests](spec/testing.md) for the executable suites and remaining
+coverage requirements. Passing local tests does not authorize deployment,
+publication, or financial smoke tests.
+
+## Deployment and source transition
+
+The project builds for `icp` CLI. Use explicit installation only for a new empty
+canister, and a state-preserving upgrade for an existing deployment; the
+[deployment guide](spec/deployment.md) gives commands and prerequisites.
+
+Before production use, supply the new canister principal, initial roles,
+existing app-ID ownership reservations, fixed charge coefficients, and the three
+burn-service receiving accounts. The old production source is a separate Rust
+asset canister and must be retained. Inventory/planning tools and an explicitly
+scoped source-transition publisher are present, but actual imports, approvals,
+publication, and installed-client migration remain release work. Transition
+packages must have higher versions, preserve app memory, and name the new source
+in their manifests. Ordinary Kernel install/update review commits each source
+change; there is no marketplace-specific Kernel update resolver.
+
+## Specifications and license
 
 - [Architecture, domains and browser authentication](spec/architecture.md)
 - [Query-first access and caller-funded updates](spec/cycles-and-queries.md)
@@ -26,9 +106,8 @@ configuration is excluded from Git; these specs describe protocol behavior.
 - [Ash/PocketIC acceptance tests](spec/testing.md)
 - [Upstream ledger references](spec/references/README.md)
 
-These are implementation specifications, not claims of tested production
-behavior. Business rules include fixed estimated cycle charges, one year of
-developer-prepaid storage followed by operator-funded storage, enduring update
-rights and no self-referrals. Remaining setup is the initial cost coefficients,
-admin/auditor principals and burn-service accounts. Research scratch work remains
-outside the repository.
+The protocol's original material is [all rights reserved](LICENSE). The Neutron
+app uses the shared [standard NSAL 1.1](../../LICENSE.APP) packaging workflow, as
+selected for this app. Third-party references retain their accompanying
+licenses. These documents describe public protocol behavior; research scratch
+work remains outside the repository.

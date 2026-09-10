@@ -48,7 +48,7 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 350;
+export const KERNEL_NPL_RELEASE_VERSION = 351;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
@@ -271,6 +271,18 @@ const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
 
 /** Explicitly reviewed new files in this uncommitted release candidate. */
 const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
+  // Kernel 351 generic source access, consent, and compiled-IC regressions.
+  "apps/kernel/backend/repository_access/Service.mo",
+  "apps/kernel/backend/repository_access/Types.mo",
+  "apps/kernel/src/repository_access/RepositoryAccessCost.tsx",
+  "apps/kernel/src/repository_access/approvals.ts",
+  "apps/kernel/src/repository_access/client.ts",
+  "apps/kernel/test/motoko/repository_access_service_test.mo",
+  "apps/kernel/test/motoko/run_repository_access.ts",
+  "apps/kernel/test/repository_access_backend.test.ts",
+  "apps/kernel/test/repository_access_client.test.ts",
+  "apps/kernel/test/repository_access_cost.test.tsx",
+  "packages/neutron-tools/src/repository_access.ts",
   "doc/todo.wallet-fresh-start.md",
   "packages/neutron-compiler/test/fresh_custody_cutover.pocketic.test.ts",
   // Custody signing, its migration, shared wallet tools and checked-upgrade fixtures.
@@ -1379,7 +1391,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.50 (packed version 350)",
+    "Package release: v0.3.51 (packed version 351)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

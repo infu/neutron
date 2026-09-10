@@ -20,7 +20,10 @@ import {
   type RepositorySetupReference,
 } from "neutron-tools/repository";
 import { hashContent } from "neutron-tools/src/hash.js";
+import { canisterOrigin } from "neutron-tools/src/runtime.js";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
+import { fetchPackageFromUrl } from "../tools/package_url.ts";
+import type { RepositoryAccessApproval } from "../repository_access/client.ts";
 
 export type FetchedRepositoryPackage = {
   metadata: RepositoryManifestPackage;
@@ -37,7 +40,10 @@ export type FetchedRepositorySetup = {
 export type RepositoryByteSource = {
   readInfo(): Promise<Uint8Array | undefined>;
   readManifest(id: string): Promise<Uint8Array | undefined>;
-  readPackage(digest: string): Promise<Uint8Array | undefined>;
+  readPackage(
+    digest: string,
+    resourcePaths?: readonly string[],
+  ): Promise<Uint8Array | undefined>;
 };
 
 export type RepositoryLoadProgress = {
@@ -47,6 +53,7 @@ export type RepositoryLoadProgress = {
 };
 
 export type RepositoryClientOptions = {
+  approvedAccess?: readonly RepositoryAccessApproval[];
   signal?: AbortSignal;
   fetch?: typeof fetch;
   onProgress?: (progress: RepositoryLoadProgress) => void;
@@ -135,6 +142,9 @@ export async function verifyRepositorySetupBytes(
     );
   }
 
+  const resourcePaths = Object.freeze(
+    manifest.packages.map(({ sha256 }) => repositoryPackagePath(sha256)),
+  );
   const packages = await mapWithConcurrency(
     manifest.packages,
     REPOSITORY_LIMITS.concurrentReads,
@@ -145,7 +155,7 @@ export async function verifyRepositorySetupBytes(
         total: manifest.packages.length,
       });
       const bytes = requireResource(
-        await source.readPackage(metadata.sha256),
+        await source.readPackage(metadata.sha256, resourcePaths),
         `Repository package '${metadata.id}' was not found`,
       );
       if (bytes.byteLength !== metadata.size) {
@@ -248,16 +258,52 @@ export async function createAnonymousRepositorySource(
         (index) => actor.repo_manifest({ id, index }),
         { maxChunks: 1, maxEncodedBytes: REPOSITORY_LIMITS.manifestJsonBytes },
       ),
-    readPackage: (digest: string) =>
-      read(
-        repositoryPackagePath(digest),
-        (index) => actor.repo_package({ sha256: digest, index }),
-        {
-          maxChunks: REPOSITORY_LIMITS.packageChunks,
-          maxEncodedBytes: REPOSITORY_LIMITS.packageBytes,
-        },
-      ),
+    readPackage: createRepositoryPackageReader(
+      canisterId,
+      (digest) =>
+        read(
+          repositoryPackagePath(digest),
+          (index) => actor.repo_package({ sha256: digest, index }),
+          {
+            maxChunks: REPOSITORY_LIMITS.packageChunks,
+            maxEncodedBytes: REPOSITORY_LIMITS.packageBytes,
+          },
+        ),
+      options,
+    ),
   });
+}
+
+/**
+ * Existing sources serve public package bytes through certified Candid reads.
+ * A source may instead certify absence in that asset tree and serve the pinned
+ * resource over certified HTTP, including an authenticated repository route.
+ * Only verified absence selects HTTP: a failed proof or interrupted Candid
+ * read must propagate, and HTTP failure must never retry another byte channel.
+ */
+export function createRepositoryPackageReader(
+  canisterId: string,
+  readCertified: (digest: string) => Promise<Uint8Array | undefined>,
+  options: RepositoryClientOptions = {},
+): RepositoryByteSource["readPackage"] {
+  const deployment = getRuntimeDeployment();
+  const origin = canisterOrigin({
+    canisterId,
+    local: deployment.local,
+    ...(deployment.localHost ? { localHost: deployment.localHost } : {}),
+  });
+  return async (digest, resourcePaths) => {
+    const bytes = await readCertified(digest);
+    if (bytes !== undefined) return bytes;
+    if (options.signal?.aborted) throw abortError();
+    return fetchPackageFromUrl(`${origin}${repositoryPackagePath(digest)}`, {
+      maxBytes: REPOSITORY_LIMITS.packageBytes,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(resourcePaths ? { resourcePaths } : {}),
+      ...(options.approvedAccess ? { approvedAccess: options.approvedAccess } : {}),
+    });
+  };
 }
 
 export function createRepositoryFetch(

@@ -2,7 +2,7 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 350,
+  "version": 351,
   "update_source": "233tv-xiaaa-aaaay-aacta-cai",
   "src": "main.mo",
   "init_arg": [
@@ -104,6 +104,13 @@
     "kernel_settings_snapshot": {
       "type": "query",
       "async": false
+    },
+    "kernel_repository_access_v1": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller"
+      ]
     },
     "kernel_certified_assets_scope_info": {
       "type": "query",

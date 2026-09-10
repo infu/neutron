@@ -11,6 +11,8 @@ import FrontendRuntimeAdmission "./frontend_runtime/Admission";
 import BackendCallsService "./backend_calls/Service";
 import BackendCallsRaw "./backend_calls/Raw";
 import BackendCallTypes "./backend_calls/Types";
+import RepositoryAccessService "./repository_access/Service";
+import RepositoryAccessTypes "./repository_access/Types";
 import RandomnessAdapter "./randomness/Adapter";
 import RandomnessService "./randomness/Service";
 import RandomnessTypes "./randomness/Types";
@@ -110,6 +112,10 @@ module {
     public type PublicIngressUpdateHandlerV1 = PublicIngressTypes.UpdateHandlerV1;
     public type PublicIngressHandlerRegistrationV1 = PublicIngressTypes.HandlerRegistrationV1;
     public type TaskInvocationLease = SchedulerTypes.InvocationLease;
+    public type RepositoryAccessRequestV1 = RepositoryAccessTypes.Request;
+    public type RepositoryAccessResultV1 = RepositoryAccessTypes.AccessResult;
+    public type RepositoryAccessInputV1 = RepositoryAccessTypes.Input;
+    public type RepositoryAccessOutputV1 = RepositoryAccessTypes.Output;
 
     // Released assembler contract: add new capability initialization through
     // separate hooks instead of requiring predecessor-generated records to
@@ -1074,6 +1080,12 @@ module {
             },
             runtimeCapabilityRegistry,
             outgoingCycleAccounting,
+        );
+        let repositoryAccess = RepositoryAccessService.Service(
+            RepositoryAccessService.transport(),
+            func(principal) {
+                Set.contains(mem.core.authorized, Principal.compare, principal);
+            },
         );
         let httpsOutcallTransformActor : HttpsOutcallsTypes.TransformActor =
             actor (Principal.toText(canisterPrincipal));
@@ -3856,6 +3868,15 @@ module {
             SettingsService.snapshot();
         };
 
+        // Owner-only generic repository transport. Ordinary app capabilities
+        // cannot invoke it, and repository rules remain outside the Kernel.
+        public func /*update*/kernel_repository_access_v1(
+            input : RepositoryAccessInputV1,
+            /*caller*/ caller : Principal,
+        ) : async* RepositoryAccessOutputV1 {
+            await* repositoryAccess.access(input, caller);
+        };
+
         public func /*query*/kernel_certified_assets_scope_info(
             scope : CapabilityTypes.AppScope,
         ) : CertifiedAssetsTypes.ScopeInfoResult {
@@ -4551,6 +4572,9 @@ public type kernel_install_status_Output = ?InstallTypes.Status;
 
 public type kernel_settings_snapshot_Input = (());
 public type kernel_settings_snapshot_Output = SettingsTypes.Snapshot;
+
+public type kernel_repository_access_v1_Input = (input : RepositoryAccessInputV1);
+public type kernel_repository_access_v1_Output = RepositoryAccessOutputV1;
 
 public type kernel_certified_assets_scope_info_Input = (scope : CapabilityTypes.AppScope,);
 public type kernel_certified_assets_scope_info_Output = CertifiedAssetsTypes.ScopeInfoResult;

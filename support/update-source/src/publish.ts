@@ -8,7 +8,9 @@ import {
   readReleaseAsset,
   readSourceAsset,
   type CertifiedFetch,
+  updateSourceOrigin,
 } from "./http.ts";
+import { assertTransitionPackage, assertTransitionScope, verifyTransitionTarget, type SourceTransition } from "./source_transition.ts";
 import {
   MAX_PACKAGES_PER_PUBLICATION,
   PACKAGE_CONTENT_TYPE,
@@ -70,6 +72,7 @@ export type PublishOptions = {
   inspect?: PackageInspector;
   now?: () => Date;
   progress?: (message: string) => void;
+  transition?: SourceTransition;
 };
 
 type PlannedPackage = {
@@ -89,8 +92,16 @@ export async function publishPackageFiles(
     ...(options.readSource ? { readSource: options.readSource } : {}),
     ...(options.inspect ? { inspect: options.inspect } : {}),
   });
+  if (options.transition) {
+    assertTransitionScope(options.transition, options.canisterId, inspected.map(({ record }) => record.id));
+    if (new URL(options.origin).origin !== updateSourceOrigin({ canisterId: options.canisterId })) {
+      throw new Error("Source transitions require the old source's canonical certified origin");
+    }
+  }
   for (const candidate of inspected) {
-    assertHostedSourceTarget(candidate, options.origin);
+    const transition = options.transition?.packages.some(({ id }) => id === candidate.record.id);
+    assertHostedSourceTarget(candidate, transition ? updateSourceOrigin({ canisterId: options.transition!.toSource }) : options.origin);
+    if (transition) assertTransitionPackage(options.transition!, candidate);
   }
   const existingAssets = options.port.listAssets
     ? indexAssets(await options.port.listAssets())
@@ -108,6 +119,15 @@ export async function publishPackageFiles(
     throw new Error(
       `One publication may contain at most ${MAX_PACKAGES_PER_PUBLICATION} changed packages`,
     );
+  }
+  if (options.transition) {
+    const changedIds = new Set(changed.map(({ package: candidate }) => candidate.record.id));
+    const pending = options.transition.packages.filter(({ id }) => changedIds.has(id));
+    // Before any new old-source mutation, require the exact transition bytes to
+    // be public at the new source. An already-committed publication is instead
+    // reconciled from its own immutable assets; a later target release/revocation
+    // or outage must not hide the outcome of a lost commit reply.
+    if (pending.length > 0) await verifyTransitionTarget({ ...options.transition, packages: pending }, inspected, options);
   }
   let committedBatch: bigint | null = null;
   if (changed.length > 0) {

@@ -169,3 +169,43 @@ test("certified package imports use the normal directory fallback", async () => 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("nested package imports retain every path component and directory fallback", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "neutron-walk-nested-"));
+  try {
+    const core = path.join(dir, "core");
+    await mkdir(path.join(core, "pure", "Nested"), { recursive: true });
+    const filePath = path.join(dir, "main.mo");
+    await writeFile(filePath, [
+      'import List "mo:core/pure/List";',
+      'import Nested "mo:core/pure/Nested";',
+      'import Root "mo:core";',
+      "module { public let values = (List.value, Nested.value, Root.value) }",
+    ].join("\n"));
+    // A shorter path exists, so truncation would silently choose the wrong module.
+    await writeFile(path.join(core, "pure.mo"), "module { public let value = 99 }");
+    const rootSource = "module { public let value = 0 }";
+    const listSource = 'import Helper "./Helper"; module { public let value = Helper.value }';
+    const nestedSource = "module { public let value = 2 }";
+    await writeFile(path.join(core, "lib.mo"), rootSource);
+    await writeFile(path.join(core, "pure", "List.mo"), listSource);
+    await writeFile(path.join(core, "pure", "Helper.mo"), "module { public let value = 1 }");
+    await writeFile(path.join(core, "pure", "Nested", "lib.mo"), nestedSource);
+
+    const hashfiles: HashFiles = {};
+    const dependencies = await getDependencies(null, filePath, { core }, hashfiles);
+
+    expect(dependencies.mods.List?.map.to).toBe(hashContent(listSource));
+    expect(dependencies.mods.Nested?.map.to).toBe(hashContent(nestedSource));
+    expect(dependencies.mods.Root?.map.to).toBe(hashContent(rootSource));
+    expect(Object.values(hashfiles).map(({ path: sourcePath }) => sourcePath).sort()).toEqual([
+      filePath,
+      path.join(core, "lib.mo"),
+      path.join(core, "pure", "Helper.mo"),
+      path.join(core, "pure", "List.mo"),
+      path.join(core, "pure", "Nested", "lib.mo"),
+    ].sort());
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

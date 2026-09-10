@@ -270,7 +270,7 @@ export async function getDependencies(
     if (!importPath) continue;
     if (importPath.startsWith("mo:⛔") || importPath == "mo:prim") continue;
     if (importPath.startsWith("mo:")) {
-      const [packagePrefix, initialPackagePath] = importPath
+      const [packagePrefix, ...packagePathSegments] = importPath
         .slice(3)
         .split("/");
       if (!packagePrefix) {
@@ -284,8 +284,7 @@ export async function getDependencies(
           `${filePath} imports unsupported mo:base package directly; use mo:core`,
         );
       }
-      let packagePath = initialPackagePath;
-      if (!packagePath) packagePath = "lib";
+      const packagePath = packagePathSegments.join("/") || "lib";
       const packageRoot = packages[packagePrefix];
       if (!packageRoot) {
         throw new Error(

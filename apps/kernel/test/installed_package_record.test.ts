@@ -21,6 +21,10 @@ import {
   type InstalledPackageDownloadEnvironment,
 } from "../src/settings/installed_package_record.ts";
 import { registryApp } from "./app_registry_fixture.ts";
+import {
+  createRepositoryAccessFetcher,
+  RepositoryAccessError,
+} from "../src/repository_access/client.ts";
 
 const encode = (value: string): Uint8Array => new TextEncoder().encode(value);
 
@@ -373,6 +377,153 @@ test("HTTPS source verification fails closed on changed bytes and transport enco
       fetch: async () => redirected,
     }),
   ).rejects.toThrow("source offer redirected");
+});
+
+test("canonical repository source downloads still require the pinned source digest", async () => {
+  const content = encode("expected source archive bytes");
+  const digest = hashContent(content);
+  const source = {
+    kind: "https" as const,
+    revision: "release-1",
+    url: `https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/${digest}.source.v1.msgpack.gz`,
+    sha256: digest,
+    bytes: content.byteLength,
+  };
+  const calls: string[] = [];
+  const read = async (bytes: Uint8Array) => fetchAndVerifyHttpsSourceOffer(source, {
+    fetch: async (input, init) => {
+      calls.push(String(input));
+      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+      return new Response(bytes.slice().buffer);
+    },
+  });
+  expect(await read(content)).toEqual(content);
+  await expect(read(new Uint8Array(content.byteLength))).rejects.toThrow(
+    "SHA-256 does not match its package record",
+  );
+  expect(calls).toEqual([source.url, source.url]);
+});
+
+test("private offered-source acquisition still verifies immutable source bytes", async () => {
+  const content = encode("expected private source bytes");
+  let delivered = content;
+  const digest = hashContent(content);
+  const repository = {
+    canisterId: "233tv-xiaaa-aaaay-aacta-cai",
+    origin: "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io",
+  };
+  const path = `/repo/v1/sources/${digest}.source.v1.msgpack.gz`;
+  const source = {
+    kind: "https" as const,
+    revision: "release-1",
+    url: `${repository.origin}${path}`,
+    sha256: digest,
+    bytes: content.byteLength,
+  };
+  const publicHeaders = {
+    "ic-certificate": "certificate=:AA==:, tree=:AA==:, expr_path=:AA==:, version=2",
+    "ic-certificateexpression": "default_certification(ValidationArgs{certification:Certification{}})",
+  };
+  let token = "";
+  let authorizations = 0;
+  const access = createRepositoryAccessFetcher({
+    resolveSource: () => repository,
+    ownerKey: () => "neutron:owner:session",
+    randomBytes: (length) => new Uint8Array(length).fill(8),
+    authorize: async ({ request }) => {
+      authorizations += 1;
+      expect(request.paths).toEqual([path]);
+      token = request.token;
+      return {
+        result: { ok: { request_id: request.request_id, paths: [...request.paths], accepted_cycles: 100n } },
+        charged_cycles: [100n] as [bigint],
+      };
+    },
+    fetch: async (input, init) => {
+      if (String(input) === `${repository.origin}/repo/v1/access.json`) {
+        return Response.json({ protocol: "neutron-repo-access-v1", fee_version: "1", cycles: "100" }, { headers: publicHeaders });
+      }
+      expect(String(input)).toBe(source.url);
+      const authorization = new Headers(init?.headers).get("authorization");
+      if (!authorization) return new Response("access required", { status: 403, headers: publicHeaders });
+      expect(authorization).toBe(`Bearer ${token}`);
+      return new Response(delivered.slice().buffer, { headers: {
+        ...publicHeaders,
+        "ic-certificateexpression": 'default_certification(ValidationArgs{certification:Certification{request_certification:RequestCertification{certified_request_headers:["authorization"],certified_query_parameters:[]},response_certification:ResponseCertification{response_header_exclusions:ResponseHeaderList{headers:[]}}}})',
+        "cache-control": "private, no-store",
+        vary: "authorization",
+      } });
+    },
+  });
+  expect(await fetchAndVerifyHttpsSourceOffer(source, { fetch: access })).toEqual(content);
+  delivered = new Uint8Array(content.byteLength);
+  await expect(fetchAndVerifyHttpsSourceOffer(source, { fetch: access })).rejects.toThrow("SHA-256 does not match its package record");
+  expect(authorizations).toBe(1);
+});
+
+test("an external source offer denial does not request Neutron repository credentials", async () => {
+  const content = encode("private source bytes");
+  const source = {
+    kind: "https" as const,
+    revision: "release-1",
+    url: "https://source.example/repo/v1/sources/source.msgpack.gz",
+    sha256: hashContent(content),
+    bytes: content.byteLength,
+  };
+  const controller = new AbortController();
+  const calls: string[] = [];
+  await expect(fetchAndVerifyHttpsSourceOffer(source, {
+    signal: controller.signal,
+    fetch: async (input, init) => {
+      calls.push(String(input));
+      expect(init?.signal).toBe(controller.signal);
+      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+      expect(init?.credentials).toBe("omit");
+      expect(init?.redirect).toBe("error");
+      return new Response("private external source", { status: 403 });
+    },
+  })).rejects.toThrow("HTTP 403");
+  expect(calls).toEqual([source.url]);
+});
+
+test("canceling source acquisition preserves the cancellation and never creates a download", async () => {
+  const controller = new AbortController();
+  const aborted = new DOMException("Owner canceled the download", "AbortError");
+  const events: string[] = [];
+  await expect(downloadAndVerifyHttpsSourceOffer({
+    source: {
+      kind: "https",
+      revision: "release-1",
+      url: "https://source.example/source.msgpack.gz",
+      sha256: "a".repeat(64),
+      bytes: 1,
+    },
+    signal: controller.signal,
+    fetch: async (_input, init) => {
+      expect(init?.signal).toBe(controller.signal);
+      controller.abort(aborted);
+      throw aborted;
+    },
+    environment: {
+      createObjectUrl() { events.push("create"); return "blob:unexpected"; },
+      triggerDownload() { events.push("download"); },
+      revokeObjectUrl() { events.push("revoke"); },
+    },
+  })).rejects.toBe(aborted);
+  expect(events).toEqual([]);
+});
+
+test("source acquisition preserves safe repository access errors", async () => {
+  const denied = new RepositoryAccessError("not_owned", "This Neutron does not own this source offer.");
+  await expect(fetchAndVerifyHttpsSourceOffer({
+    kind: "https",
+    revision: "release-1",
+    url: "https://source.example/source.msgpack.gz",
+    sha256: "a".repeat(64),
+    bytes: 1,
+  }, {
+    fetch: async () => { throw denied; },
+  })).rejects.toBe(denied);
 });
 
 test("HTTPS source verification rejects unsafe URLs and oversized offers before fetching", async () => {

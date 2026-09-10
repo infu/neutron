@@ -2,15 +2,15 @@
 
 The protocol project lives in `support/marketplace/` and uses `icp` CLI for
 creation/installation/upgrades. It is a standalone canister, separately deployed
-from the Neutron UI package. This specification creates no runnable configuration
-and does not authorize a production deployment.
+from the Neutron UI package. The project provides runnable build and local test
+commands; a production installation still requires reviewed operator inputs.
 
 ## Build inputs and distribution
 
 Research inspected installed `icp 1.0.2` help and the matching official references.
-Reuse the repo's pinned Motoko compiler script and the Dispenser's `icp.yaml`
-script-build pattern, writing the artifact to `ICP_WASM_OUTPUT_PATH`. Do not
-switch to an arbitrary host compiler.
+The build uses the repo's pinned Motoko compiler script and the Dispenser's
+`icp.yaml` script-build pattern, writing the artifact to `ICP_WASM_OUTPUT_PATH`.
+Do not switch to an arbitrary host compiler.
 
 Compile the protocol with matching Candid and compatibility evidence. Pin private
 build inputs and dependency identities in the private release record, outside
@@ -27,21 +27,30 @@ published app packages.
 
 ## Operator command shapes
 
-The following forms were verified against `icp 1.0.2`; project/configuration files,
-operator identity, actual Wasm path, initial cycles and arguments are still to be
-created and reviewed. Commands are examples, not executed deployment steps.
+The following forms were verified against `icp 1.0.2`. The operator identity,
+initial cycles and initialization record must be supplied and reviewed. Commands
+are examples, not executed deployment steps. Complete the public
+[initialization template](../config/README.md) outside Git; its placeholders
+intentionally cannot encode a deployable configuration.
 
-Local development, from the future project directory:
+Local development, from `support/marketplace`:
 
 ```sh
-icp network start -d
+npm run deps:install
+npm run test
+npm run config:init -- --input /private/path/local-init.json --output /private/path/local-init.bin
+icp network start -e local -d
 icp project show
-icp build marketplace
-icp deploy marketplace --mode install --args-file config/local-init.candid
+npm run build
+icp canister create marketplace -e local
+icp canister install marketplace -e local --mode install --wasm build/marketplace.wasm --args-file /private/path/local-init.bin --args-format bin
 ```
 
 Install mode is for an empty newly created local canister. Migration tests use
 upgrade mode against retained fixtures, not production resets.
+`npm run build` emits `build/marketplace.wasm`, Candid and stable-type evidence.
+Alternatively, `icp build marketplace` writes the CLI artifact store; omit the
+`--wasm` argument when intentionally installing that CLI-managed build.
 
 Production uses explicit creation and installation of reviewed bytes. Substitute
 the agreed creation cycles and verified artifact path in the operator procedure:
@@ -49,18 +58,25 @@ the agreed creation cycles and verified artifact path in the operator procedure:
 ```sh
 icp canister create marketplace -e ic --identity marketplace-admin --cycles "$MARKETPLACE_INITIAL_CYCLES"
 icp canister status marketplace -e ic --identity marketplace-admin --json
-icp canister install marketplace -e ic --identity marketplace-admin --mode install --wasm build/marketplace.wasm --args-file config/ic-init.candid
+icp canister install marketplace -e ic --identity marketplace-admin --mode install --wasm build/marketplace.wasm --args-file /private/path/ic-init.bin --args-format bin
 ```
 
 Later state-preserving releases install the reviewed successor:
 
 ```sh
-icp canister install marketplace -e ic --identity marketplace-admin --mode upgrade --wasm build/marketplace.wasm
+icp canister install marketplace -e ic --identity marketplace-admin --mode upgrade --wasm-memory-persistence keep --wasm build/marketplace.wasm --args-file /private/path/ic-init.bin --args-format bin
 icp canister status marketplace -e ic --identity marketplace-admin --json
 ```
 
 Do not use reinstall or memory replacement as upgrade shortcuts. Verify the
 installed module hash and retained state against the exact reviewed artifact.
+The actor class still requires its typed argument on upgrade; retained state,
+including configuration changed through protocol methods, remains authoritative.
+For larger Wasm, `icp 1.0.2` automatically uploads chunks and calls
+`install_chunked_code`; a direct single-message `install_code` test transport
+instead needs compressed Wasm. The CLI also defaults EOP upgrades to memory
+preservation; the command above makes that choice explicit.
+([Verified CLI implementation](https://github.com/dfinity/icp-cli/blob/v1.0.2/crates/icp-cli/src/operations/install.rs))
 Keep identities/secrets outside version control. A snapshot is not a way to undo
 ledger effects: restoring old internal balances cannot reverse external payments.
 
@@ -108,7 +124,7 @@ events must not run twice. Use explicit forward migrations when state changes;
 never edit a released predecessor or substitute a clean install.
 
 No new protocol Wasm, package publication or financial smoke test was performed
-for this research.
+against production as part of local implementation validation.
 
 References:
 

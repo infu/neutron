@@ -1,8 +1,9 @@
 # Protocol acceptance tests
 
-This is a draft test plan. No marketplace protocol, fixture suite or test result
-is implemented by this document. Use Ash with PocketIC for disposable local
-tests; use the separate ICP CLI workflow for production installation.
+This acceptance plan distinguishes required coverage from the runnable suites
+below. A category is verified only by its corresponding passing test result.
+All fixtures run locally in disposable PocketIC instances; production installation
+uses the separate ICP CLI workflow.
 
 ## Harness and reproducibility
 
@@ -13,14 +14,16 @@ and runs suites concurrently. It currently discovers all eligible zero-argument
 returning methods, despite help text referring to `test_*` queries. Do not list
 the production actor or ledger fixtures as test suites.
 
-The proposed ordinary command is:
+Run from the repository root:
 
 ```sh
-ash test support/marketplace/test/protocol.ash.json --verbose
+npm --workspace neutron-marketplace-protocol run test:ash
+npm --workspace neutron-marketplace-protocol run test:integration
 ```
 
-The config and suites are future implementation work. Use `--set` only to record
-an intentional performance baseline after correctness passes. Generated local
+`scripts/test-ash.ts` loads `test/protocol.ash.json` and discovers the remaining
+`test/**/*.test.mo` suites. `scripts/test-integration.ts` runs the host cases.
+Either script accepts a suite/name filter as its first argument. Generated local
 IDs, build artifacts and runtime state are not production deployment evidence.
 
 Use domain fixtures for deterministic arithmetic and error coverage, then test
@@ -31,15 +34,26 @@ order. Async scenarios perform calls outside the synchronous `mo:test` metrics
 helper and return the runner's supported metric result.
 
 Ash has no existing CLI flags for upgrade scenarios, deferred message control
-or clock advancement. Add a thin host driver using the Ash PocketIC session for
-those controls and for HTTP certificate verification. Do not describe these as
-already-supported `ash test` flags or substitute reinstall for an upgrade.
+or clock advancement. The host driver uses Ash's PocketIC session for those
+controls and HTTP certificate verification. Upgrade cases invoke a real Wasm
+upgrade at the same canister principal, with no reinstall fallback.
 
-Before implementing the suite, pin and verify the actual Ash, PocketIC, Motoko,
-Candid-tool and official ledger fixture versions/hashes. The inspected local Ash
-checkout and older installed executable are not known to match; this is an open
-toolchain task. Record the compiled protocol Wasm hash with test results and
-verify the release build uses the tested compiler options.
+`test/toolchain.json` pins the Ash source commit, runner/session hashes, PocketIC
+server/client and Candid tool. The adapter reads that immutable Git snapshot from
+the adjacent Ash checkout, or `MARKETPLACE_ASH_SOURCE`, into a temporary directory;
+it does not run the older installed Ash executable or modify another checkout.
+Its compiler adapter uses the same repository-pinned Motoko compiler and package
+resolver as release builds. A pinned three-line transport patch fixes Ash's
+partial-response busy loop; the production-sized streaming case exercises it.
+Test installation uses gzip transport for the unchanged compiled module. The public actor test
+prints its Wasm SHA-256. Missing tools or mismatched hashes fail the run.
+
+Official-ledger host cases use the separately pinned provisioner ICRC ledger
+Wasm with six- and eight-decimal configurations. These tests establish generic
+ICRC-1/2 transfer behavior, not every legacy ICP implementation detail. The
+protocol does not use ledger-history or archive interfaces. Likewise, same-build upgrades prove
+retained-state restoration; they do not replace immutable prior-release fixtures
+and supported migration tests once a production version exists.
 
 ## Financial operations
 
@@ -67,14 +81,18 @@ Cover all actual ICRC result variants used by the supported ledgers, including
 also cover expected-allowance changes and expiration. Validate amounts using the
 vendored [ledger standards and advisories](references/README.md).
 
-For each external await, test rejection before an effect, committed effect with
-a lost response, delayed response, malformed reply, local finalization failure
-and late/out-of-order callbacks. A ledger trap before commit is not a substitute
-for a committed transfer whose reply was lost. Retrying uncertainty preserves the
-exact ledger attempt arguments and its reservation. A later `TooOld` or `BadFee`
-must not erase an earlier unknown effect. Verified `Duplicate` completes the
-matching attempt once. Exact ledger/archive evidence, not a matching balance or
-index candidate alone, resolves exceptional historical outcomes.
+Test delayed guaranteed-response calls and a browser disconnect while the
+canister is still processing: the original call must complete and its saved
+status must be recoverable without a second dispatch. Separately inject a local
+finalization trap after a successful ledger response; assert its block is already
+durable and continuation completes accounting without another ledger call.
+
+Scripted commit-then-reject behavior is an exceptional faulty-ledger fixture,
+not a model of ordinary guaranteed response delivery. It tests conservative
+handling of rejects, distinct from typed ICRC no-effect errors. Preserve its
+exact arguments/reservations; `Duplicate` settles once, while a later `TooOld`
+cannot prove nonexecution and requires review. There are no ledger-history
+adapters or caller-provided receipt blocks in the production API.
 
 Assert conservation separately for every token: available credits, reservations,
 confirmed payouts, burn allocation and charged ledger fees. Do not mix USD price

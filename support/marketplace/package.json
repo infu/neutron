@@ -1,0 +1,42 @@
+{
+  "name": "neutron-marketplace-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Neutron marketplace and authenticated package-source protocol",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "deps:install": "mops install",
+    "config:init": "bun scripts/build-init.ts",
+    "build": "bun scripts/build.ts",
+    "build:wasm": "bun scripts/build.ts",
+    "test": "npm run test:unit && bun scripts/test-ash.ts && bun scripts/test-integration.ts",
+    "test:config": "bun test ./scripts/build-init.test.ts",
+    "test:ash": "bun scripts/test-ash.ts",
+    "test:integration": "bun scripts/test-integration.ts",
+    "icp:build": "icp build marketplace",
+    "local:start": "icp network start -e local -d",
+    "local:create": "icp canister create marketplace -e local",
+    "local:install": "icp canister install marketplace -e local --mode install --wasm build/marketplace.wasm",
+    "local:upgrade": "icp canister install marketplace -e local --mode upgrade --wasm-memory-persistence keep --wasm build/marketplace.wasm",
+    "icp:install": "icp canister install marketplace --mode install --wasm build/marketplace.wasm",
+    "icp:upgrade": "icp canister install marketplace --mode upgrade --wasm-memory-persistence keep --wasm build/marketplace.wasm",
+    "icp:status": "icp canister status marketplace --json",
+    "test:unit": "bun test ./scripts/build-init.test.ts ./test/storage-inputs.test.ts ./scripts/operator.test.ts ./scripts/publisher.test.ts ./scripts/migration-inventory.test.ts",
+    "operator": "bun scripts/operator.ts",
+    "publish:prepare": "bun scripts/publisher.ts",
+    "migration:plan": "bun scripts/migration-inventory.ts"
+  },
+  "dependencies": {
+    "neutron-scripts": "^1.1.0"
+  },
+  "devDependencies": {
+    "@dfinity/candid": "3.4.3",
+    "@dfinity/identity": "3.4.3",
+    "@dfinity/pic": "0.16.1",
+    "@dfinity/principal": "3.4.3",
+    "ajv": "8.17.1",
+    "chalk": "5.4.1",
+    "@dfinity/response-verification": "3.2.0"
+  }
+}

@@ -570,6 +570,9 @@ function withCurrentStoreDispatcher<T>(run: () => T): T {
     useRef<TValue>(initial: TValue) {
       return { current: initial };
     },
+    useState<TValue>(initial: TValue | (() => TValue)) {
+      return [typeof initial === "function" ? (initial as () => TValue)() : initial, () => undefined];
+    },
     useSyncExternalStore<TValue>(_subscribe: unknown, getSnapshot: () => TValue) {
       return getSnapshot();
     },

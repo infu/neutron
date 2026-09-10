@@ -36,6 +36,10 @@ import {
 import { CapabilityChangeSummary } from "../consent/CapabilityChangeSummary.tsx";
 import type { KernelUiMode } from "../ui_mode.ts";
 import { DeploymentBuildReview } from "../install_review/DeploymentBuildReview.tsx";
+import {
+  RepositoryAccessCost,
+  useRepositoryAccessApprovals,
+} from "../repository_access/RepositoryAccessCost.tsx";
 
 export function AppUpdatesCoordinator({
   fallbackFocusRef,
@@ -164,6 +168,15 @@ export function AppUpdatesBulkAction({
   const preparing = state.phase === "preparing";
   const reviewing = state.phase === "review";
   const applying = state.phase === "applying";
+  const access = useRepositoryAccessApprovals(
+    state.results.flatMap((result) =>
+      result.kind === "available" &&
+      (actionAppIds.length === 0 || actionAppIds.includes(result.appId))
+        ? [result.source]
+        : [],
+    ),
+    `${state.checkedAt ?? ""}:${state.error ?? ""}`,
+  );
 
   if (preparing) {
     return (
@@ -215,17 +228,23 @@ export function AppUpdatesBulkAction({
           className="btn"
           data-tid="settings-update-selected"
           disabled={
-            disabled || !resultsUsable || selectedAvailableCount === 0
+            disabled ||
+            !resultsUsable ||
+            selectedAvailableCount === 0 ||
+            access.loading
           }
           onClick={(event) => {
             returnFocusRef.current = event.currentTarget;
-            void prepareAppUpdates(actionAppIds);
+            void prepareAppUpdates(actionAppIds, {
+              approvedAccess: access.approvals,
+            });
           }}
           ref={returnFocusRef}
           type="button"
         >
           Update selected ({selectedAvailableCount})
         </button>
+        <RepositoryAccessCost {...access} onRetry={access.refresh} />
       </div>
     );
   }
@@ -238,16 +257,17 @@ export function AppUpdatesBulkAction({
         aria-label={`Upgrade all ${availableCount} available apps`}
         className="btn"
         data-tid="settings-upgrade-all"
-        disabled={disabled}
+        disabled={disabled || access.loading}
         onClick={(event) => {
           returnFocusRef.current = event.currentTarget;
-          void prepareAllAvailableUpdates();
+          void prepareAllAvailableUpdates({ approvedAccess: access.approvals });
         }}
         ref={returnFocusRef}
         type="button"
       >
         Upgrade all ({availableCount})
       </button>
+      <RepositoryAccessCost {...access} onRetry={access.refresh} />
     </div>
   );
 }
@@ -268,6 +288,10 @@ export function AppUpdateCell({
   const state = useUpdateCheckStore();
   const result = state.results.find((candidate) => candidate.appId === appId);
   const selected = state.selectedAppIds.includes(appId);
+  const access = useRepositoryAccessApprovals(
+    result?.kind === "available" ? [result.source] : [],
+    `${state.checkedAt ?? ""}:${state.error ?? ""}`,
+  );
 
   if (selected && state.phase === "preparing") {
     return <UpdateBusy label="Preparing" />;
@@ -303,32 +327,36 @@ export function AppUpdateCell({
       return <span className="is-current">Up to date</span>;
     case "available":
       return (
-        <button
-          aria-label={`Update ${appName} to ${formatAppVersionLabel(result.release.version)}`}
-          className="btn settings-app-update-action"
-          data-tid={`settings-update-${appId}`}
-          disabled={
-            disabled ||
-            state.phase === "checking" ||
-            state.phase === "preparing" ||
-            state.phase === "review" ||
-            state.phase === "applying" ||
-            state.errorStage === "apply"
-          }
-          onClick={(event) => {
-            returnFocusRef.current = event.currentTarget;
-            void prepareAppUpdate(appId);
-          }}
-          ref={
-            selected && state.selectedAppIds.length === 1
-              ? returnFocusRef
-              : undefined
-          }
-          title={`Update ${appName} to ${formatAppVersionLabel(result.release.version)}`}
-          type="button"
-        >
-          Update
-        </button>
+        <div className="settings-app-update-with-access">
+          <button
+            aria-label={`Update ${appName} to ${formatAppVersionLabel(result.release.version)}`}
+            className="btn settings-app-update-action"
+            data-tid={`settings-update-${appId}`}
+            disabled={
+              disabled ||
+              state.phase === "checking" ||
+              state.phase === "preparing" ||
+              state.phase === "review" ||
+              state.phase === "applying" ||
+              state.errorStage === "apply" ||
+              access.loading
+            }
+            onClick={(event) => {
+              returnFocusRef.current = event.currentTarget;
+              void prepareAppUpdate(appId, { approvedAccess: access.approvals });
+            }}
+            ref={
+              selected && state.selectedAppIds.length === 1
+                ? returnFocusRef
+                : undefined
+            }
+            title={`Update ${appName} to ${formatAppVersionLabel(result.release.version)}`}
+            type="button"
+          >
+            Update
+          </button>
+          <RepositoryAccessCost {...access} onRetry={access.refresh} />
+        </div>
       );
     case "not_published":
       return (

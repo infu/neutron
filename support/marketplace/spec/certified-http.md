@@ -26,8 +26,8 @@ changing a source grant uses an update through the Neutron with native cycles
 attached. Generic Kernel acquisition uses the same caller-funded
 `repo_access_v1` boundary independently of the marketplace app. The source
 authenticates the actual Neutron caller and checks its own entitlements/roles;
-Kernel treats the returned credential as opaque. A query may return an existing
-authorized grant or its status without changing it.
+Kernel generates an opaque bearer and the source retains its hash. Queries can
+inspect authorized grant status without creating a grant or recovering its secret.
 
 Send the credential in an HTTP authorization header to the exact selected source
 origin. Canonical package/source URLs stay credential-free. Do not put grants
@@ -43,9 +43,62 @@ setup manifest. Settings and offered-source download use the same authenticated
 HTTP reader. Existing compile/review/install journals stay unchanged. Private
 downloads must continue working after the marketplace app is uninstalled.
 
-## Certification and streaming experiment
+## Generic acquisition contract
 
-Prototype request-bound HTTP certification v2 with the selected authorization
+The source publishes a certified, read-only `/repo/v1/access.json` descriptor:
+
+```json
+{"protocol":"neutron-repo-access-v1","fee_version":"1","cycles":"1000000"}
+```
+
+The cycle amount above is illustrative. Both numeric fields use canonical
+unsigned decimal strings. Existing Install, Upgrade, and source-download actions
+show the actual descriptor's cost, source principal, and Neutron principal before
+the user acts. The access request requires that exact shown fee revision and
+amount; changed costs require another review through the existing action.
+Background checks only read metadata. A certified descriptor absence keeps
+legacy public downloads working, and a failed cost lookup never authorizes a
+paid request.
+
+The source method is:
+
+```candid
+repo_access_v1 : (record {
+  request_id : text;
+  token : text;
+  paths : vec text;
+  fee_version : nat;
+}) -> (variant {
+  ok : record { request_id : text; paths : vec text; accepted_cycles : nat };
+  err : record { code : text; message : text };
+});
+```
+
+Kernel generates a 32-character lowercase hexadecimal request ID and a
+64-character lowercase hexadecimal bearer. Paths are exact canonical package
+or offered-source paths; one grant can cover a selected bundle. Source
+idempotency binds the actual Neutron caller, request ID, token hash, and paths.
+Retrying an interrupted reply retains the original request. `accepted_cycles`
+describes the current invocation, so an idempotent lookup that refunds the new
+attachment returns zero.
+
+The owner-only `kernel_repository_access_v1` broker forwards this fixed method
+with native cycles. Its wrapper returns `result` and `charged_cycles : opt nat`:
+an observed charge on a successful typed reply, or unknown after a rejected
+native call whose refund is unavailable. It does not turn that unknown into
+either a zero charge or the entire attachment. No persistent Kernel memory root
+or marketplace policy is added.
+
+For setup bundles, public certified Candid metadata remains unchanged. Public
+legacy `repo_package` bytes also remain supported. Only a verified absence from
+that legacy certified asset subtree selects the canonical HTTP package path;
+an interrupted or invalid Candid proof does not. HTTP/access failure never
+switches back to a public byte channel. The private HTTP certification tree and
+the legacy public asset subtree serve different roles.
+
+## Certification and streaming
+
+Use request-bound HTTP certification v2 with the selected authorization
 header, canonical path, response status, relevant headers and full body digest.
 Measure certificate-tree growth, grant issuance/renewal and practical bundle
 latency before selecting the representation. Do not assume a grant-by-entire-
@@ -72,8 +125,11 @@ the buyer's entitlement and authorized publisher/auditor review access; approved
 replacement versions remain available to existing owners without repurchase.
 
 Use the actual HTTP specification and verifier as the acceptance boundary rather
-than assuming storage implies certification. The exact Motoko certification
-implementation remains development work, not a completed prototype.
+than assuming storage implies certification. Local compiled-canister tests use
+the official response verifier against actual certificates, including private
+multi-chunk responses, request authorization binding, tampered responses, HEAD,
+denials, CORS, continuation scope, revocation, and state-preserving upgrades.
+These tests are not a claim of production mainnet verification.
 
 ## Compatibility and verification
 

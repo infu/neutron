@@ -35,7 +35,7 @@ const legacyNsalAppWorkspaces = [
   "apps/wallet",
 ];
 
-const nsalAppWorkspaces: string[] = [];
+const nsalAppWorkspaces: string[] = ["apps/marketplace"];
 const nsalUseAppWorkspaces = ["apps/blast", "apps/evm_wallet", "apps/uniswap", "apps/curve", "apps/aave", "apps/hyperliquid", "apps/icpswap", "apps/nuance", "apps/snsgov", "apps/taggr"];
 
 // OpenChat preserves its deliberately permissive Apache-2.0 license.
@@ -68,6 +68,7 @@ const expectedLicenses = new Map<string, string>([
   ["support/extension", "SEE LICENSE IN LICENSE"],
   ["support/repository", "Apache-2.0"],
   ["support/update-source", "Apache-2.0"],
+  ["support/marketplace", "SEE LICENSE IN LICENSE"],
 ]);
 
 const nplPackages = [

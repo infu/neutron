@@ -1,0 +1,113 @@
+{
+  "format": 3,
+  "id": "marketplace",
+  "name": "Marketplace",
+  "version": 100,
+  "description": "Discover, acquire, install and publish Neutron applications.",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "tiles": [
+    {
+      "id": "main",
+      "title": "Marketplace",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Discover apps for your Neutron"
+    }
+  ],
+  "background": {
+    "path": "service.html",
+    "description": "Marketplace queries, purchases, publishing and install tools"
+  },
+  "capabilities": {
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    },
+    "frontend_tools": {
+      "api": 1,
+      "targets": [
+        {
+          "app": "wallet",
+          "tools": [
+            "wallet_token_info_v1",
+            "wallet_fund_v1",
+            "wallet_add_ledger_v1"
+          ]
+        }
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Attach the marketplace's fixed cycle charge to protocol updates as this Neutron. Reads and downloads go directly from the browser.",
+      "reservation_scopes": [
+        "exact"
+      ],
+      "max_concurrency": 1,
+      "max_cycles_per_call": 1000000000000,
+      "max_cycles_per_day": 10000000000000
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "marketplace_state",
+        "marketplace_initialize",
+        "marketplace_draft",
+        "marketplace_drafts",
+        "marketplace_save_draft",
+        "marketplace_revise_draft"
+      ]
+    }
+  },
+  "func": {
+    "marketplace_state": {
+      "type": "query",
+      "async": false
+    },
+    "marketplace_initialize": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_configure": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_draft": {
+      "type": "query",
+      "async": false
+    },
+    "marketplace_drafts": {
+      "type": "query",
+      "async": false
+    },
+    "marketplace_save_draft": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_revise_draft": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_call": {
+      "type": "update",
+      "async": "async*"
+    }
+  },
+  "memory": {
+    "state": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/state/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

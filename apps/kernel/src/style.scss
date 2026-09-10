@@ -4275,6 +4275,40 @@ button:focus-visible,
     }
 }
 
+.repository-access-cost {
+    color: var(--k-text-faint);
+    display: grid;
+    font-size: 10px;
+    gap: 4px;
+    line-height: 1.45;
+    margin-top: 5px;
+    min-width: 0;
+    text-align: left;
+
+    code {
+        font-size: inherit;
+        overflow-wrap: anywhere;
+    }
+
+    strong {
+        color: var(--k-text);
+    }
+
+    .btn {
+        justify-self: start;
+    }
+}
+
+.settings-app-updates-toolbar > .repository-access-cost {
+    flex-basis: 100%;
+}
+
+.settings-app-update-with-access {
+    display: grid;
+    gap: 4px;
+    justify-items: end;
+}
+
 .settings-app-updates-feedback {
     margin-bottom: 9px;
 

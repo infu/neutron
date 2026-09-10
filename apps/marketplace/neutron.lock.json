@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "marketplace",
+  "memory": {
+    "state": {
+      "schemas": {
+        "1": {
+          "hash": "a836b686252699bac742db06b99144d6bd5d4ddea08f6653aa142e9de10a5b9c",
+          "entry": "13eed1d37736f93cd6931637052266d6c7c132eb024f9f76a394c13dd1a41863"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}

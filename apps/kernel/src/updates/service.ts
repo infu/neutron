@@ -6,7 +6,7 @@ import {
   type PreparedPackageInstall,
 } from "neutron-compiler/src/install.js";
 import type { CompleteDeploymentBuildRecord } from "neutron-compiler/src/deployment_record.js";
-import { REPOSITORY_LIMITS } from "neutron-tools/repository";
+import { REPOSITORY_LIMITS, repositoryPackagePath } from "neutron-tools/repository";
 import { compareCanonicalText } from "neutron-tools/src/canonical.js";
 import { diffCapabilityPlans } from "neutron-tools/src/capabilities/wire.js";
 import { normalizeManifestUpdateSource } from "neutron-tools/src/schema.js";
@@ -311,7 +311,13 @@ export async function prepareSelectedUpdates(
         const bytes = await fetchUpdatePackage(
           candidate.source,
           currentRelease.record,
-          { ...clientOptions, signal: abort.signal },
+          {
+            ...clientOptions,
+            signal: abort.signal,
+            resourcePaths: candidates
+              .filter((selected) => selected.source === candidate.source)
+              .map((selected) => repositoryPackagePath(selected.release.sha256)),
+          },
         );
         return Object.freeze({ candidate, currentRelease, bytes });
       },

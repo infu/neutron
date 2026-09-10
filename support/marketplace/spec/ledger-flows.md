@@ -13,7 +13,7 @@ Each owns execution and continuation of its saved operation. Ordinary preparatio
 is a read-only quote. Retry means calling the same function with the same ID and
 business intent. There are no separate public execute/continue/retry methods for
 the same financial action.
-Read-only quote, status, history and evidence methods remain available.
+Read-only quote, status and operation history expose the saved write receipts.
 
 For mutations, `Access` uses the actual Neutron caller, with native cycles
 attached through the existing Neutron broker. Registered browser read principals
@@ -129,12 +129,12 @@ fresh-review requirement through the same public function.
 | Definite no-effect `BadFee` | Refresh fee; require review/approval if needed before a successor attempt |
 | `CreatedInFuture` | Respect the returned ledger time; do not churn creation timestamps while an outcome is uncertain |
 | `TemporarilyUnavailable` or understood no-effect error | Return the typed error and allow exact continuation |
-| Transport exception, lost/malformed reply or unknown call outcome | Preserve arguments and reservations; expose `outcome_unknown` |
+| Exceptional reject, malformed ledger reply or protocol callback failure before a receipt is retained | Preserve arguments and reservations; expose `outcome_unknown` |
 | `TooOld`, `BadFee` or another error after an earlier unknown attempt | Do not treat it as proof the earlier transfer failed; reconcile that attempt |
 
 Separate a temporary active driver from durable financial reservations. A second
-call while that driver is running can return current progress. A caught transport
-failure or an upgrade must leave an accessible continuation, not a permanent
+call while that driver is running can return current progress. An exceptional rejected call
+or an upgrade must leave an accessible continuation, not a permanent
 “busy” marker. Driver recovery never releases funds just because time passed.
 Ledger outcomes and finalization markers are merged monotonically under the
 saved attempt identity.
@@ -143,31 +143,40 @@ The protocol's three supported ledgers need compatibility tests for actual
 error/dedup behavior. The advisory documents explain stronger expectations and
 edge cases; do not assume undocumented guarantees for an arbitrary ledger.
 
-## Ledger evidence and ordinary-path simplicity
+## Guaranteed responses and retained receipts
 
-`Ledger.mo` contains small typed ICRC-1/2 calls and result normalization.
-`LedgerEvidence.mo` handles exceptional reconciliation. Ordinary successful
-purchases do not scan history or run an extra receipt search after `Ok`.
+`Ledger.mo` uses ordinary unbounded-wait Motoko calls to the configured ledgers:
+ICRC-2 `transferFrom` for purchases and ICRC-1 `transfer` for payouts. These calls
+have the IC's guaranteed-response semantics. A disconnected browser does not
+cancel the call or erase the marketplace's response. Reopening the app reads the
+saved operation; it does not search a ledger or create another payment.
 
-ICRC-1 does not define history retrieval. Use supported ICRC-3 ledger/archive
-interfaces where available; ICP can require its native `query_blocks` adapter.
-An index discovers candidates. Exact ledger evidence must match the saved
-operation's accounts, amount, fee, memo and available timestamp/spender fields.
-Missing fields cannot be invented. Balance changes or nearby transfers alone do
-not prove this operation settled. Browser-read evidence requires the appropriate
-certificate/hash verification; replicated ledger calls are a separate trusted
-canister-call path.
+Store the ledger's `Ok(block)` or `Duplicate(block)` response before entering a
+separate finalization message. If entitlement/accounting finalization traps, the
+returned block survives. Continuing the same ID completes local finalization
+without another ledger transfer. An active call returns its progress and is not
+redispatched by a concurrent continuation.
 
-Deduplication windows are ledger-defined. After an uncertain attempt becomes too
-old to replay, retain its identity and inspect exact historical evidence. Do not
-change its timestamp and call that a retry. The UI must distinguish actionable
-known rejection, active processing and unresolved historical outcome.
+The protocol has no ICRC-3, native ledger-history or archive lookup adapters, and
+accepts no caller-supplied block as payment proof. Transaction receipts come from
+the ledger's original typed write response. This keeps purchase and withdrawal
+recovery within the original call and durable journal.
+
+A guaranteed response can also be a reject. Exceptional ledger/protocol errors
+must not be confused with typed ICRC no-effect results. Preserve the original
+attempt after an ambiguous reject; exact deduplicated continuation cannot change
+its timestamp, memo or amount. If such an exceptional attempt exceeds the
+ledger's retry window, stop with `review_required` instead of inventing success,
+releasing reserved funds or attempting a replacement payment.
+
+See [guaranteed-response calls](https://docs.internetcomputer.org/guides/canister-calls/inter-canister-calls/)
+and [callback transaction boundaries](https://docs.internetcomputer.org/guides/security/inter-canister-calls/).
 
 ## Acceptance tests
 
-Cover all typed errors, duplicate replies, callback traps, response loss,
-out-of-order callbacks, upgrade around every await, expired deduplication and
-archived blocks. Exercise identical/conflicting IDs, overlapping baskets,
+Cover typed errors, duplicate replies, delayed guaranteed responses, browser
+disconnection, callback/finalization traps, rejected calls, upgrade recovery and
+expired deduplication. Do not model ordinary IC response delivery as best effort. Exercise identical/conflicting IDs, overlapping baskets,
 abandoned preparation, ownership acquired by another order, competing withdrawals
 and forwarding concurrent with user payouts. Assert exact liabilities, one grant
 and ranking event per app acquisition, one credit allocation per payment, and no

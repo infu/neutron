@@ -1599,15 +1599,23 @@ defineKernelTool(
       offer,
       requester,
       assertCurrent,
-      onApprove() {
+      onApprove(approval) {
         if (offer.kind === "package_url") {
           void install_app(
-            { kind: "url", url: offer.url },
+            {
+              kind: "url",
+              url: offer.url,
+              ...(approval.approvedAccess ? { approvedAccess: approval.approvedAccess } : {}),
+            },
             { installOnly: true, offer: review },
           ).catch(() => undefined);
           return;
         }
-        startRepositorySetupFromOffer(offer.reference, requester);
+        startRepositorySetupFromOffer(
+          offer.reference,
+          requester,
+          approval.approvedAccess,
+        );
       },
     });
     await handle.completion;

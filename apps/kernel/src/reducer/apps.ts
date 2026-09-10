@@ -1,3 +1,4 @@
+import type { RepositoryAccessApproval } from "../repository_access/client.ts";
 import { create } from "zustand";
 import { get_app_details } from "../tools/app.ts";
 import { pickFile, readFile } from "../tools/file_picker.ts";
@@ -131,6 +132,7 @@ export type AppInstallSource =
   | { readonly kind: "file" }
   | {
       readonly kind: "url";
+      readonly approvedAccess?: readonly RepositoryAccessApproval[];
       readonly signal?: AbortSignal;
       readonly url: string;
     };
@@ -2586,6 +2588,7 @@ async function installAppInternal(
       ? new Uint8Array(await readFile(await pickFile()))
       : await fetchPackageFromUrl(source.url, {
           ...(source.signal ? { signal: source.signal } : {}),
+          ...(source.approvedAccess ? { approvedAccess: source.approvedAccess } : {}),
         });
   const { neutronConfig, preparedPackage } = await get_app_details(
     neutron,

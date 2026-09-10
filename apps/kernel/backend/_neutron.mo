@@ -76,7 +76,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     };
 
 
-    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 350; capability_plan_fingerprint = "0bf29644477dc305f75e04f2247b79a7eb66595a15705fd083c5b41b7b64dec2"; resident_frame_security = #credentialless_opaque_v1 }];
+    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 351; capability_plan_fingerprint = "98c073a39db8c84fe7dc9e7f7fca0e1c228aef2a52b3bdb03c973f2f879967bf"; resident_frame_security = #credentialless_opaque_v1 }];
 
 
 
@@ -169,6 +169,12 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     public query({ caller = NeutronCaller }) func kernel_settings_snapshot(NeutronRequest: NeutronModule_a6_kernel.kernel_settings_snapshot_Input) : async NeutronModule_a6_kernel.kernel_settings_snapshot_Output {
         assert(NeutronKernel.is_authorized(NeutronCaller));
          NeutronKernel.kernel_settings_snapshot(NeutronRequest )
+    };
+
+
+    public shared({ caller = NeutronCaller }) func kernel_repository_access_v1(NeutronRequest: NeutronModule_a6_kernel.kernel_repository_access_v1_Input) : async NeutronModule_a6_kernel.kernel_repository_access_v1_Output {
+        assert(NeutronKernel.is_authorized(NeutronCaller));
+        await* NeutronKernel.kernel_repository_access_v1(NeutronRequest ,NeutronCaller)
     };
 
 

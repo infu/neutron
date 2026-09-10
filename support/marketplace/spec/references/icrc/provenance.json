@@ -36,18 +36,6 @@
       "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-2/ICRC-2.did"
     },
     {
-      "path": "standards/ICRC-3/README.md",
-      "bytes": 17956,
-      "sha256": "860227790b7b1ab5644df677fd7edab4df62c7f6c94c655bd3e17909c1fa815d",
-      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-3/README.md"
-    },
-    {
-      "path": "standards/ICRC-3/ICRC-3.did",
-      "bytes": 1474,
-      "sha256": "3eeb7377000569cf9f3dd26e5e81d25af664f0e3d2aae92cfa295afd4c9163e5",
-      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-3/ICRC-3.did"
-    },
-    {
       "path": "standards/ICRC-1/ADVISORY.md",
       "bytes": 1989,
       "sha256": "7da9f48a2baaf27a8a8dca4970817930b64e585270c6e2692595ae1910edb075",
@@ -64,12 +52,6 @@
       "bytes": 6070,
       "sha256": "d7812fe532da92da9c95a7dd516d5cc5fb409b3df26b24aab94dd7404cb7666a",
       "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-2/ADVISORY.md"
-    },
-    {
-      "path": "standards/ICRC-3/HASHINGVALUES.md",
-      "bytes": 2963,
-      "sha256": "c4a76f9416d75a5cbf7802fdea62660ccd5dc40aadee1290ba16a0e001318c14",
-      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-3/HASHINGVALUES.md"
     }
   ]
 }

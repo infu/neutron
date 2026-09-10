@@ -90,7 +90,6 @@ mo/Accounting.mo           # synchronous credits, splits and reservations
 mo/Billing.mo              # fixed cycle estimates, upload coverage and charge receipts
 mo/Withdrawals.mo          # one public withdrawal and internal forwarding
 mo/Ledger.mo               # one typed ICRC call/error adapter
-mo/LedgerEvidence.mo       # exceptional ledger/archive recovery
 mo/Pricing.mo              # USD/rate arithmetic, daily XRC snapshots
 mo/Rankings.mo             # acquisition counters and rolling expiry
 mo/Referrals.mo            # codes and frozen referral attribution
