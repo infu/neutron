@@ -34,9 +34,8 @@ const record = (value: SelfCallValue, label: string): SelfCallObject => {
 };
 
 /**
- * Candid `opt` arrives as a one-or-zero element array from the self-call wire,
- * and a bare value when the encoder has already unwrapped it. Accept both
- * rather than guessing one.
+ * The Kernel unwraps present Candid options and omits absent record fields.
+ * Retain support for raw Candid arrays from older adapters as well.
  */
 const optional = (value: SelfCallValue): SelfCallValue => {
   if (Array.isArray(value)) {
@@ -51,8 +50,8 @@ const optionalText = (value: SelfCallValue): string | null => {
   return typeof inner === "string" && inner.length > 0 ? inner : null;
 };
 
-const optionalBytes = (value: SelfCallValue): Uint8Array | null => {
-  if (value === null || (Array.isArray(value) && value.length === 0)) return null;
+const optionalBytes = (value: SelfCallValue | undefined): Uint8Array | null => {
+  if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) return null;
   // Accept both the typed self-call blob and a plain byte vector; never turn
   // an undecodable present key into an empty store that hydration overwrites.
   const inner = Array.isArray(value) && value.length === 1 ? value[0] : value;
@@ -67,7 +66,17 @@ const optionalBytes = (value: SelfCallValue): Uint8Array | null => {
 
 const parseState = (value: SelfCallValue): StoredState => {
   const state = record(value, "identity record");
-  const secretKey = optionalBytes(state.secret_key as SelfCallValue);
+  // An omitted optional key means empty only in a valid StoredStateV1. A
+  // malformed reply must never be mistaken for permission to create an account.
+  const integer = (field: SelfCallValue | undefined): boolean =>
+    (typeof field === "string" && /^-?\d+$/.test(field)) ||
+    (typeof field === "number" && Number.isInteger(field));
+  const revision = integer(state.revision) ? Number(state.revision) : NaN;
+  if (!integer(state.created_at) || !integer(state.updated_at) ||
+      !Number.isSafeInteger(revision) || revision < 0) {
+    throw new IdentityStoreError("The Taggr backend returned an unexpected identity record");
+  }
+  const secretKey = optionalBytes(state.secret_key);
   if (secretKey !== null && secretKey.length !== SECRET_KEY_BYTES) {
     throw new IdentityStoreError("The stored Taggr key has an unexpected length");
   }
@@ -75,11 +84,11 @@ const parseState = (value: SelfCallValue): StoredState => {
     secretKey,
     canister: optionalText(state.canister_id as SelfCallValue),
     domain: optionalText(state.domain as SelfCallValue),
-    revision: typeof state.revision === "number" ? state.revision : 0,
+    revision,
   };
 };
 
-/** `#ok`/`#err` arrives as a one-key object; an `#err` is the backend's own text. */
+/** API 1 unwraps success and rejects errors. Also accept older raw Results. */
 const unwrap = (value: SelfCallValue, label: string): SelfCallValue => {
   const result = record(value, label);
   if ("err" in result) {
@@ -88,7 +97,7 @@ const unwrap = (value: SelfCallValue, label: string): SelfCallValue => {
     );
   }
   if ("ok" in result) return result.ok as SelfCallValue;
-  throw new IdentityStoreError(`The Taggr backend returned an unexpected ${label}`);
+  return result;
 };
 
 export const readStored = async (): Promise<StoredState> =>
@@ -133,8 +142,8 @@ export const writeStoredSettings = async (input: {
   parseState(
     unwrap(
       await updateSelf<SelfCallValue>("taggr_settings_write", [
-        // Candid `opt` on the self-call wire is a zero-or-one element array.
-        { canister_id: input.canister, domain: input.domain === null ? [] : [input.domain] },
+        // API 1 takes the option's direct value or null, not raw Candid arrays.
+        { canister_id: input.canister, domain: input.domain },
       ]),
       "settings write",
     ),

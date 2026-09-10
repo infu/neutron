@@ -64,12 +64,13 @@ beforeAll(async () => {
       handlers.set(name, handler);
     },
     callTool: async (): Promise<JsonValue> => { throw new Error("Ambient authority must not fund registration"); },
-    querySelf: async () => ({ secret_key: [new Uint8Array(32).fill(7)], canister_id: [], domain: [], revision: 1 }),
-    updateSelf: async (_method: string, args: unknown[]) => ({ ok: {
-      secret_key: [new Uint8Array(32).fill(7)],
-      canister_id: [(args[0] as { canister_id?: string }).canister_id].filter(Boolean),
-      domain: (args[0] as { domain?: unknown[] }).domain ?? [], revision: 2,
-    } }),
+    querySelf: async () => ({ secret_key: new Uint8Array(32).fill(7), revision: "1", created_at: "1", updated_at: "1" }),
+    updateSelf: async (_method: string, args: unknown[]) => ({
+      secret_key: new Uint8Array(32).fill(7),
+      canister_id: (args[0] as { canister_id?: string }).canister_id,
+      domain: (args[0] as { domain?: string | null }).domain ?? null,
+      revision: "2", created_at: "1", updated_at: "2",
+    }),
     publishAppStateChange: async () => undefined,
   }));
 

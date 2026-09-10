@@ -29,6 +29,7 @@ import {
   type TaggrSettings,
 } from "./identity.ts";
 import {
+  IdentityStoreError,
   initializeStoredIdentity,
   readStored,
   writeStoredIdentity,
@@ -88,7 +89,11 @@ export const hydrateIdentity = async (
     const local = peekIdentity();
     sync = {
       stored: false,
-      error: local
+      error: error instanceof IdentityStoreError
+        ? `Taggr could not read the saved account from this Neutron. ${local
+            ? "It is using the copy in this browser."
+            : "The saved account data has not been changed."} ${message(error)}`
+        : local
         ? `This Neutron could not be reached, so Taggr is using the copy in this browser: ${message(error)}`
         : `This Neutron could not be reached and this browser has no saved Taggr identity. Reconnect to restore the existing account: ${message(error)}`,
     };
