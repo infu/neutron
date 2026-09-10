@@ -3,10 +3,13 @@
 Status: research and planning only. No marketplace implementation, package release,
 deployment, or production financial action is part of this PR.
 
+Detailed specifications and pinned ledger references are in
+[support/marketplace](support/marketplace/README.md).
+
 ## Agreed direction
 
-- One standalone canister combines the marketplace and package source. It uses
-  Ashroot for metadata and StableBlob for packages, offered source, and images.
+- One standalone canister combines the marketplace and package source, with
+  persistent catalog records, packages, offered source, and images.
 - A Neutron app provides browsing, purchases/free claims, My Apps, publishers,
   ratings, affiliate codes, and earnings withdrawals. CLI clients handle audits.
 - The **Neutron canister principal** is the purchase account ID. Ownership lives
@@ -14,8 +17,17 @@ deployment, or production financial action is part of this PR.
 - Paid package downloads are restricted to buyers. Publisher/auditor access is
   granted by their protocol roles. A public principal string is an account
   identifier; download authorization must come from that Neutron's authority.
-- Prices are USD; accepted payment tokens are ICP, ckBTC, and ckUSDC. The
-  marketplace fetches XRC rates daily and collects payments with `transferFrom`.
+- List prices are free or USD $1–$50 inclusive; discounts apply afterward.
+  Accepted payment tokens are ICP, ckBTC, and ckUSDC. The marketplace fetches XRC
+  rates daily and collects payments with `transferFrom`.
+- Top free and Top paid rank distinct Neutrons acquiring each app over rolling
+  7 days, 30 days, and all time. Retries, downloads and reinstalls do not count.
+- Packages and offered source use certified HTTP. Public and authenticated
+  reads go directly from the browser. Every non-auditor update goes through
+  Neutron with native cycles attached; authenticated audit updates are exempt.
+- Admin functions assign auditor principals. Auditors inspect unaudited packages
+  and stamp exact candidates approved/rejected. Rejection includes a reason
+  visible to the developer. Authenticated audit update endpoints are cycle-exempt.
 - With an affiliate code, the default discount is 10%. Affiliate and developer
   each receive 30% of the **actual amount paid**; the remainder is allocated to
   burning NTN. Without a code, developer receives 30% and burning receives 70%.
@@ -32,6 +44,12 @@ deployment, or production financial action is part of this PR.
   belong in the Kernel.
 - Migrate sources through higher app versions declaring the new canister in
   `update_source`. No Kernel-wide source rewrite or marketplace update resolver.
+- Keep one database and separate domain modules. The standalone protocol project
+  lives in `support/marketplace/` and uses `icp` CLI for installation/upgrades.
+- The protocol is all rights reserved. The separate Neutron app uses standard
+  NSAL 1.1 through `LICENSE.APP`. Proprietary database configuration stays out of
+  Git, and documentation describes the protocol rather than database internals.
+- Use the existing Ash test system with PocketIC for protocol acceptance tests.
 
 ## Verified integration boundaries
 
@@ -60,44 +78,49 @@ assume compatible stable memory. See [production source](support/update-source/R
 | Component | Responsibility |
 |---|---|
 | Marketplace/source canister | Catalog, app ownership, audits, artifacts, purchases, entitlements, rates, earnings, withdrawals, daily forwarding |
-| Neutron marketplace frontend | Browser-direct discovery/images/public reads and authorized bulk uploads/downloads; compact UI and agent tools |
-| Small marketplace app backend | Marketplace calls requiring the Neutron's actual principal, including checkout and private account actions |
+| Neutron marketplace frontend | Direct public/signed private queries and certified HTTP; compact UI/tools |
+| Small marketplace app backend | Browser read authorization/recovery and all non-auditor updates as the Neutron with cycles attached |
 | IC Wallet | Existing reviewed or root-authorized allowance funding and token information |
 | Kernel | Generic source-access calls as the Neutron, acquisition credentials, byte/certificate verification, existing install/update review and checked deployment |
 | Publisher/auditor CLI | Upload and release submission; exact-package analysis and assigned auditor verdicts |
 
 Do not proxy catalog browsing, images, package bytes, or every quote through the
-user's Neutron backend. Daily XRC calls and ledger collection belong in the
-standalone protocol. A browser access credential is recoverable from the Neutron;
-it is not a second identity owning purchases.
+user's Neutron backend. Bind a browser signing principal to the Neutron once;
+subsequent private queries resolve that identity to the durable Neutron account.
+Daily XRC calls and ledger collection belong in the standalone protocol. Lost
+browser credentials are reauthorized through the Neutron, without losing purchases.
+
+The existing Neutron broker attaches cycles on every non-auditor update,
+including purchases, publishing, uploads, ratings and read-grant registration.
+Public and authenticated read-only HTTP/queries remain browser-direct. No new
+Kernel cycles mechanism is required; browser read keys do not authorize writes.
 
 ## Work plan
 
-### 1. Protocol contracts and Ashroot storage
+### 1. Protocol contracts and persistent records
 
 - [ ] Define versioned typed interfaces and error/receipt schemas for public
   catalog, private library, publication, audits, purchases, and payouts.
-- [ ] Define generated tables for app/publisher ownership, listing and price
+- [ ] Isolate domains in focused Motoko modules over one database, with
+  `main.mo` limited to actor/caller wiring. Share ledger, accounting and billing
+  code across purchase, withdrawal and scheduled work.
+- [ ] Define records for app/publisher ownership, listing and price
   revisions, artifacts/releases, audit history, orders/items, entitlements,
   affiliate codes, ratings, token allocations, withdrawals, and daily jobs.
+- [ ] Add immutable acquisition events, per-app free/paid 7d/30d/all-time counts,
+  full ordered ranking indexes, two expiry cursors and coherent chart snapshots.
+  Keep all ranking candidates so a falling or delisted leader exposes the next app.
 - [ ] Keep global short app IDs and import existing publisher ownership before
   allowing registrations. A publisher may only publish its own app versions.
-- [ ] Use one retained Ashroot memory root and cached transient database handle.
-  An artifact row owns its StableBlob once; releases and images reference that
-  row. Implement resumable upload sessions and chunked reads.
+- [ ] Retain immutable artifact identities and resumable upload sessions across
+  upgrades. Releases and images reference their exact stored artifacts.
 - [ ] Compute and verify exact hashes/lengths before attaching artifacts. Reuse
   existing archive inspection and source-offer tooling rather than inventing a
   different package format.
-- [ ] Archive deployed schemas/runtime/Wasm; preserve IDs, indexes, Blob ownership,
-  entitlements and in-flight journals across explicit upgrades.
-
-Research inspected Ashroot commit
-`4f38466b3cef32c41e157383b2001921a531b771` in the adjacent Ashroot checkout. A small
-schema prototype validated and generated; no complete protocol was compiled or
-deployed. Ashroot supplies storage, not caller authorization, certification, or
-cross-canister transactions. Its batch writes can preserve a successful prefix
-on a returned error: accounting finalization needs deliberate same-message
-atomicity and recovery around ledger awaits.
+- [ ] Retain private build inputs outside Git and record release evidence;
+  preserve artifacts, entitlements and in-flight journals across explicit upgrades.
+- [ ] Test atomic accounting finalization and recovery across ledger awaits.
+  A returned ledger result must not leave partially granted ownership or splits.
 
 ### 2. Audited source and generic authenticated acquisition
 
@@ -105,8 +128,14 @@ atomicity and recovery around ledger awaits.
   the closed legacy schemas; add marketplace/audit data through separate APIs.
 - [ ] Implement compatible certified repository setup queries and HTTP response
   certification, including file streaming and missing-resource responses.
+- [ ] Use certified HTTP for package/source bytes in single installs, grouped
+  installs and Settings. Keep Candid setup metadata compatible without exposing
+  private package bytes through legacy anonymous chunk methods.
 - [ ] Bind approvals to exact package/source hashes, app/version, auditor
   principal, report, scope, and timestamp. New bytes require new review.
+- [ ] Add admin-authorized auditor assignment, private unaudited-package queries,
+  exact-candidate approval/rejection stamps and developer-visible rejection
+  reasons. Charge no cycles for the authenticated audit update endpoints.
 - [ ] Keep pending/rejected uploads out of the public catalog. Preserve the last
   approved release while a newer version awaits review. No approved package
   means no public marketplace listing.
@@ -127,8 +156,8 @@ atomicity and recovery around ledger awaits.
   available through an anonymous fallback endpoint.
 - [ ] Prototype credential delivery, retention/renewal, HTTP certification and
   cache isolation before fixing the wire format. Keep secrets out of displayed
-  URLs, agent results and provenance. Evaluate direct certified chunk transport
-  if it avoids expensive per-grant HTTP certification state.
+  URLs, agent results and provenance. Measure grant-scoped HTTP certification
+  cost without constructing a grant-by-entire-catalog cross product.
 - [ ] Preserve public repository compatibility. Legacy free transition packages
   remain available to old clients; existing public source offers stay public.
   Never publish future private successors or their source artifacts into those
@@ -144,6 +173,11 @@ References: [repository codec](packages/neutron-tools/src/repository.ts),
 
 ### 3. Checkout, accounting, and recovery
 
+- [ ] Use query previews/status wherever possible. Expose one public `purchase`
+  and one public `withdraw` mutation; repeat the same operation/intent to resume,
+  instead of separate execution/continuation endpoints.
+- [ ] Enforce list-price bounds in the protocol: zero or $1–$50 inclusive.
+  A valid $1 listing with 10% referral discount can cost $0.90 before fees.
 - [ ] Fetch ICP/USD, BTC/USD and USDC/USD from XRC daily in the marketplace
   canister. Use BTC/USDC as the explicit ck-token references. Store scaled
   integers, observation timestamps, and refresh diagnostics; do not hardcode
@@ -168,6 +202,9 @@ References: [repository codec](packages/neutron-tools/src/repository.ts),
 - [ ] Configure the three owner-supplied forwarding accounts by ledger. Retain
   allocations until the corresponding destination is configured, and record
   each forwarding transfer's exact ledger receipt.
+- [ ] Require native attached cycles on every non-auditor update through the
+  existing Neutron broker. Keep cycle charges separate from sale-token
+  liabilities; expose the versioned fee schedule and budgets through queries.
 
 Confirmed example, before ledger fees:
 
@@ -202,6 +239,9 @@ References: [Wallet adapter](apps/wallet/src/funding.ts),
 - [ ] Build Explore, My Apps, Publish and Earnings views with the existing shared
   app header. Use a single-column layout at narrow tile widths and a grid when
   space allows. Avoid large empty headers and media in agent payloads.
+- [ ] Explore shows Top free/Top paid with 7-day/30-day/all-time filters. Count
+  each first acquisition once and publish snapshots with a coherent `asOf` while
+  rolling-window maintenance catches up; ordinary reads do not scan purchase history.
 - [ ] Show screenshots, description, publisher, price, ratings and exact audit
   details in app pages. Checkout shows token fees and developer/affiliate
   principals alongside the Burning NTN allocation.
@@ -217,18 +257,25 @@ References: [Wallet adapter](apps/wallet/src/funding.ts),
 - [ ] Earnings exposes affiliate codes, per-token available/reserved balances,
   withdrawal previews and exact receipts. Eligible owners can rate apps.
 - [ ] Expose typed compact tools for discovery, audit details, library, purchase
-  preview/execute/continue/status/reconcile, free claim, install offer, referrals,
-  earnings and withdrawals.
+  preview/purchase/status/evidence, free claim through purchase, install offer,
+  referrals, earnings and withdrawal preview/withdraw/status. Mutating retries use
+  the same function and saved ID.
 - [ ] Normal agents use reviewed Wallet funding. Root agents use the existing
   direct root Wallet tool and continue the same order; nested tools do not
   impersonate root. Install approval keeps the existing Kernel behavior.
 
-Likely paths: `support/marketplace/` for the standalone protocol and CLI,
-`apps/marketplace/` for the client. Use the shared `LICENSE.APP.USE` packaging
-workflow for the new app unless the author explicitly chooses another license.
+Paths: `support/marketplace/` for the standalone protocol and CLI,
+`apps/marketplace/` for the client. The protocol is [all rights reserved](support/marketplace/LICENSE).
+The user selected standard [NSAL 1.1](LICENSE.APP) for the Neutron app; use the
+shared application-notice and offered-source packaging workflow without copying
+or altering the license. Third-party reference material retains its own license.
 
 ### 5. Release and source transition
 
+- [ ] Create the standalone `icp.yaml` script-build project with pinned build
+  inputs. Use explicit install for a new empty canister and upgrade for retained
+  state. Keep private schema configuration outside Git and preserve private
+  release evidence alongside the exact Wasm selected for icp deployment.
 - [ ] Deploy/test the new source compatibility interfaces and authenticated
   acquisition extension. Import app ownership and release history/references;
   old historical artifacts can remain at their existing immutable URLs.
@@ -261,10 +308,13 @@ configuration and documentation; this planning PR changes neither.
 
 ### 6. Required validation before production
 
+- [ ] Implement the [Ash/PocketIC acceptance suite](support/marketplace/spec/testing.md),
+  pin the tested toolchain and distinguish domain tests from real ledger,
+  certificate and upgrade scenarios.
 - [ ] Old/public and new/private repository compatibility; exact certificates,
   hashes, source offers, missing assets, streaming and private cache isolation.
 - [ ] Clean initialization and supported upgrade paths with representative
-  entitlements, balances, journals, Blob references and interrupted uploads.
+  entitlements, balances, journals, stored artifacts and interrupted uploads.
 - [ ] Local ledger tests interrupt every await: success with lost reply,
   duplicates, fee/allowance changes, expired deduplication, concurrent continuation,
   and payment success followed by failed local finalization.
@@ -277,18 +327,22 @@ configuration and documentation; this planning PR changes neither.
   handling, multi-app install, source migration and restart recovery.
 - [ ] Narrow/wide tile UI, visible progress, compact tool schemas and media-free
   tool results. No live funds tests are authorized by this planning task.
+- [ ] Exact rolling-window expiry, new purchases during maintenance, tier changes
+  and delisting backfill. Query reads stay usable without a cycle charge;
+  authenticated auditor exemptions cannot exempt unrelated mutations.
 
 ## Remaining product decisions
 
 | Decision | What needs agreement |
 |---|---|
 | Forwarding destinations | Existing conversion/burn service confirmed; owner will supply separate ICP, ckBTC and ckUSDC receiving accounts later |
-| Operating budget | Transfer-fee allocation is confirmed above. How are cycles, storage and audits funded when all remaining sale proceeds are allocated to burn? |
+| Cycle tariff and operating reserve | Each non-auditor update attaches cycles through Neutron. Set fees, call budgets and funding of shared storage/jobs/exempt audits. |
 | Referral configuration | Global or publisher-selected X/Y; universal or per-app code; per-checkout or remembered; self-referral behavior |
-| Roles and audit policy | Initial administrators/auditors; open or approved publisher registration; approval count; revoked-release access for existing owners |
+| Roles and audit policy | Admin assignment and rejection reasons are confirmed. Initial admins/auditors, publisher admission and revoked-release access remain to configure. |
 | Purchase terms | Future updates included; refunds and paid-major/free-to-paid changes; remedy after a paid release is revoked |
 | Ratings | Paid purchasers only or free claimants too; proposed one editable rating per entitlement/app |
 | Price failure | Validity of yesterday's rate after refresh failure and checkout behavior; do not silently invent a cutoff |
 
-Research notes and the exploratory Ashroot schema remain in `/tmp`; this file is
-the reviewable implementation plan. Unchecked items describe future work.
+Detailed specs and selected upstream ledger references live in
+`support/marketplace/spec/`. Scratch research remains outside the repository.
+Unchecked items describe future work.
