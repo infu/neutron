@@ -13,6 +13,11 @@ both the endpoint and auditor authority. An auditor buying an app, changing a
 publisher listing or calling an unrelated update does not receive a blanket
 exemption. Admin role-management updates follow the ordinary charged-update rule.
 
+Any Neutron can submit apps. Its developer pays fixed estimated cycle charges
+for upload and modification through that Neutron, including one year of app
+storage/processing on upload. Submission does not require a separate publisher
+admission decision; app-ID ownership and package validity still apply.
+
 ## Review workflow
 
 1. A publisher submits an immutable package candidate and its offered source.
@@ -23,14 +28,21 @@ exemption. Admin role-management updates follow the ordinary charged-update rule
    rejected. Rejection requires a nonempty reason.
 4. Developers can query their candidate's status, report and rejection reason,
    correct it and submit a new candidate for review.
-5. An approved eligible candidate can become the published release. An app with
-   no approved release stays outside the marketplace catalog and rankings.
+5. One assigned auditor's approval makes the exact candidate eligible for
+   publication. An app with no approved release stays outside the marketplace
+   catalog and rankings.
 
 Candidate identity and published release identity are separate. Corrections
 produce a new candidate/hash without overwriting the rejected candidate or stamp.
 Once a version is published, its bytes are immutable and changed bytes require a
 higher app release version. A later candidate awaiting review does not displace
 the previous approved release.
+
+Revocation blocks ordinary downloads of the affected package, including reads
+using previously issued grants, while retaining its audit history and authorized
+review access. Buyers keep their entitlement and can download an approved
+replacement. The initial protocol does not issue automatic refunds or remotely
+remove an installed app. Revocation is not an uninstall or a silent downgrade.
 
 Suggested public surface, names to finalize with Candid:
 
@@ -68,5 +80,7 @@ Unassigned principal cannot inspect private queue artifacts or stamp; publisher
 cannot approve its own package without assigned auditor authority; missing
 rejection reason fails; duplicate stamp does not duplicate history; changed bytes
 invalidate the old stamp's applicability; developer can read/fix its rejected
-candidate; approved release remains available during later review; and the cycle
-exemption does not apply to unrelated updates.
+candidate; one assigned approval is sufficient; an arbitrary Neutron can submit
+after paying its fixed estimated upload cost; approved release remains available
+during later review; revocation blocks existing ordinary download grants without
+deleting purchases; and the cycle exemption does not apply to unrelated updates.

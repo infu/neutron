@@ -87,7 +87,7 @@ mo/Access.mo               # Neutron identity, browser read delegates and resour
 mo/Purchases.mo            # one public purchase operation and its continuation
 mo/Entitlements.mo         # durable library and acquisition claims
 mo/Accounting.mo           # synchronous credits, splits and reservations
-mo/Billing.mo              # attached-cycle acceptance and update charges, separate from tokens
+mo/Billing.mo              # fixed cycle estimates, upload coverage and charge receipts
 mo/Withdrawals.mo          # one public withdrawal and internal forwarding
 mo/Ledger.mo               # one typed ICRC call/error adapter
 mo/LedgerEvidence.mo       # exceptional ledger/archive recovery
@@ -123,11 +123,21 @@ The standalone protocol is proprietary, with all rights reserved. Its future
 Neutron client uses the repository's standard `LICENSE.APP` packaging workflow;
 the client's license does not license the standalone protocol.
 
-## Still requiring policy decisions
+## Confirmed product rules and remaining setup
 
-Referral configuration, any further auditor policy, refunds/revocations,
-free-to-paid rights, rating eligibility, stale-price behavior and operating-cost
-funding details remain open. Admin assignment of auditor principals and required
-rejection reasons are confirmed in [audits](audits.md). The three forwarding
-addresses will be supplied later.
+Acquisitions include future approved updates despite price changes; revocation
+blocks ordinary downloads but preserves the entitlement for approved replacements.
+There are no automatic refunds initially. Free and paid owners can leave one
+editable rating per Neutron/app. Each Neutron has one universal referral code,
+entered per checkout with global terms; self-referrals are rejected.
+
+Any Neutron can submit a package. One assigned auditor approval suffices, with
+required rejection reasons as described in [audits](audits.md). Failed daily
+price refresh uses the last valid rate with freshness diagnostics.
+
+Fixed estimated cycle charges fund updates and uploads; uploading prepays one
+year of storage and processing. The initial coefficients and admin/auditor
+principals still need configuration, and the three forwarding accounts will be
+supplied later. After the prepaid first year, the operator funds storage.
+Developers do not need to renew, and packages and buyer ownership remain available.
 No new Kernel policy limits are part of this design.

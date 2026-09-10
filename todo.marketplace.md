@@ -19,7 +19,12 @@ Detailed specifications and pinned ledger references are in
   identifier; download authorization must come from that Neutron's authority.
 - List prices are free or USD $1–$50 inclusive; discounts apply afterward.
   Accepted payment tokens are ICP, ckBTC, and ckUSDC. The marketplace fetches XRC
-  rates daily and collects payments with `transferFrom`.
+  rates daily and collects payments with `transferFrom`. If refresh fails, keep
+  using the last successful rate and expose its age and refresh error.
+- Acquisitions include all future approved updates, including after price
+  changes. The initial protocol has no automatic refunds. Revocation blocks
+  ordinary downloads of that package while preserving ownership and access to
+  an approved replacement.
 - Top free and Top paid rank distinct Neutrons acquiring each app over rolling
   7 days, 30 days, and all time. Retries, downloads and reinstalls do not count.
 - Packages and offered source use certified HTTP. Public and authenticated
@@ -27,10 +32,17 @@ Detailed specifications and pinned ledger references are in
   Neutron with native cycles attached; authenticated audit updates are exempt.
 - Admin functions assign auditor principals. Auditors inspect unaudited packages
   and stamp exact candidates approved/rejected. Rejection includes a reason
-  visible to the developer. Authenticated audit update endpoints are cycle-exempt.
+  visible to the developer. Any Neutron may submit apps; one assigned auditor's
+  approval makes a candidate eligible. Authenticated audit update endpoints are
+  cycle-exempt.
 - With an affiliate code, the default discount is 10%. Affiliate and developer
   each receive 30% of the **actual amount paid**; the remainder is allocated to
   burning NTN. Without a code, developer receives 30% and burning receives 70%.
+- Each Neutron can have one universal affiliate code, entered per checkout.
+  The discount and shares are global. Self-referrals are rejected by comparing
+  the authenticated buyer Neutron with the code's owner.
+- Free claimants and paying buyers can each leave one editable rating per app,
+  attached to their Neutron-owned entitlement.
 - An existing external service converts the proceeds and burns NTN. The
   marketplace forwards each token's daily allocation to its own destination:
   one for ICP, one for ckBTC, and one for ckUSDC. The owner will supply these
@@ -38,6 +50,13 @@ Detailed specifications and pinned ledger references are in
 - Buyers pay approval and collection fees on top of the app price. Developers
   and affiliates pay their own withdrawal fees, and each token's burn allocation
   covers its forwarding fee.
+- Protocol cycle charges use fixed rough cost estimates, without automatic fee
+  adjustment. Uploads prepay one year of app storage and processing; developers
+  also pay estimated processing costs for modifications through their Neutron.
+  Charges depend on the stored bytes/work using fixed coefficients, and apply
+  before expensive work. They are separate from token ledger fees. After year
+  one, the operator funds storage; there is no developer renewal requirement or
+  expiration of packages or buyer ownership.
 - The Kernel remains marketplace-neutral. Reuse its installation, permission
   review, and Settings update workflows. Add only generic acquisition support
   where authenticated downloads require it; no commerce or entitlement checks
@@ -106,7 +125,8 @@ Kernel cycles mechanism is required; browser read keys do not authorize writes.
   code across purchase, withdrawal and scheduled work.
 - [ ] Define records for app/publisher ownership, listing and price
   revisions, artifacts/releases, audit history, orders/items, entitlements,
-  affiliate codes, ratings, token allocations, withdrawals, and daily jobs.
+  affiliate codes, ratings, token allocations, withdrawals, daily jobs and
+  per-upload cycle-charge/one-year coverage records.
 - [ ] Add immutable acquisition events, per-app free/paid 7d/30d/all-time counts,
   full ordered ranking indexes, two expiry cursors and coherent chart snapshots.
   Keep all ranking candidates so a falling or delisted leader exposes the next app.
@@ -135,13 +155,16 @@ Kernel cycles mechanism is required; browser read keys do not authorize writes.
   principal, report, scope, and timestamp. New bytes require new review.
 - [ ] Add admin-authorized auditor assignment, private unaudited-package queries,
   exact-candidate approval/rejection stamps and developer-visible rejection
-  reasons. Charge no cycles for the authenticated audit update endpoints.
+  reasons. Accept submissions from any Neutron; one assigned auditor approval
+  suffices. Charge no cycles for the authenticated audit update endpoints.
 - [ ] Keep pending/rejected uploads out of the public catalog. Preserve the last
   approved release while a newer version awaits review. No approved package
   means no public marketplace listing.
 - [ ] Publish the approved release pointer and certified metadata together.
-  Record revocation as history; repair installed bad releases with a reviewed
-  higher version, not a silent downgrade or uninstall.
+  Record revocation as history and block ordinary downloads of revoked bytes,
+  including with existing source grants. Preserve buyer ownership and access to
+  approved successors; repair installed bad releases with a reviewed higher
+  version, not a silent downgrade or uninstall.
 - [ ] Establish a generic repository access method, for example `repo_access_v1`,
   called through an owner-authorized Neutron backend broker for the exact source
   being installed/updated. The source authenticates the actual Neutron caller
@@ -181,9 +204,14 @@ References: [repository codec](packages/neutron-tools/src/repository.ts),
 - [ ] Fetch ICP/USD, BTC/USD and USDC/USD from XRC daily in the marketplace
   canister. Use BTC/USDC as the explicit ck-token references. Store scaled
   integers, observation timestamps, and refresh diagnostics; do not hardcode
-  ckUSDC at one dollar.
+  ckUSDC at one dollar. A failed refresh retains the last valid rate for purchases
+  without an age-based stop; expose its age/error. Before the first valid rate
+  exists, report that pricing is unavailable rather than inventing a price.
 - [ ] Store USD prices and token amounts as integers. Freeze the rate, fees,
   beneficiaries, terms, referral and split in each checkout.
+- [ ] Enforce the one-code-per-Neutron, global per-checkout referral rules and
+  reject the buyer's own code before funding/collection. No sticky attribution
+  or publisher-specific discount overrides are part of this design.
 - [ ] Use one payment token per basket and one collection transfer. Bind an
   order-specific spender subaccount to the immutable checkout.
 - [ ] Reuse Wallet funding tools and declare their dependencies. Wallet already
@@ -194,7 +222,9 @@ References: [repository codec](packages/neutron-tools/src/repository.ts),
   Retain original timestamp/memo/arguments and duplicate evidence. If ledger
   deduplication expires, obtain exact ledger evidence; do not infer nonexecution.
 - [ ] Free claims use no ledger transfer. Already-owned apps are not charged
-  again. Approval success is never described as purchase completion.
+  again, including after later price changes. Both free and paid acquisitions
+  include approved future updates. Approval success is never described as
+  purchase completion; revocation preserves ownership. No automatic refunds.
 - [ ] Reserve earnings before withdrawal and only burn allocations before daily
   forwarding. Preserve unknown results and reconcile the original transfers.
 - [ ] Persist daily jobs, re-register timers after upgrade, and carry forward
@@ -204,7 +234,11 @@ References: [repository codec](packages/neutron-tools/src/repository.ts),
   each forwarding transfer's exact ledger receipt.
 - [ ] Require native attached cycles on every non-auditor update through the
   existing Neutron broker. Keep cycle charges separate from sale-token
-  liabilities; expose the versioned fee schedule and budgets through queries.
+  liabilities; expose fixed estimated charges and budgets through queries.
+- [ ] Estimate initial fixed processing/storage coefficients, with uploads
+  covering one year of storage and processing and modifications paying for their
+  work. Require payment before expensive processing/retention, preserve upload
+  charge receipts across retries, and do not add automatic tariff recalibration.
 
 Confirmed example, before ledger fees:
 
@@ -225,7 +259,8 @@ The existing external service handles conversion and NTN burning; implementing
 that service is outside this project. The marketplace records allocation and
 daily forwarding to the three supplied destinations. Its transfer receipt proves
 delivery to that service, not the service's subsequent burn. Destination addresses
-are pending owner input; the operating-cost budget remains an open decision.
+are pending owner input. Fixed cost coefficients still need initial measurement.
+The operator funds storage after the prepaid first year.
 
 References: [Wallet adapter](apps/wallet/src/funding.ts),
 [existing consumer](apps/icpswap/src/funding.ts),
@@ -253,9 +288,11 @@ References: [Wallet adapter](apps/wallet/src/funding.ts),
 - [ ] Prepare install selections before the final click. An install offer being
   presented is not success; reconcile the installed registry afterward.
 - [ ] Publisher UI supports listing content, screenshots, price, package/source
-  uploads and review status. Auditor operations remain CLI-only.
+  uploads and review status. Show fixed estimated cycle charges and prepaid
+  storage coverage before upload/modify. Auditor operations remain CLI-only.
 - [ ] Earnings exposes affiliate codes, per-token available/reserved balances,
-  withdrawal previews and exact receipts. Eligible owners can rate apps.
+  withdrawal previews and exact receipts. Free and paid owners have one editable
+  rating per Neutron/app.
 - [ ] Expose typed compact tools for discovery, audit details, library, purchase
   preview/purchase/status/evidence, free claim through purchase, install offer,
   referrals, earnings and withdrawal preview/withdraw/status. Mutating retries use
@@ -321,8 +358,10 @@ configuration and documentation; this planning PR changes neither.
 - [ ] Per-token liabilities/allocations and integer rounding; withdrawal
   reservations; daily jobs interrupted across upgrades; no duplicate debits.
 - [ ] Audit change during checkout, revoked release behavior, and already-owned
-  acquisition according to agreed terms. Paid orders cannot silently lose both
-  entitlement and payment when a listing changes.
+  acquisition according to agreed terms. Preserve entitlements after price
+  changes or revocation. Test one editable rating for free/paid owners, global
+  per-checkout referrals and self-referral rejection. Paid orders cannot silently
+  lose both entitlement and payment when a listing changes.
 - [ ] Normal/root Wallet integration, install review dismissal, dependency
   handling, multi-app install, source migration and restart recovery.
 - [ ] Narrow/wide tile UI, visible progress, compact tool schemas and media-free
@@ -330,18 +369,19 @@ configuration and documentation; this planning PR changes neither.
 - [ ] Exact rolling-window expiry, new purchases during maintenance, tier changes
   and delisting backfill. Query reads stay usable without a cycle charge;
   authenticated auditor exemptions cannot exempt unrelated mutations.
+- [ ] Failed rate refresh continues with the retained rate and explicit freshness
+  diagnostics; fixed cycle estimates do not change with observed usage. Upload
+  retries do not pay the one-year storage allocation twice.
+- [ ] Crossing the first-year coverage boundary retains packages and entitlements
+  under operator-funded storage, without charging the developer for renewal.
 
-## Remaining product decisions
+## Remaining configuration
 
-| Decision | What needs agreement |
+| Configuration | What remains |
 |---|---|
 | Forwarding destinations | Existing conversion/burn service confirmed; owner will supply separate ICP, ckBTC and ckUSDC receiving accounts later |
-| Cycle tariff and operating reserve | Each non-auditor update attaches cycles through Neutron. Set fees, call budgets and funding of shared storage/jobs/exempt audits. |
-| Referral configuration | Global or publisher-selected X/Y; universal or per-app code; per-checkout or remembered; self-referral behavior |
-| Roles and audit policy | Admin assignment and rejection reasons are confirmed. Initial admins/auditors, publisher admission and revoked-release access remain to configure. |
-| Purchase terms | Future updates included; refunds and paid-major/free-to-paid changes; remedy after a paid release is revoked |
-| Ratings | Paid purchasers only or free claimants too; proposed one editable rating per entitlement/app |
-| Price failure | Validity of yesterday's rate after refresh failure and checkout behavior; do not silently invent a cutoff |
+| Fixed cycle coefficients | Measure and choose initial rough processing/storage costs and call budgets. No automatic fee updates; uploads cover one year. |
+| Initial roles | Supply initial admin/auditor principals. Any Neutron may submit, with one assigned auditor approval required. |
 
 Detailed specs and selected upstream ledger references live in
 `support/marketplace/spec/`. Scratch research remains outside the repository.

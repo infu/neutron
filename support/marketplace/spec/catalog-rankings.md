@@ -7,6 +7,19 @@ range `[1_000_000, 50_000_000]`. Validate this in the publisher domain, not just
 The agreed referral discount applies afterward: a $1 listing can cost $0.90.
 Preserve listing revisions and exact checkout terms; do not truncate amounts.
 
+One universal affiliate code belongs to each participating Neutron. The buyer
+enters it for a checkout; attribution is not automatically carried into later
+purchases. Discount/share defaults are global (10% discount, 30% affiliate and
+30% developer of the actual paid amount). The protocol rejects a code owned by
+the authenticated buyer Neutron. It does not infer common human ownership across
+different Neutrons.
+
+Both free claims and paid purchases grant future approved updates, including
+after a price change. Revoking a release blocks its ordinary downloads while
+preserving ownership of the app and access to approved replacements. The initial
+protocol has no automatic refunds. Free and paid owners may leave one editable
+rating per `(Neutron, appId)`; editing a rating does not add another acquisition.
+
 Show **Top free** and **Top paid**, each over **7 days**, **30 days**, and
 **All time**. Count distinct Neutrons acquiring each app, as confirmed by the
 owner. Downloads, chunks, approvals, quotes, installs, updates, retries and
@@ -34,9 +47,9 @@ implied.
 Acquisition events have an ordered `(finalizedAtNs, eventId)` index for expiry and
 an `(appId, finalizedAtNs, eventId)` index for diagnostics. The protocol assigns
 finalization time; clients cannot backdate popularity through quote timestamps.
-Keep first-acquisition evidence even if a later refund/access policy revokes an
-entitlement. Any agreed adjustment should be a separate event, not deletion that
-allows another purchase to masquerade as a new distinct Neutron.
+Keep first-acquisition evidence when a release is revoked or changes price.
+Neither event deletes the entitlement or allows another acquisition to masquerade
+as a new distinct Neutron. Any future policy adjustment must preserve that evidence.
 
 Use six full ordered optional indexes over `appRankingStats`, keyed by score and
 stable app-ID tie-breaker. Emit entries only for currently visible apps with an
@@ -51,8 +64,8 @@ changes update that app's eligibility together with its catalog change.
 Free and paid acquisition history remains separate. Proposed presentation:
 currently free apps rank by free acquisitions, currently paid apps by paid
 acquisitions. Changing price tier does not convert old free claims into sales or
-old sales into free claims. Future-update rights and refund adjustments remain
-purchase-policy decisions; retain evidence to implement them explicitly.
+old sales into free claims. Existing free and paid owners retain future-update
+rights after tier changes; their later downloads never count as new sales.
 
 ## Exact rolling expiry
 

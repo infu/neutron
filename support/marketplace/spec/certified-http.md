@@ -65,6 +65,12 @@ verification path. Neither blanket uncertified responses nor anonymous successfu
 fallbacks are acceptable for private content. Specify and test denial/OPTIONS
 responses separately; they must not reveal artifact bytes.
 
+An existing grant must not continue to authorize ordinary downloads of a revoked
+release. Recheck current release eligibility on reads and continuations, and
+invalidate its ordinary certified access paths when revocation commits. Preserve
+the buyer's entitlement and authorized publisher/auditor review access; approved
+replacement versions remain available to existing owners without repurchase.
+
 Use the actual HTTP specification and verifier as the acceptance boundary rather
 than assuming storage implies certification. The exact Motoko certification
 implementation remains development work, not a completed prototype.

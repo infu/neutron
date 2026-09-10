@@ -88,13 +88,24 @@ Ingress and a browser read delegate cannot impersonate that caller or attach
 native cycles. Auditor exemption requires both an admin-assigned auditor
 principal and an exempt auditor endpoint.
 
-Test insufficient/excess attachments, changed accepted fee version, the agreed
-per-call charge/refund behavior, concurrent charged calls and lost replies.
+Test insufficient/excess attachments, fixed estimated per-call charges and
+refund behavior, concurrent charged calls and lost replies. Observed usage or
+changing cycle prices must not automatically change the protocol tariff.
 Insufficient cycles must fail before a financial dispatch; an error must not
 release an existing uncertain reservation. An auditor calling a non-exempt
 endpoint follows the charged route. An unassigned principal cannot obtain the
 audit exemption. Test admin assignment/removal and rejection reasons visible to
 the publisher.
+
+Upload/modify tests assert fixed processing charges for the declared work and
+one year of prepaid storage/processing on upload. Verify byte counts against
+actual accepted content before retaining uncovered data, and charge before
+expensive processing. Resumable retries retain the original storage-charge
+receipt and cannot charge the same coverage twice. Neither a byte-storage charge
+nor its one-year period becomes a general browser mutation credit or a buyer
+license expiry. After year one, assert continued package/source availability and
+buyer ownership under operator-funded storage. No developer renewal charge or
+automatic deletion occurs, including across an upgrade at that boundary.
 
 Verify browser-direct public catalog, rankings, images and status queries need
 no Neutron backend call. Private library, earnings and publisher reads resolve a
@@ -130,13 +141,21 @@ failed download must preserve the installed app and its state.
 Test list prices free, $1 and $50, with rejection of negative, fractional
 micro-unit, nonzero sub-$1 and above-$50 inputs. A permitted referral discount can
 make a $1 listing cost $0.90. Verify USD-to-token rounding, actual-paid splits,
-fresh/stale rate handling and fee changes against accepted terms.
+fresh/stale rate handling and ledger fee changes against accepted terms. A failed
+daily refresh continues to use the last successful rate with its age/error;
+the absence of any initial valid rate cannot fabricate a quote. Test one universal
+code per Neutron, global per-checkout attribution and self-referral rejection
+before financial effects. Free and paid owners retain updates after price changes
+and can each leave one editable rating per app; edits do not duplicate a rating.
 
-An app/release appears publicly only after the required audit approval. A pending
-successor does not replace an eligible approved release. Verify exact artifact
+Any Neutron can submit after paying the upload charge. An app/release appears
+publicly after one assigned auditor's valid approval. A pending successor does
+not replace an eligible approved release. Verify exact artifact
 binding, publisher ownership, rejected reasons, corrected resubmission, and the
-agreed approval-revocation behavior. UI visibility must agree with query and HTTP
-authorization.
+confirmed approval-revocation behavior. Revocation blocks existing ordinary
+download grants/continuations while preserving buyer ownership and approved
+replacement access; it dispatches no automatic refund. UI visibility must agree
+with query and HTTP authorization.
 
 For all six charts, compare incremental results to a complete event-derived
 oracle in tests. Count distinct Neutrons acquiring each app, never retries,

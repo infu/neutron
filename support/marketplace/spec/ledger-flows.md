@@ -19,7 +19,9 @@ For mutations, `Access` uses the actual Neutron caller, with native cycles
 attached through the existing Neutron broker. Registered browser read principals
 can query that account's quotes, history and receipts directly; they cannot
 dispatch purchases or withdrawals. The ledger payer is the Neutron account.
-A caller-supplied alternative buyer is never authority.
+A caller-supplied alternative buyer is never authority. Protocol cycle charges
+use fixed rough cost estimates; they are distinct from the token ledger's actual
+approval/transfer fees and from the USD app price.
 
 An operation ID is unique within its authenticated account. Reusing it with
 different cart selection, token, referral or recipient is a conflict. Explicitly
@@ -41,6 +43,17 @@ to extend quote validity; compare accepted revisions against retained timestamps
 and the agreed current-state/validity policy. No query signature is needed for
 collection correctness because the update validates its own authoritative state.
 
+Daily XRC refresh failure keeps the last successful rate usable, without an
+age-based purchase cutoff. Quotes expose its observation time, age and refresh
+error. If no successful rate exists yet, pricing is unavailable. A successful
+later refresh can change the accepted checkout amount and require fresh review;
+continuing to use the last known rate is not authority to accept arbitrary
+client-supplied rates or backdated quotes.
+
+Resolve a per-checkout universal affiliate code and apply the global split to
+the actual amount paid. Reject a self-referral when code owner equals the
+authenticated buyer Neutron before Wallet funding or collection.
+
 If approval is insufficient, the same function can return saved funding
 instructions and later resume. It trusts the ledger collection result, not a
 frontend's approval assertion. Querying an already-used ID returns its retained
@@ -50,6 +63,9 @@ or changed cart/price returns a review requirement before any dispatch.
 Already-owned items are removed before a new cart is priced/reviewed. A free cart
 grants ownership without a ledger call. A basket has one payment token and one
 collection, followed by one local entitlement per newly acquired app.
+Both paid and free ownership include future approved updates, including after
+price changes. Release revocation blocks ordinary package downloads but preserves
+ownership for an approved replacement. No automatic refund is dispatched.
 
 Use an order-specific spender subaccount bound to the immutable order commitment.
 Pass the bare purchase amount to Wallet: its funding helper already adds the

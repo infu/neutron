@@ -27,5 +27,8 @@ configuration is excluded from Git; these specs describe protocol behavior.
 - [Upstream ledger references](spec/references/README.md)
 
 These are implementation specifications, not claims of tested production
-behavior. The agreed business requirements are recorded separately from remaining
-policy choices. Research scratch work remains outside the repository.
+behavior. Business rules include fixed estimated cycle charges, one year of
+developer-prepaid storage followed by operator-funded storage, enduring update
+rights and no self-referrals. Remaining setup is the initial cost coefficients,
+admin/auditor principals and burn-service accounts. Research scratch work remains
+outside the repository.
