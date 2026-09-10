@@ -2,8 +2,8 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 354,
-  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "version": 356,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "src": "main.mo",
   "init_arg": [
     "memory_kernel",

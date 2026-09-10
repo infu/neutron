@@ -31,6 +31,13 @@ module {
     public class Init(env : AppBackendEnvironment) {
         let mem = env.stable_memory.state;
         let calls = env.capabilities.backend_calls;
+        // Pin the deployed default once, including for older unconfigured
+        // installations. Explicit choices, identities and journals stay intact.
+        if (mem.canister == null) {
+            mem.canister := ?Principal.fromText("sj2r4-haaaa-aaaay-aadgq-cai");
+            mem.host := "https://icp-api.io";
+            mem.revision += 1;
+        };
         func snapshot() : State { { seed = mem.seed; canister = mem.canister; host = mem.host; owner = calls.canister_principal; revision = mem.revision } };
         public func /*query*/ marketplace_state(()) : State { snapshot() };
         public func /*update*/ marketplace_initialize(seed : Blob) : StateResult {

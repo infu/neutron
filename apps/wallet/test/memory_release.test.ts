@@ -147,6 +147,8 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     { version: 320, bytes: 806_428, sha256: "88769f296095a1a9c5ebd4200e8890fbc8640f6097e0f19fdeafe14d3afdf56f" },
     { version: 321, bytes: 810_689, sha256: "12e17e9cb83a65b2e4c1cce81a3c0ba88db27a7b64c9de363868c83698375b84" },
     { version: 322, bytes: 815_214, sha256: "16060e1485e0ffb80b813d4a5f5082735982f1502e43e3843f32c4b84baeabea" },
+    { version: 323, bytes: 883_259, sha256: "dd413ebeece8ed14a7dd606df145f9aead7371fb569184051186f5b9b44cc1c9" },
+    { version: 324, bytes: 884_423, sha256: "c0017c3480b778f62f6bf16430a077b75952596cf3a46fef9b8996aeaaf91c31" },
   ];
   for (const predecessor of predecessors) {
     const bytes = await readFile(new URL(`../${packageArchiveFilename("wallet", predecessor.version)}`, import.meta.url));

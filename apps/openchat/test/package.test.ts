@@ -43,7 +43,7 @@ test("openchat manifest is a backend-free resident + tiles app", async () => {
   expect(manifest).toMatchObject({
     format: 3,
     id: "openchat",
-    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+    update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     src: "main.mo",
     background: { path: "service.html" },
     capabilities: { persistent_browser_storage: { api: 1, surface: "background" } },

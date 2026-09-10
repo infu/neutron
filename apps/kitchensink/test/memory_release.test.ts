@@ -55,3 +55,20 @@ test("Kitchen Sink 0.3.15 keeps the exact production 0.3.14 v1 memory root", asy
     candidateVersion: 315,
   });
 });
+
+test("Kitchensink 0.3.17 keeps the exact production 0.3.15 root across the source transition", async () => {
+  await assertManagedMemoryCodeOnlyRelease({
+    appId: "kitchensink",
+    memoryId: "kitchensink",
+    memoryVersion: 1,
+    productionArchive: new URL("../kitchensink.v0.3.15.neutron", import.meta.url),
+    candidateArchive: new URL("../kitchensink.v0.3.17.neutron", import.meta.url),
+    lock: new URL("../neutron.lock.json", import.meta.url),
+    production: {
+      version: 315,
+      bytes: 472282,
+      sha256: "50f6670f51364eb8b594f4fd77444ed9d900d508d917b9f0ccfb64fdcffc28b6",
+    },
+    candidateVersion: 317,
+  });
+});

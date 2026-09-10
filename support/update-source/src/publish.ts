@@ -12,7 +12,6 @@ import {
 } from "./http.ts";
 import { assertTransitionPackage, assertTransitionScope, verifyTransitionTarget, type SourceTransition } from "./source_transition.ts";
 import {
-  MAX_PACKAGES_PER_PUBLICATION,
   PACKAGE_CONTENT_TYPE,
   PACKAGE_MAX_AGE_SECONDS,
   RELEASE_CONTENT_TYPE,
@@ -115,11 +114,6 @@ export async function publishPackageFiles(
   const changed = plans.filter((plan) => !plan.unchanged);
   // Every catalog entry is inspected and checked above. Only changed releases
   // contribute operations to the single atomic asset-canister batch.
-  if (changed.length > MAX_PACKAGES_PER_PUBLICATION) {
-    throw new Error(
-      `One publication may contain at most ${MAX_PACKAGES_PER_PUBLICATION} changed packages`,
-    );
-  }
   if (options.transition) {
     const changedIds = new Set(changed.map(({ package: candidate }) => candidate.record.id));
     const pending = options.transition.packages.filter(({ id }) => changedIds.has(id));

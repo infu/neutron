@@ -27,8 +27,8 @@ test("hello manifest validates and declares the shipped method", async () => {
   expect(result.valid).toBe(true);
   expect(manifest).toMatchObject({
     id: "hello",
-    version: 204,
-    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+    version: 205,
+    update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     src: "main.mo",
     tiles: [
       {

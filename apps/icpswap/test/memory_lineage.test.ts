@@ -51,6 +51,7 @@ test.each([
   ["0.2.6", "b5438e7dbfc5d762d1e94a273edc9931e43074929fbc2558ab2179874eca8c56"],
   ["0.2.7", "8704c855237fd162b0e62e32e5e7b709dde2528398c9df654e829066a2cf4002"],
   ["0.2.8", "ee22efc8b28da6be2b7ff72718ee9663579023be97728e6b735ed4317a91fb09"],
+  ["0.2.9", "1d571fea9c922c367a501a1364bfba2c547c1ba612530f607d78b910888f5daf"],
 ])("the update preserves all three release-%s roots and their complete schema dependencies", async (release, digest) => {
   const bytes = await readFile(new URL(`icpswap.v${release}.neutron`, app));
   expect(sha256(bytes)).toBe(digest);

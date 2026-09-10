@@ -1,9 +1,12 @@
 # Marketplace implementation and release checklist
 
-Implementation is local on `plan/app-marketplace`. No production marketplace has
-been deployed, no production packages have been uploaded or published, and no
-financial transactions have been performed. The user authorized local commits
-but has not authorized pushing this work.
+Implementation is on `plan/app-marketplace`. The production marketplace is
+deployed at `sj2r4-haaaa-aaaay-aadgq-cai`, with 27 initial free app releases
+published. The old source also has the 26 transition releases for existing
+Neutrons. Publication does not install apps into users' Neutrons. The owner
+authorized deployment and publication; Git pushes remain on hold. Exact release
+and verification status is in the
+[production release record](support/marketplace/spec/production-release.md).
 
 Protocol specifications, pinned ledger references, configuration and operator
 commands are in [support/marketplace](support/marketplace/README.md). The client
@@ -195,8 +198,8 @@ entire repository test suite passes.
 The existing Kernel `kernel` v4 and `kernel_activation` v1 roots and the released
 v3→v4 migration are unchanged. Generic acquisition uses transient state; no fake
 memory migration was introduced. Kernel release 354 and marketplace release 106
-are local candidates; the preceding local artifacts remain immutable. Package
-construction and qualification are not publication.
+were the candidates at that local validation checkpoint; those artifacts remain
+immutable. Package construction and qualification are not publication.
 
 Kernel 354 passes all 840 TypeScript tests and 33 Motoko suites, complete
 packaging, fresh certified-assets qualification and its final candidate-binding
@@ -310,45 +313,57 @@ All 54 host integration cases also pass on the final Wasm: 12 fixture, 6 HTTP,
 22 protocol and 14 upgrade cases. This is combined evidence, not an uninterrupted
 single-command pass: three older public-actor fixtures needed the new optional
 initialization field explicitly empty; the corrected admin case passed on
-rerun. The installed-app lifecycle was run separately against the exact final
-Marketplace 106 and Kernel 354 archives. No production changes were needed for
-these final fixture corrections.
+rerun. That installed-app lifecycle was run separately against Marketplace 106
+and Kernel 354. The production candidates, Marketplace 107 and Kernel 356, then
+passed the same complete lifecycle with 113 assertions: paid installation,
+reinstallation without repurchase, Marketplace removal, and grouped private
+upgrades preserving both installed apps' state. No mainnet purchases were used
+for these tests.
 
-## Production release remains pending
+## Production release
 
 - [x] Select Blast ID 0 as administrator and initial listing owner:
   `y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe`.
-  Private initialization drafts reserve all 26 catalog IDs plus Marketplace to
-  that principal and retain the observed ledger fees. Other auditors can be
-  assigned later.
-- [ ] Supply the deployed marketplace principal and complete creation/controller
-  configuration.
-- [ ] Review the fixed [cycle-cost preset](support/marketplace/config/README.md),
-  initial ledger fees and creation cycles; encode a complete initialization file
-  outside Git. Include app-ID reservations in the first installation.
+  The deployed configuration reserves all 26 existing catalog IDs plus
+  Marketplace to that principal. Other auditors can be assigned later.
+- [x] Deploy `sj2r4-haaaa-aaaay-aadgq-cai` through `icp` and verify its controllers
+  and exact tested Wasm:
+  `1bd60e9e252c7372d2e6939d3a3896fd0566c18abf4022bd4a49c8542f633d8b`.
+- [x] Review the fixed [cycle-cost preset](support/marketplace/config/README.md),
+  ledger fees and initialization, and retain the exact operator inputs outside
+  Git. Verify initial ICP/USD, BTC/USD and USDC/USD refreshes.
 - [ ] Supply the three ICP/ckBTC/ckUSDC conversion-service receiving accounts.
   They may remain unset initially; allocations then stay in the protocol.
-- [ ] Obtain authorization to push the implementation and deploy reviewed Wasm
-  through `icp`. Verify installed module identity and retained-state evidence.
-- [ ] Import/upload the intended app releases and source artifacts as Blast ID 0
-  with exact-byte automated audit records and atomic catalog publication.
-- [ ] Build higher state-compatible transition packages naming the actual new
+- [ ] Obtain authorization before pushing the local Git commits.
+- [x] Publish all 27 initial free releases and offered-source artifacts as Blast
+  ID 0 in marketplace batch 1, with exact-byte automated audit records. Verify
+  the live catalog's ownership, prices, approvals and versions.
+- [x] Build higher state-compatible transition packages naming the actual new
   `update_source`, including the Kernel. Preserve all released memory lineage.
-- [ ] Approve and verify transition bytes at the new source before publishing
-  the compatible transition set atomically to the old catalog. The transition
-  sidecar pins both sources and exact app versions/package hashes.
-- [ ] Reconcile a lost publication reply with identical bytes; require receipt-v2
-  no-op verification. Two source publications are ordered, not cross-canister atomic.
-- [ ] Exercise ordinary selected installs/Upgrade all. No registry source rewrite,
-  Kernel-first publication delay or destructive reinstall is part of migration.
-- [ ] Retain old source artifacts and transition releases for late/skipped
-  upgrades. Future releases use the new source. Update the Dispenser separately
-  only when future newly dispensed Neutrons should use the new package set.
+- [x] Verify the new source's exact bytes, then publish all 26 existing apps
+  atomically to the old source in batch 97. The transition sidecar pins both
+  sources and every app version/package hash.
+- [x] Repeat marketplace publication and require receipt-v2 `batch_id: null`,
+  with all 27 packages and offered sources unchanged.
+- [x] Repeat old-source publication and require the same verified no-op for all
+  26 transition packages and offered sources. Keep the exact bytes and retained
+  request identities if any reply is interrupted.
+- [x] Exercise selected installs and grouped upgrades in PocketIC. Kernel 356
+  passes 840 TypeScript tests, 33 Motoko suites and fresh certified-assets
+  qualification. All 27 apps pass their package and release gates; memory
+  schemas, migrations, locks and earlier archives remain unchanged.
+- [x] Retain the old source and transition releases for late or skipped upgrades.
+  Existing users choose **Settings → Upgrade all**, then install Marketplace 107
+  separately if desired. Future updates, including Kernel updates, use the new
+  source after those transition packages are installed.
+- [ ] Optionally update the Dispenser starter under separate authorization.
+  This release leaves it unchanged and installs nothing into existing Neutrons.
 
-The existing production source stays at `233tv-xiaaa-aaaay-aacta-cai` until the
-explicit source transition. A new principal has not been guessed or put into
-current production manifests. Follow [package updates](doc/package-updates.md)
-and [managed-memory migrations](doc/memory-migrations-and-uninstall.md).
+The source publications are ordered, not cross-canister atomic. The old source
+`233tv-xiaaa-aaaay-aacta-cai` remains the migration entry point for users who have
+not upgraded. No registry rewrite, Kernel-first delay or destructive reinstall
+is used. Follow [package updates](doc/package-updates.md) and
+[managed-memory migrations](doc/memory-migrations-and-uninstall.md).
 
 ## Ethereum USDC extension
 

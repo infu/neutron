@@ -6,10 +6,15 @@ The client is [apps/marketplace](../../apps/marketplace/README.md). The same cha
 adds generic authenticated repository acquisition to the Kernel so purchases
 remain installable and updatable without depending on the marketplace client.
 
-The implementation is being validated locally. No production marketplace has
-been deployed, existing apps have not been imported, and no production source
-transition or marketplace payment has been performed. Release work and remaining
-configuration are tracked in [todo.marketplace.md](../../todo.marketplace.md).
+The protocol is deployed on mainnet at `sj2r4-haaaa-aaaay-aadgq-cai`. Its installed
+Wasm, roles, 27 initial app-ID reservations and first XRC rate refresh have been
+verified. The first marketplace publication has verified receipts for all 27
+releases, and public catalog queries confirm their approved free listings. Its
+exact-byte repeat returned the required no-op. The old-source transition is in
+place, and both its first publication and exact-byte no-op repeat are verified. The
+[production release record](spec/production-release.md) separates deployment from
+publication and installation. Remaining work is tracked in
+[todo.marketplace.md](../../todo.marketplace.md).
 
 ## Implemented behavior
 
@@ -54,8 +59,8 @@ are browser-direct. Ordinary user and publisher updates use Neutron with native
 cycles. Assigned auditors and administrators use their dedicated exempt CLI
 endpoints directly; the app has no admin or auditor interface. The
 app's approved call budgets are 1 trillion cycles per call and 10 trillion per
-day. These budgets do not set the protocol's initial fee coefficients, which
-remain an operator configuration decision.
+day. These budgets are separate from the protocol's configured fee coefficients.
+Install and Upgrade reviews show the applicable access cost.
 
 The admin exemption covers exactly `admin_auditor_set`, `admin_reserve_app`,
 `admin_set_burn_account`, and `rates_refresh`. They authenticate the actual
@@ -94,8 +99,8 @@ fixtures have distinct limits:
   including private delivery and streaming. This is local verification, not a
   production gateway test.
 - Same-build upgrades exercise retained state at the same canister principal.
-  They do not establish migration from a previously released marketplace schema;
-  no production marketplace version exists yet.
+  They do not establish migration between different released marketplace schemas.
+  The initial mainnet deployment is recorded separately from these local tests.
 - Ethereum fixtures exercise the deployed RPC and minter interfaces, exact
   helper-event verification, early certified downloads with zero minted balance,
   deferred earnings, concurrent recovery, and upgrades during conversion. They
@@ -113,15 +118,26 @@ The project builds for `icp` CLI. Use explicit installation only for a new empty
 canister, and a state-preserving upgrade for an existing deployment; the
 [deployment guide](spec/deployment.md) gives commands and prerequisites.
 
-Before production use, supply the new canister principal, initial roles,
-existing app-ID ownership reservations, fixed charge coefficients, and the three
-burn-service receiving accounts. The old production source is a separate Rust
-asset canister and must be retained. Inventory/planning tools and an explicitly
-scoped source-transition publisher are present, but actual imports, approvals,
-publication, and installed-client migration remain release work. Transition
-packages must have higher versions, preserve app memory, and name the new source
-in their manifests. Ordinary Kernel install/update review commits each source
-change; there is no marketplace-specific Kernel update resolver.
+The initial mainnet deployment has its roles, existing app-ID reservations and
+fixed charge configuration. ICP/USD, BTC/USD and USDC/USD rates were refreshed
+successfully. The three burn-service destinations remain unset until the owner
+supplies them; no external burn is implied by the deployment.
+
+The old production source is a separate Rust asset canister and remains in
+place. Marketplace batch 1 published 27 apps, and its exact-byte repeat verified
+all packages and offered sources unchanged with `batch_id: null`. The atomic
+publication of 26 higher transition releases to the old source is verified as
+batch 97; its exact-byte repeat also returned `batch_id: null` with all packages
+and offered sources unchanged.
+Transition packages preserve app memory and name the marketplace as their new
+source. Ordinary Kernel install/update review commits each source change;
+there is no marketplace-specific Kernel update resolver.
+
+Existing users choose **Settings → Upgrade all**,
+then install [Marketplace version 107](https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/packages/03ef7d67e3c7314474049da7ee9ede6678b5a8e291b3ed85e55fc5feddb7f785.neutron)
+separately. Publication does not install
+apps into an existing Neutron. This release does not change the Dispenser starter
+or push Git commits.
 
 ## Specifications and license
 
@@ -133,6 +149,7 @@ change; there is no marketplace-specific Kernel update resolver.
 - [Admin-assigned auditors and review stamps](spec/audits.md)
 - [Certified HTTP package delivery](spec/certified-http.md)
 - [Build, installation and upgrades with icp](spec/deployment.md)
+- [Production deployment and publication status](spec/production-release.md)
 - [Ash/PocketIC acceptance tests](spec/testing.md)
 - [Upstream ledger references](spec/references/README.md)
 

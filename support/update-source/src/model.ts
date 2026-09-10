@@ -44,8 +44,6 @@ export const SOURCE_MAX_AGE_SECONDS = PACKAGE_MAX_AGE_SECONDS;
 export const RELEASE_MAX_AGE_SECONDS = 0n;
 export const UPLOAD_CHUNK_BYTES = 1_800_000;
 export const UPLOAD_CONCURRENCY = 4;
-// Bound the atomic mutation, not the inventory inspected for unchanged releases.
-export const MAX_PACKAGES_PER_PUBLICATION = 20;
 export const MAX_PUBLICATION_BYTES = 128 * 1024 * 1024;
 export const SOURCE_UNCOMPRESSED_MAX_BYTES =
   NEUTRON_APP_SOURCE_SNAPSHOT_LIMITS.encodedBytes;

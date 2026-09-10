@@ -7,7 +7,7 @@ import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 const manifestUrl = new URL("../neutron.json", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
 const mainJsUrl = new URL("../dist/web/main.js", import.meta.url);
-const packageUrl = new URL("../spreadsheet.v0.3.4.neutron", import.meta.url);
+const packageUrl = new URL("../spreadsheet.v0.3.5.neutron", import.meta.url);
 
 test("Spreadsheet manifest is a persistent frontend-only resident and tile", async () => {
   const manifest = JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -15,8 +15,8 @@ test("Spreadsheet manifest is a persistent frontend-only resident and tile", asy
   expect(manifest).toMatchObject({
     id: "spreadsheet",
     name: "Spreadsheet",
-    version: 304,
-    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+    version: 305,
+    update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: { path: "service.html" },
     capabilities: {
       background_ui_requests: { api: 1, categories: ["frontend_tool"] },

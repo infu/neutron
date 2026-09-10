@@ -21,8 +21,8 @@ test("Wagyu manifest is a semantically valid format-3 app package", async () => 
     format: 3,
     id: "wagyu",
     name: "Wagyu",
-    version: 306,
-    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+    version: 307,
+    update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     src: "main.mo",
     backend: {
       capabilities: {

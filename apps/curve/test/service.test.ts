@@ -9,7 +9,7 @@ test("resident tools register through the actual Neutron descriptor validator", 
 });
 test("the app declares only its exact public Wallet protocol and durable v1 root", async () => {
   const manifest = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8"));
-  expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
+  expect(manifest.update_source).toBe("sj2r4-haaaa-aaaay-aadgq-cai");
   expect(manifest.capabilities.frontend_tools.targets).toEqual([{ app: "evm_wallet", tools: ["evm_accounts_v1", "evm_balances_v1", "evm_wallet_prices_v1", "evm_call_contract_v1", "evm_estimate_transaction_v1", "evm_transaction_v1", "evm_replacement_transaction_v1", "evm_operation_status_v1", "evm_send_transaction_v1"] }]);
   expect(Object.keys(manifest.memory)).toEqual(["curve"]); expect(manifest.memory.curve.version).toBe(1); expect(manifest.memory.curve.migrations).toEqual([]);
 });

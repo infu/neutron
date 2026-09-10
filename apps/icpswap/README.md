@@ -332,5 +332,5 @@ read-only production probes do not establish successful production trading.
 
 The app uses the repository's shared `LICENSE.APP.USE`, application notice and
 Complete App Source packaging workflow. Production packages use update source
-`233tv-xiaaa-aaaay-aacta-cai`; publication and installation follow
+`sj2r4-haaaa-aaaay-aadgq-cai`; publication and installation follow
 [the repository release workflow](../../doc/package-updates.md).

@@ -7,11 +7,13 @@ current Neutron principal and survive uninstalling this app or an acquired app.
 
 ## Setup
 
-Install the package through Neutron's normal installer. In **Marketplace
-settings**, enter the principal of an actual deployed marketplace protocol.
-There is no bundled production marketplace ID. The default IC gateway is
-`https://icp-api.io`; a local deployment can use its localhost replica origin.
-Save settings, then **Connect** to authorize this Neutron's browser read identity.
+Install the package through Neutron's normal installer. New and previously
+unconfigured installations select the production marketplace
+`sj2r4-haaaa-aaaay-aadgq-cai` at `https://icp-api.io` automatically. Select
+**Connect** to authorize this Neutron's browser read identity. Existing explicit
+configuration, identities and saved requests remain intact on upgrade.
+**Marketplace settings** can select another deployed protocol; a local
+deployment can use its localhost replica origin.
 
 Use IC Wallet for ICP, ckBTC or ckUSDC purchases. Ethereum USDC checkout
 uses EVM Wallet or a connected MetaMask/browser wallet. Review the app's requested

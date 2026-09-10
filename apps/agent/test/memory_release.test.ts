@@ -65,3 +65,20 @@ test("Agent 0.3.20 keeps its immediate predecessor's v1 memory root", async () =
     candidateVersion: 320,
   });
 });
+
+test("Agent 0.3.21 keeps the exact production 0.3.20 root across the source transition", async () => {
+  await assertManagedMemoryCodeOnlyRelease({
+    appId: "agent",
+    memoryId: "agent",
+    memoryVersion: 1,
+    productionArchive: new URL("../agent.v0.3.20.neutron", import.meta.url),
+    candidateArchive: new URL("../agent.v0.3.21.neutron", import.meta.url),
+    lock: new URL("../neutron.lock.json", import.meta.url),
+    production: {
+      version: 320,
+      bytes: 528248,
+      sha256: "6c9fa67fcfe46719eecbfbeb5d3d9de5f2d48e35e2c7c1b7b1560b6a0bb59732",
+    },
+    candidateVersion: 321,
+  });
+});

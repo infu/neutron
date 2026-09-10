@@ -13,7 +13,7 @@ const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const mainJsUrl = new URL("../dist/web/main.js", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
 const packageUrl = new URL(
-  "../agent.v0.3.20.neutron",
+  "../agent.v0.3.21.neutron",
   import.meta.url
 );
 
@@ -23,8 +23,8 @@ test("Agent declares one resident credential connection", async () => {
   expect(manifest).toMatchObject({
     id: "agent",
     name: "Agent",
-    version: 320,
-    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+    version: 321,
+    update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: { path: "service.html" },
     capabilities: {
       connections: {

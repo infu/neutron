@@ -52,7 +52,7 @@ test("manifest validates and declares the tile, background, and memory root", as
 
   // Ordinary apps never declare positional constructor resources.
   expect(manifest).not.toHaveProperty("init_arg");
-  expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
+  expect(manifest.update_source).toBe("sj2r4-haaaa-aaaay-aadgq-cai");
 });
 
 test("every backend method is reachable without a per-call dialog", async () => {

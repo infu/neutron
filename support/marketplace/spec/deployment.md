@@ -2,8 +2,11 @@
 
 The protocol project lives in `support/marketplace/` and uses `icp` CLI for
 creation/installation/upgrades. It is a standalone canister, separately deployed
-from the Neutron UI package. The project provides runnable build and local test
-commands; a production installation still requires reviewed operator inputs.
+from the Neutron UI package. The initial production canister is
+`sj2r4-haaaa-aaaay-aadgq-cai`; its verified deployment and package release progress
+are recorded in [production release status](production-release.md). Commands
+below describe the operator procedure, not permission to create another canister
+or reinstall this one.
 
 ## Build inputs and distribution
 
@@ -107,12 +110,25 @@ The old source's static asset synchronization can delete objects absent from its
 local folder. The new protocol must not use static asset sync to replace retained
 publisher content during a code deployment.
 
-Create a new canister rather than installing Motoko over the existing Rust source.
-Import ownership and release history/references; retain old historical bytes at
-their existing immutable URLs. Publish higher audited transition packages with
-the new source field through the agreed old/new source workflow. Existing free
-transition package bytes are temporarily present at both sources. This is not
-permission to expose future paid packages through the old source.
+The initial deployment created a separate canister and reserved all 27 initial
+app IDs for the configured first-party publisher. The existing Rust source
+`233tv-xiaaa-aaaay-aacta-cai` remains intact; its historical bytes stay at their
+existing immutable URLs. Marketplace batch 1 has published 27 reviewed packages;
+its exact-byte repeat verified the receipt-v2 no-op. The compatible 26-app
+transition was verified in old-source batch 97; its exact-byte repeat check is
+also complete, with `batch_id: null` and all 26 packages and offered sources
+unchanged.
+Transition manifests name the new source, and matching
+offered-source artifacts accompany the packages. The first-party set is free;
+this workflow does not expose future paid packages through the old source.
+
+Repeat each publication with the exact same bytes and require the verified
+receipt-v2 no-op before calling that source complete. A lost reply must be
+reconciled with the retained request and bytes. Package review is not a publish
+receipt, and deployment is not app installation. After both publications are
+verified, users choose **Settings → Upgrade all**, then install Marketplace
+version 107 separately. No Dispenser starter change or Git push is part of this
+release.
 
 ## Upgrade evidence
 
@@ -129,8 +145,10 @@ Resume periodic work from retained progress; completed payments and ranking
 events must not run twice. Use explicit forward migrations when state changes;
 never edit a released predecessor or substitute a clean install.
 
-No new protocol Wasm, package publication or financial smoke test was performed
-against production as part of local implementation validation.
+The local implementation checks below preceded the initial production deployment.
+They did not publish packages or execute marketplace financial smoke tests.
+Current production status is tracked separately in the
+[release record](production-release.md).
 
 ## Local CLI release check
 
@@ -148,7 +166,7 @@ argument handling, alongside the broader retained-data PocketIC suites. It is
 not a production installation or a financial test. The disposable network was
 stopped after the check.
 
-A subsequent local check used the final protocol build with public Candid
+A subsequent local check used a later protocol build with public Candid
 metadata, SHA-256
 `0d9af11fa662a51da3ff9200070fe04db1838cc064c01998400d85b47bc2debc`.
 Blast 4.2.0 discovered the interface and called all four exempt admin methods

@@ -12,7 +12,6 @@ import {
 import { neutronAppSourceRepositoryPath } from "neutron-tools/src/package_record.ts";
 import { publishPackageFiles } from "../src/publish.ts";
 import {
-  MAX_PACKAGES_PER_PUBLICATION,
   PACKAGE_CONTENT_TYPE,
   PACKAGE_MAX_AGE_SECONDS,
   RELEASE_CONTENT_TYPE,
@@ -155,7 +154,7 @@ function seedRelease(
 
 function largerCatalog(changedCount: number) {
   const state = publishingState();
-  const ids = Array.from({ length: MAX_PACKAGES_PER_PUBLICATION + 1 }, (_, index) => `app_${String(index).padStart(2, "0")}`);
+  const ids = Array.from({ length: 26 }, (_, index) => `app_${String(index).padStart(2, "0")}`);
   const versions = Object.fromEntries(ids.map((id) => [id, 100]));
   const values = Object.fromEntries(ids.map((id) => [id, new TextEncoder().encode(id)]));
   const sources = Object.fromEntries(ids.map((id) => [id, hostedSourceFixture(id, 100)]));
@@ -174,16 +173,20 @@ function largerCatalog(changedCount: number) {
 }
 
 describe("atomic update-source publication", () => {
-  for (const changedCount of [0, 2, MAX_PACKAGES_PER_PUBLICATION]) {
-    test(`a 21-entry catalog with ${changedCount} changes verifies every package and source in one transaction or a complete no-op`, async () => {
+  for (const changedCount of [0, 2, 20, 26]) {
+    test(`a 26-entry catalog with ${changedCount} changes verifies every package and source in one transaction or a complete no-op`, async () => {
       const { state, ids, source, sources, options } = largerCatalog(changedCount);
-      const receipt = await publishPackageFiles(source.files, options);
+      const checked: string[] = [];
+      const receipt = await publishPackageFiles(source.files, { ...options, progress: message => checked.push(message) });
+      expect(checked.filter(message => message.startsWith("Checking "))).toHaveLength(ids.length);
       expect(state.commits).toBe(changedCount ? 1 : 0);
       expect(state.calls.filter(call => call.startsWith("create_batch:"))).toHaveLength(changedCount ? 1 : 0);
       expect(receipt).toMatchObject({ protocol: "neutron-update-source-publish-v2", atomic: true, batch_id: changedCount ? "1" : null });
       expect(receipt.packages).toHaveLength(ids.length);
       for (const [index, id] of ids.entries()) {
         const outcome = receipt.packages.find(candidate => candidate.id === id)!;
+        const packageBytes = await source.read(`${id}.neutron`);
+        expect(outcome).toMatchObject({ id, version: 100, sha256: sha256Hex(packageBytes), size: packageBytes.byteLength });
         expect(outcome.status).toBe(index < changedCount ? "published" : "unchanged");
         expect(outcome.source).toMatchObject({ path: sources[id]!.path, sha256: sources[id]!.digest, size: sources[id]!.bytes.byteLength, status: index < changedCount ? "published" : "unchanged" });
         expect(state.fetchedPaths).toContain(outcome.release_path);
@@ -195,18 +198,10 @@ describe("atomic update-source publication", () => {
       expect(repeated.batch_id).toBeNull();
       expect(repeated.packages).toHaveLength(ids.length);
       expect(repeated.packages.every(candidate => candidate.status === "unchanged" && candidate.source?.status === "unchanged")).toBe(true);
+      expect(repeated.packages).toEqual(receipt.packages.map(candidate => ({ ...candidate, status: "unchanged", source: candidate.source ? { ...candidate.source, status: "unchanged" } : null })));
       expect(state.calls.slice(calls).filter(call => /^(create_batch|create_chunk|commit_batch):/.test(call))).toEqual([]);
     });
   }
-
-  test("21 changed catalog entries still fail before creating or uploading any batch", async () => {
-    const { state, source, options } = largerCatalog(MAX_PACKAGES_PER_PUBLICATION + 1);
-    const checked: string[] = [];
-    await expect(publishPackageFiles(source.files, { ...options, progress: message => checked.push(message) })).rejects.toThrow("at most 20 changed packages");
-    expect(checked.filter(message => message.startsWith("Checking "))).toHaveLength(MAX_PACKAGES_PER_PUBLICATION + 1);
-    expect(state.calls.filter(call => /^(create_batch|create_chunk|commit_batch):/.test(call))).toEqual([]);
-    expect(state.assets.size).toBe(0);
-  });
 
   test("a late conflicting entry in a larger catalog prevents all earlier planned changes", async () => {
     const { state, ids, source, inspect, options } = largerCatalog(2);

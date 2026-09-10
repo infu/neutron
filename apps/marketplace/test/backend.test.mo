@@ -1,5 +1,7 @@
 import Blob "mo:core/Blob";
+import Map "mo:core/Map";
 import Principal "mo:core/Principal";
+import Text "mo:core/Text";
 import Memory "../backend/memory/state/v1";
 import App "../backend/main";
 import Capabilities "mo:neutron-capabilities";
@@ -13,7 +15,10 @@ let broker : Capabilities.BackendCallsV1 = {
 };
 let memory = Memory.init();
 let app = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker } });
-assert app.marketplace_state(()).canister == null;
+let production = Principal.fromText("sj2r4-haaaa-aaaay-aadgq-cai");
+assert app.marketplace_state(()).canister == ?production;
+assert app.marketplace_state(()).host == "https://icp-api.io";
+assert app.marketplace_state(()).revision == 1;
 assert app.marketplace_state(()).seed == null;
 switch (app.marketplace_initialize(Blob.fromArray([1, 2]))) { case (#err(_)) {}; case (_) assert false };
 let seed : Blob = "01234567890123456789012345678901";
@@ -25,6 +30,8 @@ switch (app.marketplace_save_draft({ id = "purchase-1"; value = "replacement" })
 assert app.marketplace_draft("purchase-1") == ?"original";
 let restored = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker } });
 assert restored.marketplace_state(()).seed == ?seed;
+assert restored.marketplace_state(()).canister == ?production;
+assert restored.marketplace_state(()).revision == 2;
 assert restored.marketplace_draft("purchase-1") == ?"original";
 assert restored.marketplace_drafts({ cursor = null; limit = 1 }).items.size() == 1;
 ignore app.marketplace_save_draft({ id = "purchase-2"; value = "second" });
@@ -54,6 +61,28 @@ ignore restoredRevision.marketplace_revise_draft({ id = "installation-1"; expect
 let restoredInstall = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker } });
 assert restoredInstall.marketplace_draft("installation-1") == ?unavailableInstall;
 assert restoredInstall.marketplace_draft("history:installation-1:retirement") == ?originalInstall;
+// Restore the released v1 root before it had a deployed default. Adopt only
+// the missing configuration; retain the read identity and opaque journal.
+let unconfigured = Memory.init();
+unconfigured.seed := ?seed;
+unconfigured.revision := 8;
+Map.add(unconfigured.drafts, Text.compare, "legacy-request", "legacy-data");
+let adopted = App.Init({ stable_memory = { state = unconfigured }; capabilities = { backend_calls = broker } });
+assert adopted.marketplace_state(()).canister == ?production;
+assert adopted.marketplace_state(()).seed == ?seed;
+assert adopted.marketplace_state(()).revision == 9;
+assert adopted.marketplace_draft("legacy-request") == ?"legacy-data";
+let adoptedAgain = App.Init({ stable_memory = { state = unconfigured }; capabilities = { backend_calls = broker } });
+assert adoptedAgain.marketplace_state(()).revision == 9;
+// A deliberately configured local or alternate protocol remains selected
+// across initialization and upgrade, with its exact host and revision.
+ignore adopted.marketplace_configure({ canister = owner; host = "http://127.0.0.1:4943" });
+let custom = App.Init({ stable_memory = { state = unconfigured }; capabilities = { backend_calls = broker } });
+assert custom.marketplace_state(()).canister == ?owner;
+assert custom.marketplace_state(()).host == "http://127.0.0.1:4943";
+assert custom.marketplace_state(()).revision == 10;
+assert custom.marketplace_state(()).seed == ?seed;
+assert custom.marketplace_draft("legacy-request") == ?"legacy-data";
 assert App.allowed("purchase");
 assert App.allowed("ethereum_prepare");
 assert App.allowed("ethereum_verify");

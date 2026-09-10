@@ -2,8 +2,8 @@
   "format": 3,
   "id": "curve",
   "name": "via Curve",
-  "version": 106,
-  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "version": 107,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Curve swaps, pools and liquidity using EVM Wallet",
   "src": "main.mo",
   "background": {

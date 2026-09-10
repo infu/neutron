@@ -307,7 +307,8 @@ npm run publish -- \
   ../../apps/mail/mail.v0.3.5.neutron
 ```
 
-One command may change up to 20 packages in one atomic transaction. It may
+One command publishes all selected changed packages in one atomic transaction,
+subject to the aggregate byte and individual artifact limits. It may
 inspect a larger inventory containing unchanged releases:
 
 ```sh
@@ -393,16 +394,17 @@ later versions to bypass ordinary source checks.
 
 First prepare the inventory and migration plan with
 [`migration-inventory.ts`](../marketplace/scripts/migration-inventory.ts).
-Supply the deployed marketplace principal, an explicit publisher Neutron for
+Supply the deployed marketplace principal, an explicit publisher for
 every existing app ID, live or retained published-release evidence, and the
 exact transition archives. Local packed files are not evidence of what was
 published. Put the plan's complete, reviewed `initReservations` array into the
 initial canister configuration's `reservations` field. Installation reserves
 those app IDs atomically, before public submissions can race them. Later
 `admin_reserve_app` calls are for controlled additions, not the initial
-migration. Upload the prepared archives and offered source through their
-publisher Neutrons and obtain auditor approval. These steps are separate from
-old-source publication.
+migration. First-party entries belong to the configured Blast identity 0 and use
+the marketplace's cycle-free atomic publication workflow. Ordinary publishers
+upload through their Neutrons with the quoted cycles and obtain auditor approval.
+These steps are separate from old-source publication.
 
 The sidecar has exactly these fields:
 
@@ -451,8 +453,12 @@ reviewed release plan. It is not a lasting alternate-source fallback.
 After publication is authorized, run from the repository root:
 
 ```sh
-npm run updates:publish -- --transition /path/reviewed-source-transition.json
+npm --workspace neutron-update-source run production:publish -- --transition /path/reviewed-source-transition.json
 ```
+
+The root `npm run updates:publish` command now targets the marketplace; it does
+not accept the old-source transition sidecar. Use the explicit legacy workspace
+command above only for this reviewed transition.
 
 This command publishes immediately after its checks; it has no interactive
 confirmation. Only one production publisher may run at a time. Retain the
@@ -567,12 +573,12 @@ release lane and rerun the exact same inputs to reconcile it; do not substitute
 different bytes at the same version.
 
 Record `icp canister status <canister-id> --json` under the administrative
-identity and alert on low cycle runway or abnormal memory growth. The limits of
-20 changed packages and 128 MiB apply to one publication, not to the source's
+identity and alert on low cycle runway or abnormal memory growth. The 128 MiB
+aggregate byte limit applies to one publication, not to the source's
 lifetime. The byte bound still covers every inspected package and unique source,
 including unchanged releases. Every selected catalog entry is checked before
 mutation and verified again before its receipt is returned; unchanged entries
-do not consume mutation slots. The catalog itself retains its 256 KiB byte bound.
+do not add batch mutations. The catalog itself retains its 256 KiB byte bound.
 Each new digest-addressed package and source is retained, so estimate logical
 retained bytes by summing each unique `sha256` and `size` once across archived
 receipts, then compare that trend with canister memory and cycles. Set

@@ -516,7 +516,9 @@ async function verifyResponseProof(
 
 type AssetPathLookup =
   | { status: LookupPathStatus.Found; value: Uint8Array }
-  | { status: LookupPathStatus.Absent | LookupPathStatus.Unknown | LookupPathStatus.Error };
+  | { status: LookupPathStatus.Absent }
+  | { status: LookupPathStatus.Unknown }
+  | { status: LookupPathStatus.Error };
 
 /**
  * A certified witness uses lexicographically ordered byte labels. The pinned

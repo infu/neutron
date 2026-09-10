@@ -19,6 +19,9 @@ owner-trusted apps and live agents, not a cold-storage boundary against the
 installed Wallet package. Installing or updating Wallet is therefore a
 consequential trust decision.
 
+Release 325 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`. All
+seven version-1 memory roots and their released lineage remain unchanged.
+
 ## Agent token selection
 
 `wallet_add_ledger_v1({ ledger })` adds one catalog or custom ICRC ledger at
