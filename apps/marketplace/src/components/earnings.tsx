@@ -2,15 +2,15 @@ import { useState } from "react";
 import type { Earnings, MarketplaceClient, OperationResult, PaymentToken, WithdrawalQuote } from "../view-types.ts";
 import { CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, Principal, decimalAmount, errorMessage, parseAmount, quantity, useRead } from "./primitives.tsx";
 
-export function EarningsPanel({ client, connected, connect, refresh, onOperation }: {
-  client: MarketplaceClient; connected: boolean; connect: () => void; refresh: number;
+export function EarningsPanel({ client, connected, refresh, onOperation }: {
+  client: MarketplaceClient; connected: boolean; refresh: number;
   onOperation: (result: OperationResult, resume?: () => Promise<OperationResult>) => void;
 }) {
   const [revision, setRevision] = useState(0), [error, setError] = useState(""), [busy, setBusy] = useState(false), [copied, setCopied] = useState(false);
   const [token, setToken] = useState<PaymentToken | null>(null);
   const read = useRead(connected ? "earnings" : null, () => client.earnings(), refresh + revision);
   const earnings = read.data;
-  if (!connected) return <EmptyState title="Your work. Your earnings." icon="earnings" action={<button type="button" className="mp-primary" onClick={connect}>Connect this Neutron</button>}>See publisher and affiliate earnings, share your code, and withdraw to your account.</EmptyState>;
+  if (!connected) return <EmptyState title="Your earnings are unavailable" icon="earnings">Retry setup above to load your publisher and affiliate earnings.</EmptyState>;
   async function getCode() {
     setBusy(true); setError("");
     try { await client.createReferralCode(); setRevision((v) => v + 1); }

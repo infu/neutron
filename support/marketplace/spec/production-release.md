@@ -74,11 +74,38 @@ Publication to both sources is verified. Existing users choose
 **Settings → Upgrade all**. The compatible Kernel and app transition updates
 preserve installed state and switch their normal update source to the
 marketplace. Users then install
-[Marketplace version 107](https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/packages/03ef7d67e3c7314474049da7ee9ede6678b5a8e291b3ed85e55fc5feddb7f785.neutron)
+[Marketplace version 109](https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/packages/8bdeb24571521f33ef4a91a684dcea89e7085a569f8ef7726f03769c1a0c6db2.neutron)
 separately; publishing does not add that app automatically. This public package
-was fetched through the gateway and its SHA-256 matched
-`03ef7d67e3c7314474049da7ee9ede6678b5a8e291b3ed85e55fc5feddb7f785`.
+was verified by publication postflight with SHA-256
+`8bdeb24571521f33ef4a91a684dcea89e7085a569f8ef7726f03769c1a0c6db2`.
 
 No existing Neutron has been upgraded by this deployment record. No Dispenser
 starter change or Git push is included. The missing burn-service destinations
 remain an operator configuration item, not evidence of a completed token burn.
+
+## Marketplace 109 access and storefront follow-up
+
+Marketplace batch **2** publishes only Marketplace 109; the other 26 selected
+packages and sources remain unchanged. Request:
+`a2d7ccdaa6fa3dea54eccd5693378da464c7f33ae0b633928222563c18a2c589`.
+The exact-byte repeated publication passed receipt-v2 with `batch_id: null`;
+all 27 selected packages and offered sources were unchanged, with matching
+versions, paths, sizes and SHA-256 digests. The legacy source was not modified.
+The archive is 471,686 bytes. Its offered source is 1,728,766 bytes with SHA-256
+`754c3e2f768b819c8d43c06029ad80d3328ae6ddeed6a6bcf2d4dc1403ed5ac3`.
+The emitted, unpublished 108 candidate remains preserved locally.
+
+This release removes the Connect action and restores a permanent read principal
+through the existing Neutron custody facility. The browser still performs private
+queries directly. Existing v1 app memory and lock lineage are unchanged. The
+storefront shows Top paid then Top free, omits Kernel and Marketplace listings
+and rank numbers, and labels the retained audit evidence **Audited by AI**.
+
+Validation passed: 111 Bun tests plus the isolated client-access assertions,
+Motoko initialization/restoration and delegation vectors, typecheck, five UI
+browser suites, direct protocol integration, and the exact-package installed
+browser gate. That gate reproduced the original 107 error, then verified 109
+automatic setup, reload, fresh-browser access, checked uninstall/reinstall with
+the same principal and a new browser seed, and a subsequent nonfinancial update.
+Kernel 356 and the protocol module are unchanged; no existing production Neutron
+was installed or reinstalled by these tests or by publication.

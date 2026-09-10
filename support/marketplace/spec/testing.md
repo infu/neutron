@@ -293,3 +293,11 @@ Report domain assertions, real ledger/inter-canister tests, certificate checks,
 upgrade tests and frontend/install tests separately. A passing fresh install or
 mock-ledger test does not establish the other categories. No mainnet financial
 action is implied by this acceptance plan.
+
+The installed-browser access regression is documented in
+[test/qualification/marketplace](../../../test/qualification/marketplace/README.md).
+It exercises actual tile/background/Kernel permission boundaries and signed
+private queries against the unchanged protocol in PocketIC. It includes the
+released 107 negative control, permanent read-identity restoration after a
+checked uninstall/reinstall, and the first later update's permission recovery.
+The test does not seed backend reservations or register the delegate directly.

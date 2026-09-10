@@ -9,9 +9,11 @@ current Neutron principal and survive uninstalling this app or an acquired app.
 
 Install the package through Neutron's normal installer. New and previously
 unconfigured installations select the production marketplace
-`sj2r4-haaaa-aaaay-aadgq-cai` at `https://icp-api.io` automatically. Select
-**Connect** to authorize this Neutron's browser read identity. Existing explicit
-configuration, identities and saved requests remain intact on upgrade.
+`sj2r4-haaaa-aaaay-aadgq-cai` at `https://icp-api.io` automatically. Read access
+is prepared automatically, without a Connect button. Neutron's ordinary
+permission review still applies when installing or granting a missing route.
+Existing explicit configuration, browser signing seeds and saved requests
+remain intact on upgrade.
 **Marketplace settings** can select another deployed protocol; a local
 deployment can use its localhost replica origin.
 
@@ -26,10 +28,24 @@ Package downloads use authorized certified HTTP. Protocol mutations go through
 Neutron with native cycles attached; the browser read identity does not grant
 direct update authority.
 
+Version 109 uses the existing app-ID custody key facility for a permanent read
+principal. Reinstalling Marketplace in the same Neutron restores that principal;
+it does not create another account or change purchases. The existing browser
+seed signs locally under a delegation restricted to the selected protocol.
+One-time setup authorizes this new permanent principal for older installations,
+without deleting their old read delegate. A browser caches only the public
+signed delegation and validates it against the live Neutron key before reuse.
+Fresh browsers or reinstalls can issue another delegation automatically. There
+is no recurring login timer; explicit protocol revocation remains effective.
+Uninstall still removes app-local journals and browser signing data.
+
 ## Using the app
 
-- **Explore:** browse Top free or Top paid over rolling 7 days, 30 days or all
-  time; inspect descriptions, screenshots and the release's audit. Checkout
+- **Explore:** browse Top paid followed by Top free over rolling 7 days,
+  30 days or all time. Kernel and Marketplace packages remain available to the
+  installer and updater but are omitted from these storefront lists. Inspect
+  descriptions, screenshots and the release's audit under **Audited by AI**,
+  including its actual auditor and analysis. Checkout
   shows the token price, ledger fees, referral discount, developer/affiliate
   shares and allocation toward burning NTN before purchase.
 - **My Apps:** select one or several acquired apps and open the standard Neutron
@@ -71,7 +87,7 @@ before calling them; atomic amounts are decimal strings.
 |---|---|
 | `marketplace_catalog_v1`, `marketplace_app_v1` | Discover and inspect apps |
 | `marketplace_library_v1`, `marketplace_earnings_v1` | Read owned apps and earnings |
-| `marketplace_connect_v1` | Authorize browser reads through this Neutron |
+| `marketplace_connect_v1` | Restore automatic browser read access through this Neutron |
 | `marketplace_quote_v1`, `marketplace_purchase_v1` | Review costs and acquire apps |
 | `marketplace_ethereum_quote_v1`, `marketplace_ethereum_purchase_v1` | Review and pay Ethereum USDC through EVM Wallet |
 | `marketplace_ethereum_continue_v1`, `marketplace_ethereum_verify_v1`, `marketplace_ethereum_settle_v1`, `marketplace_ethereum_cancel_v1` | Resume or verify the original Ethereum invoice, collect converted credit, or cancel before entitlement |

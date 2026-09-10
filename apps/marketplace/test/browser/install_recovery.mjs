@@ -46,7 +46,7 @@ window.marketplaceTransport={callTool(call){
  if(call.target!=='app:marketplace:background')return Promise.reject(Error('Unexpected application endpoint'));
  const method=call.arguments.method,args=JSON.parse(call.arguments.paramsJson);state.calls.push({method,args});
  if(method==='initialize'||method==='connect')return Promise.resolve(result({configured:true,connected:true,canisterId,account:owner,host:'https://icp-api.io'}));
- if(method==='catalog')return Promise.resolve(result(page([app])));
+ if(method==='catalog')return Promise.resolve(result(page(args.tier==='free'?[app]:[])));
  if(method==='library')return Promise.resolve(result(page([{...app,installedVersion:state.installed?'101':null}])));
  if(method==='detail')return Promise.resolve(result(app));
  if(method==='recentOperations')return Promise.resolve(result(state.saved&&!state.saved.opened?[operation(state.saved)]:[]));

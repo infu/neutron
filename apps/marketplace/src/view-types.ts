@@ -21,7 +21,7 @@ export type PublishedApp = AppListing & {
   status: "draft" | "uploading" | "in_review" | "approved" | "rejected" | "revoked";
   rejectionReason?: string; coverageEndsAt?: string;
 };
-export type Session = { configured: boolean; canisterId: string; host: string; account: string | null; connected: boolean };
+export type Session = { configured: boolean; canisterId: string; host: string; account: string | null; connected: boolean; connectionError?: string | null };
 export type CycleEstimate = { total: string; processing: string; storage?: string; schedule: string };
 export type Allocation = { kind: "developer" | "affiliate" | "burn"; principal: string | null; amount: Money; label?: string };
 export type EthereumWalletSource = "evm_wallet" | "browser";

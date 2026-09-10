@@ -20,7 +20,8 @@ import App from '${root}/apps/marketplace/src/app.tsx';
 import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const principal='3rurp-vyaaa-aaaay-aacua-cai';
-const state=window.marketplaceFixture={calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[]};
+const scenario=new URL(location.href).searchParams;
+const state=window.marketplaceFixture={initializations:0,connections:0,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[]};
 const entries=[
  ['notes','Quiet Notes','A little space for your biggest ideas.','0'],
  ['garden','Garden','A clearer view of your day.','0'],
@@ -38,8 +39,8 @@ const quote=(args)=>{
 };
 const session={configured:true,canisterId:'aaaaa-aa',host:'https://icp-api.io',account:principal,connected:true};
 const client={
- initialize:async()=>session,configure:async x=>({...session,...x}),connect:async()=>session,
- catalog:async input=>{state.calls.push(['catalog',input]);return {items:entries.filter(x=>(input.tier==='free'?x[3]==='0':x[3]!=='0')&&x[1].toLowerCase().includes(input.search.toLowerCase())).map(listing),nextCursor:null,asOf:'2026-09-10T00:00:00Z'}},
+ initialize:async()=>{state.initializations++;if(scenario.get('setup')==='fatal'&&state.initializations===1)throw Error('Neutron is temporarily unavailable.');if(scenario.get('setup')==='delegate')return {...session,connected:false,connectionError:'Read access could not be prepared.'};return session;},configure:async x=>({...session,...x}),connect:async()=>{state.connections++;return session;},
+ catalog:async input=>{state.calls.push(['catalog',input]);if(scenario.get('catalog')==='paid-error'&&input.tier==='paid'&&!state.paidReadFailed){state.paidReadFailed=true;throw Error('Paid charts are temporarily unavailable.');}const matches=entries.filter(x=>(input.tier==='free'?x[3]==='0':x[3]!=='0')&&x[1].toLowerCase().includes(input.search.toLowerCase()));const paged=scenario.get('catalog')==='paged';return {items:(paged?(input.cursor?matches.slice(1):matches.slice(0,1)):matches).map(listing),nextCursor:paged&&!input.cursor&&matches.length>1?input.tier+'-next':null,asOf:'2026-09-10T00:00:00Z'}},
  detail:async id=>({...listing(entries.find(x=>x[0]===id)),description:'Your ideas deserve a place of their own. Work in a calm, focused space, with everything you need at your fingertips.',screenshots:[],audit:{auditor:principal,verdict:'approved',analysis:'The submitted package was checked for malware. No malicious behavior was found in this review.',date:'2026-09-10T00:00:00Z',packageHash:'a'.repeat(64)},ownRating:null}),
  library:async()=>({items:entries.filter(x=>state.owned.includes(x[0])).map(x=>({...listing(x),acquiredAt:'2026-09-10',installedVersion:state.installed.includes(x[0])?'1':null,available:true})),nextCursor:null}),
  publisherApps:async()=>({items:[],nextCursor:null}),
@@ -83,6 +84,13 @@ try {
   await page.route("**/*", route => route.request().url().startsWith(url) ? route.continue() : route.abort());
   await page.goto(url);
   await page.getByRole("button", { name: /Quiet Notes/ }).waitFor();
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.initializations), 1);
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.connections), 0);
+  assert.equal(await page.getByRole("button", { name: /^(Connect|Connected|Connect this Neutron)$/ }).count(), 0);
+  assert.deepEqual(await page.locator('.mp-catalog-section > h3').allTextContents(), ['Top paid', 'Top free']);
+  assert.equal(await page.locator('.mp-rank').count(), 0);
+  assert.equal(await page.getByRole("button", { name: /Top (paid|free)/ }).count(), 0);
+  checks.push("Marketplace initializes automatically for this Neutron, without a Connect action; paid then free charts are visible together with no rank numbers.");
   for (const width of [320, 380, 480, 960]) {
     await page.setViewportSize({ width, height: 760 });
     const bounds = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth, body: document.querySelector('.mp-body').scrollWidth, client: document.querySelector('.mp-body').clientWidth, firstCard: document.querySelector('.mp-app-card').getBoundingClientRect().top }));
@@ -93,11 +101,18 @@ try {
   }
   checks.push("Explore is compact and has no horizontal overflow at 320, 380, 480 and 960px.");
   await page.setViewportSize({ width: 380, height: 760 });
-  await page.getByRole("button", { name: "Top paid", exact: true }).click();
   await page.getByRole("combobox", { name: "Ranking period" }).selectOption("month");
   await page.getByRole("button", { name: "$1.999999", exact: true }).waitFor();
-  assert.ok(await page.evaluate(() => window.marketplaceFixture.calls.some(x=>x[0]==='catalog' && x[1].tier==='paid' && x[1].window==='month')));
+  assert.ok(await page.evaluate(() => ['paid','free'].every(tier=>window.marketplaceFixture.calls.some(x=>x[0]==='catalog' && x[1].tier===tier && x[1].window==='month'))));
   checks.push("Ranking controls request the selected rolling window; exact micro-dollar list prices are not truncated.");
+  await page.getByRole("button", { name: /Atlas Productivity/ }).click();
+  const appDetail = page.getByRole("dialog", { name: "Atlas", exact: true });
+  await appDetail.getByText("Audited by AI", { exact: true }).waitFor();
+  await appDetail.locator('.mp-audit > summary').click();
+  assert.match(await appDetail.locator('.mp-audit').innerText(), /3rurp-vyaaa-aaaay-aacua-cai/);
+  assert.match(await appDetail.locator('.mp-audit').innerText(), /submitted package was checked for malware/);
+  await appDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
+  checks.push("App details display Audited by AI while retaining the auditor principal and exact review analysis.");
   await page.getByRole("button", { name: "$10.00", exact: true }).click();
   const checkout = page.getByRole("dialog", { name: "Review purchase", exact: true });
   await checkout.getByLabel(/Affiliate code/).fill("QUIET-CODE");
@@ -213,6 +228,48 @@ try {
   assert.equal(dependencyPurchase.payment.atoms, '5000000');
   assert.equal(await page.evaluate(() => window.marketplaceFixture.purchased.length), beforeOwnerReview + 1);
   checks.push("A free Canvas Studio root with paid Folio dependency shows both quoted apps, labels the required app, changes to paid checkout, and waits for explicit 5 ckUSDC purchase confirmation.");
+  await page.goto(`${url}/?catalog=paged`);
+  await page.getByRole("button", { name: "Show more paid apps", exact: true }).click();
+  await page.getByRole("button", { name: /Focus Productivity/ }).waitFor();
+  assert.equal(await page.getByRole("button", { name: "Show more paid apps", exact: true }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Show more free apps", exact: true }).count(), 1);
+  assert.equal(await page.getByRole("button", { name: /Garden Productivity/ }).count(), 0);
+  await page.getByRole("button", { name: "Show more free apps", exact: true }).click();
+  await page.getByRole("button", { name: /Garden Productivity/ }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='catalog'&&call[1].cursor).map(call=>[call[1].tier,call[1].cursor])), [['paid','paid-next'],['free','free-next']]);
+  await page.getByRole("searchbox", { name: "Search apps", exact: true }).fill("Atlas");
+  await page.getByText("No matching free apps.", { exact: true }).waitFor();
+  assert.ok(await page.evaluate(() => ['paid','free'].every(tier=>window.marketplaceFixture.calls.some(call=>call[0]==='catalog'&&call[1].tier===tier&&call[1].search==='Atlas'))));
+  checks.push("Paid and free charts page independently, and a shared search applies to both lists without carrying pagination into the new search.");
+
+  await page.goto(`${url}/?catalog=paid-error`);
+  await page.getByText("Paid charts are temporarily unavailable.", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /Quiet Notes/ }).waitFor();
+  await page.getByRole("region", { name: "Top paid", exact: true }).getByRole("button", { name: "Try again", exact: true }).click();
+  await page.getByRole("button", { name: /Atlas Productivity/ }).waitFor();
+  checks.push("One chart's read error does not block the other chart, and its retry recovers in place.");
+
+  await page.goto(`${url}/?setup=delegate`);
+  await page.getByText("Read access could not be prepared.", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: "My Apps", exact: true }).click();
+  await page.getByRole("heading", { name: "Your library is unavailable", exact: true }).waitFor();
+  assert.equal(await page.getByText("Opening marketplace…", { exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Retry setup", exact: true }).click();
+  await page.getByLabel("Select Quiet Notes", { exact: true }).waitFor();
+  assert.equal(await page.getByText("Read access could not be prepared.", { exact: true }).count(), 0);
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.connections), 1);
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), []);
+  checks.push("A recoverable setup error preserves public browsing, clearly explains the unavailable library, and Retry setup restores it without a purchase.");
+
+  await page.goto(`${url}/?setup=fatal`);
+  await page.getByText("Neutron is temporarily unavailable.", { exact: true }).waitFor();
+  assert.equal(await page.getByText("Opening marketplace…", { exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Retry setup", exact: true }).click();
+  await page.getByRole("button", { name: /Atlas Productivity/ }).waitFor();
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.initializations), 2);
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.connections), 0);
+  checks.push("A failed initial Neutron request stops loading and offers a working initialization retry.");
   assert.deepEqual(errors, []);
   await writeFile(join(output, "results.json"), JSON.stringify({ checks, errors }, null, 2));
   console.log(`Marketplace UI checks passed. Artifacts: ${output}`);

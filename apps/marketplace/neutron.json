@@ -2,13 +2,16 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 107,
+  "version": 109,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
   "backend": {
     "capabilities": {
       "backend_calls": {
+        "api": 1
+      },
+      "wallet_custody_signing": {
         "api": 1
       }
     }
@@ -27,6 +30,12 @@
     "description": "Marketplace queries, purchases, publishing and install tools"
   },
   "capabilities": {
+    "background_ui_requests": {
+      "api": 1,
+      "categories": [
+        "backend_access"
+      ]
+    },
     "persistent_browser_storage": {
       "api": 1,
       "surface": "background"
@@ -72,10 +81,14 @@
       "methods": [
         "marketplace_state",
         "marketplace_initialize",
+        "marketplace_configure",
+        "marketplace_call",
         "marketplace_draft",
         "marketplace_drafts",
         "marketplace_save_draft",
-        "marketplace_revise_draft"
+        "marketplace_revise_draft",
+        "marketplace_read_key",
+        "marketplace_read_identity"
       ]
     },
     "ethereum_provider": {
@@ -93,6 +106,16 @@
         "eth_sendTransaction",
         "eth_getTransactionReceipt"
       ]
+    },
+    "wallet_custody_signing": {
+      "api": 1,
+      "slots": [
+        {
+          "id": "read_access",
+          "algorithm": "ecdsa_secp256k1",
+          "purpose": "Permanent Marketplace read identity for this Neutron; authorize browser reads without wallet spending or another login after reinstall."
+        }
+      ]
     }
   },
   "func": {
@@ -103,6 +126,14 @@
     "marketplace_initialize": {
       "type": "update",
       "async": false
+    },
+    "marketplace_read_key": {
+      "type": "update",
+      "async": "async*"
+    },
+    "marketplace_read_identity": {
+      "type": "update",
+      "async": "async*"
     },
     "marketplace_configure": {
       "type": "update",

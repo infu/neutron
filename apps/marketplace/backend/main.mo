@@ -1,10 +1,12 @@
 import Blob "mo:core/Blob";
 import List "mo:core/List";
 import Map "mo:core/Map";
+import Nat64 "mo:core/Nat64";
 import Text "mo:core/Text";
 import Principal "mo:core/Principal";
 import Capabilities "mo:neutron-capabilities";
 import Memory "./memory/state/v1";
+import ReadIdentity "./read_identity";
 
 module {
     public type State = { seed : ?Blob; canister : ?Principal; host : Text; owner : Principal; revision : Nat };
@@ -17,9 +19,23 @@ module {
     public type StateResult = { #ok : State; #err : Text };
     public type TextResult = { #ok : Text; #err : Text };
     public type BlobResult = { #ok : Blob; #err : Text };
+    public type ReadIdentityRequest = { publicKey : Blob };
+    public type ReadIdentityResult = {
+        #ok : {
+            publicKey : Blob;
+            sessionPublicKey : Blob;
+            signature : Blob;
+            expiration : Nat64;
+            target : Principal;
+        };
+        #err : Text;
+    };
     public type AppBackendEnvironment = {
         stable_memory : { state : Memory.Mem };
-        capabilities : { backend_calls : Capabilities.BackendCallsV1 };
+        capabilities : {
+            backend_calls : Capabilities.BackendCallsV1;
+            wallet_custody_signing : Capabilities.WalletCustodySigningV1;
+        };
     };
     // Explicit mutation contract. Reads never use this broker.
     public func allowed(method : Text) : Bool {
@@ -44,6 +60,33 @@ module {
             if (Blob.size(seed) != 32) return #err("The browser read key must contain 32 bytes.");
             if (mem.seed == null) { mem.seed := ?seed; mem.revision += 1 };
             #ok(snapshot());
+        };
+        public func /*update*/ marketplace_read_key(()) : async* BlobResult {
+            let key = switch (await* env.capabilities.wallet_custody_signing.public_key(ReadIdentity.SLOT)) {
+                case (#ok(value)) value;
+                case (#err(error)) return #err("Could not restore the permanent marketplace read identity: " # debug_show(error));
+            };
+            if (key.slot != ReadIdentity.SLOT or key.namespace_version != 2 or key.public_key.size() != 33) return #err("The permanent marketplace read identity has an unexpected key format.");
+            if (key.public_key[0] != 2 and key.public_key[0] != 3) return #err("The permanent marketplace read identity has an invalid public key.");
+            #ok(key.public_key);
+        };
+        public func /*update*/ marketplace_read_identity(request : ReadIdentityRequest) : async* ReadIdentityResult {
+            if (not ReadIdentity.validSessionKey(request.publicKey)) return #err("The browser read signer must use its Ed25519 public key.");
+            let ?savedSeed = mem.seed else return #err("Initialize the saved browser read signer first.");
+            let ?target = mem.canister else return #err("Configure the marketplace protocol first.");
+            let key = switch (await* marketplace_read_key(())) {
+                case (#ok(value)) value;
+                case (#err(error)) return #err(error);
+            };
+            if (mem.canister != ?target or mem.seed != ?savedSeed) return #err("The marketplace configuration changed while restoring access. Try again.");
+            let digest = ReadIdentity.signingDigest(request.publicKey, target);
+            let signed = switch (await* env.capabilities.wallet_custody_signing.sign_digest({ slot = ReadIdentity.SLOT; digest })) {
+                case (#ok(value)) value;
+                case (#err(error)) return #err("Could not authorize the saved browser read signer: " # debug_show(error));
+            };
+            if (mem.canister != ?target or mem.seed != ?savedSeed) return #err("The marketplace configuration changed while restoring access. Try again.");
+            if (signed.slot != ReadIdentity.SLOT or signed.digest != digest or signed.signature.size() != 64) return #err("The marketplace read delegation did not match the requested identity.");
+            #ok({ publicKey = key; sessionPublicKey = request.publicKey; signature = signed.signature; expiration = ReadIdentity.EXPIRATION; target });
         };
         public func /*update*/ marketplace_configure(request : Configure) : StateResult {
             if (Principal.isAnonymous(request.canister)) return #err("Select the marketplace protocol canister.");
@@ -106,6 +149,12 @@ public type marketplace_state_Output = State;
 
 public type marketplace_initialize_Input = (seed : Blob);
 public type marketplace_initialize_Output = StateResult;
+
+public type marketplace_read_key_Input = (());
+public type marketplace_read_key_Output = BlobResult;
+
+public type marketplace_read_identity_Input = (request : ReadIdentityRequest);
+public type marketplace_read_identity_Output = ReadIdentityResult;
 
 public type marketplace_configure_Input = (request : Configure);
 public type marketplace_configure_Output = StateResult;

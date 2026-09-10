@@ -73,7 +73,7 @@ const fixture = `
       return { message: 'Package submitted for review.' };
     },
   };
-  createRoot(document.getElementById('root')!).render(<main className='nt-app mp-app'><div className='mp-shell'><div className='mp-body'><PublisherPanel client={client} connected={true} connect={() => unexpected('connect prop')} refresh={0} onChanged={() => { state.refreshes++; if (state.throwRefresh) throw Error('Fixture surrounding view refresh failed'); }} /></div></div></main>);
+  createRoot(document.getElementById('root')!).render(<main className='nt-app mp-app'><div className='mp-shell'><div className='mp-body'><PublisherPanel client={client} connected={true} refresh={0} onChanged={() => { state.refreshes++; if (state.throwRefresh) throw Error('Fixture surrounding view refresh failed'); }} /></div></div></main>);
 `;
 await build({ absWorkingDir: root, stdin: { contents: fixture, loader: "tsx", resolveDir: root }, outfile: join(out, "main.js"), bundle: true, platform: "browser", format: "esm", jsx: "automatic", logLevel: "warning", plugins: [sassPlugin()] });
 const server = createServer(async (req, res) => {

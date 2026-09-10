@@ -5,7 +5,6 @@ import { AppIcon, CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, dateLa
 type Props = {
   client: MarketplaceClient;
   connected: boolean;
-  connect: () => Promise<unknown>;
   refresh: number;
   onChanged: () => void;
 };
@@ -34,7 +33,7 @@ function FilePreview({ file, remove }: { file: File; remove: () => void }) {
   </div>;
 }
 
-export function PublisherPanel({ client, connected, connect, refresh, onChanged }: Props) {
+export function PublisherPanel({ client, connected, refresh, onChanged }: Props) {
   const [apps, setApps] = useState<PublishedApp[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,8 +41,6 @@ export function PublisherPanel({ client, connected, connect, refresh, onChanged 
   const [readError, setReadError] = useState("");
   const [reload, setReload] = useState(0);
   const pageGeneration = useRef(0);
-  const [connecting, setConnecting] = useState(false);
-  const [connectionError, setConnectionError] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [draftStarted, setDraftStarted] = useState(false);
   const [editing, setEditing] = useState<PublishedApp | null>(null);
@@ -155,14 +152,7 @@ export function PublisherPanel({ client, connected, connect, refresh, onChanged 
   const editorBusy = quoting || publishing || detailLoading;
   const fileLabel = (file: File | null, fallback: string) => file ? `${file.name} · ${bytesLabel(file.size)}` : fallback;
 
-  if (!connected) return <>
-    <EmptyState icon="publish" title="Bring your app to the marketplace" action={<button type="button" className="mp-button mp-button-primary" disabled={connecting} onClick={() => {
-      if (connecting) return;
-      setConnecting(true); setConnectionError("");
-      void connect().catch((reason) => setConnectionError(errorMessage(reason))).finally(() => setConnecting(false));
-    }}>{connecting ? "Connecting…" : "Connect this Neutron"}</button>}>Publish free and paid apps, see review feedback, and manage your releases.</EmptyState>
-    <ErrorNote error={connectionError} />
-  </>;
+  if (!connected) return <EmptyState icon="publish" title="Your publications are unavailable">Retry setup above to load your publications and saved releases.</EmptyState>;
 
   return <section className="mp-publisher" aria-label="Publisher apps">
     <div className="mp-section-heading"><div><h2>Your publications</h2><p className="mp-muted">Every release is reviewed before it reaches the store.</p></div>

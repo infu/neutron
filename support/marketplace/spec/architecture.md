@@ -16,9 +16,12 @@ and update workflows. Marketplace business rules stay in this protocol.
 
 Use the existing signed IC browser-agent model with a recoverable read delegation:
 
-1. The marketplace client creates or restores a browser signing identity.
-2. A small owner-authorized update through the Neutron registers that browser
-   principal with the protocol and attaches the required native cycles. The
+1. The marketplace client automatically restores its Neutron/app-ID custody
+   read key and authorizes the saved browser signing identity with an IC
+   delegation targeted only to this protocol. The browser signs reads locally;
+   it never receives the permanent root's private key.
+2. A small owner-authorized update through the Neutron registers that permanent
+   read principal with the protocol once and attaches the required native cycles. The
    protocol derives the account from the actual Neutron caller, not a submitted
    account-ID string.
 3. The protocol persists a binding from browser principal to Neutron account and
@@ -27,8 +30,13 @@ Use the existing signed IC browser-agent model with a recoverable read delegatio
 4. Library, checkout preview/status, publisher status and earnings queries go
    directly from browser to protocol. Ordinary user and publisher updates use the
    Neutron's existing backend-call capability with attached native cycles.
-5. Key loss or reinstall authorizes a replacement through the same Neutron.
-   Ownership, earnings and operation journals remain under the Neutron account.
+5. Reinstall restores the same permanent read principal. A fresh browser signer
+   receives another targeted delegation automatically, without registering a
+   replacement account. Version 109 preserves older browser signing seeds and
+   adds the permanent principal without deleting their old protocol binding.
+   Ownership, earnings and protocol journals remain under the Neutron account;
+   app-local journals are removed by uninstall. Update-route permissions belong
+   to the installed app instance and are restored at the first actual mutation.
 
 Ordinary update methods authenticate the actual Neutron caller. Assigned CLI
 auditors and administrators authenticate their own role principals at dedicated

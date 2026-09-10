@@ -54,7 +54,7 @@ const verified=()=>{
 const checkpoint=async stage=>{state.stage=stage;state.events.push(stage);await new Promise(resolve=>state.release=resolve);state.release=null;};
 const client={
  initialize:async()=>session,configure:async x=>({...session,...x}),connect:async()=>session,
- catalog:async()=>({items:[{...app,owned:state.owned}],nextCursor:null}),
+ catalog:async input=>({items:input.tier==='paid'?[{...app,owned:state.owned}]:[],nextCursor:null}),
  detail:async()=>({...app,owned:state.owned,description:'A local checkout test.',screenshots:[],audit:null}),
  library:async()=>({items:state.owned?[{...app,owned:true,acquiredAt:'2026-09-10',installedVersion:null,available:true}]:[],nextCursor:null}),
  publisherApps:async()=>({items:[],nextCursor:null}),earnings:async()=>({referralCode:null,affiliateDiscountBps:1000,affiliateShareBps:3000,balances:[]}),

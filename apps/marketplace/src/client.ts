@@ -1,9 +1,11 @@
 import { Ed25519KeyIdentity } from "@dfinity/identity";
+import type { Identity } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
 import { IDL } from "@dfinity/candid";
 import { isJsonObject, type MsgBusToolContext } from "neutron-tools/app";
 import { readIdentity, readState, configureState, type StoredState } from "./store.ts";
 import { makeAgent, makeTransport } from "./transport.ts";
+import { readAccess } from "./read_access.ts";
 import { CONTRACT, first, some, encodeOpaque, checkoutType, withdrawalType, type Info, type WireApp, type Fee, type Checkout, type WithdrawQuote, type WireResult, type Option, type Token } from "./protocol.ts";
 import { readWalletTokenInfo } from "./wallet.ts";
 import type { AppDetail, AppListing, Page, LibraryApp, PublishedApp, Earnings, Session, Money, CycleEstimate, OperationResult, PurchaseQuote, WithdrawalQuote, PaymentToken, AppTier, RankingWindow } from "./view-types.ts";
@@ -36,24 +38,31 @@ type Detail = { app: WireApp; candidate: Option<{ id: bigint; version: bigint; d
 let savedState: StoredState | null = null;
 let stateFlight: Promise<StoredState> | null = null;
 let connected = false;
+let browserReadIdentity: Identity | null = null;
+let clientGeneration = 0;
+let connectionFlight: { generation: number; promise: Promise<Session> } | null = null;
 let agentCache: { key: string; agent: Awaited<ReturnType<typeof makeAgent>> } | null = null;
 let infoCache: { key: string; info: Promise<Info> } | null = null;
 
 async function currentState(context: MsgBusToolContext): Promise<StoredState> {
   if (savedState) return savedState;
-  if (!stateFlight) stateFlight = readState(context.kernel).then(s => { savedState = s; return s; }).finally(() => { stateFlight = null; });
+  if (!stateFlight) {
+    const generation = clientGeneration;
+    stateFlight = readState(context.kernel).then(s => { if (generation === clientGeneration) savedState = s; return s; }).finally(() => { if (generation === clientGeneration) stateFlight = null; });
+  }
   return stateFlight;
 }
 export function session(state: StoredState): Session { return { configured: state.canisterId !== null, canisterId: state.canisterId ?? "", host: state.host, account: state.owner, connected }; }
-export function clearClient(): void { savedState = null; stateFlight = null; connected = false; agentCache = null; infoCache = null; }
+export function clearClient(): void { clientGeneration++; savedState = null; stateFlight = null; connected = false; browserReadIdentity = null; connectionFlight = null; agentCache = null; infoCache = null; }
 export async function configured(context: MsgBusToolContext, input: { canisterId: string; host: string }): Promise<Session> {
   const state = await configureState(context.kernel, input); clearClient(); savedState = state; return session(state);
 }
 export async function protocolClient(context: MsgBusToolContext) {
+  const generation = clientGeneration;
   const state = await currentState(context);
   if (!state.canisterId) throw new Error("Connect this app to the marketplace protocol in Settings.");
-  const key = `${state.host}:${state.canisterId}:${state.revision}`;
-  if (!agentCache || agentCache.key !== key) agentCache = { key, agent: await makeAgent(state, state.seed ? Ed25519KeyIdentity.generate(state.seed) : undefined) };
+  const key = `${state.host}:${state.canisterId}:${state.revision}:${browserReadIdentity?.getPrincipal().toText() ?? "legacy"}`;
+  if (!agentCache || agentCache.key !== key) agentCache = { key, agent: await makeAgent(state, browserReadIdentity ?? (state.seed ? Ed25519KeyIdentity.generate(state.seed) : undefined)) };
   const transport = makeTransport({ canisterId: state.canisterId, agent: agentCache.agent, contract: CONTRACT, kernel: context.kernel });
   if (!infoCache || infoCache.key !== key) infoCache = { key, info: transport.query<Info>("marketplace_info").catch(error => { if (infoCache?.key === key) infoCache = null; throw error; }) };
   const info = await infoCache.info;
@@ -74,6 +83,11 @@ export async function protocolClient(context: MsgBusToolContext) {
   async function update<T>(name: string, request: Record<string, unknown>, quote?: Fee): Promise<T> {
     const estimate = quote ?? await estimateUpdate(name, request);
     context.signal?.throwIfAborted();
+    // Reinstall restores the permanent read principal, but installation-scoped
+    // update routes must be granted again at the first actual mutation.
+    await transport.reserve();
+    context.signal?.throwIfAborted();
+    if (generation !== clientGeneration) throw new Error("Marketplace settings changed during setup. Retry using the current marketplace.");
     return response(await transport.update(name, [{ ...request, feeVersion: estimate.feeVersion }], estimate.totalCycles));
   }
   async function estimateUpdate(name: string, request: Record<string, unknown>, newStorageBytes = 0n): Promise<Fee> {
@@ -139,7 +153,9 @@ export async function protocolClient(context: MsgBusToolContext) {
       const parsed = input.cursor ? JSON.parse(input.cursor) as { generation: string; offset: string } : null;
       const value = await query<{ apps: WireApp[]; nextCursor: Option<{ generation: bigint; offset: bigint }>; asOfNs: bigint; refreshing: boolean }>("catalog_query", [{ search: input.search, tier: { [input.tier]: null }, window: { [input.window]: null }, cursor: parsed ? [{ generation: BigInt(parsed.generation), offset: BigInt(parsed.offset) }] : [], limit: 24n }]);
       const next = first(value.nextCursor);
-      return { items: value.apps.map(listing), nextCursor: next ? JSON.stringify({ generation: String(next.generation), offset: String(next.offset) }) : null, asOf: date(value.asOfNs), ...(value.refreshing ? { warning: "Rankings are refreshing. These results share the displayed snapshot time." } : {}) };
+      // System packages stay available to the installer and update source, but
+      // do not occupy the storefront or its discovery-tool results.
+      return { items: value.apps.filter(app => app.appId !== "kernel" && app.appId !== "marketplace").map(listing), nextCursor: next ? JSON.stringify({ generation: String(next.generation), offset: String(next.offset) }) : null, asOf: date(value.asOfNs), ...(value.refreshing ? { warning: "Rankings are refreshing. These results share the displayed snapshot time." } : {}) };
     },
     async library(cursor?: string): Promise<Page<LibraryApp>> {
       const value = await query<{ apps: WireApp[]; nextCursor: Option<bigint> }>("library_query", [{ cursor: cursor ? [BigInt(cursor)] : [], limit: 24n }]);
@@ -189,17 +205,53 @@ export async function protocolClient(context: MsgBusToolContext) {
 export type Client = Awaited<ReturnType<typeof protocolClient>>;
 export async function initialize(context: MsgBusToolContext): Promise<Session> {
   const state = await currentState(context);
-  if (state.canisterId && state.seed) {
-    try { await (await protocolClient(context)).earnings(); connected = true; }
-    catch { connected = false; }
+  if (!state.canisterId) return session(state);
+  try { return await ensureConnection(context, false); }
+  catch (error) {
+    context.signal?.throwIfAborted();
+    // Public browsing remains available when private access needs attention.
+    return { ...session(await currentState(context)), connected: false, connectionError: error instanceof Error ? error.message : String(error) };
   }
-  return session(state);
 }
 export async function connect(context: MsgBusToolContext): Promise<Session> {
-  const identity = await readIdentity(context.kernel); savedState = identity.state; agentCache = null; infoCache = null;
-  const client = await protocolClient(context);
-  await client.transport.reserve();
-  await client.update("read_delegate_set", { browser: identity.identity.getPrincipal(), active: true });
-  connected = true;
-  return session(identity.state);
+  return ensureConnection(context, true);
+}
+
+async function ensureConnection(context: MsgBusToolContext, restoreRevoked: boolean): Promise<Session> {
+  const generation = clientGeneration;
+  const checkCurrent = () => {
+    context.signal?.throwIfAborted();
+    if (generation !== clientGeneration) throw new Error("Marketplace settings changed during setup. Retry using the current marketplace.");
+  };
+  if (!connectionFlight || connectionFlight.generation !== generation) {
+    const promise = (async () => {
+      const state = await currentState(context);
+      checkCurrent();
+      if (!state.canisterId) throw new Error("Choose a marketplace in Settings.");
+      const identity = state.seed ? { state, identity: Ed25519KeyIdentity.generate(state.seed) } : await readIdentity(context.kernel);
+      checkCurrent();
+      savedState = identity.state;
+      const access = browserReadIdentity ?? await readAccess(context.kernel, identity.state, identity.identity);
+      checkCurrent();
+      browserReadIdentity = access;
+      const client = await protocolClient(context);
+      try {
+        await client.earnings();
+      } catch (error) {
+        checkCurrent();
+        const missing = error instanceof ProtocolError && (error.code === "delegate_required" || error.code === "authentication_required" || (restoreRevoked && error.code === "delegate_revoked"));
+        if (!missing) throw error;
+        await client.update("read_delegate_set", { browser: access.getPrincipal(), active: true });
+      }
+      checkCurrent();
+      connected = true;
+      return session(identity.state);
+    })().catch(error => { if (generation === clientGeneration) connected = false; throw error; }).finally(() => {
+      if (connectionFlight?.promise === promise) connectionFlight = null;
+    });
+    connectionFlight = { generation, promise };
+  }
+  const result = await connectionFlight.promise;
+  context.signal?.throwIfAborted();
+  return result;
 }
