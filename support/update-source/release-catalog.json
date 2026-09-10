@@ -89,6 +89,22 @@
     {
       "id": "icpswap",
       "directory": "../../apps/icpswap"
+    },
+    {
+      "id": "taggr",
+      "directory": "../../apps/taggr"
+    },
+    {
+      "id": "openchat",
+      "directory": "../../apps/openchat"
+    },
+    {
+      "id": "nuance",
+      "directory": "../../apps/nuance"
+    },
+    {
+      "id": "snsgov",
+      "directory": "../../apps/snsgov"
     }
   ]
 }

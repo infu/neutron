@@ -33,6 +33,9 @@ describe("release catalog", () => {
     );
     expect(catalog.updateSource).toBe(updateSource);
     expect(catalog.packages.length).toBeGreaterThan(0);
+    expect(catalog.packages.map(({ id }) => id)).toEqual(expect.arrayContaining([
+      "taggr", "openchat", "nuance", "snsgov",
+    ]));
     expect(new Set(catalog.packages.map(({ id }) => id)).size).toBe(
       catalog.packages.length,
     );

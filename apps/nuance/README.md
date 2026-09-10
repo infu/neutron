@@ -119,6 +119,11 @@ src/
 
 ## Commands
 
+Release 0.1.10 adds the production update source. Install this package once over
+an older copy marked **Manual** to enable future Settings updates, using the
+state-preserving [package update workflow](../../doc/package-updates.md).
+Existing drafts, bookmarks and the complete memory migration path are retained.
+
 ```sh
 npm --workspace neutron-nuance run package    # build the .neutron archive
 npm --workspace neutron-nuance test           # package + all suites

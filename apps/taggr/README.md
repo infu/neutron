@@ -292,6 +292,11 @@ own does:
 
 ## Build
 
+Release 0.1.7 adds the production update source. Install this package once over
+an older copy marked **Manual** to enable future Settings updates, using the
+state-preserving [package update workflow](../../doc/package-updates.md).
+The existing identity and browser storage are retained.
+
 ```sh
 cd apps/taggr
 npm run package        # validate, build, mopack, schema, metadata, pack

@@ -28,6 +28,11 @@ submission and permission changes remain in the user interface.
 
 ## Development
 
+Release 0.1.12 adds the production update source. Install this package once over
+an older copy marked **Manual** to enable future Settings updates, using the
+state-preserving [package update workflow](../../doc/package-updates.md).
+Existing configuration, drafts and audit history are retained.
+
 ```sh
 npm --workspace neutron-snsgov run package
 npm --workspace neutron-snsgov test

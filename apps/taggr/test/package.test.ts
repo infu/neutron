@@ -48,8 +48,7 @@ describe("manifest", () => {
     expect(value.tiles?.[0]).toMatchObject({ id: "taggr", path: "index.html" });
     expect(value).not.toHaveProperty("backend");
     expect(value).not.toHaveProperty("init_arg");
-    // Manual-update-only; it must not inherit a distribution source.
-    expect(value).not.toHaveProperty("update_source");
+    expect(value.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
   });
 
   test("keeps the Taggr key in one versioned store", async () => {
