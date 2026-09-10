@@ -14,7 +14,7 @@ const blockNumber = "0x16cbeb2";
 const blockHash = `0x${"ee".repeat(32)}`;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
-  if (!url.includes("-rpc.publicnode.com") && url !== "https://hyperliquid.drpc.org") throw new Error(`Unexpected browser RPC URL: ${url}`);
+  if (!url.includes("-rpc.publicnode.com") && url !== "https://eth.drpc.org" && url !== "https://hyperliquid.drpc.org") throw new Error(`Unexpected browser RPC URL: ${url}`);
   const body = JSON.parse(String(init?.body));
   const method = String(body.method), params = body.params as unknown[];
   calls.push({ method, params: structuredClone(params), url });

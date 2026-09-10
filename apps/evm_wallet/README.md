@@ -296,6 +296,11 @@ its saved outcome.
 The former EVM RPC canister adapter remains historical test material. Current
 app paths use the direct browser RPC client and no backend outcall capability.
 Direct observations are provided by one server, not replica/provider consensus.
+Ethereum reads use [dRPC's public endpoint](https://drpc.org/docs/ethereum-api)
+without an account or API key. PublicNode rejects even current-block numeric
+state requests as token-gated archive requests, so it is no longer used for
+Ethereum Wallet RPC. Balances, allowances and simulations retain their exact
+block tags; an unavailable historical read is never replaced with latest state.
 History reads retry existing aggregate response-size failures with smaller pages
 at the same offset. Initial loading and Load more share this path; no operations
 are discarded or capped. Unrelated errors and a single operation that cannot fit

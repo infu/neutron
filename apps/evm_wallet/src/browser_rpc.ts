@@ -10,12 +10,16 @@ export type BrowserEvmRpcConfig = {
 };
 
 // Published HTTP endpoints support the app's opaque sandbox origin without an
-// extension or private API key. Hyperliquid lists dRPC in its developer tools:
+// extension or private API key. Ethereum uses dRPC's public endpoint because
+// PublicNode gates numeric state reads behind an archive token, even at the
+// current head. Keep exact block tags for consistent balances and simulations.
+// https://drpc.org/docs/ethereum-api
+// Hyperliquid lists dRPC in its developer tools:
 // https://hyperliquid.gitbook.io/hyperliquid-docs/builder-tools/hyperevm-tools
 // Its archive endpoint preserves explicit-block reads. The default HyperEVM
 // RPC silently substitutes latest state for numeric block tags.
 export const DEFAULT_EVM_RPC_ENDPOINTS: Readonly<Record<string, string>> = Object.freeze({
-  "1": "https://ethereum-rpc.publicnode.com",
+  "1": "https://eth.drpc.org",
   "42161": "https://arbitrum-one-rpc.publicnode.com",
   "999": "https://hyperliquid.drpc.org",
   "11155111": "https://ethereum-sepolia-rpc.publicnode.com",
