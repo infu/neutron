@@ -20,7 +20,7 @@ import App from '${root}/apps/marketplace/src/app.tsx';
 import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const principal='3rurp-vyaaa-aaaay-aacua-cai';
-const state=window.marketplaceFixture={calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false};
+const state=window.marketplaceFixture={calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[]};
 const entries=[
  ['notes','Quiet Notes','A little space for your biggest ideas.','0'],
  ['garden','Garden','A clearer view of your day.','0'],
@@ -49,7 +49,8 @@ const client={
  operation:async id=>{state.calls.push(['operation',id]);return {operationId:id,state:'pending',message:'Waiting for the original payment.',nextAction:'resume'}},
  resumeOperation:async id=>{state.calls.push(['resumeOperation',id]);return {operationId:id,state:'complete',message:'Your app is ready.',nextAction:'none'}},
  recentOperations:async()=>state.restored?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[],
- install:async ids=>{state.calls.push(['install',ids]);return {message:'Install review opened.'}},
+ quoteInstallation:async(ids,operationId)=>{const quote={operationId:operationId??(state.installationQuotes.length+1).toString(16).padStart(32,'0'),appIds:[...ids],canisterId:session.canisterId,owner:principal,cycles,fee:{feeVersion:'1',processingCycles:cycles.processing,storageCycles:'0',totalCycles:cycles.total,processingBytes:'1024',newStorageBytes:'0'}};state.installationQuotes.push(quote);return quote;},
+ install:async(ids,quote)=>{if(!state.installationQuotes.includes(quote)||JSON.stringify(ids)!==JSON.stringify(quote.appIds))throw Error('Install must retain the exact reviewed quote and app selection.');state.calls.push(['install',ids]);return {message:'Install review opened.'}},
  rate:async (...args)=>{state.calls.push(['rate',...args])},
  earnings:async()=>({referralCode:'QUIET-CODE',affiliateDiscountBps:1000,affiliateShareBps:3000,balances:[{token:'ckUSDC',available:money('4500000'),reserved:money('250000'),earned:null}]}),
  createReferralCode:async()=> 'QUIET-CODE',

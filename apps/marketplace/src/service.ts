@@ -1,6 +1,7 @@
 import { exposeTool, publishAppStateChange, type JsonObject, type JsonValue, type MsgBusToolContext } from "neutron-tools/app";
 import { initialize, configured, connect, protocolClient, randomId } from "./client.ts";
 import { runPurchase, runWithdrawal, operationStatus, operationHistory, recentOperations, resumeOperation, type SavedIntent } from "./actions.ts";
+import { quoteInstallation, installApplications, installationStatus, recentInstallations, markInstallationOpened, resumeInstallation } from "./install.ts";
 import { loadIntent } from "./store.ts";
 import {
   quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, ethereumSavedStatus, recentEthereumPurchases,
@@ -12,7 +13,7 @@ import type { EthereumFundingKind, EthereumFundingRecord } from "./ethereum.ts";
 import { first, type Option, type WireResult } from "./protocol.ts";
 import { beginPublication, beginArtifact, writeArtifact, finishPublication, quotePublication } from "./publishing.ts";
 import type { PublicationPlan } from "./publication.ts";
-import type { PurchaseQuote, WithdrawalQuote, PublicationQuote, PaymentToken, AppTier, RankingWindow, EthereumPurchaseSelection } from "./view-types.ts";
+import type { PurchaseQuote, WithdrawalQuote, PublicationQuote, PaymentToken, AppTier, RankingWindow, EthereumPurchaseSelection, InstallationQuote } from "./view-types.ts";
 
 const string = { type: "string" }, id = { type: "string", pattern: "^[0-9a-f]{32}$" }, token = { type: "string", enum: ["ICP", "ckBTC", "ckUSDC"] };
 const object = (properties: JsonObject = {}, required: string[] = Object.keys(properties)): JsonObject => ({ type: "object", properties, required, additionalProperties: false });
@@ -23,12 +24,6 @@ const sameApp = { "neutron:visibility": "same_app" };
 const asJson = (value: unknown): JsonValue => value as JsonValue;
 const text = (value: JsonValue | undefined, fallback = ""): string => typeof value === "string" ? value : fallback;
 
-async function install(context: MsgBusToolContext, appIds: string[]): Promise<{ message: string }> {
-  const client = await protocolClient(context);
-  const prepared = await client.update<{ setupUrl: string }>("install_prepare", { requestId: randomId(), appIds });
-  await context.kernel.callTool({ target: "kernel", name: "apps.install_offer", arguments: { kind: "repository_setup_url", url: prepared.setupUrl } }, 0);
-  return { message: "The selected apps are ready for review in the Neutron installer." };
-}
 function requireMarketplaceTile(context: MsgBusToolContext): void {
   if (context.agentMode || context.caller?.appId !== "marketplace" || context.caller.role !== "tile") throw new Error("This interface belongs to the marketplace tile.");
 }
@@ -37,9 +32,11 @@ function fundingKind(value: unknown): EthereumFundingKind {
   return value;
 }
 async function status(context: MsgBusToolContext, operationId: string) {
-  return await ethereumSavedStatus(context, operationId) ?? operationStatus(context, operationId);
+  return await installationStatus(context, operationId) ?? await ethereumSavedStatus(context, operationId) ?? operationStatus(context, operationId);
 }
 async function resume(context: MsgBusToolContext, operationId: string) {
+  const installation = await resumeInstallation(context, operationId);
+  if (installation) return installation;
   const ethereum = await ethereumSavedStatus(context, operationId);
   if (ethereum) {
     if (ethereum.ethereumWallet === "browser") throw new Error("Continue this Ethereum purchase from the marketplace tile with its original browser wallet.");
@@ -51,11 +48,12 @@ async function requireIcOperation(context: MsgBusToolContext, operationId: strin
   if (await ethereumSavedStatus(context, operationId)) throw new Error("This operation ID belongs to an Ethereum purchase. Continue its original payment route.");
 }
 async function history(context: MsgBusToolContext, args: JsonObject) {
-  const [ic, ethereum] = await Promise.all([
+  const [ic, ethereum, installations] = await Promise.all([
     operationHistory(context, { ...(typeof args.purchaseCursor === "string" ? { purchaseCursor: args.purchaseCursor } : {}), ...(typeof args.withdrawalCursor === "string" ? { withdrawalCursor: args.withdrawalCursor } : {}) }),
     args.ethereumCursor === "done" ? Promise.resolve({ items: [], nextCursor: null }) : ethereumHistory(context, typeof args.ethereumCursor === "string" && args.ethereumCursor !== "start" ? args.ethereumCursor : undefined),
+    recentInstallations(context),
   ]);
-  return { ...ic, ethereumPurchases: ethereum.items, nextEthereumCursor: ethereum.nextCursor ?? "done" };
+  return { ...ic, ethereumPurchases: ethereum.items, nextEthereumCursor: ethereum.nextCursor ?? "done", installations };
 }
 async function uiRead(context: MsgBusToolContext, method: string, args: JsonObject): Promise<unknown> {
   if (method === "initialize") return initialize(context);
@@ -74,11 +72,12 @@ async function uiRead(context: MsgBusToolContext, method: string, args: JsonObje
       }
       return client.quotePurchase(args as unknown as { appIds: string[]; token: PaymentToken; affiliateCode: string });
     }
+    case "quoteInstallation": return quoteInstallation(context, args.appIds as string[], typeof args.operationId === "string" ? args.operationId : undefined);
     case "quoteWithdrawal": return client.quoteWithdrawal(args as unknown as { token: PaymentToken; amountAtoms: string; destination: string });
     case "operation": return status(context, String(args.operationId));
     case "recentOperations": {
-      const [ic, ethereum] = await Promise.all([recentOperations(context), recentEthereumPurchases(context)]);
-      return [...new Map([...ic, ...ethereum].map(result => [result.operationId, result])).values()];
+      const [ic, ethereum, installations] = await Promise.all([recentOperations(context), recentEthereumPurchases(context), recentInstallations(context)]);
+      return [...new Map([...ic, ...ethereum, ...installations].map(result => [result.operationId, result])).values()];
     }
     case "ethereumJournalRead": return ethereumJournalRead(context, String(args.operationId), fundingKind(args.kind));
     case "quotePublication": return quotePublication(context, args.plan as unknown as PublicationPlan);
@@ -112,7 +111,8 @@ async function uiWrite(context: MsgBusToolContext, method: string, args: JsonObj
       return runWithdrawal(context, quote);
     }
     case "resumeOperation": return resume(context, String(args.operationId));
-    case "install": return install(context, args.appIds as string[]);
+    case "install": return installApplications(context, args.appIds as string[], args.quote as unknown as InstallationQuote);
+    case "installationOpened": return markInstallationOpened(context, args.quote as unknown as InstallationQuote);
     case "rate": await client.update("rating_set", { appId: String(args.appId), stars: BigInt(Number(args.stars)), review: String(args.text) }); return null;
     case "createReferralCode": return (await client.update<{ code: string }>("referral_get_or_create", {})).code;
     case "beginPublication": return beginPublication(context, args.quote as unknown as PublicationQuote);
@@ -204,7 +204,8 @@ register("marketplace_withdraw_v1", "Withdraw marketplace earnings", "Withdraw a
   const quote = await client.quoteWithdrawal({ operationId: text(args.operationId), token: args.token as PaymentToken, amountAtoms: text(args.amountAtoms), destination: text(args.destination) });
   return runWithdrawal(context, quote);
 });
-register("marketplace_install_v1", "Install acquired apps", "Prepare the latest approved entitled package set and open the generic Neutron installer for one or multiple apps. Installation retains Neutron's standard review. This does not purchase missing apps.", { appIds: { type: "array", items: string } }, ["appIds"], writes, async (args, context) => install(context, args.appIds as string[]));
+register("marketplace_install_quote_v1", "Review installation preparation cost", "Read the exact cycle cost of preparing the selected apps for Neutron's installer. This quote performs no charged update. The later repository grant and installation costs are reviewed separately by Neutron.", { appIds: { type: "array", items: string }, operationId: id }, ["appIds"], reads, async (args, context) => quoteInstallation(context, args.appIds as string[], typeof args.operationId === "string" ? args.operationId : undefined));
+register("marketplace_install_v1", "Install acquired apps", "Review the exact preparation cycle cost and prepare the latest approved entitled apps for the generic Neutron installer. Normal agents open owner review; Root agents use scoped authorization. The Kernel separately reviews later repository grant and installation costs. Retain operationId after an interrupted reply; this does not purchase missing apps.", { appIds: { type: "array", items: string }, operationId: id, quote: { type: "object", additionalProperties: true } }, ["appIds"], reviewed, async (args, context) => installApplications(context, args.appIds as string[], args.quote as unknown as InstallationQuote | undefined, typeof args.operationId === "string" ? args.operationId : undefined));
 register("marketplace_rate_v1", "Rate an acquired app", "Save one editable 1–5 star review for an app this Neutron acquired free or paid. Charges the fixed protocol update estimate through Neutron.", { appId: string, stars: { type: "integer", minimum: 1, maximum: 5 }, review: string }, ["appId", "stars", "review"], writes, async (args, context) => {
   const client = await protocolClient(context);
   await client.update("rating_set", { appId: text(args.appId), stars: BigInt(Number(args.stars)), review: text(args.review) });

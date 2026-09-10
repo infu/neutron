@@ -37,7 +37,9 @@ const fixture = `
     initialize: () => unexpected('initialize'), configure: () => unexpected('configure'), connect: () => unexpected('connect'),
     catalog: () => unexpected('catalog'), library: () => unexpected('library'), earnings: () => unexpected('earnings'),
     createReferralCode: () => unexpected('createReferralCode'), quotePurchase: () => unexpected('quotePurchase'), purchase: () => unexpected('purchase'),
-    operation: () => unexpected('operation'), install: () => unexpected('install'), rate: () => unexpected('rate'),
+    operation: () => unexpected('operation'),
+    quoteInstallation: async (appIds, operationId) => ({operationId: operationId ?? '11111111111111111111111111111111', appIds: [...appIds], canisterId: 'rrkah-fqaaa-aaaaa-aaaaq-cai', owner: '3rurp-vyaaa-aaaay-aacua-cai', cycles: {total: '1100000', processing: '1100000', schedule: 'fixed-fixture'}, fee: {feeVersion: '1', processingCycles: '1100000', storageCycles: '0', totalCycles: '1100000', processingBytes: '1024', newStorageBytes: '0'}}),
+    install: () => unexpected('install'), rate: () => unexpected('rate'),
     quoteWithdrawal: () => unexpected('quoteWithdrawal'), withdraw: () => unexpected('withdraw'),
     publisherApps: async (cursor) => {
       state.pageRequests.push(cursor ?? null);

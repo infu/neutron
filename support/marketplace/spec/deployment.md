@@ -126,6 +126,22 @@ never edit a released predecessor or substitute a clean install.
 No new protocol Wasm, package publication or financial smoke test was performed
 against production as part of local implementation validation.
 
+## Local CLI release check
+
+On 2026-09-10, `icp 1.0.2` installed the reviewed protocol Wasm on a separate
+managed local network, then upgraded that same canister with
+`--wasm-memory-persistence keep`. Both commands succeeded. Status queries before
+and after reported module SHA-256
+`18def141b7ed5cb081e18b4e58cb1bd11ece899985987e62d97a8d3b8799fe0f`, matching
+the normal build and public-actor PocketIC test.
+
+The upgrade deliberately supplied different fee initialization values;
+`marketplace_info` remained byte-for-byte equal, confirming that retained
+configuration was authoritative. This checks the CLI transport and constructor
+argument handling, alongside the broader retained-data PocketIC suites. It is
+not a production installation or a financial test. The disposable network was
+stopped after the check.
+
 References:
 
 - [icp 1.0.2 command reference](https://github.com/dfinity/icp-cli/blob/v1.0.2/docs/reference/cli.md)

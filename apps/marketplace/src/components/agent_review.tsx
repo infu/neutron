@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { exposeTool, removeExposedTool } from "neutron-tools/app";
-import type { CycleEstimate, PurchaseQuote, WithdrawalQuote } from "../view-types.ts";
+import type { CycleEstimate, InstallationQuote, PurchaseQuote, WithdrawalQuote } from "../view-types.ts";
 import { PurchaseQuoteView } from "./checkout.tsx";
 import { AppIcon, CycleCost, Modal, Principal, quantity, usd } from "./primitives.tsx";
 
 type EthereumInvoiceReview = { kind: "ethereum_cancel" | "ethereum_settle"; operationId: string; quote: PurchaseQuote; cycles: CycleEstimate }
   | { kind: "ethereum_verify"; operationId: string; transactionHash: string; quote: PurchaseQuote; cycles: CycleEstimate };
-type Review = { kind: "purchase"; quote: PurchaseQuote } | { kind: "withdrawal"; quote: WithdrawalQuote } | EthereumInvoiceReview;
+type Review = { kind: "purchase"; quote: PurchaseQuote } | { kind: "withdrawal"; quote: WithdrawalQuote } | { kind: "installation"; quote: InstallationQuote } | EthereumInvoiceReview;
 type Prompt = { id: number; owner: boolean; review: Review; finish: (approved: boolean) => void };
 function isInvoiceReview(review: Review): review is EthereumInvoiceReview {
   return review.kind === "ethereum_cancel" || review.kind === "ethereum_settle" || review.kind === "ethereum_verify";
@@ -24,7 +24,7 @@ export function AgentReviewHost() {
     const pending = new Set<Prompt>(); let sequence = 0;
     for (const owner of [false, true]) exposeTool(owner ? "marketplace_owner_review_v1" : "marketplace_review_v1", {
       title: "Review marketplace action",
-      description: "Owner review of the exact prepared purchase or earnings withdrawal, presented by the Kernel.",
+      description: "Owner review of exact marketplace purchase, installation, earnings withdrawal or payment recovery terms, presented by the Kernel.",
       inputSchema: { type: "object", properties: { reviewJson: { type: "string" } }, required: ["reviewJson"], additionalProperties: false },
       outputSchema: { type: "object", properties: { approved: { type: "boolean" } }, required: ["approved"], additionalProperties: false },
       annotations: { "neutron:effects": ["read", "user_visible_ui"], "neutron:visibility": "same_app", ...(owner ? {} : { "neutron:audience": "foreground_tile" }) },
@@ -33,7 +33,7 @@ export function AgentReviewHost() {
       const authenticOwner = context.caller?.appId === "marketplace" && context.caller.role === "background" && context.caller.endpoint === "app:marketplace:background";
       if (context.agentMode || (owner ? !authenticOwner : context.audience !== "foreground_tile")) throw new Error("Marketplace review requires its authenticated resident or Kernel-attested foreground presentation.");
       const review: Review = JSON.parse(String(args.reviewJson));
-      if (!review || !["purchase", "withdrawal", "ethereum_cancel", "ethereum_settle", "ethereum_verify"].includes(review.kind) || !review.quote || typeof review.quote.operationId !== "string") throw new Error("The marketplace action review is invalid.");
+      if (!review || !["purchase", "withdrawal", "installation", "ethereum_cancel", "ethereum_settle", "ethereum_verify"].includes(review.kind) || !review.quote || typeof review.quote.operationId !== "string") throw new Error("The marketplace action review is invalid.");
       if (isInvoiceReview(review)) {
         if (review.operationId !== review.quote.operationId || !review.quote.ethereum) throw new Error("The Ethereum action names a different original invoice.");
         if (review.kind === "ethereum_verify" && (typeof review.transactionHash !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(review.transactionHash))) throw new Error("The original Ethereum transaction hash is invalid.");
@@ -41,7 +41,11 @@ export function AgentReviewHost() {
       }
       // Verify display-critical exact numbers before mounting so malformed
       // provider input rejects the request rather than crashing the tile.
-      if (review.kind !== "withdrawal") {
+      if (review.kind === "installation") {
+        if (!Array.isArray(review.quote.appIds) || !review.quote.appIds.length || review.quote.appIds.some((id) => typeof id !== "string" || !id)) throw new Error("The installation review has no valid app selection.");
+        if (typeof review.quote.canisterId !== "string" || !review.quote.canisterId || typeof review.quote.owner !== "string" || !review.quote.owner) throw new Error("The installation review has an invalid marketplace or Neutron.");
+        if (BigInt(review.quote.fee.totalCycles) !== BigInt(review.quote.cycles.total)) throw new Error("The installation review has inconsistent cycle costs.");
+      } else if (review.kind !== "withdrawal") {
         usd(review.quote.subtotalUsdMicros); usd(review.quote.discountUsdMicros);
         [review.quote.payment, review.quote.totalDebit, ...review.quote.allocations.map((item) => item.amount)].forEach(quantity);
         const ethereum = review.quote.ethereum;
@@ -69,10 +73,16 @@ export function AgentReviewHost() {
   }, []);
   const prompt = prompts[0]; if (!prompt) return null;
   const review = prompt.review;
-  const title = review.kind === "ethereum_verify" ? "Verify original payment" : review.kind === "ethereum_cancel" ? "Cancel checkout" : review.kind === "ethereum_settle" ? "Collect converted payment" : prompt.owner ? `Review updated ${review.kind} costs` : review.kind === "purchase" ? "Agent purchase request" : "Agent withdrawal request";
-  const action = review.kind === "ethereum_verify" ? "Verify payment" : review.kind === "ethereum_cancel" ? "Cancel checkout" : review.kind === "ethereum_settle" ? "Collect payment" : review.kind === "purchase" ? "Approve purchase" : "Approve withdrawal";
+  const title = review.kind === "ethereum_verify" ? "Verify original payment" : review.kind === "ethereum_cancel" ? "Cancel checkout" : review.kind === "ethereum_settle" ? "Collect converted payment" : prompt.owner ? `Review updated ${review.kind} costs` : review.kind === "installation" ? "Agent installation request" : review.kind === "purchase" ? "Agent purchase request" : "Agent withdrawal request";
+  const action = review.kind === "ethereum_verify" ? "Verify payment" : review.kind === "ethereum_cancel" ? "Cancel checkout" : review.kind === "ethereum_settle" ? "Collect payment" : review.kind === "installation" ? "Install apps" : review.kind === "purchase" ? "Approve purchase" : "Approve withdrawal";
   return <Modal key={prompt.id} title={title} close={() => prompt.finish(false)} footer={<><button type="button" className="mp-secondary" onClick={() => prompt.finish(false)}>Decline</button><button type="button" className="mp-primary" onClick={() => prompt.finish(true)}>{action}</button></>}>
-    {isInvoiceReview(review) ? <div className="mp-stack">
+    {review.kind === "installation" ? <div className="mp-stack">
+      <section><h3>Apps to install</h3><ul>{review.quote.appIds.map((id, index) => <li key={`${id}-${index}`}><code>{id}</code></li>)}</ul></section>
+      <div className="mp-destination"><span className="mp-muted">Marketplace</span><Principal value={review.quote.canisterId} /></div>
+      <div className="mp-destination"><span className="mp-muted">Your Neutron</span><Principal value={review.quote.owner} /></div>
+      <CycleCost value={review.quote.cycles} />
+      <p className="mp-muted">This covers marketplace installation preparation. The Kernel will review app permissions and its installation costs separately.</p>
+    </div> : isInvoiceReview(review) ? <div className="mp-stack">
       <p className="mp-notice">{review.kind === "ethereum_verify" ? "Check this Ethereum transaction against the original invoice and ask the protocol to verify it independently. This does not send another Ethereum payment." : review.kind === "ethereum_cancel" ? "Cancel this checkout. This cannot stop an Ethereum payment already sent; a late payment remains recoverable as ckUSDC credit. It does not refund a completed app purchase or send another Ethereum payment." : "Collect the converted ckUSDC assigned to this invoice. This finalizes protocol accounting without another Ethereum payment or another app purchase."}</p>
       <div className="mp-destination"><span className="mp-muted">Marketplace</span><Principal value={review.quote.ethereum!.recipientPrincipal} /></div>
       {review.kind === "ethereum_verify" && <div className="mp-destination"><span className="mp-muted">Ethereum transaction</span><Principal value={review.transactionHash} /></div>}

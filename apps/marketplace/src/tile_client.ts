@@ -1,5 +1,5 @@
 import { callTool, type JsonObject, type EthereumProviderConnection } from "neutron-tools/app";
-import type { MarketplaceClient, PublicationInput, PublicationQuote, PurchaseQuote, OperationResult } from "./view-types.ts";
+import type { MarketplaceClient, PublicationInput, PublicationQuote, PurchaseQuote, OperationResult, InstallationQuote } from "./view-types.ts";
 import { base64, preparePublication, publicationFiles, UPLOAD_CHUNK_BYTES, type PublicationPlan } from "./publication.ts";
 
 async function invoke<T>(write: boolean, method: string, args: unknown = {}): Promise<T> {
@@ -70,6 +70,14 @@ async function publish(input: PublicationInput, quote: PublicationQuote, progres
   progress(100);
   return result;
 }
+async function openInstallation(quote: InstallationQuote): Promise<OperationResult> {
+  if (!quote.setupUrl) throw new Error("Prepare this saved selection before opening the installer.");
+  // Dispatch from the physical tile before the first await. A background
+  // round-trip would lose both endpoint provenance and the click activation.
+  await callTool({ target: "kernel", name: "apps.install_offer", arguments: { kind: "repository_setup_url", url: quote.setupUrl } }, { timeout: 0 });
+  return invoke(true, "installationOpened", { quote });
+}
+
 export function createMarketplaceClient(): MarketplaceClient {
   return {
     initialize: () => invoke(false, "initialize"), configure: args => invoke(true, "configure", args), connect: () => invoke(true, "connect"),
@@ -80,7 +88,11 @@ export function createMarketplaceClient(): MarketplaceClient {
     operation: operationId => invoke(false, "operation", { operationId }), recentOperations: () => invoke(false, "recentOperations"), resumeOperation: (operationId, connection) => connection ? browserPurchase(connection, undefined, operationId) : invoke(true, "resumeOperation", { operationId }),
     cancelEthereumCheckout: operationId => invoke(true, "ethereumCancel", { operationId }),
     verifyEthereumTransaction: (operationId, transactionHash) => invoke(true, "ethereumVerifyOriginal", { operationId, transactionHash }),
-    install: appIds => invoke(true, "install", { appIds }), rate: (appId, stars, text) => invoke(true, "rate", { appId, stars, text }),
+    quoteInstallation: (appIds, operationId) => invoke(false, "quoteInstallation", { appIds, ...(operationId ? { operationId } : {}) }),
+    install: (appIds, quote) => {
+      if (JSON.stringify(appIds) !== JSON.stringify(quote.appIds)) return Promise.reject(new Error("The selected apps changed. Refresh the installation quote."));
+      return quote.setupUrl ? openInstallation(quote) : invoke(true, "install", { appIds, quote });
+    }, openInstallation, rate: (appId, stars, text) => invoke(true, "rate", { appId, stars, text }),
     quoteWithdrawal: args => invoke(false, "quoteWithdrawal", args), withdraw: quote => invoke(true, "withdraw", { quote }),
     quotePublication: async input => invoke(false, "quotePublication", { plan: await preparePublication(input) }), publish,
   };

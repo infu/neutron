@@ -1,10 +1,11 @@
 import { useState } from "react";
-import type { AppListing, MarketplaceClient } from "../view-types.ts";
+import type { AppListing, InstallationQuote, MarketplaceClient } from "../view-types.ts";
+import { InstallControl } from "./install.tsx";
 import { AppIcon, ErrorNote, Icon, Loading, Modal, Principal, dateLabel, errorMessage, usd, useRead } from "./primitives.tsx";
 
-export function AppDetailDialog({ client, app, close, acquire, install, connected, connect }: {
+export function AppDetailDialog({ client, app, close, acquire, install, connected, connect, installing = false }: {
   client: MarketplaceClient; app: AppListing; close: () => void; acquire: (app: AppListing) => void;
-  install: (ids: string[]) => void; connected: boolean; connect: () => Promise<unknown>;
+  install: (ids: string[], quote: InstallationQuote) => Promise<void> | void; connected: boolean; connect: () => Promise<unknown>; installing?: boolean;
 }) {
   const [revision, setRevision] = useState(0), [ratingOpen, setRatingOpen] = useState(false), [rating, setRating] = useState(0), [review, setReview] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -18,7 +19,7 @@ export function AppDetailDialog({ client, app, close, acquire, install, connecte
     catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
-  return <Modal title={shown.title} close={close} wide footer={<><span className="mp-muted mp-footer-note">{installed ? "Installed. Manage app updates in Settings." : shown.owned ? "Owned by this Neutron · Future updates included" : "One acquisition. All future approved updates."}</span><button className="mp-primary" type="button" disabled={installed} onClick={() => { if (shown.owned) install([shown.id]); else acquire(shown); }}>{installed ? "Installed" : shown.owned ? "Install app" : BigInt(shown.priceUsdMicros) === 0n ? "Get app" : `Get · ${usd(shown.priceUsdMicros)}`}</button></>}>
+  return <Modal title={shown.title} close={close} wide footer={<><span className="mp-muted mp-footer-note">{installed ? "Installed. Manage app updates in Settings." : shown.owned ? "Owned by this Neutron · Future updates included" : "One acquisition. All future approved updates."}</span>{shown.owned || installed ? <InstallControl client={client} appIds={[shown.id]} disabled={installed} busy={installing} label={installed ? "Installed" : "Install app"} onInstall={install} className="mp-primary" /> : <button className="mp-primary" type="button" onClick={() => acquire(shown)}>{BigInt(shown.priceUsdMicros) === 0n ? "Get app" : `Get · ${usd(shown.priceUsdMicros)}`}</button>}</>}>
     <div className="mp-detail-hero"><AppIcon app={shown} large /><div><span className="mp-eyebrow">{shown.category}</span><h2>{shown.title}</h2><p>{shown.summary}</p></div></div>
     <div className="mp-detail-stats"><div><strong>{shown.rating === null ? "New" : `${shown.rating.toFixed(1)} ★`}</strong><span>{shown.ratingCount ? `${shown.ratingCount.toLocaleString()} ratings` : "No ratings yet"}</span></div><div><strong>{usd(shown.priceUsdMicros)}</strong><span>Future updates included</span></div><div><strong>{shown.version}</strong><span>Latest approved version</span></div></div>
     <ErrorNote error={read.error} retry={() => setRevision((v) => v + 1)} />

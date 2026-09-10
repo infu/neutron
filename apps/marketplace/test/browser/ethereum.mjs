@@ -26,7 +26,7 @@ import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const owner='3rurp-vyaaa-aaaay-aacua-cai',marketplace='rrkah-fqaaa-aaaaa-aaaaq-cai';
 const payer='0x3333333333333333333333333333333333333333',helper='0x1111111111111111111111111111111111111111',minter='0x2222222222222222222222222222222222222222';
-const state=window.ethereumFixture={events:[],quotes:[],purchases:[],resumes:[],verifications:[],installed:[],owned:false,stage:'idle',release:null,rejectConnection:false,interrupt:false,connections:[],lastQuote:null,fullQuote:null,observed:null};
+const state=window.ethereumFixture={events:[],quotes:[],purchases:[],resumes:[],verifications:[],installed:[],owned:false,stage:'idle',release:null,rejectConnection:false,interrupt:false,connections:[],lastQuote:null,fullQuote:null,observed:null,installationQuotes:[]};
 const app={id:'studio',title:'Canvas Studio',summary:'Create and collect what inspires you.',priceUsdMicros:'5000000',category:'Creativity',publisher:owner,version:'101',rating:4.5,ratingCount:20};
 const money=atoms=>({atoms,decimals:6,symbol:'USDC'});
 const cost=total=>({total,processing:total,schedule:'fixed-fixture'});
@@ -95,7 +95,8 @@ const client={
   await checkpoint('original-hash-verification');
   return verified();
  },
- install:async ids=>{if(!state.owned)throw Error('No verified entitlement yet.');state.installed.push(ids);return {message:'Install review opened.'};},
+ quoteInstallation:async(ids,operationId)=>{const cycles=cost('1100000');const quote={operationId:operationId??(state.installationQuotes.length+1).toString(16).padStart(32,'0'),appIds:[...ids],canisterId:marketplace,owner,cycles,fee:{feeVersion:'1',processingCycles:cycles.processing,storageCycles:'0',totalCycles:cycles.total,processingBytes:'1024',newStorageBytes:'0'}};state.installationQuotes.push(quote);return quote;},
+ install:async(ids,quote)=>{if(!state.owned)throw Error('No verified entitlement yet.');if(!state.installationQuotes.includes(quote)||JSON.stringify(ids)!==JSON.stringify(quote.appIds))throw Error('Install must retain the exact reviewed quote and app selection.');state.installed.push(ids);return {message:'Install review opened.'};},
  rate:async()=>{},createReferralCode:async()=>'',quoteWithdrawal:async()=>{throw Error('Unexpected withdrawal')},withdraw:async()=>{throw Error('Unexpected withdrawal')},quotePublication:async()=>{throw Error('Unexpected publication')},publish:async()=>{throw Error('Unexpected publication')},
 };
 createRoot(document.getElementById('root')).render(<App client={client}/>);

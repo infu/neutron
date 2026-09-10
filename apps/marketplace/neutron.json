@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 101,
+  "version": 103,
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
   "backend": {

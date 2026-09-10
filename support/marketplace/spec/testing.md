@@ -49,11 +49,25 @@ Test installation uses gzip transport for the unchanged compiled module. The pub
 prints its Wasm SHA-256. Missing tools or mismatched hashes fail the run.
 
 Official-ledger host cases use the separately pinned provisioner ICRC ledger
-Wasm with six- and eight-decimal configurations. These tests establish generic
-ICRC-1/2 transfer behavior, not every legacy ICP implementation detail. The
-protocol does not use ledger-history or archive interfaces. Likewise, same-build upgrades prove
+Wasm with six- and eight-decimal configurations. The native ICP cases separately
+install DFINITY's pinned `ledger-suite-icp-2025-08-29` Wasm at the canonical local
+ledger principal. They verify order-specific spender subaccounts, 32-byte memos,
+collection and withdrawal deduplication, concurrent balance reservations, and
+successful-receipt recovery after actual payment-engine upgrades. The fixture
+provenance is in [native-icp.md](../test/fixtures/native-icp.md). These tests do not
+establish every historical or future ledger version's behavior. The protocol
+does not use ledger-history or archive interfaces. Likewise, same-build upgrades prove
 retained-state restoration; they do not replace immutable prior-release fixtures
 and supported migration tests once a production version exists.
+
+The certified repository suite includes two paid releases in one installation
+selection, before and after a real upgrade. It verifies the legacy endpoint's
+proof of package absence before the installer uses authenticated HTTP. This
+reproduced a byte-label comparison bug in the pinned JavaScript IC client.
+The shared reader now uses lexicographic lookup for the verified asset witness;
+certificate signatures and root checks remain unchanged. Its regression keeps
+the captured witness and rejects unresolved pruned ranges and contradictory
+presence responses. Both real repository cases and all 406 SDK cases pass.
 
 ## Financial operations
 
@@ -186,6 +200,22 @@ transport, including after marketplace app uninstall. A presented install offer
 is not successful installation; confirm the resulting installed registry. A
 failed download must preserve the installed app and its state.
 
+`host/installed-lifecycle.integration.ts` runs this through the real assembled
+Neutron and current source-selected Kernel/Marketplace archives. It purchases a
+two-app basket once, downloads certified private packages, and uses checked
+installation transactions. Registry reads and managed counters verify the
+result. Uninstall/reinstall retains protocol ownership while retiring only the
+uninstalled app's memory; removing Marketplace still permits grouped Settings
+updates of the two paid apps, with their remaining state and installation
+identities preserved. The fixture derives method types from each assembled
+canister's generated Candid. It never substitutes an installer-offer mock for
+the actual registry assertions.
+
+Separate Marketplace browser tests exercise the physical tile handoff and
+saved request recovery after lost replies and remounts. Their transport fixture
+enforces the existing Kernel rule that an unscoped background process cannot
+open an installer. Root and Normal agent invocations retain their scoped route.
+
 ## Prices, audits and rankings
 
 Test list prices free, $1 and $50, with rejection of negative, fractional
@@ -220,6 +250,17 @@ delisting or tier changes must filter stale snapshot entries immediately without
 duplicating or skipping other eligible entries across pages. A lagging chart reports
 its actual `asOf`; partially expired aggregates must not be presented as current.
 All-time counts survive expiry and restart.
+
+`host/rankings-scale.integration.ts` additionally uses PocketIC's production
+instruction limits with 5,000 apps and 25,020 first acquisitions. It checks all
+six complete chart outputs, stale/current pagination and 25,000 weekly expiries
+over 50 maintenance ticks. The observed maximum was 99,069,632 metered
+instructions for expiry plus publication (0.248% of the 40-billion update
+limit), and the largest observed full-message cycle debit including garbage
+collection was 1,551,551,550 cycles. An unchanged maintenance tick still rebuilds
+the charts and advances their generation; the test verifies the resulting old-
+cursor rejection. These measurements establish headroom at this fixture scale,
+not an unlimited-size performance guarantee or a catalog quota.
 
 ## Initialization, upgrades and release evidence
 

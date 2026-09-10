@@ -13,9 +13,13 @@ export const cases: IntegrationCase[] = [{
   async run() {
     const { pic, shutdown } = await session();
     try {
-      await pic.setTime(new Date());
+      // Let PocketIC refill install-code instruction credit between the first
+      // installation and the immediate upgrade without future certificates.
+      await pic.setTime(new Date(Date.now() - 600_000));
       const fixture = await installFixture(pic, "repository_certification", "test/fixtures/Repository.mo");
       const { actor, canisterId, wasmPath } = fixture;
+      await pic.advanceTime(600_000);
+      await pic.tick();
       const subnet = await pic.getCanisterSubnetId(canisterId);
       const rootKey = new Uint8Array(await pic.getPubKey(subnet));
       const reader = createCertifiedAssetReader({ canisterId: canisterId.toText(), rootKey, readChunk: (input) => actor.read(input) });
@@ -58,7 +62,7 @@ export const cases: IntegrationCase[] = [{
       const request = (headers: [string, string][] = []) => ({ method: "GET", url: packagePath, headers, body: new Uint8Array(), certificate_version: [2] });
       const verify = async (req: ReturnType<typeof request>, response: any) => {
         const result = verifyRequestResponsePair(req, { status_code: response.status_code, headers: response.headers, body: Uint8Array.from(response.body) },
-          canisterId.toUint8Array(), BigInt(await pic.getTime()) * 1_000_000n, 300_000_000_000n, rootKey, 2);
+          canisterId.toUint8Array(), BigInt(Math.floor(await pic.getTime())) * 1_000_000n, 300_000_000_000n, rootKey, 2);
         assert.equal(result.verificationVersion, 2);
       };
       const denied = await actor.http_request(request());
@@ -80,6 +84,51 @@ export const cases: IntegrationCase[] = [{
       const restored = await actor.http_request(authenticated);
       assert.equal(restored.status_code, 200);
       await verify(authenticated, restored);
+    } finally { await shutdown() }
+  },
+}, {
+  name: "Repository two paid releases certify package absence before HTTP fallback and after upgrade",
+  scope: "http",
+  async run() {
+    const { pic, shutdown } = await session();
+    try {
+      await pic.setTime(new Date(Date.now() - 600_000));
+      const { actor, canisterId, wasmPath } = await installFixture(pic, "repository_certification", "test/fixtures/Repository.mo");
+      await pic.advanceTime(600_000);
+      await pic.tick();
+      const rootKey = new Uint8Array(await pic.getPubKey(await pic.getCanisterSubnetId(canisterId)));
+      const reader = createCertifiedAssetReader({ canisterId: canisterId.toText(), rootKey, readChunk: (input) => actor.read(input) });
+      const json = async (path: string) => {
+        const value = await reader.readRaw(path);
+        assert.ok(value);
+        return JSON.parse(new TextDecoder().decode(value));
+      };
+      const prepared = await actor.setupTwo();
+      assert.equal(parseRepositoryInfo(await json("/repo/v1/info.json")).protocol, "neutron-repo-v1");
+      assert.deepEqual(parseRepositoryManifestIndex(await json("/repo/v1/manifests.json")).manifests, []);
+      assert.equal(parseRepositoryAccessDescriptor(await json("/repo/v1/access.json")).protocol, "neutron-repo-access-v1");
+      const manifestPath = `/repo/v1/manifests/${prepared.manifestId}.json`;
+      const manifest = parseRepositoryManifest(await json(manifestPath));
+      assert.deepEqual(manifest.packages.map(({ id, version }) => [id, version]), [["paid_alpha", 100], ["paid_beta", 100]]);
+      const verifyAbsent = async () => {
+        for (const selected of manifest.packages) {
+          const release = parseRepositoryReleaseRecord(await json(`/repo/v1/releases/${selected.id}.json`));
+          assert.equal(release.sha256, selected.sha256);
+          const packagePath = `/repo/v1/packages/${release.sha256}.neutron`;
+          const packageReader = createCertifiedAssetReader({
+            canisterId: canisterId.toText(), rootKey,
+            readChunk: ({ index }) => actor.repo_package({ sha256: release.sha256, index }),
+          });
+          assert.equal(await packageReader.readRaw(packagePath), undefined,
+            `${selected.id}: generic installer must verify certified absence before using private HTTP`);
+        }
+      };
+      await verifyAbsent();
+      await pic.upgradeCanister({ canisterId, wasm: wasmPath, arg: new Uint8Array(),
+        upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+      assert.deepEqual(await actor.prepareTwo(), prepared);
+      assert.deepEqual(parseRepositoryManifest(await json(manifestPath)), manifest);
+      await verifyAbsent();
     } finally { await shutdown() }
   },
 }];

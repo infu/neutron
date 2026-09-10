@@ -46,6 +46,7 @@ export type OperationResult = {
   /** Ledger-confirmed block returned for the retained attempt, when available. */
   ledgerBlock?: string;
   paymentRail?: "ethereum"; entitled?: boolean; ethereumTransactionHash?: string; ethereumWallet?: EthereumWalletSource;
+  installation?: InstallationQuote;
   settlement?: { state: "pending" | "complete" | "failed"; message: string };
 };
 export type Earnings = {
@@ -62,6 +63,12 @@ export type PublicationInput = {
   packageFile: File | null; sourceFile: File | null; iconFile: File | null; screenshotFiles: File[];
 };
 export type PublicationQuote = { cycles: CycleEstimate; bytes: number; coverageEndsAt: string; warnings: string[]; opaque: unknown };
+export type InstallationQuote = {
+  operationId: string; appIds: string[]; canisterId: string; owner: string; cycles: CycleEstimate;
+  /** Saved installer handoff; opening it does not repeat charged preparation. */
+  setupUrl?: string;
+  fee: { feeVersion: string; processingCycles: string; storageCycles: string; totalCycles: string; processingBytes: string; newStorageBytes: string };
+};
 export interface MarketplaceClient {
   initialize(): Promise<Session>;
   configure(input: { canisterId: string; host: string }): Promise<Session>;
@@ -79,7 +86,9 @@ export interface MarketplaceClient {
   resumeOperation(operationId: string, browserConnection?: EthereumProviderConnection): Promise<OperationResult>;
   cancelEthereumCheckout(operationId: string): Promise<OperationResult>;
   verifyEthereumTransaction(operationId: string, transactionHash: string): Promise<OperationResult>;
-  install(appIds: string[]): Promise<{ message: string }>;
+  quoteInstallation(appIds: string[], operationId?: string): Promise<InstallationQuote>;
+  install(appIds: string[], quote: InstallationQuote): Promise<OperationResult>;
+  openInstallation(quote: InstallationQuote): Promise<OperationResult>;
   rate(appId: string, stars: number, text: string): Promise<void>;
   quoteWithdrawal(input: { token: PaymentToken; amountAtoms: string; destination: string }): Promise<WithdrawalQuote>;
   withdraw(quote: WithdrawalQuote): Promise<OperationResult>;

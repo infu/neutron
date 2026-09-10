@@ -67,9 +67,11 @@ fixtures have distinct limits:
 
 - Scripted ledger canisters exercise lost replies, duplicates, concurrent
   continuation, and interrupted local finalization.
-- Official ICRC ledger Wasm exercises six- and eight-decimal payment flows. This
-  is not comprehensive legacy ICP-ledger compatibility coverage. No ledger-history
-  or archive adapter is used by the protocol.
+- Official generic ICRC ledger Wasm exercises six- and eight-decimal payment
+  flows; a separately pinned native ICP ledger tests order-specific spender
+  subaccounts, full-length memos, duplicates, withdrawals and upgrade recovery.
+  Coverage applies to those pinned releases. No ledger-history or archive adapter
+  is used by the protocol.
 - HTTP fixtures use the response verifier against actual canister certificates,
   including private delivery and streaming. This is local verification, not a
   production gateway test.

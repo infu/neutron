@@ -126,6 +126,41 @@ packaging. Its archive SHA-256 is
 `f3286df1e087f09c950964adf84202038a0e09d440b6e77adb7f7bb1043c70c1`.
 The shared SDK passes 402 tests, including preserved browser-wallet error codes.
 
+Marketplace 103 additionally fixes installation cost disclosure, direct tile
+handoff to the Kernel, and durable recovery of prepared or interrupted install
+requests. Reloading My Apps retains the original request; a saved setup URL
+opens without another preparation update. Both scoped agent modes keep their
+invocation-bound handoff. Its 88 top-level tests pass, including isolated suites
+with 26 installation and 8 handoff cases, alongside Motoko restoration, real
+protocol integration, five browser suites, typecheck and complete packaging.
+Archive SHA-256:
+`4c6381ee1aedb29b38de860b4356ef11194e92d22dbb4fddf6b070f910b6e426`.
+Archives 100–102 and managed memory version 1 remain unchanged.
+
+A later full-installation check found a certified-witness lookup defect in the
+pinned IC JavaScript client: comparison continued beyond the first differing
+byte, rejecting valid package-absence proofs when multiple release labels were
+present. The shared asset reader now compares labels lexicographically while
+retaining certificate/root verification and rejection of unresolved proofs.
+All 406 SDK tests and both real repository certification cases pass, including
+the captured failing witness and a same-canister upgrade.
+
+The documented `icp 1.0.2` install and `--wasm-memory-persistence keep` upgrade
+commands also passed on an isolated local network. The module hash matched the
+tested build, and retained configuration survived deliberately changed upgrade
+initialization arguments. That disposable network has been stopped.
+
+Two additional PocketIC cases pass against DFINITY's actual native ICP ledger
+Wasm: direct ICRC-1/2 compatibility and production purchase/withdrawal recovery
+across upgrades. They extend the original generic ckBTC/ckUSDC fixtures and use
+no ledger-history interfaces. The exact release and hashes are retained in the
+[fixture provenance](support/marketplace/test/fixtures/native-icp.md).
+
+A further production-limit PocketIC case passes for 5,000 apps and 25,020
+acquisitions, verifying all six ranking charts and 25,000 weekly expiries. Its
+largest measured execution used 99.07 million instructions, 0.248% of the IC
+update limit. No catalog quota or production ranking change was introduced.
+
 A broader `neutron-scripts` sweep reports 72 passes and an existing collection-
 style failure in `apps/evm_wallet/test/concurrency_await_wallet.mo` (`Array.concat`
 assignment). That unrelated fixture is unchanged; this is not a claim that the
@@ -133,26 +168,51 @@ entire repository test suite passes.
 
 The existing Kernel `kernel` v4 and `kernel_activation` v1 roots and the released
 v3→v4 migration are unchanged. Generic acquisition uses transient state; no fake
-memory migration was introduced. Kernel release 352 and marketplace release 101
+memory migration was introduced. Kernel release 354 and marketplace release 103
 are local candidates; the preceding local artifacts remain immutable. Package
 construction and qualification are not publication.
 
-Kernel 352 passes all 840 TypeScript tests and 33 Motoko suites, complete
+Kernel 354 passes all 840 TypeScript tests and 33 Motoko suites, complete
 packaging, fresh certified-assets qualification and its final candidate-binding
 check. The compiler suite passes 370 tests with 165 documented opt-in/environment
 skips. The Kernel archive SHA-256 is
-`b8f5fc3e0dd79fcb950e8ae3c1197ef48deccbc07dcaac922854acc61a498c13`;
+`b22aeb303d936753f896780148243763597af114ab80452dbe9b482a1e829156`;
 its retained offered-source artifact is
-`a657ab49014433e5074d7e1b6b958e9560839d0bccd330dc3454a94ec482e008`.
+`2aba64fa0b0c01e0ac0172c47e0153802e3714650a476aa8db31becd7c02514e`.
 
-Browser fixtures and local ledger tests do not establish mainnet behavior or
-complete live Wallet/installation acceptance. Those require a separately
-reviewed release and smoke test; no paid production testing was authorized here.
+The prior 353 test run passed 839 TypeScript cases; its growing retained-archive
+comparison exceeded the default five-second test timeout without an assertion
+failure. Version 354 gives that compatibility test an explicit 30-second budget
+and passes the complete suite. The 353 archive remains unchanged, alongside
+351–352; these retained local artifacts are included as immutable test fixtures.
+
+The final current-artifact paid-install lifecycle also passes through the normal
+host runner: one case with 113 assertions on Marketplace 103 / Kernel 354.
+A single ledger collection grants two apps; certified private downloads feed
+actual checked installs and registry reads. Uninstall/reinstall preserves
+ownership and unrelated memory. After Marketplace itself is uninstalled, both
+paid apps update together through their source, preserving their remaining
+managed state and installation identities. The test observes five private reads
+and two batch download grants, with no second purchase.
+
+Host discovery now contains 45 cases. Evidence combines the original 40-case
+baseline with five added focused cases: native ICP (2), ranking scale (1),
+two-release certification (1), and checked installation (1). This is not a claim
+of a fresh 45-case aggregate run. The existing repository case was also rerun.
+
+Local browser and PocketIC evidence does not establish mainnet behavior or a
+complete live Wallet acceptance test. Those require a separately reviewed
+release and smoke test; no paid production testing was authorized here.
 
 ## Production release remains pending
 
-- [ ] Supply the deployed marketplace principal, initial admin Neutron(s),
-  assigned auditor principal(s), and complete existing-app publisher bindings.
+- [ ] Finalize direct Blast CLI administration. The owner confirmed that admin
+  and auditor roles have no app interface. Direct auditors already work;
+  the owner approved the same cycle exemption for admin-only updates, since
+  direct ingress cannot attach native cycles. This additional change needs its
+  own direct-principal and ordinary-user charging regression tests.
+- [ ] Supply the deployed marketplace principal, initial admin/auditor CLI
+  principal(s), and separate existing-app publisher Neutron bindings.
 - [ ] Review the fixed [cycle-cost preset](support/marketplace/config/README.md),
   initial ledger fees and creation cycles; encode a complete initialization file
   outside Git. Include app-ID reservations in the first installation.

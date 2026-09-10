@@ -31,7 +31,13 @@ direct update authority.
   shows the token price, ledger fees, referral discount, developer/affiliate
   shares and allocation toward burning NTN before purchase.
 - **My Apps:** select one or several acquired apps and open the standard Neutron
-  install review. Installed apps update through Neutron Settings. Revocation
+  install review. Each Install action displays its exact preparation cycle cost
+  before any update; **Refresh cost** rechecks that quote for the same selection.
+  Once prepared, **Open installer** presents the saved selection from the tile
+  without charging preparation again. Saved preparations remain available after
+  navigating away or reloading. Neutron separately reviews subsequent
+  download-access and installation costs. Installed apps update through Neutron
+  Settings. Revocation
   blocks downloads of the affected release while preserving ownership for a
   later approved replacement.
 - **Publish:** create or edit a listing, attach a `.neutron` package and matching
@@ -63,7 +69,13 @@ before calling them; atomic amounts are decimal strings.
 | `marketplace_ethereum_continue_v1`, `marketplace_ethereum_verify_v1`, `marketplace_ethereum_settle_v1`, `marketplace_ethereum_cancel_v1` | Resume or verify the original Ethereum invoice, collect converted credit, or cancel before entitlement |
 | `marketplace_operation_v1`, `marketplace_history_v1` | Read original outcomes and recover their IDs |
 | `marketplace_withdraw_v1` | Review and withdraw earnings |
-| `marketplace_install_v1`, `marketplace_rate_v1` | Offer installation and rate acquired apps |
+| `marketplace_install_quote_v1`, `marketplace_install_v1` | Quote exact preparation cycles and offer installation with scoped owner/Root review |
+| `marketplace_rate_v1` | Rate acquired apps |
+
+Installation history also retains the original selection and prepared installer
+URL. Resume that request rather than preparing the same selection under another
+ID. A completed installer handoff means the selection was presented to Neutron;
+check My Apps or the installer for the actual installation outcome.
 
 Normal agents open an exact owner review for purchases and withdrawals. Root
 agents use the existing root permission judge. For a paid root purchase:

@@ -34,7 +34,7 @@ function officialLedger() {
 
 // Standard ICRC wire types. Init encoding is reused from neutron-provision,
 // rather than maintaining a second release-specific ledger initialization DID.
-const ledgerIdl: IDL.InterfaceFactory = ({ IDL }) => {
+export const ledgerIdl: IDL.InterfaceFactory = ({ IDL }) => {
   const blob = IDL.Vec(IDL.Nat8);
   const accountType = IDL.Record({ owner: IDL.Principal, subaccount: IDL.Opt(blob) });
   const common = {

@@ -16,7 +16,7 @@
     "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "test": "bun test && npm run test:motoko",
     "test:motoko": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/backend.test.mo",
-    "test:browser": "node test/browser/app.mjs && node test/browser/publisher.mjs && node test/browser/ethereum.mjs",
+    "test:browser": "node test/browser/app.mjs && node test/browser/publisher.mjs && node test/browser/ethereum.mjs && node test/browser/install.mjs && node test/browser/install_recovery.mjs",
     "test:protocol": "bun test/protocol.integration.ts",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "watch": "bun build.ts watch"
