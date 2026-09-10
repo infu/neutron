@@ -39,7 +39,7 @@ persistent actor {
     ignore require(db.referrals.insert({ owner = owner; code = "code-fixture"; createdAtNs = 1 }));
     ignore require(db.ratings.insert({ owner = owner; appId = "test-app"; stars = 4; review = "Useful app"; createdAtNs = 1; updatedAtNs = 1 }));
     ignore require(db.rates.insert({ ledger = owner; symbol = "symbol-fixture"; usdRate = 1; decimals = 1; observedAtNs = 1; refreshedAtNs = 1; lastError = null }));
-    ignore require(db.uploads.insert({ owner = owner; requestId = "requestId-fixture"; appId = "test-app"; digest = "digest-bytes"; size = 8; mediaType = "mediaType-fixture"; purpose = #package; ticket = ticket; hashState = ?"persisted-sha256-state"; chargeId = 1; state = #uploading; artifactId = null; createdAtNs = 1; updatedAtNs = 1 }));
+    ignore require(db.uploads.insert({ owner = owner; requestId = "requestId-fixture"; appId = "test-app"; digest = "digest-bytes"; size = 8; mediaType = "mediaType-fixture"; purpose = #package; ticket = ticket; hashState = ?"persisted-sha256-state"; candidateId = null; chargeId = 1; state = #uploading; artifactId = null; createdAtNs = 1; updatedAtNs = 1 }));
     ignore require(db.charges.insert({ owner = owner; requestId = "requestId-fixture"; method = "method-fixture"; feeVersion = 1; cycles = 1; processingCycles = 1; storageCycles = 1; coveredBytes = 1; coverageFromNs = 1; coverageUntilNs = 1; createdAtNs = 1 }));
     ignore require(db.jobs.insert({ key = "key-fixture"; kind = #xrc; ledger = null; scheduledAtNs = 1; state = #waiting; operationId = ?1; attempts = 1; lastError = ?"source unavailable"; updatedAtNs = 1 }));
     assert Store.allocateReferralCodeId(db) == 1;

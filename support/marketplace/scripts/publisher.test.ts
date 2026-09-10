@@ -9,8 +9,8 @@ import { gzipSync } from "fflate";
 import msgpack from "tiny-msgpack";
 import { hashContent } from "neutron-tools/src/hash.ts";
 import { hostedSourceArtifactPath } from "../../update-source/src/model.ts";
-import { decode, encode } from "./operator-wire.ts";
-import { Fee, FeeRequest, Info, Listing, Submit, SubmitReply, UploadBegin, UploadChunk, UploadFinish, UploadReply, preparePublisher, publish, type PublisherOptions, type Transport } from "./publisher.ts";
+import { decode, encode, json } from "./operator-wire.ts";
+import { Fee, FeeRequest, Info, Listing, ListingReply, Submit, SubmitReply, TRUSTED_FIRST_PARTY_PUBLISHER, UploadBegin, UploadChunk, UploadFinish, UploadReply, preparePublisher, publish, type PublisherOptions, type Transport } from "./publisher.ts";
 
 const p = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai"), neutron = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 const text = (s: string) => new TextEncoder().encode(s);
@@ -48,24 +48,36 @@ async function fixture(root: string) {
   return { root, packageFile, sourceFile, listingFile, options, archive };
 }
 
-function mock() {
+function mock(trustedDirect = false) {
   let loseMethod: string | undefined, lost = false, candidateCount = 0;
-  const updates: { method: string; args: string; cycles: bigint }[] = [], quotes: { argsBytes: bigint; storage: bigint }[] = [];
+  let listing: { owner: string; revision: bigint; fields: Record<string, unknown> } | undefined;
+  const updates: { method: string; args: string; cycles: bigint }[] = [], quotes: { argsBytes: bigint; storage: bigint }[] = [], queries: string[] = [];
   const uploads = new Map<string, any>();
   const bodies = new Map<string, Uint8Array>();
   const io: Transport = {
+    async callerPrincipal() { return TRUSTED_FIRST_PARTY_PUBLISHER; },
     async query(_target, method, args) {
+      queries.push(method);
       if (method === "marketplace_info") return encode(Info, { canister: p, fees: { version: 1n } });
       if (method !== "fee_quote") throw new Error(`Unexpected query ${method}`);
+      if (trustedDirect) throw new Error("Trusted direct publication must not request a fee quote.");
       const q = decode<any>(FeeRequest, args); quotes.push({ argsBytes: q.processingBytes, storage: q.newStorageBytes });
       return encode(Fee, { feeVersion: 1n, processingCycles: 100n + q.processingBytes, storageCycles: 10n * q.newStorageBytes, totalCycles: 100n + q.processingBytes + 10n * q.newStorageBytes, processingBytes: q.processingBytes, newStorageBytes: q.newStorageBytes });
     },
     async update(target, targetNeutron, method, args, cycles) {
-      expect(target.canister).toBe(p.toText()); expect(targetNeutron).toBe(neutron); expect(cycles).toBeGreaterThan(0n);
+      expect(target.canister).toBe(p.toText()); expect(targetNeutron).toBe(trustedDirect ? TRUSTED_FIRST_PARTY_PUBLISHER : neutron);
+      if (trustedDirect) expect(cycles).toBe(0n); else expect(cycles).toBeGreaterThan(0n);
       updates.push({ method, args: hex(args), cycles });
       let response: Uint8Array;
       if (method === "listing_save") {
-        const v = decode<any>(Listing, args); response = encode(IDL.Variant({ ok: IDL.Record({ appId: IDL.Text, revision: IDL.Nat64 }), err: IDL.Record({ code: IDL.Text, message: IDL.Text }) }), { ok: { appId: v.appId, revision: 0n } });
+        const { expectedRevision, feeVersion: _feeVersion, ...fields } = decode<any>(Listing, args);
+        // Match Catalog.save: an owner replay with identical listing fields
+        // returns the existing revision before evaluating expectedRevision.
+        if (listing && listing.owner !== targetNeutron) response = encode(ListingReply, { err: { code: "listing", message: "The listing belongs to another publisher." } });
+        else if (listing && json(listing.fields) === json(fields)) response = encode(ListingReply, { ok: { appId: fields.appId, revision: listing.revision } });
+        else if (listing && expectedRevision[0] !== listing.revision) response = encode(ListingReply, { err: { code: "listing", message: "The listing changed. Review its current revision before saving." } });
+        else if (!listing && expectedRevision.length && expectedRevision[0] !== 0n) response = encode(ListingReply, { err: { code: "listing", message: "This listing does not exist at the expected revision." } });
+        else { listing = { owner: targetNeutron, revision: (listing?.revision ?? 0n) + 1n, fields }; response = encode(ListingReply, { ok: { appId: fields.appId, revision: listing.revision } }); }
       } else if (method === "upload_begin") {
         const v = decode<any>(UploadBegin, args);
         if (!uploads.has(v.requestId)) { uploads.set(v.requestId, { ...v, uploadedBytes: 0n, state: { uploading: null }, artifactId: [] }); bodies.set(v.requestId, new Uint8Array()); }
@@ -84,14 +96,16 @@ function mock() {
       } else if (method === "candidate_submit") {
         const v = decode<any>(Submit, args), pkg = uploads.get("release-alpha-100:package"), source = uploads.get("release-alpha-100:source");
         candidateCount = 1;
-        response = encode(SubmitReply, { ok: { ...v, id: 99n, publisher: p, listingRevision: 0n, digest: pkg.digest, sourceDigest: source ? [source.digest] : [], state: { pending: null }, published: false, createdAtNs: 1n, updatedAtNs: 1n } });
+        response = encode(SubmitReply, { ok: { ...v, id: 99n, publisher: trustedDirect ? Principal.fromText(TRUSTED_FIRST_PARTY_PUBLISHER) : p, listingRevision: listing?.revision ?? 0n, digest: pkg.digest, sourceDigest: source ? [source.digest] : [], state: { pending: null }, published: false, createdAtNs: 1n, updatedAtNs: 1n } });
       } else throw new Error(`Unexpected update ${method}`);
       if (!lost && method === loseMethod) { lost = true; throw new Error("simulated response loss after effect"); }
       return response;
     },
   };
-  return { io, updates, quotes, uploads, bodies, candidateCount: () => candidateCount, lose: (method: string) => { loseMethod = method; } };
+  return { io, updates, quotes, queries, uploads, bodies, listing: () => listing, candidateCount: () => candidateCount, lose: (method: string) => { loseMethod = method; } };
 }
+
+const trustedOptions = (options: PublisherOptions): PublisherOptions => ({ ...options, neutron: undefined, trustedDirect: { caller: TRUSTED_FIRST_PARTY_PUBLISHER } });
 
 fixtureTest("default review validates package and complete source, quotes all costs, sends no updates", async (f) => {
   const m = mock(), prepared = await preparePublisher(f.packageFile, f.listingFile);
@@ -100,6 +114,9 @@ fixtureTest("default review validates package and complete source, quotes all co
   expect(report.steps.map(v => v.method)).toEqual(["listing_save", "upload_begin", "upload_chunk", "upload_finish", "upload_begin", "upload_chunk", "upload_finish", "candidate_submit"]);
   expect(m.quotes.filter(q => q.storage > 0n).map(q => q.storage)).toEqual(prepared.files.map(file => BigInt(file.bytes.length)));
   expect(report.estimatedRemainingCycles).toBe(report.steps.reduce((n, s) => n + BigInt(s.cycles), 0n).toString());
+  const saved = JSON.parse(await readFile(f.options.journal, "utf8"));
+  expect(saved.fingerprint).toBe(hashContent(text(json({ canister: p.toText(), neutron, network: "local", requestId: f.options.requestId, appId: prepared.appId, version: prepared.version, dependencies: prepared.dependencies, listing: prepared.listing ?? null, files: report.files }))));
+  expect(saved.mode).toBeUndefined(); expect(saved.caller).toBeUndefined();
 });
 
 for (const method of ["upload_begin", "upload_chunk", "upload_finish", "candidate_submit"]) {
@@ -150,3 +167,112 @@ fixtureTest("explicit maximum budget stops before the first paid update", async 
   await expect(publish(await preparePublisher(f.packageFile), { ...f.options, execute: true, maxCycles: 1n }, m.io)).rejects.toThrow("maximum cycle budget");
   expect(m.updates).toHaveLength(0);
 });
+
+fixtureTest("trusted publication verifies declared and actual principals before any request", async (f) => {
+  const m = mock(true), prepared = await preparePublisher(f.packageFile), options = trustedOptions(f.options);
+  await expect(publish(prepared, { ...options, trustedDirect: { caller: neutron }, execute: true }, m.io)).rejects.toThrow("configured first-party publisher");
+  m.io.callerPrincipal = async () => neutron;
+  await expect(publish(prepared, { ...options, execute: true }, m.io)).rejects.toThrow("signing principal does not match");
+  delete m.io.callerPrincipal;
+  await expect(publish(prepared, { ...options, execute: true }, m.io)).rejects.toThrow("actual signing principal");
+  await expect(publish(prepared, { ...options, execute: true })).rejects.toThrow("actual signing principal");
+  expect(m.queries).toEqual([]); expect(m.updates).toEqual([]);
+});
+
+fixtureTest("trusted review and execution use the ordinary ABI without a Neutron or cycle quotes", async (f) => {
+  const m = mock(true), prepared = await preparePublisher(f.packageFile, f.listingFile), options = trustedOptions(f.options);
+  const reviewed = await publish(prepared, options, m.io);
+  expect(m.updates).toEqual([]); expect(m.queries).toEqual(["marketplace_info"]);
+  expect(reviewed.estimatedRemainingCycles).toBe("0"); expect(reviewed.candidate).toBeNull();
+  expect(reviewed.steps.every(step => step.cycles === "0")).toBe(true);
+  const executed = await publish(prepared, { ...options, execute: true, maxCycles: 0n }, m.io);
+  expect(m.updates.map(update => update.method)).toEqual(["listing_save", "upload_begin", "upload_chunk", "upload_finish", "upload_begin", "upload_chunk", "upload_finish", "candidate_submit"]);
+  expect(m.updates.every(update => update.cycles === 0n)).toBe(true);
+  const abis: Record<string, IDL.Type> = { listing_save: Listing, upload_begin: UploadBegin, upload_chunk: UploadChunk, upload_finish: UploadFinish, candidate_submit: Submit };
+  for (const update of m.updates) {
+    expect(decode<{ feeVersion: bigint }>(abis[update.method]!, Buffer.from(update.args, "hex")).feeVersion).toBe(1n);
+  }
+  expect(m.quotes).toEqual([]); expect(executed.attemptedCycles).toBe("0");
+  expect(executed.candidate?.publisher.toText()).toBe(TRUSTED_FIRST_PARTY_PUBLISHER);
+  expect(executed.candidate?.id).toBe(99n);
+  expect(hex(executed.candidate!.digest)).toBe(prepared.files[0]!.digest);
+  expect(hex(executed.candidate!.sourceDigest[0]!)).toBe(prepared.files[1]!.digest);
+  const saved = JSON.parse(await readFile(f.options.journal, "utf8"));
+  expect(saved.mode).toBe("trusted_direct"); expect(saved.caller).toBe(TRUSTED_FIRST_PARTY_PUBLISHER); expect(saved.neutron).toBeUndefined();
+});
+
+for (const method of ["upload_begin", "upload_chunk", "upload_finish", "candidate_submit"]) {
+  fixtureTest(`trusted lost ${method} reply retains exact original IDs and zero-cycle bytes`, async (f) => {
+    const m = mock(true), prepared = await preparePublisher(f.packageFile), options = { ...trustedOptions(f.options), execute: true };
+    m.lose(method);
+    await expect(publish(prepared, options, m.io)).rejects.toThrow("same journal and request ID");
+    const dispatched = m.updates.at(-1)!;
+    const interrupted = JSON.parse(await readFile(f.options.journal, "utf8"));
+    expect(interrupted.steps.at(-1).outcome).toBe("unknown");
+    const resumed = await publish(prepared, options, m.io);
+    expect(m.updates.filter(update => update.method === dispatched.method && update.args === dispatched.args)).toEqual([dispatched, dispatched]);
+    expect(m.updates.every(update => update.cycles === 0n)).toBe(true); expect(m.quotes).toEqual([]);
+    expect(resumed.candidateId).toBe("99"); expect(resumed.candidate?.publisher.toText()).toBe(TRUSTED_FIRST_PARTY_PUBLISHER);
+    expect(m.candidateCount()).toBe(1); expect(m.uploads.size).toBe(2);
+    const count = m.updates.length;
+    await publish(prepared, options, m.io);
+    expect(m.updates).toHaveLength(count);
+  });
+}
+
+fixtureTest("ordinary and trusted journals cannot be resumed as the other authority", async (f) => {
+  const ordinary = mock(), trusted = mock(true), prepared = await preparePublisher(f.packageFile);
+  await publish(prepared, f.options, ordinary.io);
+  await expect(publish(prepared, { ...trustedOptions(f.options), execute: true }, trusted.io)).rejects.toThrow("different package bytes");
+  const direct = { ...trustedOptions(f.options), journal: path.join(f.root, "trusted.json") };
+  await publish(prepared, direct, trusted.io);
+  await expect(publish(prepared, { ...f.options, journal: direct.journal, execute: true }, ordinary.io)).rejects.toThrow("different package bytes");
+  expect(ordinary.updates).toEqual([]); expect(trusted.updates).toEqual([]);
+});
+
+fixtureTest("trusted authority cannot bypass exact source and dependency validation", async (f) => {
+  const m = mock(true), prepared = await preparePublisher(f.packageFile), options = { ...trustedOptions(f.options), execute: true };
+  const source = prepared.files.pop()!;
+  await expect(publish(prepared, options, m.io)).rejects.toThrow("offered source must remain");
+  prepared.files.push(source); prepared.dependencies.push({ appId: "wallet", minVersion: 100n });
+  await expect(publish(prepared, options, m.io)).rejects.toThrow("dependencies differ");
+  expect(m.queries).toEqual([]); expect(m.updates).toEqual([]);
+});
+
+for (const trustedDirect of [false, true]) {
+  const mode = trustedDirect ? "trusted" : "ordinary";
+  fixtureTest(`${mode} lost listing reply resumes exact fields without duplicating its revision`, async (f) => {
+    const m = mock(trustedDirect), prepared = await preparePublisher(f.packageFile, f.listingFile);
+    const options = { ...(trustedDirect ? trustedOptions(f.options) : f.options), execute: true };
+    m.lose("listing_save");
+    await expect(publish(prepared, options, m.io)).rejects.toThrow("same journal and request ID");
+    const first = m.updates[0]!;
+    expect(m.listing()?.revision).toBe(1n); expect(m.uploads.size).toBe(0);
+    expect(JSON.parse(await readFile(options.journal, "utf8")).steps[0].outcome).toBe("unknown");
+    const resumed = await publish(prepared, options, m.io);
+    expect(m.updates.filter(update => update.method === "listing_save")).toEqual([first, first]);
+    expect(m.listing()?.revision).toBe(1n); expect(resumed.candidateId).toBe("99");
+    expect(m.candidateCount()).toBe(1); expect(m.uploads.size).toBe(2);
+    const journal = JSON.parse(await readFile(options.journal, "utf8"));
+    expect(journal.steps[0].attempts).toBe(2); expect(journal.steps[0].outcome).toBe("complete");
+    expect(decode<{ ok: { revision: bigint } }>(ListingReply, Buffer.from(journal.steps[0].replyHex, "hex")).ok.revision).toBe(1n);
+  });
+
+  fixtureTest(`${mode} lost listing reply detects a concurrent edit before uploading`, async (f) => {
+    const m = mock(trustedDirect), prepared = await preparePublisher(f.packageFile, f.listingFile);
+    const options = { ...(trustedDirect ? trustedOptions(f.options) : f.options), execute: true };
+    m.lose("listing_save");
+    await expect(publish(prepared, options, m.io)).rejects.toThrow("same journal and request ID");
+    const first = m.updates[0]!;
+    const original = decode<Record<string, unknown>>(Listing, Buffer.from(first.args, "hex"));
+    const changed = await m.io.update(options.target, trustedDirect ? TRUSTED_FIRST_PARTY_PUBLISHER : neutron, "listing_save", encode(Listing, { ...original, expectedRevision: [1n], title: "Concurrent publisher edit" }), first.cycles);
+    expect(decode<{ ok: { revision: bigint } }>(ListingReply, changed).ok.revision).toBe(2n);
+    await expect(publish(prepared, options, m.io)).rejects.toThrow("The listing changed");
+    expect(m.updates.at(-1)).toEqual(first);
+    expect(m.listing()?.revision).toBe(2n); expect(m.listing()?.fields.title).toBe("Concurrent publisher edit");
+    expect(m.updates.every(update => update.method === "listing_save")).toBe(true);
+    expect(m.uploads.size).toBe(0); expect(m.candidateCount()).toBe(0);
+    const journal = JSON.parse(await readFile(options.journal, "utf8"));
+    expect(journal.steps).toHaveLength(1); expect(journal.steps[0].outcome).toBe("rejected");
+  });
+}

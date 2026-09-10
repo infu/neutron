@@ -12,6 +12,7 @@ import { neutronAppSourceRepositoryPath } from "neutron-tools/src/package_record
 import { loadReleaseCatalog } from "../../update-source/src/release_catalog.ts";
 import { hostedSourceArtifactPath, sha256Hex } from "../../update-source/src/model.ts";
 import { inspectMigrationArchive, migrationInventory, prepareMigration, publisherMap, readPublishedSnapshot, type PublishedSnapshot } from "./migration-inventory.ts";
+import { TRUSTED_PUBLISHER_CALLER } from "./first-party-publish.ts";
 
 const oldSource = "233tv-xiaaa-aaaay-aacta-cai";
 const marketplace = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -99,6 +100,22 @@ describe("read-only marketplace migration inventory", () => {
     for (const owner of ["2vxsx-fae", "aaaaa-aa", Principal.selfAuthenticating(new Uint8Array(32).fill(8)).toText()]) {
       expect(() => publisherMap(f.catalog, [{ appId: "alpha", publisher: owner }])).toThrow("canonical canister principal");
     }
+  });
+
+  test("accepts only the approved trusted identity exception without weakening source principals", async () => {
+    const f = await fixture();
+    expect(TRUSTED_PUBLISHER_CALLER).toBe("y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe");
+    const publishers = [{ appId: "alpha", publisher: TRUSTED_PUBLISHER_CALLER }];
+    expect(publisherMap(f.catalog, publishers).get("alpha")).toBe(TRUSTED_PUBLISHER_CALLER);
+    const plan = await prepareMigration({ ...f.input, publishers });
+    expect(plan.initReservations[0]?.publisher).toBe(TRUSTED_PUBLISHER_CALLER);
+    expect(plan.nextSteps.join("\n")).toContain("approved direct first-party upload");
+    expect(plan.nextSteps.join("\n")).not.toContain("through each publisher Neutron");
+    expect((await prepareMigration(f.input)).nextSteps.join("\n")).toContain("through each publisher Neutron with attached cycles");
+    const ordinaryIdentity = Principal.selfAuthenticating(new Uint8Array(32).fill(9)).toText();
+    expect(() => publisherMap(f.catalog, [{ appId: "alpha", publisher: ordinaryIdentity }])).toThrow("canonical canister principal");
+    await expect(prepareMigration({ ...f.input, marketplace: TRUSTED_PUBLISHER_CALLER, publishers })).rejects.toThrow("canonical canister principal");
+    await expect(prepareMigration({ ...f.input, published: { ...f.published, updateSource: TRUSTED_PUBLISHER_CALLER }, publishers })).rejects.toThrow("canonical canister principal");
   });
 
   test("produces deterministic reservations and exact immutable transition evidence without editing files", async () => {

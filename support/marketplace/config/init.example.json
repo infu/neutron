@@ -46,5 +46,6 @@
     "affiliateBps": "3000",
     "developerBps": "3000"
   },
-  "reservations": null
+  "reservations": null,
+  "trustedPublishingPrincipal": null
 }

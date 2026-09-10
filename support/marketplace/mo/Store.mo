@@ -19,6 +19,7 @@ module {
         charts = { free7 = []; free30 = []; freeAll = []; paid7 = []; paid30 = []; paidAll = [] };
       };
       nextReferralCodeId = 1;
+      trustedPublishingPrincipal = null;
     };
     mem;
   };
@@ -32,6 +33,10 @@ module {
 
   public func config(db : DB) : Types.Config { db.store.get().config };
   public func setConfig(db : DB, config : Types.Config) { db.store.config.set(config) };
+  public func getTrustedPublishingPrincipal(db : DB) : ?Principal { db.store.get().trustedPublishingPrincipal };
+  // Only initialization configures this deployment identity; normal config
+  // updates do not replace it or change ownership of existing records.
+  public func setTrustedPublishingPrincipal(db : DB, value : ?Principal) { db.store.trustedPublishingPrincipal.set(value) };
   public func rankingMaintenance(db : DB) : Types.RankingMaintenance { db.store.get().rankings };
   public func setRankingMaintenance(db : DB, value : Types.RankingMaintenance) { db.store.rankings.set(value) };
   public func allocateReferralCodeId(db : DB) : Nat64 {
@@ -93,6 +98,19 @@ module {
       case (#err(error)) #err(error);
       case (#ok(id)) {
         let ?stored = db.audits.get(id) else Runtime.trap("Inserted marketplace audits row is missing");
+        #ok(stored);
+      };
+    };
+  };
+
+  public func getPublishBatch(db : DB, owner : Principal, requestId : Text) : ?Types.PublishBatch {
+    db.publishBatches.by_request.lookup((owner, requestId));
+  };
+  public func insertPublishBatch(db : DB, value : Types.CreatePublishBatch) : Result.Result<Types.PublishBatch, Error> {
+    switch (db.publishBatches.insert(value)) {
+      case (#err(error)) #err(error);
+      case (#ok(id)) {
+        let ?stored = db.publishBatches.get(id) else Runtime.trap("Inserted marketplace publication batch row is missing");
         #ok(stored);
       };
     };

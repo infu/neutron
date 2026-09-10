@@ -19,6 +19,15 @@ The protocol stores immutable content, maintains hashes and certification,
 checks access and streams content. Both new and legacy HTTP responses must pass
 the normal certificate and complete-file hash/size verification before installation.
 
+Immutable identity does not promise permanent storage of every package version.
+The new marketplace retains current approved content and candidates awaiting
+review. Approval removes unreferenced superseded package/source bytes and their
+certified access paths together. Grants and streaming callbacks for retired
+content fail without substituting another version. A user can prepare the latest
+approved release under their existing ownership; purchase and audit records are
+not deleted by content retirement. Historical bytes already served by the old
+public source remain there.
+
 ## Authentication without a Neutron byte proxy
 
 A browser delegate authorizes private queries and HTTP reads only. Creating or

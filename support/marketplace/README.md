@@ -37,6 +37,13 @@ configuration are tracked in [todo.marketplace.md](../../todo.marketplace.md).
   or revoke. An audit binds the candidate ID and inspected package/source hashes.
   Pending releases do not replace an approved version, and revocation preserves
   ownership while blocking ordinary downloads of revoked bytes.
+- The configured first-party publisher, production Blast ID 0, owns the initial
+  listings. Its releases are cycle-free and automatically approved after the
+  publishing scripts inspect the exact package/source artifacts. Compatible
+  release sets publish atomically. Other publishers retain normal fees and
+  assigned-auditor review.
+- Current approved and pending-review package/source content is retained;
+  superseded bytes are removed without deleting purchases, receipts or audits.
 - Domain modules isolate catalog, audit, access, assets, ranking, ledger, payment,
   and accounting behavior. `main.mo` wires these to authenticated actor methods,
   certified responses, and scheduled maintenance.
@@ -55,7 +62,9 @@ The admin exemption covers exactly `admin_auditor_set`, `admin_reserve_app`,
 configured admin principal, accept no attached cycles, and retain `feeVersion`
 only for Candid compatibility. Existing canister admin principals remain valid.
 Admin or auditor status does not exempt purchases, uploads, or other ordinary
-writes. See [operator commands](OPERATIONS.md) for direct CLI usage.
+writes. The separately configured first-party principal may publish and withdraw
+its own earnings directly without cycle charges; ledger withdrawal fees still
+apply. See [operator commands](OPERATIONS.md) for direct CLI usage.
 
 ## Local build and validation
 

@@ -101,7 +101,7 @@ test("real marketplace paid packages install, reinstall and upgrade together aft
     const ledger = await fixture("ledger", "test/fixtures/FakeLedger.mo", [{ symbol: "ckUSDC", decimals: 6, fee: 10n }]);
     const oracle = await fixture("oracle", "test/fixtures/Oracle.mo");
     const fees = { version: 1n, updateBase: 1_000_000n, updateByte: 2n, storageByteYear: 3n, purchase: 2_000_000n, withdraw: 2_000_000n, grant: 3_000_000n, xrc: 20_000_000n };
-    const market = await fixture("protocol", "mo/main.mo", [{ admins: [publisher.canisterId], auditors: [auditor], tokens: [{ ledger: ledger.canisterId, symbol: "ckUSDC", decimals: 6, fee: 10n, rateSymbol: "USDC", burnAccount: [] }], xrc: oracle.canisterId, fees, referralTerms: { version: 1n, discountBps: 1000n, affiliateBps: 3000n, developerBps: 3000n }, reservations: [] }]);
+    const market = await fixture("protocol", "mo/main.mo", [{ admins: [publisher.canisterId], auditors: [auditor], tokens: [{ ledger: ledger.canisterId, symbol: "ckUSDC", decimals: 6, fee: 10n, rateSymbol: "USDC", burnAccount: [] }], xrc: oracle.canisterId, fees, referralTerms: { version: 1n, discountBps: 1000n, affiliateBps: 3000n, developerBps: 3000n }, reservations: [], trustedPublishingPrincipal: [] }]);
     const initial = await compileFreshPackages({ packages: initialPackages.map(p => p.prepared), persistenceMode: "classical" });
     let state = freshPackageState(initialPackages.map(p => p.prepared), initial);
     let deploymentId = initial.deploymentId;

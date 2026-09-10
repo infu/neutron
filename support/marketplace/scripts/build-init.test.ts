@@ -87,3 +87,49 @@ test("initial owner reservations encode atomically while omitted inventories rem
   expect(() => encodeMarketplaceInit({ ...input, reservations: [{ ...reservations[0], publisher: Principal.selfAuthenticating(Uint8Array.of(1)).toText() }] })).toThrow("Neutron canister principal");
   expect(() => encodeMarketplaceInit({ ...input, reservations: [{ ...reservations[0], appId: "Bad-ID" }] })).toThrow("Neutron app ID format");
 });
+
+test("omitted and null trusted publishers both roundtrip as absent", () => {
+  const { trustedPublishingPrincipal: _omitted, ...input } = fixture();
+  const omitted = encodeMarketplaceInit(input);
+  const explicitNull = encodeMarketplaceInit({ ...input, trustedPublishingPrincipal: null });
+  expect(omitted).toEqual(explicitNull);
+  for (const encoded of [omitted, explicitNull]) {
+    const [decoded] = IDL.decode([MarketplaceInit], encoded) as [{ trustedPublishingPrincipal: [] }];
+    expect(decoded.trustedPublishingPrincipal).toEqual([]);
+  }
+});
+
+test("exact trusted CLI may own reservations without authorizing other CLI identities", () => {
+  const input = fixture();
+  const trusted = Principal.selfAuthenticating(Uint8Array.of(11)).toText();
+  const another = Principal.selfAuthenticating(Uint8Array.of(12)).toText();
+  const reservations = [
+    { appId: "first_party", publisher: trusted, title: "First party app" },
+    { appId: "neutron_app", publisher: input.admins[0], title: "Neutron publisher" },
+  ];
+  const config = { ...input, trustedPublishingPrincipal: trusted, reservations };
+  const [decoded] = IDL.decode([MarketplaceInit], encodeMarketplaceInit(config)) as [{
+    trustedPublishingPrincipal: [Principal];
+    reservations: [{ appId: string; publisher: Principal; title: string }[]];
+  }];
+  expect(decoded.trustedPublishingPrincipal[0].toText()).toBe(trusted);
+  expect(decoded.reservations[0].map((row) => ({ ...row, publisher: row.publisher.toText() }))).toEqual(reservations);
+  expect(() => encodeMarketplaceInit({
+    ...config, admins: [...input.admins, another], auditors: [another],
+    reservations: [{ ...reservations[0], publisher: another }],
+  })).toThrow("exact trustedPublishingPrincipal");
+  for (const absent of [null, undefined]) {
+    expect(() => encodeMarketplaceInit({ ...config, trustedPublishingPrincipal: absent })).toThrow("exact trustedPublishingPrincipal");
+  }
+});
+
+test("trusted publisher requires valid authenticated principal text", () => {
+  const input = fixture();
+  for (const trustedPublishingPrincipal of [Principal.anonymous().toText(), Principal.fromText("aaaaa-aa").toText()]) {
+    expect(() => encodeMarketplaceInit({ ...input, trustedPublishingPrincipal })).toThrow("trustedPublishingPrincipal must be authenticated");
+  }
+  expect(() => encodeMarketplaceInit({ ...input, trustedPublishingPrincipal: "not-a-principal" })).toThrow("valid principal text");
+  expect(() => encodeMarketplaceInit({ ...input, trustedPublishingPrincipal: 1 })).toThrow("principal text");
+  const [decoded] = IDL.decode([MarketplaceInit], encodeMarketplaceInit({ ...input, trustedPublishingPrincipal: input.admins[0] })) as [{ trustedPublishingPrincipal: [Principal] }];
+  expect(decoded.trustedPublishingPrincipal[0].toText()).toBe(input.admins[0]);
+});

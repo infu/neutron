@@ -45,6 +45,15 @@ switch (restored.marketplace_revise_draft({ id = "purchase-1"; expected = "origi
 assert restored.marketplace_draft("purchase-1") == ?"changed";
 let restoredRevision = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker } });
 assert restoredRevision.marketplace_draft("history:purchase-1:revision-1") == ?"original";
+// The existing v1 root stores opaque draft bytes. New optional installation
+// diagnostics preserve older drafts and their revision history on restoration.
+let originalInstall : Blob = "{\"version\":1,\"setupUrl\":null}";
+let unavailableInstall : Blob = "{\"version\":1,\"setupUrl\":null,\"unavailableReason\":\"Saved release retired\"}";
+ignore restoredRevision.marketplace_save_draft({ id = "installation-1"; value = originalInstall });
+ignore restoredRevision.marketplace_revise_draft({ id = "installation-1"; expected = originalInstall; value = unavailableInstall; revision = "retirement" });
+let restoredInstall = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker } });
+assert restoredInstall.marketplace_draft("installation-1") == ?unavailableInstall;
+assert restoredInstall.marketplace_draft("history:installation-1:retirement") == ?originalInstall;
 assert App.allowed("purchase");
 assert App.allowed("ethereum_prepare");
 assert App.allowed("ethereum_verify");

@@ -10,6 +10,7 @@ import { parseRepositoryReleaseRecord, repositoryReleasePath, type RepositoryRel
 import { loadReleaseCatalog, productionReleaseCatalogPath, type ReleaseCatalog } from "../../update-source/src/release_catalog.ts";
 import { inspectPackageFiles } from "../../update-source/src/model.ts";
 import { readReleaseAsset, updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
+import { TRUSTED_PUBLISHER_CALLER } from "./first-party-publish.ts";
 
 export type PublisherMapping = { appId: string; publisher: string };
 export type TransitionFile = { appId: string; file: string };
@@ -46,7 +47,9 @@ export function publisherMap(catalog: ReleaseCatalog, values: readonly Publisher
   for (const value of values) {
     if (!value || !ids.has(value.appId)) throw new Error(`Publisher mapping contains an unknown app id '${value?.appId}'.`);
     if (result.has(value.appId)) throw new Error(`Duplicate publisher mapping for '${value.appId}'.`);
-    result.set(value.appId, normalizeUpdateSourcePrincipal(value.publisher, `publisher for '${value.appId}'`));
+    result.set(value.appId, value.publisher === TRUSTED_PUBLISHER_CALLER
+      ? TRUSTED_PUBLISHER_CALLER
+      : normalizeUpdateSourcePrincipal(value.publisher, `publisher for '${value.appId}'`));
   }
   const missing = [...ids].filter(id => !result.has(id)).sort(compareCanonicalText);
   if (missing.length) throw new Error(`Missing publisher mapping: ${missing.join(", ")}. Ownership must not be inferred.`);
@@ -184,7 +187,12 @@ export async function prepareMigration(options: {
     packages,
     nextSteps: [
       "Put the reviewed complete initReservations into the initial canister configuration so existing app IDs are reserved atomically before public submissions can race them. Later admin_reserve_app calls are for controlled additions, not initial migration.",
-      "Upload these exact packages and offered-source bytes through each publisher Neutron, then obtain auditor approval for each candidate.",
+      ...(packages.some(entry => entry.publisher === TRUSTED_PUBLISHER_CALLER) ? [
+        `For entries owned by ${TRUSTED_PUBLISHER_CALLER}, use the approved direct first-party upload and publication workflow as that exact trusted identity. The target must explicitly authorize this trusted publisher; an inventory mapping alone grants no authority.`,
+      ] : []),
+      ...(packages.some(entry => entry.publisher !== TRUSTED_PUBLISHER_CALLER) ? [
+        "Upload ordinary publisher entries and their exact offered-source bytes through each publisher Neutron with attached cycles, then obtain auditor approval for each candidate.",
+      ] : []),
       "Recheck the live old release records and approved marketplace candidates before publishing transition releases through the existing production workflow.",
       "Keep old public package bytes available. A transition release changes future update_source metadata; it does not delete or privatize previously public bytes.",
     ],

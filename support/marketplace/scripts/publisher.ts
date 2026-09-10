@@ -1,14 +1,15 @@
 // All rights reserved. See ../LICENSE.
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
-import { createHash, randomBytes } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { inspectPackageFiles, inspectUpdatePackage, PACKAGE_CONTENT_TYPE, SOURCE_CONTENT_TYPE, UPLOAD_CHUNK_BYTES } from "../../update-source/src/model.ts";
 import { preparePackageInstall } from "neutron-compiler/src/install.ts";
 import { normalizeManifestDependencies } from "neutron-tools/src/schema.ts";
 import { blob, Candidate, call, decode, encode, json, natural, principal, relay, result, unwrap, type Target } from "./operator-wire.ts";
+import { savePublisherJournal as save, lockPublisherJournal as lock } from "./publisher-journal.ts";
 
 const nat = IDL.Nat, text = IDL.Text, nat64 = IDL.Nat64, rec = IDL.Record, opt = IDL.Opt;
 const variant = (...keys: string[]) => IDL.Variant(Object.fromEntries(keys.map(key => [key, IDL.Null])));
@@ -21,7 +22,7 @@ export const UploadChunk = rec({ requestId: text, offset: nat64, bytes: blob, fe
 export const UploadFinish = rec({ requestId: text, feeVersion: nat });
 export const Submit = rec({ requestId: text, appId: text, version: nat, artifactId: nat64, sourceArtifactId: opt(nat64), dependencies: IDL.Vec(rec({ appId: text, minVersion: nat })), feeVersion: nat });
 export const UploadReply = result(rec({ requestId: text, appId: text, digest: blob, size: nat64, uploadedBytes: nat64, state: variant("uploading", "attached", "aborted"), artifactId: opt(nat64) }));
-const ListingReply = result(rec({ appId: text, revision: nat64 }));
+export const ListingReply = result(rec({ appId: text, revision: nat64 }));
 export const SubmitReply = result(Candidate);
 type Quote = { feeVersion: bigint; processingCycles: bigint; storageCycles: bigint; totalCycles: bigint; processingBytes: bigint; newStorageBytes: bigint };
 type UploadValue = { requestId: string; appId: string; digest: Uint8Array; size: bigint; uploadedBytes: bigint; state: Record<string, null>; artifactId: [] | [bigint] };
@@ -29,11 +30,13 @@ type Outcome<T> = { ok: T } | { err: { code: string; message: string } };
 type ListingInput = { appId: string; title: string; summary: string; description: string; priceUsdMicros: bigint; iconArtifact: bigint[]; screenshots: bigint[]; expectedRevision: bigint[] };
 type File = { purpose: "package" | "source"; digest: string; bytes: Uint8Array; mediaType: string };
 export type Prepared = { appId: string; version: bigint; dependencies: { appId: string; minVersion: bigint }[]; files: File[]; listing?: ListingInput };
-export type PublisherOptions = { target: Target; neutron: string; requestId: string; journal: string; execute?: boolean; maxCycles?: bigint };
-export type Transport = { query: (target: Target, method: string, args: Uint8Array) => Promise<Uint8Array>; update: (target: Target, neutron: string, method: string, args: Uint8Array, cycles: bigint) => Promise<Uint8Array> };
+export const TRUSTED_FIRST_PARTY_PUBLISHER = "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe";
+export type PublisherOptions = { target: Target; neutron?: string; trustedDirect?: { caller: string }; requestId: string; journal: string; execute?: boolean; maxCycles?: bigint };
+export type Transport = { callerPrincipal?: () => Promise<string>; query: (target: Target, method: string, args: Uint8Array) => Promise<Uint8Array>; update: (target: Target, neutronOrCaller: string, method: string, args: Uint8Array, cycles: bigint) => Promise<Uint8Array> };
+export type PublisherCandidate = { id: bigint; appId: string; version: bigint; publisher: Principal; artifactId: bigint; sourceArtifactId: bigint[]; digest: Uint8Array; sourceDigest: Uint8Array[]; dependencies: { appId: string; minVersion: bigint }[] };
 const transport: Transport = { query: (target, method, args) => call(target, method, args, true), update: relay };
 type Step = { key: string; method: string; argsHex: string; cycles: string; feeVersion: string; replyHex?: string; attempts: number; outcome: "prepared" | "unknown" | "complete" | "rejected"; error?: string };
-type Journal = { format: "marketplace-publisher-v1"; fingerprint: string; requestId: string; canister: string; neutron: string; appId: string; version: string; files: { purpose: string; digest: string; size: number }[]; steps: Step[]; submittedCandidateId?: string };
+type Journal = { format: "marketplace-publisher-v1"; fingerprint: string; requestId: string; canister: string; neutron?: string; mode?: "trusted_direct"; caller?: string; appId: string; version: string; files: { purpose: string; digest: string; size: number }[]; steps: Step[]; submittedCandidateId?: string };
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
 const bytes = (value: string) => Uint8Array.from(Buffer.from(value, "hex"));
@@ -64,33 +67,7 @@ export async function preparePublisher(packageFile: string, listingFile?: string
   return { appId: checked.record.id, version: BigInt(checked.record.version), dependencies, files, ...(listingFile ? { listing: listingInput(JSON.parse(await readFile(listingFile, "utf8")), checked.record.id) } : {}) };
 }
 
-async function save(file: string, journal: Journal) {
-  const temporary = `${file}.${randomBytes(8).toString("hex")}.tmp`;
-  const handle = await open(temporary, "wx", 0o600);
-  try { await handle.writeFile(json(journal)); await handle.sync(); } finally { await handle.close(); }
-  try { await rename(temporary, file); const directory = await open(path.dirname(file), "r"); try { await directory.sync(); } finally { await directory.close(); } }
-  finally { await rm(temporary, { force: true }); }
-}
-
-async function lock(file: string): Promise<() => Promise<void>> {
-  const name = `${file}.lock`;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try { const handle = await open(name, "wx", 0o600); await handle.writeFile(String(process.pid)); await handle.close(); return () => rm(name, { force: true }); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const owner = Number(await readFile(name, "utf8"));
-      if (!Number.isSafeInteger(owner) || owner <= 0) throw new Error(`Publisher journal lock is unreadable: ${name}`);
-      try { process.kill(owner, 0); throw new Error("This publication journal is already being used by another process."); }
-      catch (e) { if ((e as NodeJS.ErrnoException).code !== "ESRCH") throw e; }
-      await rm(name);
-    }
-  }
-  throw new Error("Could not acquire the publication journal.");
-}
-
-export async function publish(prepared: Prepared, options: PublisherOptions, io: Transport = transport) {
-  const target = { ...options.target, canister: principal(options.target.canister) }, neutron = principal(options.neutron);
-  if (!options.requestId.trim()) throw new Error("Provide a stable publication request ID; reuse it after interruption.");
+export function validatePreparedPublisher(prepared: Prepared): void {
   if (prepared.files[0]?.purpose !== "package" || prepared.files.some(file => digest(file.bytes) !== file.digest)) throw new Error("Prepared archive bytes changed after inspection.");
   const metadata = inspectUpdatePackage(`${prepared.appId}.neutron`, prepared.files[0].bytes);
   const source = prepared.files.find(file => file.purpose === "source");
@@ -98,15 +75,34 @@ export async function publish(prepared: Prepared, options: PublisherOptions, io:
   if (prepared.files.length !== (metadata.hostedSource ? 2 : 1) || (metadata.hostedSource?.sha256 ?? null) !== (source?.digest ?? null) || (metadata.hostedSource && metadata.hostedSource.size !== source?.bytes.length)) throw new Error("The exact declared offered source must remain part of this publication.");
   const actualDependencies = Object.values(normalizeManifestDependencies(preparePackageInstall(prepared.files[0].bytes).manifest)).map(value => ({ appId: value.app, minVersion: BigInt(value.min_version) })).sort((a, b) => a.appId.localeCompare(b.appId));
   if (json(actualDependencies) !== json(prepared.dependencies)) throw new Error("Publication dependencies differ from the packed manifest.");
+}
+
+export async function publish(prepared: Prepared, options: PublisherOptions, io: Transport = transport) {
+  const target = { ...options.target, canister: principal(options.target.canister) };
+  let neutron: string | undefined, caller: string | undefined;
+  if (options.trustedDirect) {
+    caller = principal(options.trustedDirect.caller);
+    if (caller !== TRUSTED_FIRST_PARTY_PUBLISHER) throw new Error("Trusted direct publishing requires the configured first-party publisher principal.");
+    if (!io.callerPrincipal) throw new Error("Trusted direct publishing requires a transport that verifies its actual signing principal.");
+    if (principal(await io.callerPrincipal()) !== caller) throw new Error("The transport signing principal does not match the trusted first-party publisher.");
+  } else {
+    if (!options.neutron) throw new Error("Ordinary publication requires an authorized Neutron relay.");
+    neutron = principal(options.neutron);
+  }
+  const authority = caller ? { mode: "trusted_direct" as const, caller } : { neutron: neutron! };
+  if (!options.requestId.trim()) throw new Error("Provide a stable publication request ID; reuse it after interruption.");
+  validatePreparedPublisher(prepared);
   const file = path.resolve(options.journal);
   await mkdir(path.dirname(file), { recursive: true });
   const release = await lock(file);
   try {
     const files = prepared.files.map(f => ({ purpose: f.purpose, digest: f.digest, size: f.bytes.length }));
-    const fingerprint = digest(json({ canister: target.canister, neutron, network: target.network, requestId: options.requestId, appId: prepared.appId, version: prepared.version, dependencies: prepared.dependencies, listing: prepared.listing ?? null, files }));
+    // Keep the ordinary fingerprint's property order and bytes unchanged so
+    // existing relay journals remain resumable without migration.
+    const fingerprint = digest(json({ canister: target.canister, ...authority, network: target.network, requestId: options.requestId, appId: prepared.appId, version: prepared.version, dependencies: prepared.dependencies, listing: prepared.listing ?? null, files }));
     let journal: Journal;
     try { journal = JSON.parse(await readFile(file, "utf8")); if (journal.format !== "marketplace-publisher-v1" || journal.fingerprint !== fingerprint) throw new Error("This journal belongs to different package bytes, listing, target, or request ID. Resume using the original inputs."); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; journal = { format: "marketplace-publisher-v1", fingerprint, requestId: options.requestId, canister: target.canister, neutron, appId: prepared.appId, version: String(prepared.version), files, steps: [] }; await save(file, journal); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; journal = { format: "marketplace-publisher-v1", fingerprint, requestId: options.requestId, canister: target.canister, ...authority, appId: prepared.appId, version: String(prepared.version), files, steps: [] }; await save(file, journal); }
     const info = decode<{ canister: Principal; fees: { version: bigint } }>(Info, await io.query(target, "marketplace_info", new Uint8Array(IDL.encode([], []))));
     if (info.canister.toText() !== target.canister || info.fees.version <= 0n) throw new Error("Marketplace information does not match the selected source or a valid fee schedule.");
     const feeVersion = info.fees.version;
@@ -124,10 +120,13 @@ export async function publish(prepared: Prepared, options: PublisherOptions, io:
         args = bytes(saved.argsHex); cycles = natural(saved.cycles, "saved cycles");
       } else {
         args = encode(inputType, { ...input, feeVersion });
-        const request = { operation: { [method === "upload_begin" ? "upload" : "update"]: null }, processingBytes: BigInt(args.length), newStorageBytes: newStorage };
-        const quote = decode<Quote>(Fee, await io.query(target, "fee_quote", encode(FeeRequest, request)));
-        if (quote.feeVersion !== feeVersion || quote.processingBytes !== request.processingBytes || quote.newStorageBytes !== newStorage || quote.totalCycles <= 0n || quote.totalCycles !== quote.processingCycles + quote.storageCycles) throw new Error("Cycle quote changed or does not match the exact request. Review again before publishing.");
-        cycles = quote.totalCycles;
+        if (caller) cycles = 0n;
+        else {
+          const request = { operation: { [method === "upload_begin" ? "upload" : "update"]: null }, processingBytes: BigInt(args.length), newStorageBytes: newStorage };
+          const quote = decode<Quote>(Fee, await io.query(target, "fee_quote", encode(FeeRequest, request)));
+          if (quote.feeVersion !== feeVersion || quote.processingBytes !== request.processingBytes || quote.newStorageBytes !== newStorage || quote.totalCycles <= 0n || quote.totalCycles !== quote.processingCycles + quote.storageCycles) throw new Error("Cycle quote changed or does not match the exact request. Review again before publishing.");
+          cycles = quote.totalCycles;
+        }
       }
       estimatedCycles += cycles;
       review.push({ key, method, argumentBytes: args.length, argumentSha256: digest(args), cycles: String(cycles), resumed: Boolean(saved) });
@@ -138,7 +137,7 @@ export async function publish(prepared: Prepared, options: PublisherOptions, io:
       await save(file, journal);
       attemptedCycles += cycles;
       let response: Uint8Array;
-      try { response = await io.update(target, neutron, method, args, cycles); }
+      try { response = await io.update(target, caller ?? neutron!, method, args, cycles); }
       catch (error) { saved.error = error instanceof Error ? error.message : String(error); await save(file, journal); throw new Error(`${method} reply unavailable. Resume with the same journal and request ID; no new upload or candidate identity is needed. ${saved.error}`); }
       // Save response bytes before interpreting them or advancing to another step.
       saved.replyHex = hex(response); await save(file, journal);
@@ -165,12 +164,13 @@ export async function publish(prepared: Prepared, options: PublisherOptions, io:
       if (completed && (!("attached" in completed.state) || completed.artifactId.length !== 1)) throw new Error("The completed upload did not return an attached artifact.");
       artifacts.set(part.purpose, completed?.artifactId[0] ?? 0n);
     }
-    const candidate = await step<{ id: bigint; appId: string; version: bigint; artifactId: bigint; sourceArtifactId: bigint[]; digest: Uint8Array; sourceDigest: Uint8Array[]; dependencies: { appId: string; minVersion: bigint }[] }>("candidate", "candidate_submit", Submit, { requestId: `${options.requestId}:candidate`, appId: prepared.appId, version: prepared.version, artifactId: artifacts.get("package")!, sourceArtifactId: artifacts.has("source") ? [artifacts.get("source")!] : [], dependencies: prepared.dependencies }, SubmitReply);
+    const candidate = await step<PublisherCandidate>("candidate", "candidate_submit", Submit, { requestId: `${options.requestId}:candidate`, appId: prepared.appId, version: prepared.version, artifactId: artifacts.get("package")!, sourceArtifactId: artifacts.has("source") ? [artifacts.get("source")!] : [], dependencies: prepared.dependencies }, SubmitReply);
     if (candidate) {
+      if (caller && candidate.publisher.toText() !== caller) throw new Error("Submitted candidate publisher does not match the verified first-party signer.");
       if (candidate.appId !== prepared.appId || candidate.version !== prepared.version || hex(candidate.digest) !== prepared.files[0]!.digest || candidate.artifactId !== artifacts.get("package") || json(candidate.dependencies) !== json(prepared.dependencies) || json(candidate.sourceArtifactId) !== json(artifacts.has("source") ? [artifacts.get("source")!] : []) || (candidate.sourceDigest[0] ? hex(candidate.sourceDigest[0]) : null) !== (prepared.files.find(f => f.purpose === "source")?.digest ?? null)) throw new Error("Submitted candidate evidence does not match the inspected package and offered source.");
       journal.submittedCandidateId = String(candidate.id); await save(file, journal);
     }
-    return { action: options.execute ? "candidate_submitted_for_audit" : "publication_review", canister: target.canister, neutron, requestId: options.requestId, appId: prepared.appId, version: String(prepared.version), journal: file, files, dependencies: prepared.dependencies, steps: review, estimatedRemainingCycles: String(estimatedCycles), attemptedCycles: String(attemptedCycles), candidateId: journal.submittedCandidateId ?? null, note: "Storage includes one year. Retransmissions can pay processing again; unused attached cycles are refunded. Audit approval is separate from submission." };
+    return { action: options.execute ? "candidate_submitted_for_audit" : "publication_review", canister: target.canister, ...authority, requestId: options.requestId, appId: prepared.appId, version: String(prepared.version), journal: file, files, dependencies: prepared.dependencies, steps: review, estimatedRemainingCycles: String(estimatedCycles), attemptedCycles: String(attemptedCycles), candidateId: journal.submittedCandidateId ?? null, candidate: candidate ?? null, note: caller ? "First-party publication is cycle-exempt. Candidate submission retains its exact package and source evidence; catalog approval is separate." : "Storage includes one year. Retransmissions can pay processing again; unused attached cycles are refunded. Audit approval is separate from submission." };
   } finally { await release(); }
 }
 

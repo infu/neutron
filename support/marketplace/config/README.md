@@ -12,17 +12,34 @@ are not administrators. Selecting a CLI identity does not derive authority from
 a different Neutron's principal. `auditors` similarly names explicitly assigned
 reviewer principals. Neither role requires an administration UI.
 
+`trustedPublishingPrincipal` separately names the single first-party publisher,
+or is null when that exception is disabled. Production selects the existing
+Blast ID 0 principal
+`y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe`.
+Initial reservations may belong to a Neutron canister or that configured
+principal. Its current and future publishing calls, exact batch approvals,
+access to its own publication files, and withdrawal of its own earnings are
+cycle-free. Ledger withdrawal fees still apply. This deployment identity is
+retained through upgrades; changing initialization arguments does not reassign
+it or change existing listing ownership.
+
 Exactly four admin endpoints are exempt from caller cycle payments:
 `admin_auditor_set`, `admin_reserve_app`, `admin_set_burn_account`, and
 `rates_refresh`. They accept direct authenticated calls and retain the Candid
 `feeVersion` field without charging or funding validation. Attached cycles are
 left unaccepted. Admin status does not exempt ordinary purchases, uploads,
 withdrawals, or publisher edits; those still use Neutron with attached cycles.
+The separately configured first-party exception above does not follow from
+membership in either role.
 
 The three ledger and XRC principals are mainnet addresses. For local tests,
 replace them with the corresponding disposable fixture canisters and use test
 fee estimates. For production, read current ledger fees and use the reviewed
 fixed protocol cycle estimates; this template does not set a production tariff.
+
+`symbol` identifies the payment token; `rateSymbol` selects its XRC base asset
+against USD. In particular, ckBTC payments use the ckBTC ledger and **BTC/USD**
+prices, not a ckBTC/USD request. ICP uses ICP/USD and ckUSDC uses USDC/USD.
 
 `fees.application-subnet.json` provides the initial fixed estimate for a standard
 application subnet. Copy it into the filled configuration's `fees` field after

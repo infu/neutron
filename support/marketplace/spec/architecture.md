@@ -40,6 +40,12 @@ funding requirement. No admin or auditor UI is part of the marketplace app.
 A browser client cannot register itself for another account by knowing that
 account's public ID.
 
+The configured first-party publisher is a distinct CLI account: production uses
+Blast ID 0 for initial app ownership and future releases. Its own publication
+and earnings-withdrawal updates are cycle-exempt, and its exact checked releases
+may be approved automatically. This narrow exception does not change
+Neutron-owned purchases or grant other administrators the same publishing rights.
+
 Session renewal/revocation and origin-isolated storage must be explicit and
 recoverable. Do not introduce an arbitrary session expiry or repeatedly ask for
 authorization on each query. A revoked read credential cannot access private
@@ -60,6 +66,7 @@ browser-agent and storage facilities, not Taggr's account-ownership semantics.
 | Ordinary purchases, withdrawals, listing edits, uploads and grant changes | Existing Neutron backend calls with native cycles attached to each update |
 | Authorized auditor updates | Direct CLI-to-protocol calls; cycle-funding exemption |
 | The four authorized admin endpoints | Direct CLI-to-protocol calls; cycle-funding exemption |
+| Configured first-party publishing and withdrawal of its own earnings | Direct CLI-to-protocol calls; cycle-funding exemption |
 | Approving payment from the Neutron Wallet | Existing Wallet tools and their authority/approval flow |
 | Collection, payouts, daily XRC and forwarding | Protocol calls the ledgers/XRC |
 | Package/source bytes | Browser directly to certified HTTP, with a source access grant |
@@ -88,6 +95,7 @@ mo/Context.mo              # shared domain dependencies and external services
 mo/Catalog.mo              # listings, list-price bounds, visible catalog
 mo/Publishing.mo           # publisher ownership, uploads, release submission
 mo/Audits.mo               # assigned reviewers, exact-release verdicts
+mo/BatchPublishing.mo      # trusted first-party atomic release batches
 mo/Access.mo               # Neutron identity, browser read delegates and resource grants
 mo/Purchases.mo            # one public purchase operation and its continuation
 mo/Entitlements.mo         # durable library and acquisition claims
@@ -100,6 +108,7 @@ mo/Rankings.mo             # acquisition counters and rolling expiry
 mo/Referrals.mo            # codes and frozen referral attribution
 mo/Ratings.mo              # entitled reviews and rating summaries
 mo/Assets.mo               # immutable artifact identity and stored content
+mo/Retention.mo            # retire unreferenced superseded package/source content
 mo/Http.mo                 # certified HTTP and authorized streaming
 mo/Jobs.mo                 # timer rescheduling and domain job dispatch
 migrations/                # immutable supported predecessors and transitions
@@ -113,6 +122,8 @@ purchases, withdrawals and daily forwarding. `main.mo` should remain wiring.
 
 Internal persistent storage retains domain records, immutable content and
 unfinished operation journals. Its implementation is outside this specification.
+Only current approved and pending-review package/source content is retained;
+superseded bytes are removed without deleting purchases or audit history.
 
 Purchase success orchestrates accounting, entitlement and ranking changes in one
 await-free segment. Lower-level accounting and ranking modules never initiate
@@ -143,5 +154,6 @@ Fixed estimated cycle charges fund updates and uploads; uploading prepays one
 year of storage and processing. The initial coefficients and admin/auditor
 principals still need configuration, and the three forwarding accounts will be
 supplied later. After the prepaid first year, the operator funds storage.
-Developers do not need to renew, and packages and buyer ownership remain available.
+Developers do not need to renew, and current packages and buyer ownership remain available.
+The operator funds first-party publishing from the configured Blast ID 0 account.
 No new Kernel policy limits are part of this design.

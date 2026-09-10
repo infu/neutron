@@ -17,7 +17,7 @@ module {
   public type Charts = { free7 : [{ appId : Text; score : Nat }]; free30 : [{ appId : Text; score : Nat }]; freeAll : [{ appId : Text; score : Nat }]; paid7 : [{ appId : Text; score : Nat }]; paid30 : [{ appId : Text; score : Nat }]; paidAll : [{ appId : Text; score : Nat }] };
   public type RankingMaintenance = { expiry7 : ?{ atNs : Int; id : Nat64 }; expiry30 : ?{ atNs : Int; id : Nat64 }; generation : Nat64; asOfNs : Int; charts : { free7 : [{ appId : Text; score : Nat }]; free30 : [{ appId : Text; score : Nat }]; freeAll : [{ appId : Text; score : Nat }]; paid7 : [{ appId : Text; score : Nat }]; paid30 : [{ appId : Text; score : Nat }]; paidAll : [{ appId : Text; score : Nat }] }; dirty : Bool };
   public type Reservation = { appId : Text; publisher : Principal; title : Text };
-  public type Init = Config and { reservations : ?[Reservation] };
+  public type Init = Config and { reservations : ?[Reservation]; trustedPublishingPrincipal : ?Principal };
   public type Error = Generated.Errors.Error;
   public type BlobRef = StableBlob.Ref;
   public type BlobInput = StableBlob.Input;
@@ -37,6 +37,10 @@ module {
 
   public type Audit = { id : Nat64; auditor : Principal; requestId : Text; candidateId : Nat64; decision : { #approved; #rejected; #revoked }; analysis : Text; reason : ?Text; createdAtNs : Int };
   public type CreateAudit = Generated.Types.CreateAudit;
+
+  public type PublishBatchEntry = { candidateId : Nat64; appId : Text; version : Nat; digest : Blob; sourceDigest : ?Blob; auditId : Nat64 };
+  public type PublishBatch = { id : Nat64; owner : Principal; requestId : Text; publisher : Principal; entries : [PublishBatchEntry]; analysis : Text; createdAtNs : Int };
+  public type CreatePublishBatch = Generated.Types.CreatePublishBatche;
 
   public type Delegate = { id : Nat64; browser : Principal; owner : Principal; active : Bool; createdAtNs : Int; updatedAtNs : Int };
   public type CreateDelegate = Generated.Types.CreateDelegate;
@@ -106,7 +110,7 @@ module {
   public type Rate = { id : Nat64; ledger : Principal; symbol : Text; usdRate : Nat; decimals : Nat32; observedAtNs : Int; refreshedAtNs : Int; lastError : ?Text };
   public type CreateRate = Generated.Types.CreateRate;
 
-  public type Upload = { id : Nat64; owner : Principal; requestId : Text; appId : Text; digest : Blob; size : Nat64; mediaType : Text; purpose : { #package; #source; #image }; ticket : { upload : { pool : Nat; slot : Nat64; generation : Nat64 } }; hashState : ?Blob; chargeId : Nat64; state : { #uploading; #attached; #aborted }; artifactId : ?Nat64; createdAtNs : Int; updatedAtNs : Int };
+  public type Upload = { id : Nat64; owner : Principal; requestId : Text; appId : Text; digest : Blob; size : Nat64; mediaType : Text; purpose : { #package; #source; #image }; ticket : { upload : { pool : Nat; slot : Nat64; generation : Nat64 } }; hashState : ?Blob; chargeId : Nat64; state : { #uploading; #attached; #aborted }; artifactId : ?Nat64; candidateId : ?Nat64; createdAtNs : Int; updatedAtNs : Int };
   public type CreateUpload = Generated.Types.CreateUpload;
 
   public type Charge = { id : Nat64; owner : Principal; requestId : Text; method : Text; feeVersion : Nat; cycles : Nat; processingCycles : Nat; storageCycles : Nat; coveredBytes : Nat64; coverageFromNs : Int; coverageUntilNs : Int; createdAtNs : Int };

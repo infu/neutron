@@ -11,6 +11,7 @@ const FeeSchedule = IDL.Record({
 });
 export const MarketplaceInit = IDL.Record({
   reservations: IDL.Opt(IDL.Vec(IDL.Record({ appId: IDL.Text, publisher: IDL.Principal, title: IDL.Text }))),
+  trustedPublishingPrincipal: IDL.Opt(IDL.Principal),
   admins: IDL.Vec(IDL.Principal),
   auditors: IDL.Vec(IDL.Principal),
   tokens: IDL.Vec(IDL.Record({
@@ -63,7 +64,13 @@ function text(value: unknown, label: string): string {
 }
 
 export function encodeMarketplaceInit(input: unknown): Uint8Array {
-  const config = record(input, "init", ["admins", "auditors", "tokens", "xrc", "fees", "referralTerms"], ["reservations"]);
+  const config = record(input, "init", ["admins", "auditors", "tokens", "xrc", "fees", "referralTerms"], ["reservations", "trustedPublishingPrincipal"]);
+  const trustedPublishingPrincipal: [] | [Principal] = config.trustedPublishingPrincipal == null
+    ? [] : [principal(config.trustedPublishingPrincipal, "trustedPublishingPrincipal")];
+  const trusted = trustedPublishingPrincipal[0];
+  if (trusted && (trusted.toUint8Array().length === 0 || trusted.isAnonymous())) {
+    throw new Error("trustedPublishingPrincipal must be authenticated; anonymous and management principals cannot publish");
+  }
   const reserved = new Map<string, string>();
   const reservations = config.reservations == null ? [] : [list(config.reservations, "reservations").map((item, index) => {
     const label = `reservations[${index}]`;
@@ -74,7 +81,9 @@ export function encodeMarketplaceInit(input: unknown): Uint8Array {
     }
     const publisher = principal(row.publisher, `${label}.publisher`);
     const bytes = publisher.toUint8Array();
-    if (bytes.length === 0 || bytes[bytes.length - 1] !== 1) throw new Error(`${label}.publisher must be a Neutron canister principal`);
+    if ((bytes.length === 0 || bytes[bytes.length - 1] !== 1) && publisher.toText() !== trusted?.toText()) {
+      throw new Error(`${label}.publisher must be a Neutron canister principal or the exact trustedPublishingPrincipal`);
+    }
     const title = text(row.title, `${label}.title`);
     if (title.trim().length === 0) throw new Error(`${label}.title must be nonempty text`);
     const previous = reserved.get(appId);
@@ -84,7 +93,7 @@ export function encodeMarketplaceInit(input: unknown): Uint8Array {
   })];
   const admins = list(config.admins, "admins").map((value) => principal(value, "admin"));
   // Assigned administrators can call their exempt endpoints directly from a
-  // CLI identity. Publisher and buyer ownership remains Neutron-based.
+  // CLI identity. This does not authorize arbitrary CLI publisher reservations.
   if (admins.length === 0 || admins.some((value) => {
     const bytes = value.toUint8Array();
     return bytes.length === 0 || value.isAnonymous();
@@ -129,7 +138,7 @@ export function encodeMarketplaceInit(input: unknown): Uint8Array {
   const termInput = record(config.referralTerms, "referralTerms", termKeys);
   const referralTerms = Object.fromEntries(termKeys.map((key) => [key, natural(termInput[key], `referralTerms.${key}`)]));
   return new Uint8Array(IDL.encode([MarketplaceInit], [{
-    admins, auditors, tokens, xrc: principal(config.xrc, "xrc"), fees, referralTerms, reservations,
+    admins, auditors, tokens, xrc: principal(config.xrc, "xrc"), fees, referralTerms, reservations, trustedPublishingPrincipal,
   }]));
 }
 

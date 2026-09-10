@@ -67,8 +67,33 @@ agreed policy. Do not edit a past rejection into an apparent original approval.
 
 Keep candidate/analysis access available to its publisher and assigned auditors;
 “hidden from marketplace” does not mean the developer cannot inspect a rejection.
-Public UI can show “Checked for malware”, reviewer and report for approved bytes,
-without describing inspection as a guarantee against every possible behavior.
+Public UI shows the approved release, reviewer and report for the exact bytes.
+The report describes the checks actually performed; approval alone must not be
+presented as evidence of a malware scan or a guarantee of every app behavior.
+
+## First-party automated publication
+
+The production publishing scripts may approve their own checked artifacts only
+when authenticated as the explicitly configured first-party principal. The
+selected production identity is Blast ID 0. Admin or auditor membership alone
+does not enable this publishing path, and another caller cannot select it by
+supplying that principal in a request.
+
+That principal owns the initial app listings. All its releases, including future
+updates, are cycle-exempt. It can withdraw its own earned funds directly through
+the CLI using the normal withdrawal accounting and ledger-fee rules.
+
+The scripts inspect the package, its manifest and dependencies, and its matching
+offered-source artifact before submitting their exact digests for approval. The
+retained analysis identifies the automated checks actually performed. Automatic
+first-party approval does not claim a manual malware review. Other publishers
+continue through the assigned-auditor workflow above.
+
+A compatible Kernel and app release set is approved and made visible in one
+catalog transaction. Each stamp binds its candidate and package/source digests;
+the batch request retains the exact set for recovery after an interrupted reply.
+Repeating an unchanged publication verifies the existing releases without
+creating another release or audit history entry.
 
 ## Storage and consistency
 
@@ -78,6 +103,26 @@ Release publication checks that the stamp still names the exact bytes and that
 the version can advance. Update the approved pointer, certificate metadata and
 ranking eligibility in one local commit. Stale concurrent submissions cannot
 replace already-published bytes at the same version.
+
+The marketplace retains the current approved package and offered source, plus
+candidates still awaiting review. After a replacement is approved, superseded
+package/source content is removed when no other current release or pending
+candidate references it. Shared content is not removed while another live
+reference needs it. A completed upload awaiting candidate submission also retains
+its exact bytes. Upload-to-candidate associations distinguish these staged files
+from consumed upload history, including when identical source bytes are reused.
+Rejecting a candidate releases its content if no live reference remains; the
+rejection report and candidate identity remain readable. Listing images are
+separate from package-version retention.
+Purchase ownership, payment receipts, candidate identities and audit reports
+remain available as records. Existing local release archives and the old source
+canister's historical public artifacts remain release evidence.
+
+Removal also invalidates the retired artifact's certified HTTP paths and
+streaming access in the same update. A previous install selection may need to
+prepare the latest release; its old hash is never redirected to replacement
+bytes. A completed upload retry whose artifact has since been retired reports
+that condition explicitly rather than fabricating a usable artifact.
 
 ## Acceptance tests
 

@@ -35,6 +35,9 @@ module {
   public func isAuditor(db : Store.DB, principal : Principal) : Bool {
     not Principal.isAnonymous(principal) and includes(Store.config(db).auditors, principal);
   };
+  public func isTrustedPublisher(db : Store.DB, principal : Principal) : Bool {
+    not Principal.isAnonymous(principal) and Store.getTrustedPublishingPrincipal(db) == ?principal;
+  };
   func principalClass(principal : Principal) : ?Nat8 {
     let bytes = Principal.toBlob(principal);
     if (bytes.size() == 0) null else ?bytes[bytes.size() - 1];
@@ -44,7 +47,7 @@ module {
     if (Principal.isAnonymous(caller)) return failure("authentication_required", "Connect this browser to its Neutron before reading private marketplace data.");
     // Canister identity and assigned CLI roles are already authenticated by
     // the IC. Browser delegates do not replace or alias either identity.
-    if (principalClass(caller) == ?(1 : Nat8) or isAdmin(db, caller) or isAuditor(db, caller)) return #ok(caller);
+    if (principalClass(caller) == ?(1 : Nat8) or isAdmin(db, caller) or isAuditor(db, caller) or isTrustedPublisher(db, caller)) return #ok(caller);
     switch (Store.getDelegate(db, caller)) {
       case (?delegate) {
         if (delegate.active) #ok(delegate.owner)
@@ -226,6 +229,18 @@ module {
     let ?artifact = Store.getArtifact(db, artifactId) else return false;
     for (kind in [#package, #source, #image].vals()) {
       if (accessPath(db, owner, { artifact; purpose = kind }, purpose)) return true;
+    };
+    false;
+  };
+
+  // The trusted publisher subsidy covers its own publishing artifacts only,
+  // rather than changing the ordinary buyer/publisher grant authorization.
+  public func ownsPublishingPath(db : Store.DB, owner : Principal, path : Text) : Bool {
+    let ?resolved = resolveArtifactPath(db, path) else return false;
+    let id = resolved.artifact.id;
+    if (matchingCandidates(db, id, resolved.purpose, func(candidate) { candidate.publisher == owner })) return true;
+    for (upload in db.uploads.by_artifact.rangeIter({ gt = null; gte = ?id; lt = null; lte = ?id; dir = #fwd }, null)) {
+      if (upload.owner == owner and upload.state == #attached and upload.artifactId == ?id and upload.purpose == resolved.purpose) return true;
     };
     false;
   };

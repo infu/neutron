@@ -37,7 +37,10 @@ direct update authority.
   without charging preparation again. Saved preparations remain available after
   navigating away or reloading. If a saved selection refers to an older or
   unavailable release, **Prepare latest selection** reviews a new request and
-  its current cost; the earlier request remains saved. Ordinary refresh and
+  its current cost; the earlier request remains saved. This also recovers a
+  lost preparation reply if the protocol later confirms that release is
+  unavailable. An interrupted reply alone does not mark a release unavailable.
+  Ordinary refresh and
   retry retain the original request. Neutron separately reviews subsequent
   download-access and installation costs. Installed apps update through Neutron
   Settings. Revocation

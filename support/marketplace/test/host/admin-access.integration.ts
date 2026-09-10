@@ -35,7 +35,7 @@ export const cases: IntegrationCase[] = [{
         xrc: oracle.canisterId,
         fees: { version: 1n, updateBase: 1n, updateByte: 1n, storageByteYear: 1n, purchase: 1n, withdraw: 1n, grant: 1n, xrc: 20_000_000n },
         referralTerms: { version: 1n, discountBps: 1000n, affiliateBps: 3000n, developerBps: 3000n },
-        reservations: [],
+        trustedPublishingPrincipal: [], reservations: [],
       };
       // Install the exact public actor, including validation of its initial
       // self-authenticating administrator. No test-only authorization facade.

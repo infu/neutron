@@ -32,7 +32,7 @@ persistent actor {
   public func reservations_are_atomic_hidden_and_never_overwrite_existing_rows() : async Test.Metrics {
     Test.test(func() {
       let original = reservation();
-      let mem = Initialization.memory({ config() with reservations = ?[original, original] }, 1);
+      let mem = Initialization.memory({ config() with reservations = ?[original, original]; trustedPublishingPrincipal = null }, 1);
       let db = Store.Use(mem);
       assert db.apps.size() == 1 and db.listings.size() == 1;
       let ?first = Store.getApp(db, original.appId) else Runtime.trap("Reservation missing");
@@ -50,7 +50,7 @@ persistent actor {
   };
   public func omitted_reservations_keep_clean_initialization_compatible() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Initialization.memory({ config() with reservations = null }, 0));
+      let db = Store.Use(Initialization.memory({ config() with reservations = null; trustedPublishingPrincipal = null }, 0));
       assert db.apps.size() == 0 and Store.config(db) == config();
     });
   };

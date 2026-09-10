@@ -43,6 +43,8 @@ persistent actor {
       let db = Store.Use(mem);
       let first = start(db, input("file"));
       assert first.uploadedBytes == 0 and first.charge.coveredBytes == 6;
+      let ?unbound = Store.getUploadByRequest(db, owner(), "file") else Runtime.trap("Upload missing");
+      assert unbound.candidateId == null;
       assert must(Assets.chunk(db, owner(), { requestId = "file"; offset = 0; bytes = "abc"; feeVersion = 1 }, 11)).uploadedBytes == 3;
       let restored = Store.Use(mem);
       assert must(Assets.status(restored, owner(), "file")).uploadedBytes == 3;
@@ -55,6 +57,8 @@ persistent actor {
       assert must(Assets.finish(Store.Use(mem), owner(), { requestId = "file"; feeVersion = 1 }, 17)) == completed;
       assert start(restored, input("file")) == completed;
       assert restored.uploads.size() == 1 and restored.charges.size() == 1 and restored.artifacts.size() == 1;
+      let ?attachedUpload = Store.getUploadByRequest(restored, owner(), "file") else Runtime.trap("Upload missing");
+      assert attachedUpload.candidateId == null;
       let ?artifactId = completed.artifactId else Runtime.trap("Artifact missing");
       let ?artifact = Store.getArtifact(restored, artifactId) else Runtime.trap("Artifact missing");
       assert Store.readBlob(restored, artifact.content, 1, 3) == #ok("bcd");
@@ -102,6 +106,43 @@ persistent actor {
       assert db.artifacts.size() == 0;
       let saved = must(Assets.status(db, owner(), "bad"));
       assert saved.state == #uploading and saved.artifactId == null and saved.uploadedBytes == 6;
+    });
+  };
+
+  public func retired_artifact_retries_keep_original_upload_and_charge() : async Test.Metrics {
+    Test.test(func () {
+      let mem = memory();
+      let db = Store.Use(mem);
+      ignore start(db, input("retired"));
+      ignore must(Assets.chunk(db, owner(), { requestId = "retired"; offset = 0; bytes = "abcdef"; feeVersion = 1 }, 11));
+      let completed = must(Assets.finish(db, owner(), { requestId = "retired"; feeVersion = 1 }, 12));
+      let ?artifactId = completed.artifactId else Runtime.trap("Artifact missing");
+      let retainedUpload = Store.getUploadByRequest(db, owner(), "retired");
+      let retainedCharge = Store.getCharge(db, completed.charge.id);
+      switch (db.artifacts.delete(artifactId)) { case (#ok(_)) {}; case (#err(e)) Runtime.trap(debug_show(e)) };
+      // A different file can reuse freed blob storage; old metadata must never
+      // follow that allocation or silently bind to the newer artifact.
+      let replacement = switch (Store.insertArtifact(db, {
+        digest = Sha256.fromBlob(#sha256, "ghijkl"); size = 6; mediaType = "application/octet-stream";
+        content = #bytes("ghijkl"); publicLegacy = false; createdAtNs = 13;
+      })) { case (#ok(value)) value; case (#err(e)) Runtime.trap(debug_show(e)) };
+      assert replacement.id != artifactId;
+      let restored = Store.Use(mem);
+      let quote = Billing.quote(Store.config(restored).fees, #upload, 1, 0);
+      for (result in [
+        Assets.status(restored, owner(), "retired"),
+        Assets.begin(restored, owner(), input("retired"), quote, 14),
+        Assets.finish(restored, owner(), { requestId = "retired"; feeVersion = 1 }, 15),
+        Assets.chunk(restored, owner(), { requestId = "retired"; offset = 0; bytes = "abcdef"; feeVersion = 1 }, 16),
+        Assets.chunk(restored, owner(), { requestId = "retired"; offset = 0; bytes = "ghijkl"; feeVersion = 1 }, 17),
+      ].vals()) {
+        switch (result) { case (#err(e)) assert e.code == "artifact_retired"; case (_) assert false };
+      };
+      switch (Assets.estimateNewStorage(restored, owner(), input("retired"))) { case (#err(e)) assert e.code == "artifact_retired"; case (_) assert false };
+      assert Store.getUploadByRequest(restored, owner(), "retired") == retainedUpload;
+      assert Store.getCharge(restored, completed.charge.id) == retainedCharge;
+      assert restored.uploads.size() == 1 and restored.charges.size() == 1 and restored.artifacts.size() == 1;
+      assert Store.readBlob(restored, replacement.content, 0, 6) == #ok("ghijkl");
     });
   };
 };

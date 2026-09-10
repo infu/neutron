@@ -21,7 +21,7 @@ try {
   const identity = Ed25519KeyIdentity.generate(new Uint8Array(32).fill(93));
   const auditorIdentity = Ed25519KeyIdentity.generate(new Uint8Array(32).fill(94));
   const fees = { version: 1n, updateBase: 13n, updateByte: 2n, storageByteYear: 3n, purchase: 17n, withdraw: 19n, grant: 23n, xrc: 20_000_000n };
-  const marketplace = await installFixture(env.pic, "marketplace", "mo/main.mo", [{ admins: [publisher.canisterId], auditors: [auditorIdentity.getPrincipal()], tokens: [{ ledger: ledger.canisterId, symbol: "ckUSDC", decimals: 6, fee: 10n, rateSymbol: "USDC", burnAccount: [] }], xrc: oracle.canisterId, fees, referralTerms: { version: 1n, discountBps: 1000n, affiliateBps: 3000n, developerBps: 3000n }, reservations: [] }]);
+  const marketplace = await installFixture(env.pic, "marketplace", "mo/main.mo", [{ admins: [publisher.canisterId], auditors: [auditorIdentity.getPrincipal()], trustedPublishingPrincipal: [], tokens: [{ ledger: ledger.canisterId, symbol: "ckUSDC", decimals: 6, fee: 10n, rateSymbol: "USDC", burnAccount: [] }], xrc: oracle.canisterId, fees, referralTerms: { version: 1n, discountBps: 1000n, affiliateBps: 3000n, developerBps: 3000n }, reservations: [] }]);
   let browserQueries = 0;
   const queryAgent = { query: async (canisterId: unknown, { methodName, arg }: { methodName: string; arg: ArrayBuffer }) => {
     browserQueries++;

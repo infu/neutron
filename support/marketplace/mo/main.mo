@@ -11,6 +11,7 @@ import API "./API";
 import Access "./Access";
 import Assets "./Assets";
 import Audits "./Audits";
+import BatchPublishing "./BatchPublishing";
 import Billing "./Billing";
 import Catalog "./Catalog";
 import Certification "./Certification";
@@ -67,6 +68,12 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     let bytes = Principal.toBlob(caller);
     if (bytes.size() == 0 or bytes[bytes.size() - 1] != (1 : Nat8)) return failure("neutron_required", "Send this update through your Neutron with its quoted native cycles attached.");
     #ok(caller);
+  };
+  func publisher(caller : Principal) : API.Result<Principal> {
+    if (Access.isTrustedPublisher(db, caller)) #ok(caller) else writer(caller);
+  };
+  func publisherCharge<system>(caller : Principal, operation : Billing.Operation, args : Blob, feeVersion : Nat) : API.Result<Nat> {
+    if (Access.isTrustedPublisher(db, caller)) #ok(0) else charge<system>(operation, args, 0, feeVersion);
   };
   func viewer(caller : Principal) : ?Principal {
     switch (Access.readOwner(db, caller)) { case (#ok(owner)) ?owner; case (#err(_)) null };
@@ -172,7 +179,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
 
   public query func marketplace_info() : async API.Info {
     let config = Store.config(db);
-    { version = 1; canister = source; tokens = config.tokens; fees = config.fees; referralTerms = config.referralTerms };
+    { version = 1; canister = source; trustedPublishingPrincipal = Store.getTrustedPublishingPrincipal(db); tokens = config.tokens; fees = config.fees; referralTerms = config.referralTerms };
   };
   public query func fee_quote(request : API.FeeRequest) : async Billing.Quote {
     Billing.quote(Store.config(db).fees, request.operation, request.processingBytes, request.newStorageBytes);
@@ -201,8 +208,8 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     Access.setDelegate(db, owner, request.browser, request.active, Time.now());
   };
   public shared ({ caller }) func listing_save(request : API.ListingRequest) : async API.Result<API.App> {
-    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
-    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     let visible = switch (Store.getApp(db, request.appId)) { case null true; case (?value) value.visible };
     switch (Catalog.save(db, owner, { request with visible }, Time.now())) {
       case (#err(message)) failure("listing", message);
@@ -279,8 +286,10 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     operations.withdrawalQuote(owner, request);
   };
   public shared ({ caller }) func withdraw(request : API.WithdrawalExecute) : async API.Result<API.WithdrawalResult> {
-    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
-    switch (fixedCharge<system>(#withdraw, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    if (not Access.isTrustedPublisher(db, caller)) {
+      switch (fixedCharge<system>(#withdraw, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    };
     await* operations.withdraw(owner, request.quote);
   };
   public shared query ({ caller }) func withdraw_status(request : API.OperationRequest) : async API.Result<?API.WithdrawalResult> {
@@ -306,20 +315,25 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   };
 
   public shared ({ caller }) func upload_begin(request : API.UploadBegin) : async API.Result<API.UploadStatus> {
-    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     let bytes = switch (Assets.estimateNewStorage(db, owner, request)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     let estimate = Billing.quote(Store.config(db).fees, #upload, Blob.size(to_candid(request)), bytes);
+    if (Access.isTrustedPublisher(db, caller)) {
+      // This explicit first-party subsidy accepts no incoming cycles and keeps
+      // the normal digest, byte count, ownership and retry checks unchanged.
+      return Assets.begin(db, owner, { request with feeVersion = estimate.feeVersion }, { estimate with processingCycles = 0; storageCycles = 0; totalCycles = 0 }, Time.now());
+    };
     switch (Billing.accept<system>(estimate, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     Assets.begin(db, owner, request, estimate, Time.now());
   };
   public shared ({ caller }) func upload_chunk(request : API.UploadChunk) : async API.Result<API.UploadStatus> {
-    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
-    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     Assets.chunk(db, owner, request, Time.now());
   };
   public shared ({ caller }) func upload_finish(request : API.UploadFinish) : async API.Result<API.UploadStatus> {
-    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
-    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     switch (Assets.finish(db, owner, request, Time.now())) {
       case (#err(value)) #err(value);
       case (#ok(value)) {
@@ -333,12 +347,26 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     Assets.status(db, owner, request.requestId);
   };
   public shared ({ caller }) func candidate_submit(request : API.CandidateRequest) : async API.Result<Types.Candidate> {
-    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
-    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     switch (Publishing.submit(db, owner, request, Time.now())) {
       case (#err(message)) failure("candidate", message);
       case (#ok(value)) { changedApp(value.appId); #ok(value) };
     };
+  };
+  public shared ({ caller }) func trusted_publish_batch(request : API.TrustedPublishRequest) : async API.Result<Types.PublishBatch> {
+    switch (BatchPublishing.publish(db, caller, request, Time.now())) {
+      case (#err(value)) #err(value);
+      case (#ok(value)) {
+        certificates.removeArtifacts(value.retiredArtifacts);
+        for (appId in value.appIds.vals()) changedApp(appId);
+        #ok(value.batch);
+      };
+    };
+  };
+  public shared query ({ caller }) func trusted_publish_status(request : API.OperationRequest) : async API.Result<?Types.PublishBatch> {
+    if (not Access.isTrustedPublisher(db, caller)) return failure("trusted_publisher_required", "Only the configured first-party publisher can inspect its publication batches.");
+    #ok(Store.getPublishBatch(db, caller, request.requestId));
   };
   public shared query ({ caller }) func audit_queue(request : API.PageRequest) : async API.Result<API.CandidatePage> {
     switch (Audits.queue(db, caller, request.cursor, request.limit)) {
@@ -353,7 +381,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     // Only assigned auditors on this audit endpoint receive the update subsidy.
     switch (Audits.stamp(db, caller, request, Time.now())) {
       case (#err(message)) failure("audit", message);
-      case (#ok(value)) { changedApp(value.app.appId); #ok(value.audit) };
+      case (#ok(value)) { certificates.removeArtifacts(value.retiredArtifacts); changedApp(value.app.appId); #ok(value.audit) };
     };
   };
   public shared ({ caller }) func admin_auditor_set(request : API.AuditorRequest) : async API.Result<()> {
@@ -371,7 +399,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   };
   public shared ({ caller }) func admin_reserve_app(request : API.ReservationRequest) : async API.Result<API.App> {
     if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can register the publisher of an existing application.");
-    ignore switch (writer(request.publisher)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    ignore switch (publisher(request.publisher)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     switch (Store.getApp(db, request.appId)) {
       case (?app) {
         if (app.owner != request.publisher) return failure("publisher_conflict", "This app ID already belongs to a different publisher. Existing ownership was preserved.");
@@ -409,14 +437,20 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   };
 
   public shared ({ caller }) func repo_access_v1(request : API.RepoAccessRequest) : async API.RepoAccessResult {
-    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     let saved = Store.getGrant(db, owner, request.request_id);
     let schedule = Store.config(db).fees;
-    if (request.fee_version != schedule.version) return failure("cycle_fee_version", "Review the current source access estimate before continuing.");
-    if (Cycles.available() < schedule.grant) return failure("cycles_required", "Attach the source's fixed access estimate through your Neutron, including when reconciling an interrupted request.");
     var accepted = 0;
-    if (saved == null) {
-      accepted := switch (fixedCharge<system>(#grant, request.fee_version)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    if (Access.isTrustedPublisher(db, caller)) {
+      for (path in request.paths.vals()) {
+        if (not Access.ownsPublishingPath(db, owner, path)) return failure("publisher_required", "First-party source access is limited to this publisher's own files.");
+      };
+    } else {
+      if (request.fee_version != schedule.version) return failure("cycle_fee_version", "Review the current source access estimate before continuing.");
+      if (Cycles.available() < schedule.grant) return failure("cycles_required", "Attach the source's fixed access estimate through your Neutron, including when reconciling an interrupted request.");
+      if (saved == null) {
+        accepted := switch (fixedCharge<system>(#grant, request.fee_version)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+      };
     };
     switch (Access.grant(db, owner, request, #publisher, Time.now())) {
       case (#err(value)) #err(value);

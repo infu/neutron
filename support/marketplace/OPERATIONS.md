@@ -8,7 +8,7 @@ The separate Blast syntax and immediate-call behavior are documented below.
 
 Assigned auditors call audit endpoints directly. The four admin-only endpoints
 listed below also accept direct authenticated CLI calls without attached cycles.
-Publisher and ordinary user updates go
+Ordinary publisher and user updates go
 through the installed marketplace app's `marketplace_marketplace_call` method on
 the selected Neutron, which attaches the reviewed cycles. Ingress cannot attach
 cycles for those charged methods; do not substitute `icp --proxy` or a direct
@@ -17,6 +17,8 @@ must be configured for this protocol, and its backend reservation must permit th
 exact method. An admin call authenticates the actual configured admin principal;
 that may be an existing CLI identity or an existing canister principal. Knowing
 the principal text does not confer authority. There is no admin or auditor UI.
+The separately configured first-party publisher uses the direct catalog workflow
+below; this exception is checked against its actual signing principal.
 
 When an additional operator method needs a reservation, `operator.ts reserve-route`
 prepares the existing Kernel's exact principal/method reservation. It does not
@@ -77,6 +79,78 @@ binary requests and responses before advancing. Resume with the same journal,
 request ID, files and listing after an interruption. A completed upload/candidate
 is not auditor approval. Do not invent new upload identities to recover lost
 responses. Keep this journal private because it contains unpublished package bytes.
+
+## First-party catalog publication
+
+The assigned existing Blast identity 0 is
+`y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe`.
+It owns the initial listings. Its current and future listing/upload/publication
+updates attach no cycles. A different CLI identity cannot acquire this authority
+through a command flag, and ordinary publishers still follow the charged flow
+above. The script loads the existing identity without creating or exporting keys.
+
+From the repository root:
+
+```sh
+npm --workspace neutron-marketplace-protocol run production:review -- --catalog "$RELEASE_CATALOG"
+npm --workspace neutron-marketplace-protocol run production:publish -- --catalog "$RELEASE_CATALOG"
+npm --workspace neutron-marketplace-protocol run production:publish -- --catalog "$RELEASE_CATALOG"
+```
+
+The catalog retains the existing `{format:1, update_source, packages:[{id,directory}]}`
+format. Set `update_source` to the actual marketplace canister and build strictly
+higher app releases with that same source before publication. There is no old-source
+fallback or placeholder canister. The default catalog path is the ignored
+`.private/production-release-catalog.trusted-id0.json` in this directory.
+`--listings FILE` optionally supplies an array of `{appId,file}` mappings to the
+same explicit listing JSON used by the ordinary publisher; omit it to preserve
+existing listing details, prices, and images. These listing inputs apply only to
+packages with changed releases. When a package is already current, this command
+does not save metadata-only changes; the receipt names such supplied listings in
+`skippedListingAppIds`.
+
+Read `app_detail` or `publisher_apps` as the publisher before preparing listing
+JSON for an existing or reserved app ID. Supply that app's current revision as
+`expectedRevision`; null is for a new listing. A reserved name already has a
+listing revision even before its first package is approved. After a lost save
+reply, retain the original input: the protocol accepts an exact match of all
+current listing fields before checking the older revision, without creating a
+second listing revision. A conflicting intervening edit instead requires a new
+review and must not be overwritten by the old saved request.
+
+The workflow validates exact archives, manifests, dependencies and memory
+migration structure, plus declared offered-source bytes and build inputs. It
+stages changed candidates, then promotes the selected set in one atomic
+`trusted_publish_batch` update. Its audit analysis identifies these automated
+checks; it never claims a manual malware or application-behavior review.
+
+Request IDs and private journals default deterministically from the exact selected
+releases and listing inputs. `--request ID --journal FILE` can instead select an
+explicit retained pair. After a lost response, rerun with the same files and
+inputs. Do not rebuild or change versions to recover it. The journal reconciles
+the original batch before any promotion retry. A revoked or superseded release
+does not trigger automatic reapproval.
+
+Certified HTTP postflight verifies current release records, every package, and
+every declared source artifact. The second publication must report receipt-v2
+`batch_id: null` and every package/source `unchanged`, with matching version,
+path, size, and SHA-256. This means no new upload, candidate, audit, or publication
+batch. A new CLI process can still obtain a cycle-free own-publisher authorization
+grant to verify private downloads; the credential stays in memory and does not
+appear in the receipt. Local verification requires `--host URL --root-key FILE`
+and checks against that explicit root key.
+
+The same Blast identity can read `earnings_query`, request `withdraw_quote`, and
+call `withdraw` directly for its own credit. Inspect the live schema, choose the
+ledger, destination and total debit, and submit the exact returned quote with
+its original request ID. The ledger fee is included in that debit; this account's
+protocol update accepts no cycles. After interruption, read `withdraw_status`
+and continue the same quote/request when instructed. Do not substitute another
+account as owner or create a new withdrawal to recover an uncertain one.
+
+Use the old-source transition command only for the separately reviewed migration
+of installed users' source pointers. This catalog command never mutates the old
+source and never uploads paid package bytes there.
 
 ## Admin calls and initial source transition
 
@@ -155,7 +229,9 @@ upload, approval, publication or app-manifest edit.
 
 Put the complete reviewed `initReservations` into the initial canister config's
 `reservations` field. Installation then reserves existing IDs atomically under
-their correct publisher Neutrons, before any public submission can race them.
+their correct publishers, before any public submission can race them. The initial
+first-party entries belong to the exact Blast principal above; ordinary entries
+continue to belong to their publisher Neutrons.
 Later `admin_reserve_app` calls are available for controlled additions. Upload and audit the transition packages at the
 new protocol, then publish those higher versions through the existing old-source
 production workflow. Recheck live release records before publication. Keep old

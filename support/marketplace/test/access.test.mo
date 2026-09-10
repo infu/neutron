@@ -210,7 +210,7 @@ persistent actor {
         ignore stored(Store.insertUpload(db, {
           owner = publisher; requestId = id; appId = f.app.appId; digest = image.digest;
           size = image.size; mediaType = image.mediaType; purpose = #image;
-          ticket = { upload = image.content }; hashState = null; chargeId = charge.id;
+          ticket = { upload = image.content }; hashState = null; chargeId = charge.id; candidateId = null;
           state = #attached; artifactId = ?image.id; createdAtNs = 1; updatedAtNs = 2;
         }));
       };

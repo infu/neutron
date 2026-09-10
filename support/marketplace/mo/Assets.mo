@@ -34,6 +34,14 @@ module {
     saved.appId == input.appId and saved.digest == input.digest and saved.size == input.size and
     saved.mediaType == input.mediaType and saved.purpose == input.purpose;
   };
+  func attachedArtifact(db : Store.DB, upload : Types.Upload) : API.Result<Types.Artifact> {
+    let ?artifactId = upload.artifactId else Runtime.trap("Attached upload artifact ID is missing");
+    let ?artifact = Store.getArtifact(db, artifactId) else return error(
+      "artifact_retired",
+      "This upload belongs to a superseded release whose file is no longer retained. Start a new upload request to upload the file again.",
+    );
+    #ok(artifact);
+  };
   func validateBegin(db : Store.DB, owner : Principal, input : API.UploadBegin) : API.Result<?Types.Upload> {
     switch (authorizedApp(db, owner, input.appId)) { case (#err(e)) return #err(e); case (#ok(_)) {} };
     if (not hasText(input.requestId)) return error("request_id", "An upload request ID is required for safe retry.");
@@ -46,6 +54,9 @@ module {
     switch (saved) {
       case (?upload) {
         if (not sameIntent(upload, input)) return error("request_conflict", "This upload request ID already names a different file.");
+        if (upload.state == #attached) {
+          switch (attachedArtifact(db, upload)) { case (#err(e)) return #err(e); case (#ok(_)) {} };
+        };
       };
       case null {};
     };
@@ -59,7 +70,10 @@ module {
   func publicStatus(db : Store.DB, upload : Types.Upload) : API.Result<API.UploadStatus> {
     let ?charge = Store.getCharge(db, upload.chargeId) else Runtime.trap("Upload storage charge is missing");
     let uploadedBytes : Nat64 = switch (upload.state) {
-      case (#attached) upload.size;
+      case (#attached) {
+        switch (attachedArtifact(db, upload)) { case (#err(e)) return #err(e); case (#ok(_)) {} };
+        upload.size;
+      };
       case (#aborted) 0;
       case (#uploading) {
         switch (Store.blobUploadInfo(db, upload.ticket)) { case (#ok(info)) info.written; case (#err(e)) return blobError(e) };
@@ -115,7 +129,7 @@ module {
     let upload = must(Store.insertUpload(db, {
       owner; requestId = input.requestId; appId = input.appId; digest = input.digest; size = input.size;
       mediaType = input.mediaType; purpose = input.purpose; ticket; chargeId = charge.id;
-      hashState = ?to_candid(hash.share()); state = #uploading; artifactId = null; createdAtNs = now; updatedAtNs = now;
+      hashState = ?to_candid(hash.share()); state = #uploading; artifactId = null; candidateId = null; createdAtNs = now; updatedAtNs = now;
     }));
     publicStatus(db, upload);
   };
@@ -128,8 +142,7 @@ module {
     let upload = switch (uploadFor(db, owner, input.requestId)) { case (#ok(value)) value; case (#err(e)) return #err(e) };
     if (upload.state == #aborted) return error("upload_aborted", "This upload was aborted.");
     if (upload.state == #attached) {
-      let ?artifactId = upload.artifactId else Runtime.trap("Attached upload artifact is missing");
-      let ?artifact = Store.getArtifact(db, artifactId) else Runtime.trap("Attached artifact is missing");
+      let artifact = switch (attachedArtifact(db, upload)) { case (#err(e)) return #err(e); case (#ok(value)) value };
       if (input.offset > upload.size or input.bytes.size() > Nat64.toNat(upload.size - input.offset)) {
         return error("upload_range", "The chunk lies outside the completed file.");
       };

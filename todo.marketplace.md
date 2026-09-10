@@ -44,6 +44,13 @@ is [apps/marketplace](apps/marketplace/README.md).
 - Any Neutron may publish. Initial app-ID reservations preserve existing
   publishers. An assigned auditor approves exact package/source hashes or gives
   a rejection reason. Pending candidates do not displace approved releases.
+- Blast ID 0 owns the initial listings. All releases published by our scripts
+  under that exact configured principal are cycle-free and automatically
+  approved after artifact checks. It can withdraw its own earnings through the
+  CLI. Other publishers retain cycle charges and assigned-auditor review.
+- Keep current approved packages/source and pending review content in the new
+  marketplace. Retire superseded bytes, preserving purchases, payment records,
+  audit history and local release archives.
 - Top free/paid ranks distinct first acquisitions over rolling 7/30 days and all
   time. Downloads, reinstalls and retries do not increase counts. Free and paid
   owners can each maintain one editable rating per app.
@@ -89,6 +96,10 @@ is [apps/marketplace](apps/marketplace/README.md).
   interface is part of the app.
 - [x] Standalone `icp` build/install/upgrade configuration and a reviewable fixed
   cost preset. Actual deployment uses explicit operator configuration.
+- [x] First-party direct publishing and own earnings withdrawal, exact-principal
+  automatic atomic approval, root publication-script migration and no-op checks.
+- [x] Latest-package retention, safe staged/shared artifacts, certified deletion,
+  and explicit UI recovery when a prepared release has been retired.
 
 ## Local validation
 
@@ -183,7 +194,7 @@ entire repository test suite passes.
 
 The existing Kernel `kernel` v4 and `kernel_activation` v1 roots and the released
 v3→v4 migration are unchanged. Generic acquisition uses transient state; no fake
-memory migration was introduced. Kernel release 354 and marketplace release 104
+memory migration was introduced. Kernel release 354 and marketplace release 106
 are local candidates; the preceding local artifacts remain immutable. Package
 construction and qualification are not publication.
 
@@ -224,7 +235,7 @@ existing full acquisition/withdrawal/private-download/upgrade case also passes.
 
 An actual Blast 4.2.0 smoke test found and fixed controller-only Candid metadata.
 The build now publishes only the service interface; constructor and stable-type
-metadata remain private and unchanged. Final protocol Wasm SHA-256:
+metadata remain private and unchanged. That admin-only revision's protocol Wasm SHA-256:
 `0d9af11fa662a51da3ff9200070fe04db1838cc064c01998400d85b47bc2debc`.
 On an isolated `icp` local network, a non-controller Blast identity successfully
 discovered and called all four admin methods, assigned/removed an auditor, and
@@ -243,10 +254,75 @@ Local browser and PocketIC evidence does not establish mainnet behavior or a
 complete live Wallet acceptance test. Those require a separately reviewed
 release and smoke test; no paid production testing was authorized here.
 
+## First-party publication and retention follow-up
+
+The root `npm run updates:publish` now targets the configured marketplace using
+the existing Blast ID 0. Exact archive/source checks precede one atomic
+automatic-approval batch. Publication journals retain the original candidates
+and batch across lost replies, and the second run verifies receipt-v2 unchanged
+results. The legacy publisher remains explicit for source migration.
+
+Only that configured principal receives free publishing, own-file grants and
+withdrawal of its own earnings. Other admins, auditors and publishers do not
+inherit this exception. Four public-actor PocketIC cases cover those boundaries,
+real ledger collection/royalty withdrawal, upgrades and rollback after an earlier
+package's promotion and content retirement within a failed batch.
+
+Superseded artifact removal preserves current releases, pending reviews and
+genuinely staged uploads. Explicit upload/candidate associations protect new
+uploads with the same digest as old content. Storage and certified-HTTP tests
+cover reuse of freed allocations, old streaming tokens, current content and
+ownership through upgrades. Stable-memory capacity itself does not shrink when
+an allocation is freed.
+
+Marketplace 106 fixes recovery after a successful preparation whose reply was
+lost and whose release was subsequently retired. Only an explicit protocol
+`release_unavailable` answer enables a fresh reviewed selection; unknown replies
+retain the original ID. Approval headings describe an approved release without
+claiming a malware scan. Its complete app gates pass: 88 top-level tests,
+29 focused installation cases, Motoko initialization/restoration, five browser
+suites, real protocol integration, typecheck and packaging. The memory root and
+lock remain unchanged; archives 104 and 105 are preserved.
+
+Current package: `marketplace.v0.1.6.neutron`, 2,166,004 bytes, SHA-256
+`72b71a5ae2857948620c3801dff7884ffb4e01d75d4c23817f3353d4a02ab0a9`.
+Its offered source contains 334 files with no private paths. The current normal
+protocol build matches the tested Wasm:
+`1bd60e9e252c7372d2e6939d3a3896fd0566c18abf4022bd4a49c8542f633d8b`.
+The final 106/354 paid-install lifecycle passes 113 assertions, including grouped
+upgrades after Marketplace uninstall and preservation of unrelated state.
+
+The actual publishing CLI also passes against a disposable local canister using
+the same Wasm and the existing Blast ID 0. One atomic batch publishes a free app,
+a $1 app and both hosted source artifacts. The exact repeat returns receipt-v2
+`batch_id: null` with all artifacts unchanged. The checks verify automatic stamps,
+ownership, anonymous denial and paid-package privacy; the network was stopped.
+This local smoke does not publish production apps.
+
+Final unit coverage is 96 passing cases. Protocol domain coverage is 93 passing
+cases across the full run and focused reruns: the repository test now expects a
+superseded release's bytes to be retired while retaining ownership and the
+original request, and the new rate test verifies that ckBTC payments request
+BTC/USD from XRC and retain that rate against the ckBTC ledger. No ckBTC/USD
+oracle pair is requested.
+
+All 54 host integration cases also pass on the final Wasm: 12 fixture, 6 HTTP,
+22 protocol and 14 upgrade cases. This is combined evidence, not an uninterrupted
+single-command pass: three older public-actor fixtures needed the new optional
+initialization field explicitly empty; the corrected admin case passed on
+rerun. The installed-app lifecycle was run separately against the exact final
+Marketplace 106 and Kernel 354 archives. No production changes were needed for
+these final fixture corrections.
+
 ## Production release remains pending
 
-- [ ] Supply the deployed marketplace principal, initial admin/auditor CLI
-  principal(s), and separate existing-app publisher Neutron bindings.
+- [x] Select Blast ID 0 as administrator and initial listing owner:
+  `y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe`.
+  Private initialization drafts reserve all 26 catalog IDs plus Marketplace to
+  that principal and retain the observed ledger fees. Other auditors can be
+  assigned later.
+- [ ] Supply the deployed marketplace principal and complete creation/controller
+  configuration.
 - [ ] Review the fixed [cycle-cost preset](support/marketplace/config/README.md),
   initial ledger fees and creation cycles; encode a complete initialization file
   outside Git. Include app-ID reservations in the first installation.
@@ -254,8 +330,8 @@ release and smoke test; no paid production testing was authorized here.
   They may remain unset initially; allocations then stay in the protocol.
 - [ ] Obtain authorization to push the implementation and deploy reviewed Wasm
   through `icp`. Verify installed module identity and retained-state evidence.
-- [ ] Import/upload the intended app releases and source artifacts under their
-  proper publisher principals; auditors inspect and approve exact bytes.
+- [ ] Import/upload the intended app releases and source artifacts as Blast ID 0
+  with exact-byte automated audit records and atomic catalog publication.
 - [ ] Build higher state-compatible transition packages naming the actual new
   `update_source`, including the Kernel. Preserve all released memory lineage.
 - [ ] Approve and verify transition bytes at the new source before publishing

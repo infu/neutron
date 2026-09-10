@@ -32,7 +32,7 @@ export const cases: IntegrationCase[] = [{
         xrc: oracle.canisterId,
         fees: { version: 1n, updateBase: 1n, updateByte: 1n, storageByteYear: 1n, purchase: 1n, withdraw: 1n, grant: 1n, xrc: 20_000_000n },
         referralTerms: { version: 1n, discountBps: 1000n, affiliateBps: 3000n, developerBps: 3000n },
-        reservations: [[{ appId: "reserved_app", publisher: publisher.canisterId, title: "Existing publisher app" }]],
+        trustedPublishingPrincipal: [], reservations: [[{ appId: "reserved_app", publisher: publisher.canisterId, title: "Existing publisher app" }]],
       };
       const marketplace = await installFixture(env.pic, "marketplace", "mo/main.mo", [config]);
       const endpoints = marketplace.idlFactory({ IDL })._fields.map(([name]: [string, unknown]) => name);

@@ -10,6 +10,14 @@ endpoints are exempt and accept direct authenticated CLI calls:
 `rates_refresh`. There is no prepaid cycle balance or general direct-browser
 mutation route. The app has no admin or auditor UI.
 
+The configured first-party publishing principal has a separate, explicit
+exception. Production uses Blast ID 0, which owns the initial listings. Its
+publishing calls, including future releases, and withdrawals of its own earnings
+are direct CLI updates without attached cycles. Its exact checked releases can
+be approved automatically in an atomic batch. This authority comes from the
+configured principal, not general admin or auditor membership. Other publishers
+still pay the normal charges and require an assigned auditor.
+
 Any Neutron may publish. Its developer pays attached cycles for uploads and
 modifications using fixed, rough processing-cost estimates. Upload charges also
 prepay one year of the app's storage and processing. After year one, the operator
@@ -31,6 +39,7 @@ replication; it is not the free browser-query route.
 | Browser read binding or source grant that writes authorization | Neutron update with attached cycles |
 | `admin_auditor_set`, `admin_reserve_app`, `admin_set_burn_account`, `rates_refresh` | Direct assigned-admin update, exempt from caller cycle charges |
 | Auditor stamp and auditor-only access issuance | Direct assigned-auditor update, exempt from caller cycle charges |
+| Configured first-party publishing and withdrawal of its own earnings | Direct CLI update, exempt from caller cycle charges |
 
 Do not create updates for page views, download counts or status polling. Rankings
 come from entitlement finalization. Prefer quote query → Wallet approval → one
@@ -52,9 +61,10 @@ under the selected policy; do not disguise a direct browser write as an attached
 cycle call. Generic repository authorization uses the same principle and works
 without the marketplace app installed.
 
-Both exemptions check the actual assigned principal and the endpoint. Admin or
+Role exemptions check the actual assigned principal and the endpoint. Admin or
 auditor principals using ordinary update methods follow the normal Neutron
-route. A browser read delegation never authorizes direct mutations. The four
+route unless the caller is also the explicitly configured first-party publisher
+using that separate exception. A browser read delegation never authorizes direct mutations. The four
 admin methods retain `feeVersion` for Candid compatibility but perform no cycle
 funding/fee-version check; any cycles attached by a canister caller remain
 unaccepted and refunded. Existing canister admin principals stay valid alongside
@@ -129,7 +139,9 @@ Daily XRC, forwarding, ranking expiry, storage and exempt admin/auditor work hav
 current paying external caller. The one-year publication allocation funds its
 app storage/processing scope. Account for shared jobs and exempt review work in
 the initial fixed cost estimates; storage beyond the first year is funded by the
-operator. Initial reserve sizing is deployment configuration, not a dynamic fee
+operator. The operator also funds exempt first-party publishing and withdrawal
+processing; ledger transfer fees still come from the withdrawing beneficiary.
+Initial reserve sizing is deployment configuration, not a dynamic fee
 adjustment. These costs cannot silently consume sale-token liabilities or trigger
 new developer renewal charges.
 Requiring payment for state-changing work does not make unauthenticated rejected
@@ -149,6 +161,12 @@ Cover all four admin methods through direct authenticated ingress without
 cycles, including existing canister admins, unauthorized callers, retained
 `feeVersion` arguments, and unaccepted surplus attachments. These exemptions
 must not extend to purchases, publisher changes, uploads, or withdrawals.
+
+Test the separate first-party exception with the exact configured identity and
+with other admins, auditors, publishers and browser delegates. Only that identity
+can publish without cycles, approve its own checked release batch, or withdraw
+its own earnings directly. The same withdrawal accounting and retry handling
+must apply; the exception must not create access to another account's earnings.
 
 Verify that any Neutron can enter the publisher flow and pays the quoted fixed
 processing/storage estimate. Cover upload-size mismatches, charge-before-retention,

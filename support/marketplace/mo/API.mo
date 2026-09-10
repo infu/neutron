@@ -52,6 +52,7 @@ module {
   public type Info = {
     version : Nat;
     canister : Principal;
+    trustedPublishingPrincipal : ?Principal;
     tokens : [Types.TokenConfig];
     fees : Types.FeeSchedule;
     referralTerms : Types.ReferralTerms;
@@ -148,6 +149,11 @@ module {
     sourceArtifactId : ?Nat64;
     dependencies : [{ appId : Text; minVersion : Nat }];
     feeVersion : Nat;
+  };
+  public type TrustedPublishRequest = {
+    requestId : Text;
+    candidates : [{ candidateId : Nat64; expectedDigest : Blob; expectedSourceDigest : ?Blob }];
+    analysis : Text;
   };
   public type AuditRequest = {
     requestId : Text;

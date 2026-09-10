@@ -174,7 +174,7 @@ persistent actor RepositoryTests {
     });
   };
 
-  public func retry_keeps_original_bytes_after_new_release_and_changed_roots_reject() : async Test.Metrics {
+  public func retired_release_retry_preserves_original_selection_and_requires_new_request() : async Test.Metrics {
     Test.test(func() {
       let c = setup();
       let dependency = release(c.db, "retry_dependency", 100, 0, "retry-dependency-100", []);
@@ -183,10 +183,20 @@ persistent actor RepositoryTests {
       let input = request("immutable-request", [root.appId]);
       let first = accepted(c.repo.prepare(c.http, F.other(), input, 10));
       let before = manifest(c, first);
+      let entitlement = Store.getEntitlement(c.db, F.other(), root.appId);
+      assert accepted(c.repo.prepare(c.http, F.other(), input, 11)) == first;
       ignore release(c.db, dependency.appId, 200, 0, "retry-dependency-200", []);
       ignore release(c.db, root.appId, 200, 0, "retry-root-200", [{ appId = dependency.appId; minVersion = 200 }]);
-      let retry = accepted(c.repo.prepare(c.http, F.other(), input, 20));
-      assert retry == first and manifest(c, retry) == before;
+      assert Store.getArtifact(c.db, dependency.artifactId) == null;
+      assert Store.getArtifact(c.db, root.artifactId) == null;
+      // Retention deletes superseded package bytes, but cannot silently
+      // rewrite an existing installation request to the successor release.
+      switch (c.repo.prepare(c.http, F.other(), input, 20)) {
+        case (#err(error)) assert error.code == "release_unavailable";
+        case (#ok(_)) Runtime.trap("A retired release unexpectedly remained installable");
+      };
+      assert manifest(c, first) == before;
+      assert Store.getEntitlement(c.db, F.other(), root.appId) == entitlement;
       // Both selections expand to the same two apps. The original selected
       // roots still differ, so the old request ID must not accept this change.
       rejected(c.repo.prepare(c.http, F.other(), { input with appIds = [root.appId, dependency.appId] }, 21));

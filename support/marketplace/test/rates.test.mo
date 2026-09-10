@@ -21,6 +21,38 @@ persistent actor {
           timestamp = at; rate = value; metadata = { decimals = 9; base_asset_num_received_rates = 4; base_asset_num_queried_sources = 5;
             quote_asset_num_received_rates = 3; quote_asset_num_queried_sources = 4; standard_deviation = 1; forex_timestamp = null } };
     };
+    public func ckbtc_ledger_uses_btc_usd_oracle_pair() : async Test.Metrics {
+        let (db, previous) = fixture();
+        let btc : Types.TokenConfig = { previous with
+            ledger = Principal.fromText("mxzaz-hqaaa-aaaar-qaada-cai");
+            symbol = "ckBTC"; rateSymbol = "BTC"; decimals = 8; fee = 10;
+        };
+        Store.setConfig(db, { Store.config(db) with tokens = [btc] });
+        var observed : ?Rates.Request = null;
+        let responses = await* Rates.refreshWith(db, func () : Int { 1_000_000_000 }, {
+            fee = func (ledger : Principal) : async* Rates.Result<Nat> {
+                assert ledger == btc.ledger;
+                #ok(10);
+            };
+            rate = func (oracle : Principal, cycles : Nat, request : Rates.Request) : async* Rates.Result<Rates.ExchangeRate> {
+                assert oracle == Store.config(db).xrc and cycles == 1_000_000_000;
+                observed := ?request;
+                #ok(rate("BTC", 1, 80_000_000_000_000));
+            };
+        });
+        Test.test(func () {
+            assert observed == ?{
+                base_asset = { symbol = "BTC"; class_ = #Cryptocurrency };
+                quote_asset = { symbol = "USD"; class_ = #FiatCurrency };
+                timestamp = null;
+            };
+            assert responses.size() == 1 and responses[0].ledger == btc.ledger;
+            assert responses[0].rateUpdated and responses[0].error == null;
+            let ?saved = Store.getRate(db, btc.ledger) else { assert false; return };
+            assert saved.symbol == "BTC" and saved.usdRate == 80_000_000_000_000;
+            assert Store.config(db).tokens[0].symbol == "ckBTC";
+        });
+    };
     public func failed_refresh_keeps_successful_price_indefinitely() : async Test.Metrics {
         Test.test(func () {
             let (db, token) = fixture();

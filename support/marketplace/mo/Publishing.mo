@@ -37,6 +37,17 @@ module {
     false;
   };
 
+  func bindUploads(db : Store.DB, candidate : Types.Candidate, artifactId : Nat64, purpose : { #package; #source }) {
+    let range = { gt = null; gte = ?artifactId; lt = null; lte = ?artifactId; dir = #fwd };
+    for (upload in db.uploads.by_artifact.rangeIter(range, null)) {
+      if (upload.owner == candidate.publisher and upload.appId == candidate.appId and
+        upload.artifactId == ?artifactId and upload.purpose == purpose and
+        upload.state == #attached and upload.candidateId == null) {
+        ignore must(db.uploads.update({ upload with candidateId = ?candidate.id; updatedAtNs = candidate.createdAtNs }));
+      };
+    };
+  };
+
   public func highestPublishedVersion(db : Store.DB, appId : Text) : ?Nat {
     var highest : ?Nat = null;
     for (candidate in db.candidates.by_app_version.rangeIter({ gt = null; gte = ?(appId, 0); lt = null; lte = null; dir = #fwd }, null)) {
@@ -93,6 +104,11 @@ module {
       digest = artifact.digest; sourceDigest; dependencies = input.dependencies;
       state = #pending; published = false; createdAtNs = now; updatedAtNs = now;
     }));
-    switch (db.candidates.get(id)) { case (?candidate) #ok(candidate); case null Runtime.trap("Submitted candidate missing") };
+    let ?candidate = db.candidates.get(id) else Runtime.trap("Submitted candidate missing");
+    // Associate uploads only when this exact candidate is first submitted.
+    // Retrying an old request must not consume a newer staged duplicate upload.
+    bindUploads(db, candidate, candidate.artifactId, #package);
+    switch (candidate.sourceArtifactId) { case (?sourceId) bindUploads(db, candidate, sourceId, #source); case null {} };
+    #ok(candidate);
   };
 }

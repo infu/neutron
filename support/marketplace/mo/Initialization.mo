@@ -19,7 +19,7 @@ module {
         case (#ok(())) {};
       };
       let bytes = Principal.toBlob(reservation.publisher);
-      if (bytes.size() == 0 or bytes[bytes.size() - 1] != (1 : Nat8)) return #err("A reserved publisher must be a Neutron canister principal.");
+      if ((bytes.size() == 0 or bytes[bytes.size() - 1] != (1 : Nat8)) and Store.getTrustedPublishingPrincipal(db) != ?reservation.publisher) return #err("A reserved publisher must be a Neutron canister or the configured trusted publishing principal.");
       switch (Map.get(owners, Text.compare, reservation.appId)) {
         case (?owner) if (owner != reservation.publisher) return #err("Conflicting publishers for reserved app " # reservation.appId);
         case (_) {};
@@ -50,6 +50,14 @@ module {
   public func memory(initial : Types.Init, now : Int) : Store.Mem {
     let retained = Store.init(initial);
     let db = Store.Use(retained);
+    switch (initial.trustedPublishingPrincipal) {
+      case null {};
+      case (?principal) {
+        let bytes = Principal.toBlob(principal);
+        if (bytes.size() == 0 or Principal.isAnonymous(principal)) Runtime.trap("The trusted publishing principal must be authenticated.");
+      };
+    };
+    Store.setTrustedPublishingPrincipal(db, initial.trustedPublishingPrincipal);
     switch (initial.reservations) {
       case null {};
       case (?reservations) switch (initialize(db, reservations, now)) {

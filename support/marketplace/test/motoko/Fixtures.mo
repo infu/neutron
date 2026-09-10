@@ -49,7 +49,7 @@ module {
     }));
     ignore stored(Store.insertUpload(db, {
       owner = owner(); requestId; appId; digest = artifact.digest; size; mediaType = artifact.mediaType;
-      purpose; ticket; hashState = null; chargeId = charge.id; state = #attached; artifactId = ?artifact.id;
+      purpose; ticket; hashState = null; chargeId = charge.id; state = #attached; artifactId = ?artifact.id; candidateId = null;
       createdAtNs = 1; updatedAtNs = 1;
     }));
     artifact;

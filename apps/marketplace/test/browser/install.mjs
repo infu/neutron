@@ -90,6 +90,9 @@ try {
   assert.deepEqual(await page.evaluate(()=>window.installFixture.handoffs),[{operationId:'installation-0',setupUrl:'https://marketplace-fixture.invalid/install/installation-0'}]);
   assert.equal(await page.evaluate(()=>window.installFixture.prepared.length),1,'opening the saved handoff must not repeat preparation');
   await page.evaluate(()=>window.installFixture.setMode('review'));
+  // Wait for React to commit the unmount before requesting the next mode;
+  // consecutive browser evaluations can otherwise batch into one render.
+  await page.locator('.mp-install-control').waitFor({ state: 'detached' });
   await page.evaluate(()=>window.installFixture.setMode('control'));
   await waitRequests(3);
   await page.getByRole('button', { name: 'Open installer', exact: true }).waitFor();

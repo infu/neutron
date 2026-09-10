@@ -4,6 +4,7 @@ import API "../mo/API";
 import Certification "../mo/Certification";
 import Encoding "../mo/Encoding";
 import Http "../mo/Http";
+import Retention "../mo/Retention";
 import Store "../mo/Store";
 import Types "../mo/Types";
 import Array "mo:core/Array";
@@ -74,7 +75,7 @@ persistent actor {
       createdAtNs = 1; updatedAtNs = 1;
     }));
     let value = stored(Store.insertCandidate(db, {
-      appId; version = 1; publisher; requestId; listingRevision = 1;
+      appId; version = 100; publisher; requestId; listingRevision = 1;
       artifactId = package.id; sourceArtifactId = ?source.id; digest = package.digest; sourceDigest = ?source.digest;
       dependencies = []; state = #approved; published = true; createdAtNs = 1; updatedAtNs = 1;
     }));
@@ -110,6 +111,38 @@ persistent actor {
     let ?app = Store.getApp(db, appId) else Runtime.trap("Fixture app missing");
     ignore stored(db.apps.update({ app with priceUsdMicros = if (free) 0 else 1_000_000 }));
     certification.refreshApp(appId);
+  };
+  public func approveSuccessorAndRetire() : async { paths : [Text]; retiredCount : Nat; retiredMissing : Bool; historyRetained : Bool } {
+    let previous = candidate();
+    let package = artifact("successor-package", "application/octet-stream");
+    let source = artifact("successor-offered-source", "application/gzip");
+    let successor = stored(Store.insertCandidate(db, {
+      appId; version = previous.version + 1; publisher; requestId = "00000000000000000000000000000002";
+      listingRevision = 1; artifactId = package.id; sourceArtifactId = ?source.id;
+      digest = package.digest; sourceDigest = ?source.digest; dependencies = [];
+      state = #approved; published = true; createdAtNs = 6; updatedAtNs = 6;
+    }));
+    let ?app = Store.getApp(db, appId) else Runtime.trap("Fixture app missing");
+    ignore stored(db.apps.update({ app with approvedCandidate = ?successor.id; updatedAtNs = 6 }));
+    let retired = Retention.afterDecision(db, appId);
+    certification.removeArtifacts(retired);
+    paths := [Access.artifactPath(package, #package), Access.artifactPath(source, #source), paths[2]];
+    ignore accepted(Access.grant(db, buyer, {
+      request_id = "00000000000000000000000000000002";
+      token = "0000000000000000000000000000000000000000000000000000000000000004";
+      paths = [paths[0], paths[1]]; fee_version = 1;
+    }, #buyer, 6));
+    certification.refreshApp(appId);
+    candidateId := ?successor.id;
+    let sourceMissing = switch (previous.sourceArtifactId) {
+      case (?id) Store.getArtifact(db, id) == null;
+      case null false;
+    };
+    {
+      paths; retiredCount = retired.size();
+      retiredMissing = Store.getArtifact(db, previous.artifactId) == null and sourceMissing;
+      historyRetained = Store.getCandidate(db, previous.id) == ?previous;
+    };
   };
   public query func buyerOwnershipRetained() : async Bool { Store.getEntitlement(db, buyer, appId) != null };
   public query func http_request(request : Http.Request) : async Http.Response { http.httpRequest(request, http_streaming_callback) };

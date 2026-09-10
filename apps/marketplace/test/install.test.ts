@@ -354,6 +354,49 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
     expect(await quoteInstallation(ctx, appIds, OPERATION)).toMatchObject({ operationId: OPERATION, setupUrl: SETUP, cycles: { total: "0" } });
     expect(offers).toEqual([]);
   });
+  test("a lost preparation reply followed by retirement retains its failed ID and permits an explicit latest selection", async () => {
+    const ctx = context(), appIds = ["editor"], freshId = "ef".repeat(16);
+    const originalQuote = await quoteInstallation(ctx, appIds, OPERATION);
+    prepareError = new Error("Original preparation reply interrupted");
+    await expect(installApplications(ctx, appIds, originalQuote)).rejects.toThrow("interrupted");
+    const unknownBytes = new Uint8Array(stored.get(`installation:${OPERATION}`)!);
+    const unknown = await quoteInstallation(context(), appIds);
+    expect(unknown.operationId).toBe(OPERATION);
+    expect(unknown.unavailableReason).toBeUndefined();
+    expect(unknown.setupUrl).toBeUndefined();
+    expect(await installationStatus(context(), OPERATION)).toMatchObject({ state: "review_required" });
+
+    const reason = "A release in this saved selection is no longer approved or accessible.";
+    prepareError = new actualClient.ProtocolError("release_unavailable", reason);
+    await expect(installApplications(context(), appIds, unknown)).rejects.toThrow(reason);
+    const unavailableBytes = new Uint8Array(stored.get(`installation:${OPERATION}`)!);
+    const unavailable = await quoteInstallation(context(), appIds);
+    expect(unavailable).toMatchObject({ operationId: OPERATION, unavailableReason: reason });
+    expect(unavailable.setupUrl).toBeUndefined();
+    expect(await installationStatus(context(), OPERATION)).toMatchObject({ state: "failed", nextAction: "review", installation: { unavailableReason: reason } });
+    expect([...stored.entries()].some(([key, value]) => key.startsWith(`history:installation:${OPERATION}:`) && Buffer.from(value).equals(Buffer.from(unknownBytes)))).toBe(true);
+    await expect(installApplications(context(), appIds, unavailable)).rejects.toThrow("new installation request");
+    expect(updates).toHaveLength(2);
+
+    prepareError = null;
+    latestSetup = "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/install/latest-grant/setup.json";
+    const latest = await quoteInstallation(context(), appIds, freshId);
+    expect(latest.unavailableReason).toBeUndefined();
+    expect(updates).toHaveLength(2);
+    const prepared = await installApplications(context(), appIds, latest);
+    expect(prepared.installation).toMatchObject({ operationId: freshId, setupUrl: latestSetup });
+    expect(stored.get(`installation:${OPERATION}`)).toEqual(unavailableBytes);
+    expect(await quoteInstallation(context(), appIds, OPERATION)).toMatchObject({ operationId: OPERATION, unavailableReason: reason });
+    expect(updates.map(update => update.request.requestId)).toEqual([OPERATION, OPERATION, freshId]);
+    expect(offers).toEqual([]);
+  });
+  test("an unavailable-looking transport error cannot mark an interrupted selection as retired", async () => {
+    const appIds = ["editor"], quote = await quoteInstallation(context(), appIds, OPERATION);
+    prepareError = new Error("release_unavailable: the source response was interrupted");
+    await expect(installApplications(context(), appIds, quote)).rejects.toThrow("interrupted");
+    expect((await quoteInstallation(context(), appIds)).unavailableReason).toBeUndefined();
+    expect(await installationStatus(context(), OPERATION)).toMatchObject({ state: "review_required", operationId: OPERATION });
+  });
   test("an aborted agent request cannot prepare an install", async () => {
     const abort = new AbortController(); abort.abort(new Error("Canceled invocation"));
     await expect(installApplications(context("agent", abort.signal), ["editor"])).rejects.toThrow("Canceled");

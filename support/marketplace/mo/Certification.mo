@@ -70,6 +70,21 @@ module {
       refreshOne(id);
       http.commitCertification();
     };
+    public func removeArtifacts(retired : [Types.Artifact]) {
+      for (value in retired.vals()) {
+        switch (Store.getArtifactByDigest(db, value.digest)) {
+          // A digest may be uploaded again after retirement. A delayed or
+          // repeated cleanup must preserve its current authorization tree.
+          case (?current) refreshOne(current.id);
+          case null {
+            for (kind in ([#package, #source, #image] : [Access.ArtifactKind]).vals()) {
+              http.removeArtifact(Access.artifactPath(value, kind));
+            };
+          };
+        };
+      };
+      http.commitCertification();
+    };
     public func refreshGrant(grant : Types.Grant) {
       let ids = Set.empty<Nat64>();
       for (id in grant.artifactIds.vals()) Set.add(ids, Nat64.compare, id);

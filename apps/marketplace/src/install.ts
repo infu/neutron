@@ -1,13 +1,13 @@
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
-import { protocolClient, randomId, cycleView } from "./client.ts";
+import { protocolClient, randomId, cycleView, ProtocolError } from "./client.ts";
 import { authorize, scope, assertScope, type Scope } from "./actions.ts";
 import { listIntents, loadIntent, saveIntent, reviseIntent } from "./store.ts";
 import type { Fee } from "./protocol.ts";
 import type { InstallationQuote, OperationResult } from "./view-types.ts";
 
 // Optional fields extend an existing JSON draft; the managed-memory root stays
-// at schema 1. Old drafts without an offered marker remain recoverable.
-type SavedInstall = { version: 1; scope: Scope; quote: InstallationQuote; setupUrl: string | null; offered?: boolean; createdAt?: number };
+// at schema 1. Drafts predating handoff or availability markers still restore.
+type SavedInstall = { version: 1; scope: Scope; quote: InstallationQuote; setupUrl: string | null; offered?: boolean; createdAt?: number; unavailableReason?: string };
 const active = new Set<string>();
 const feeKeys = ["feeVersion", "processingCycles", "storageCycles", "totalCycles", "processingBytes", "newStorageBytes"] as const;
 function quoteId(id: string): string { if (!/^[0-9a-f]{32}$/.test(id)) throw new Error("Keep the installation's original 32-character request ID."); return id; }
@@ -19,7 +19,7 @@ function feeView(fee: Fee): InstallationQuote["fee"] { return Object.fromEntries
 function ownTile(context: MsgBusToolContext): boolean { return context.caller?.appId === "marketplace" && context.caller.role === "tile" && !context.agentMode; }
 function sameScope(saved: Scope, current: Scope): boolean { return JSON.stringify(saved) === JSON.stringify(current); }
 function readyQuote(saved: SavedInstall): InstallationQuote {
-  if (!saved.setupUrl) return saved.quote;
+  if (!saved.setupUrl) return saved.unavailableReason ? { ...saved.quote, unavailableReason: saved.unavailableReason } : saved.quote;
   return {
     ...saved.quote, setupUrl: saved.setupUrl,
     cycles: { ...saved.quote.cycles, total: "0", processing: "0", storage: "0" },
@@ -30,16 +30,18 @@ function view(saved: SavedInstall, current: Scope): OperationResult {
   const permitted = sameScope(saved.scope, current), ready = !!saved.setupUrl;
   return {
     operationId: saved.quote.operationId, appIds: saved.quote.appIds,
-    state: saved.offered ? "complete" : ready ? "pending" : "review_required",
+    state: saved.offered ? "complete" : saved.unavailableReason ? "failed" : ready ? "pending" : "review_required",
     nextAction: saved.offered || !permitted ? "none" : ready ? "resume" : "review",
     ...(permitted ? { installation: readyQuote(saved) } : {}),
     message: saved.offered
       ? "The saved selection was handed to the Neutron installer. Check My Apps or the installer for its installation outcome."
       : !permitted
         ? `This saved installation belongs to the original ${saved.scope.callerApp} ${saved.scope.root ? "agent invocation" : "application"}. Resume it there to preserve the reviewed request.`
-        : ready
-          ? "Your selection is prepared. Open the Neutron installer; preparation will not be charged again. Any repository grant and installation costs are reviewed there separately."
-          : "The original installation request is saved. Refresh and review its preparation cost before continuing with the same request ID.",
+        : saved.unavailableReason
+          ? `${saved.unavailableReason} Prepare the latest selection to review a new installation request. This does not purchase the apps again.`
+          : ready
+            ? "Your selection is prepared. Open the Neutron installer; preparation will not be charged again. Any repository grant and installation costs are reviewed there separately."
+            : "The original installation request is saved. Refresh and review its preparation cost before continuing with the same request ID.",
   };
 }
 export async function quoteInstallation(context: MsgBusToolContext, appIds: string[], operationId?: string): Promise<InstallationQuote> {
@@ -57,7 +59,7 @@ export async function quoteInstallation(context: MsgBusToolContext, appIds: stri
     saved = rows.filter(row => row.id.startsWith("installation:") && !row.value.offered && sameScope(row.value.scope, current) && JSON.stringify(row.value.quote.appIds) === JSON.stringify(appSelection))
       .map(row => row.value).sort((left, right) => (right.createdAt ?? 0) - (left.createdAt ?? 0))[0] ?? null;
   }
-  if (saved?.setupUrl) return readyQuote(saved);
+  if (saved?.setupUrl || saved?.unavailableReason) return readyQuote(saved);
   const request = { requestId: quoteId(saved?.quote.operationId ?? operationId ?? randomId()), appIds: appSelection };
   const fee = await client.estimateUpdate("install_prepare", request);
   return { operationId: request.requestId, appIds: request.appIds, canisterId: current.canister, owner: current.owner, cycles: cycleView(fee), fee: feeView(fee) };
@@ -67,7 +69,7 @@ function assertIdentity(proposed: InstallationQuote, exact: InstallationQuote) {
 }
 function assertQuote(proposed: InstallationQuote, exact: InstallationQuote) {
   assertIdentity(proposed, exact);
-  if (proposed.setupUrl !== exact.setupUrl || !proposed.fee || feeKeys.some(key => proposed.fee[key] !== exact.fee[key]) || proposed.cycles.total !== exact.cycles.total || proposed.cycles.processing !== exact.cycles.processing || proposed.cycles.storage !== exact.cycles.storage || proposed.cycles.schedule !== exact.cycles.schedule) throw new Error("The installation preparation fee or saved offer changed. Refresh its displayed cost before installing; nothing was charged.");
+  if (proposed.setupUrl !== exact.setupUrl || proposed.unavailableReason !== exact.unavailableReason || !proposed.fee || feeKeys.some(key => proposed.fee[key] !== exact.fee[key]) || proposed.cycles.total !== exact.cycles.total || proposed.cycles.processing !== exact.cycles.processing || proposed.cycles.storage !== exact.cycles.storage || proposed.cycles.schedule !== exact.cycles.schedule) throw new Error("The installation preparation fee or saved offer changed. Refresh its displayed cost before installing; nothing was charged.");
 }
 export async function installationStatus(context: MsgBusToolContext, operationId: string): Promise<OperationResult | null> {
   const saved = await loadIntent<SavedInstall>(context.kernel, `installation:${quoteId(operationId)}`);
@@ -104,6 +106,7 @@ export async function installApplications(context: MsgBusToolContext, appIds: st
   if (ownTile(context) && !supplied) throw new Error("Review the displayed installation preparation cost before installing.");
   const exact = await quoteInstallation(context, appIds, supplied?.operationId ?? operationId), client = await protocolClient(context);
   if (supplied) assertQuote(supplied, exact);
+  if (exact.unavailableReason) throw new Error(`${exact.unavailableReason} Prepare the latest selection using a new installation request; retain ${exact.operationId} as its original record.`);
   if (client.state.canisterId !== exact.canisterId || client.state.owner !== exact.owner) throw new Error("The marketplace changed while preparing the installation quote. Review it again.");
   const currentScope = scope(context, exact.canisterId, exact.owner), storageKey = `installation:${exact.operationId}`;
   let saved = await loadIntent<SavedInstall>(context.kernel, storageKey);
@@ -124,7 +127,18 @@ export async function installApplications(context: MsgBusToolContext, appIds: st
       const refreshed = await quoteInstallation(context, exact.appIds, exact.operationId);
       assertQuote(exact, refreshed);
       const fees = Object.fromEntries(feeKeys.map(key => [key, BigInt(exact.fee[key])])) as Fee;
-      const prepared = await client.update<{ setupUrl: string }>("install_prepare", { requestId: exact.operationId, appIds: exact.appIds }, fees);
+      let prepared: { setupUrl: string };
+      try {
+        prepared = await client.update<{ setupUrl: string }>("install_prepare", { requestId: exact.operationId, appIds: exact.appIds }, fees);
+      } catch (error) {
+        // A missing response remains unknown. Only the protocol's explicit
+        // terminal answer permits a new selection after this one was retired.
+        if (error instanceof ProtocolError && error.code === "release_unavailable") {
+          const next = { ...saved, unavailableReason: error.message };
+          await reviseIntent(context.kernel, storageKey, saved, next); saved = next;
+        }
+        throw error;
+      }
       if (typeof prepared.setupUrl !== "string" || !prepared.setupUrl) throw new Error("The marketplace did not return an installation offer.");
       const next = { ...saved, setupUrl: prepared.setupUrl };
       await reviseIntent(context.kernel, storageKey, saved, next); saved = next;

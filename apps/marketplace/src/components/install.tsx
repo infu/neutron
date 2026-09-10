@@ -39,8 +39,10 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   const quote = read.error || read.loading || dispatchError ? null : usePrepared ? initial : read.data;
   const working = busy || dispatchBusy;
   const hasPreparedSelection = !!(usePrepared ? initial?.setupUrl : read.data?.setupUrl);
+  const unavailableReason = read.data?.unavailableReason;
+  const canPrepareLatest = hasPreparedSelection || !!unavailableReason;
   function prepareLatest() {
-    if (disabled || working || read.loading || !hasPreparedSelection) return;
+    if (disabled || working || read.loading || !canPrepareLatest) return;
     // A fresh request is created only by this explicit action. Refresh and
     // interrupted-request recovery continue to retain their original IDs.
     retained.current = { selection, operationId: crypto.randomUUID().replaceAll("-", "") };
@@ -62,11 +64,11 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   }
   return <div className="mp-install-control">
     <div className="mp-button-row">
-      {!disabled && appIds.length > 0 && <span className="mp-muted mp-install-cost" aria-live="polite" title="Neutron reviews download access and installation costs next.">{quote ? quote.setupUrl ? "Prepared · No additional preparation charge" : `Prepare · ${BigInt(quote.cycles.total).toLocaleString("en-US")} cycles` : read.error || dispatchError ? "Refresh cost to continue" : "Checking cost…"}</span>}
+      {!disabled && appIds.length > 0 && <span className="mp-muted mp-install-cost" aria-live="polite" title="Neutron reviews download access and installation costs next.">{quote ? quote.unavailableReason ? "Selection no longer available" : quote.setupUrl ? "Prepared · No additional preparation charge" : `Prepare · ${BigInt(quote.cycles.total).toLocaleString("en-US")} cycles` : read.error || dispatchError ? "Refresh cost to continue" : "Checking cost…"}</span>}
       {!disabled && appIds.length > 0 && <button type="button" className="mp-text-button" aria-label="Refresh installation cost" title="Refresh cost" disabled={working || read.loading} onClick={() => setRevision((value) => value + 1)}><Icon name="refresh" /></button>}
-      <button type="button" className={className} disabled={disabled || working || !quote} onClick={() => void install()}>{working ? "Opening install…" : quote?.setupUrl ? "Open installer" : label}</button>
+      <button type="button" className={className} disabled={disabled || working || !quote || !!unavailableReason} onClick={() => void install()}>{working ? "Opening install…" : quote?.setupUrl ? "Open installer" : label}</button>
     </div>
-    {!disabled && hasPreparedSelection && <button type="button" className="mp-text-button" disabled={working || read.loading} onClick={prepareLatest} title="Review a new preparation request for the latest approved releases. Your previous saved selection remains available.">Prepare latest selection</button>}
-    <ErrorNote error={dispatchError || read.error} retry={!dispatchError && !working ? () => setRevision((value) => value + 1) : undefined} />
+    {!disabled && canPrepareLatest && <button type="button" className="mp-text-button" disabled={working || read.loading} onClick={prepareLatest} title="Review a new preparation request for the latest approved releases. Your previous request remains in saved history.">Prepare latest selection</button>}
+    <ErrorNote error={dispatchError || read.error || unavailableReason || null} retry={!dispatchError && !unavailableReason && !working ? () => setRevision((value) => value + 1) : undefined} />
   </div>;
 }

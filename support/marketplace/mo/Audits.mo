@@ -2,9 +2,11 @@
 import Catalog "Catalog";
 import Publishing "Publishing";
 import Rankings "Rankings";
+import Retention "Retention";
 import Store "Store";
 import Types "Types";
 import API "API";
+import Access "Access";
 import Runtime "mo:core/Runtime";
 import List "mo:core/List";
 
@@ -27,7 +29,7 @@ module {
     #ok(());
   };
 
-  public type StampResult = { audit : Types.Audit; candidate : Types.Candidate; app : Types.App; publicationChanged : Bool };
+  public type StampResult = { audit : Types.Audit; candidate : Types.Candidate; app : Types.App; publicationChanged : Bool; retiredArtifacts : [Types.Artifact] };
 
   func must<T>(value : { #ok : T; #err : Types.Error }) : T {
     switch (value) { case (#ok(result)) result; case (#err(error)) Runtime.trap("Audit storage invariant: " # debug_show(error)) };
@@ -40,6 +42,19 @@ module {
 
   public func stamp(db : Store.DB, caller : Principal, input : API.AuditRequest, now : Int) : Result<StampResult> {
     if (not assigned(db, caller)) return #err("Only an assigned auditor can submit a package audit.");
+    stampChecked(db, caller, input, now);
+  };
+
+  // The first-party publishing identity can automatically approve only its own
+  // exact candidate bytes. Administrative/auditor roles confer no such bypass.
+  public func approveTrusted(db : Store.DB, caller : Principal, input : API.AuditRequest, now : Int) : Result<StampResult> {
+    if (not Access.isTrustedPublisher(db, caller)) return #err("Only the configured first-party publisher can automatically approve its packages.");
+    let ?candidate = db.candidates.get(input.candidateId) else return #err("This package candidate does not exist.");
+    if (candidate.publisher != caller or input.decision != #approved) return #err("Automatic approval applies only to the caller's own first-party package candidates.");
+    stampChecked(db, caller, input, now);
+  };
+
+  func stampChecked(db : Store.DB, caller : Principal, input : API.AuditRequest, now : Int) : Result<StampResult> {
     let reason = switch (input.reason) { case null ""; case (?value) value };
     switch (validateStamp(input.requestId, input.decision, input.analysis, reason)) {
       case (#err(error)) return #err(error); case (#ok(())) {};
@@ -55,7 +70,7 @@ module {
           existing.analysis != input.analysis or existing.reason != input.reason) {
           return #err("This audit request ID already has a different retained decision.");
         };
-        return #ok({ audit = existing; candidate; app; publicationChanged = false });
+        return #ok({ audit = existing; candidate; app; publicationChanged = false; retiredArtifacts = [] });
       };
       case null {};
     };
@@ -110,7 +125,8 @@ module {
     let savedApp = if (nextApp != app) must(db.apps.update(nextApp)) else app;
     Rankings.refreshEligibility(db, savedApp);
     let ?audit = db.audits.get(auditId) else Runtime.trap("Saved audit missing");
-    #ok({ audit; candidate = savedCandidate; app = savedApp; publicationChanged });
+    let retiredArtifacts = Retention.afterDecision(db, savedApp.appId);
+    #ok({ audit; candidate = savedCandidate; app = savedApp; publicationChanged; retiredArtifacts });
   };
 
   public func queue(db : Store.DB, caller : Principal, after : ?Nat64, limit : Nat) : Result<API.CandidatePage> {
