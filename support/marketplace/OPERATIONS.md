@@ -1,17 +1,22 @@
 # Marketplace operators
 
-Run these commands from `support/marketplace`. They require an explicitly selected
-`icp` identity, network, protocol canister and, for charged updates, Neutron.
-They do not create or upgrade canisters. All commands that send updates default
-to a review; add `--execute` after inspecting that exact request.
+Run the repository operator scripts from `support/marketplace`. They require an
+explicitly selected `icp` identity, network, protocol canister and, for charged
+updates, Neutron. They do not create or upgrade canisters. These scripts default
+to a review before updates; add `--execute` after inspecting that exact request.
+The separate Blast syntax and immediate-call behavior are documented below.
 
-Assigned auditors call audit endpoints directly. Publisher and admin updates go
+Assigned auditors call audit endpoints directly. The four admin-only endpoints
+listed below also accept direct authenticated CLI calls without attached cycles.
+Publisher and ordinary user updates go
 through the installed marketplace app's `marketplace_marketplace_call` method on
-the selected Neutron, which attaches the reviewed cycles. An ordinary ingress
-call cannot attach cycles; do not substitute `icp --proxy` or a direct protocol
-update. The CLI identity must be authorized by that Neutron, its marketplace app
+the selected Neutron, which attaches the reviewed cycles. Ingress cannot attach
+cycles for those charged methods; do not substitute `icp --proxy` or a direct
+protocol update. The CLI identity must be authorized by that Neutron, its marketplace app
 must be configured for this protocol, and its backend reservation must permit the
-exact method. Admin membership names the Neutron principal, not the CLI identity.
+exact method. An admin call authenticates the actual configured admin principal;
+that may be an existing CLI identity or an existing canister principal. Knowing
+the principal text does not confer authority. There is no admin or auditor UI.
 
 When an additional operator method needs a reservation, `operator.ts reserve-route`
 prepares the existing Kernel's exact principal/method reservation. It does not
@@ -75,13 +80,62 @@ responses. Keep this journal private because it contains unpublished package byt
 
 ## Admin calls and initial source transition
 
-`operator.ts admin-auditor` assigns/removes an auditor through the admin Neutron.
-`operator.ts reserve-app` reserves an existing app ID for an explicitly named
-publisher Neutron. `operator.ts burn-account` sets one accepted token's burn-service
-recipient, including an optional 32-byte subaccount. These commands display the
-exact request and attached cycles before `--execute`; no default recipient or
-publisher is guessed. `operator.ts relay` accepts an already reviewed Candid binary
-request for other allowed charged methods.
+These commands call the protocol directly as the configured admin identity:
+
+| Operator command | Protocol endpoint | Effect |
+|---|---|---|
+| `admin-auditor` | `admin_auditor_set` | Assign or remove an auditor |
+| `reserve-app` | `admin_reserve_app` | Reserve an app ID for an explicitly named publisher Neutron |
+| `burn-account` | `admin_set_burn_account` | Set one token's forwarding recipient and optional 32-byte subaccount |
+| `rates-refresh` | `rates_refresh` | Request an additional oracle refresh |
+
+They display the exact request before `--execute` and require no `--neutron` or
+attached-cycle payment. The Candid `feeVersion` field remains for compatibility;
+these endpoints do not check a funding amount or charge that fee. Any attached
+cycles remain unaccepted and are refunded. Oracle and execution costs still come
+from the protocol's operating balance. No default recipient or publisher is
+guessed. Existing canister-admin callers remain accepted. `operator.ts relay`
+handles other allowed charged methods through Neutron; it is not an admin
+impersonation mechanism.
+
+### Blast CLI
+
+The normal protocol build publishes `candid:service` metadata so assigned
+operators can discover the interface without also being canister controllers.
+Method authorization still checks the caller's assigned role.
+
+The installed Blast syntax uses numeric identity selection `--id` (0–65535) and
+`--host URL`; these are different from `icp`'s named `--identity` and `--network`.
+Select an existing Blast identity whose principal is already in `admins`. This
+workflow does not create an identity, add an administrator, or deploy a canister.
+Use `blast help` for this installed CLI's global usage; it has no per-command
+`--help` parser, and `blast scan --help` treats `--help` as a canister ID.
+
+```sh
+blast scan "$MARKETPLACE" --id "$BLAST_ADMIN_ID" --host "$IC_HOST"
+blast schema "$MARKETPLACE" admin_auditor_set --id "$BLAST_ADMIN_ID" --host "$IC_HOST"
+blast validate "$MARKETPLACE" marketplace_info '[]' --id "$BLAST_ADMIN_ID" --host "$IC_HOST"
+```
+
+`scan` discovers methods, and `schema` prints the selected method's argument and
+result schemas. `args_json` is a JSON array of positional Candid arguments; each
+of these admin endpoints takes one record. Keep its `feeVersion` field in that
+record and use the types returned by `schema`.
+
+**`blast validate` executes the selected method**, then checks its result against
+the schema. It is not a dry run for an update. The example above calls only the
+read-only `marketplace_info` query. For an authorized admin mutation, inspect the
+schema and exact JSON array first, then submit it once with `call`:
+
+```sh
+blast call "$MARKETPLACE" admin_auditor_set "$REVIEWED_ADMIN_ARGS_JSON" --id "$BLAST_ADMIN_ID" --host "$IC_HOST"
+```
+
+Use the same form for the other three admin endpoints in the table. Blast sends
+the call immediately and has no separate `--execute` review switch. Do not run
+`validate` followed by `call` on an update intending to validate without effects.
+No cycles or Neutron relay are needed for these four authenticated admin calls;
+ordinary publisher/user operations still require their existing Neutron route.
 
 Use `migration-inventory.ts` to prepare the old-source transition:
 

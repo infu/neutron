@@ -82,6 +82,10 @@ is [apps/marketplace](apps/marketplace/README.md).
   local client state does not lose purchases or payment recovery records.
 - [x] Publisher/auditor/admin CLI, resumable publication journal, read-only
   migration inventory and explicitly scoped old-to-new source transition tooling.
+- [x] Direct administration from assigned CLI principals. The four admin-only
+  updates accept no caller cycles; ordinary purchases, publishing, uploads and
+  withdrawals retain the Neutron route and its cycle charges. No admin or auditor
+  interface is part of the app.
 - [x] Standalone `icp` build/install/upgrade configuration and a reviewable fixed
   cost preset. Actual deployment uses explicit operator configuration.
 
@@ -112,12 +116,12 @@ reserved earnings, daily jobs across upgrades, hash-bound audit decisions,
 private streaming and retained bytes beyond the prepaid year. See the
 [testing specification](support/marketplace/spec/testing.md) for their limits.
 
-The final IC/Ethereum protocol validation passed 37 unit tests and 82 Ash tests
+The IC/Ethereum protocol baseline passed 37 unit tests and 82 Ash tests
 with no skips. The 40 PocketIC host cases have passing results: the aggregate
 passed 39, and its storage-upgrade fixture passed a focused rerun after adding
 subnet rounds following the simulated year-long clock jump. That correction
-changes test scheduling, not production behavior. The normal build's Wasm
-SHA-256 is `18def141b7ed5cb081e18b4e58cb1bd11ece899985987e62d97a8d3b8799fe0f`,
+changes test scheduling, not production behavior. That normal build's Wasm
+SHA-256 was `18def141b7ed5cb081e18b4e58cb1bd11ece899985987e62d97a8d3b8799fe0f`,
 matching the public-actor integration fixture.
 
 Marketplace 101 passes 86 client tests, Motoko initialization/restoration checks,
@@ -136,6 +140,16 @@ protocol integration, five browser suites, typecheck and complete packaging.
 Archive SHA-256:
 `4c6381ee1aedb29b38de860b4356ef11194e92d22dbb4fddf6b070f910b6e426`.
 Archives 100–102 and managed memory version 1 remain unchanged.
+
+Marketplace 104 adds an explicit **Prepare latest selection** action for an old
+ready offer whose release has been replaced or revoked. It displays a new cost
+quote before preparation, preserves the old request, and keeps the new request
+ID through an interrupted reply. The 88 top-level tests, 27 focused installation
+cases, Motoko state restoration, protocol integration, all five browser suites,
+typecheck and packaging pass. Its archive SHA-256 is
+`1d8afeb405d5935372004df85664a8b0b7ae6fdfe2d9e44f73936cd89cadb02e`.
+Archives 100–103 and memory version 1 remain unchanged. Its offered source
+contains 334 files and no private protocol or storage-configuration inputs.
 
 A later full-installation check found a certified-witness lookup defect in the
 pinned IC JavaScript client: comparison continued beyond the first differing
@@ -168,7 +182,7 @@ entire repository test suite passes.
 
 The existing Kernel `kernel` v4 and `kernel_activation` v1 roots and the released
 v3→v4 migration are unchanged. Generic acquisition uses transient state; no fake
-memory migration was introduced. Kernel release 354 and marketplace release 103
+memory migration was introduced. Kernel release 354 and marketplace release 104
 are local candidates; the preceding local artifacts remain immutable. Package
 construction and qualification are not publication.
 
@@ -186,7 +200,7 @@ failure. Version 354 gives that compatibility test an explicit 30-second budget
 and passes the complete suite. The 353 archive remains unchanged, alongside
 351–352; these retained local artifacts are included as immutable test fixtures.
 
-The final current-artifact paid-install lifecycle also passes through the normal
+The Marketplace 103 paid-install lifecycle also passes through the normal
 host runner: one case with 113 assertions on Marketplace 103 / Kernel 354.
 A single ledger collection grants two apps; certified private downloads feed
 actual checked installs and registry reads. Uninstall/reinstall preserves
@@ -195,10 +209,34 @@ paid apps update together through their source, preserving their remaining
 managed state and installation identities. The test observes five private reads
 and two batch download grants, with no second purchase.
 
-Host discovery now contains 45 cases. Evidence combines the original 40-case
+Before the direct-admin change, host discovery contained 45 cases. Evidence combines the original 40-case
 baseline with five added focused cases: native ICP (2), ranking scale (1),
 two-release certification (1), and checked installation (1). This is not a claim
 of a fresh 45-case aggregate run. The existing repository case was also rerun.
+
+The direct-admin follow-up passes 59 unit tests and 16 affected Ash cases
+(initialization, access and rates). Its added public-actor case covers all four
+zero-cycle admin methods, direct signing identities, existing canister admins,
+invalid initial admin configuration and unauthorized callers. Ordinary listing
+and purchase methods still enforce the Neutron and cycle requirements. The
+existing full acquisition/withdrawal/private-download/upgrade case also passes.
+
+An actual Blast 4.2.0 smoke test found and fixed controller-only Candid metadata.
+The build now publishes only the service interface; constructor and stable-type
+metadata remain private and unchanged. Final protocol Wasm SHA-256:
+`0d9af11fa662a51da3ff9200070fe04db1838cc064c01998400d85b47bc2debc`.
+On an isolated `icp` local network, a non-controller Blast identity successfully
+discovered and called all four admin methods, assigned/removed an auditor, and
+retained roles/configuration through a same-canister keep upgrade. Unauthorized
+admin calls and ordinary direct publisher writes were rejected. The test network
+is stopped. Host discovery now contains 46 cases; the added focused evidence is
+not a new full-suite aggregate run.
+
+The final-artifact paid-install lifecycle was rerun successfully with Marketplace
+104, Kernel 354 and the public-Candid protocol build above: one host case, 113
+assertions, no failures. It verifies one purchase collection, five private HTTP
+reads, two download grants, owned reinstall and grouped updates after removing
+Marketplace, with unrelated managed state preserved.
 
 Local browser and PocketIC evidence does not establish mainnet behavior or a
 complete live Wallet acceptance test. Those require a separately reviewed
@@ -206,11 +244,6 @@ release and smoke test; no paid production testing was authorized here.
 
 ## Production release remains pending
 
-- [ ] Finalize direct Blast CLI administration. The owner confirmed that admin
-  and auditor roles have no app interface. Direct auditors already work;
-  the owner approved the same cycle exemption for admin-only updates, since
-  direct ingress cannot attach native cycles. This additional change needs its
-  own direct-principal and ordinary-user charging regression tests.
 - [ ] Supply the deployed marketplace principal, initial admin/auditor CLI
   principal(s), and separate existing-app publisher Neutron bindings.
 - [ ] Review the fixed [cycle-cost preset](support/marketplace/config/README.md),

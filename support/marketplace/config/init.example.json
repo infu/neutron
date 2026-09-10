@@ -1,6 +1,6 @@
 {
   "admins": [
-    "REPLACE_WITH_ADMIN_NEUTRON_PRINCIPAL"
+    "REPLACE_WITH_ADMIN_PRINCIPAL"
   ],
   "auditors": [],
   "tokens": [

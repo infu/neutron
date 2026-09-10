@@ -146,11 +146,19 @@ and client behavior, not live wallet connectivity or mainnet financial delivery.
 
 ## Neutron identity, cycles and direct reads
 
-Use a Neutron relay fixture to attach native cycles to every non-auditor update.
+Use a Neutron relay fixture to attach native cycles to ordinary user/publisher updates.
 Test the authenticated canister caller, not a supplied `neutronPrincipal` field.
 Ingress and a browser read delegate cannot impersonate that caller or attach
 native cycles. Auditor exemption requires both an admin-assigned auditor
 principal and an exempt auditor endpoint.
+
+Test direct authenticated admin ingress without cycles for exactly
+`admin_auditor_set`, `admin_reserve_app`, `admin_set_burn_account`, and
+`rates_refresh`. Existing canister-admin identities remain accepted. Preserve
+the `feeVersion` argument without enforcing a funding or fee-version check on
+these endpoints, and leave surplus attached cycles unaccepted. Reject
+unassigned/anonymous callers and ensure admin status grants no exemption for
+ordinary publisher, purchase, withdrawal, or upload methods.
 
 Test insufficient/excess attachments, fixed estimated per-call charges and
 refund behavior, concurrent charged calls and lost replies. Observed usage or

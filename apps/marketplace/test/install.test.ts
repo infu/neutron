@@ -22,6 +22,7 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
   const actualClient = await import("../src/client.ts");
   const OPERATION = "ab".repeat(16), OWNER = "3rurp-vyaaa-aaaay-aacua-cai", PROTOCOL = "233tv-xiaaa-aaaay-aacta-cai";
   const SETUP = "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/install/original-grant/setup.json";
+  let latestSetup: string;
   let afterReview: (() => void) | null, prepareGate: Promise<void> | null, prepareStarted: (() => void) | null, revisionReplyError: Error | null;
   let fee: Fee, state: { owner: string; canisterId: string }, prepareError: Error | null, installerError: Error | null, approved: boolean, reviewError: Error | null, counter: number;
   const stored = new Map<string, Uint8Array>(), events: string[] = [], reviews: Data[] = [], offers: Data[] = [], estimates: Data[] = [], updates: Data[] = [];
@@ -32,7 +33,7 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
       updates.push({ name, request: structuredClone(request), fee: structuredClone(charged) }); events.push("prepare");
       prepareStarted?.(); if (prepareGate) await prepareGate;
       if (prepareError) throw prepareError;
-      return { setupUrl: SETUP };
+      return { setupUrl: latestSetup };
     },
   };
   mock.module("../src/client.ts", () => ({ ...actualClient, protocolClient: async () => client, randomId: () => (++counter).toString(16).padStart(32, "0") }));
@@ -80,6 +81,7 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
   }
   beforeEach(() => {
     fee = { feeVersion: 7n, processingCycles: 1100000000n, storageCycles: 900000000n, totalCycles: 2000000000n, processingBytes: 1024n, newStorageBytes: 512n };
+    latestSetup = SETUP;
     state = { owner: OWNER, canisterId: PROTOCOL }; prepareError = null; installerError = null; reviewError = null; approved = true; counter = 0; afterReview = null; prepareGate = null; prepareStarted = null; revisionReplyError = null;
     stored.clear(); events.length = 0; reviews.length = 0; offers.length = 0; estimates.length = 0; updates.length = 0;
   });
@@ -329,6 +331,28 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_TEST_CHILD !== "1") {
     expect(await resumeInstallation(changed, OPERATION)).toMatchObject({ operationId: OPERATION, nextAction: "none" });
     await expect(quoteInstallation(changed, ["editor"], OPERATION)).rejects.toThrow();
     expect(updates).toHaveLength(1); expect(offers).toEqual([]);
+  });
+  test("only an explicit fresh installation ID prepares latest while retaining the old ready offer", async () => {
+    const ctx = context(), appIds = ["editor", "wallet"], freshId = "cd".repeat(16);
+    await installApplications(ctx, appIds, await quoteInstallation(ctx, appIds, OPERATION));
+    const originalBytes = new Uint8Array(stored.get(`installation:${OPERATION}`)!);
+    latestSetup = "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/install/latest-grant/setup.json";
+    fee = { ...fee, feeVersion: 8n, processingCycles: fee.processingCycles + 100000000n, totalCycles: fee.totalCycles + 100000000n };
+    for (const requestId of [undefined, OPERATION]) {
+      const existing = await quoteInstallation(ctx, appIds, requestId);
+      expect(existing).toMatchObject({ operationId: OPERATION, appIds, setupUrl: SETUP, cycles: { total: "0" } });
+    }
+    expect(updates).toHaveLength(1);
+    const latest = await quoteInstallation(ctx, appIds, freshId);
+    expect(latest).toMatchObject({ operationId: freshId, appIds, cycles: { total: "2100000000" } });
+    expect(latest.setupUrl).toBeUndefined();
+    const prepared = await installApplications(ctx, appIds, latest);
+    expect(prepared.installation).toMatchObject({ operationId: freshId, appIds, setupUrl: latestSetup, cycles: { total: "0" } });
+    expect(updates).toHaveLength(2);
+    expect(updates[1]).toEqual({ name: "install_prepare", request: { requestId: freshId, appIds }, fee });
+    expect(stored.get(`installation:${OPERATION}`)).toEqual(originalBytes);
+    expect(await quoteInstallation(ctx, appIds, OPERATION)).toMatchObject({ operationId: OPERATION, setupUrl: SETUP, cycles: { total: "0" } });
+    expect(offers).toEqual([]);
   });
   test("an aborted agent request cannot prepare an install", async () => {
     const abort = new AbortController(); abort.abort(new Error("Canceled invocation"));

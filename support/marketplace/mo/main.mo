@@ -106,7 +106,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     let config = Store.config(db);
     if (config.admins.size() == 0) Runtime.trap("Configure at least one marketplace administrator.");
     for (admin in config.admins.vals()) {
-      switch (writer(admin)) { case (#ok(_)) {}; case (#err(_)) Runtime.trap("An administrator must be a Neutron canister so its updates can attach cycles.") };
+      if (Principal.isAnonymous(admin) or Principal.toBlob(admin).size() == 0) Runtime.trap("An administrator must have an authenticated principal.");
     };
     for (auditor in config.auditors.vals()) if (Principal.isAnonymous(auditor)) Runtime.trap("An auditor cannot be anonymous.");
     if (not Billing.validSchedule(config.fees)) Runtime.trap("Configure explicit positive fixed cycle estimates before installation.");
@@ -357,10 +357,12 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     };
   };
   public shared ({ caller }) func admin_auditor_set(request : API.AuditorRequest) : async API.Result<()> {
-    ignore switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    // Assigned administrators call these administrative endpoints directly
+    // from their CLI. This exemption never applies to ordinary user writes.
+    // Retain feeVersion in the wire record for existing callers; no cycles are
+    // accepted or required on these explicitly exempt endpoints.
     if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an assigned administrator can change auditors.");
     if (Principal.isAnonymous(request.principal)) return failure("invalid_auditor", "An auditor must have an authenticated principal.");
-    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     let config = Store.config(db);
     let without = Array.filter<Principal>(config.auditors, func(value) { value != request.principal });
     Store.setConfig(db, { config with auditors = if (request.active) Array.concat(without, [request.principal]) else without });
@@ -368,10 +370,8 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     #ok(());
   };
   public shared ({ caller }) func admin_reserve_app(request : API.ReservationRequest) : async API.Result<API.App> {
-    ignore switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can register the publisher of an existing application.");
     ignore switch (writer(request.publisher)) { case (#err(value)) return #err(value); case (#ok(value)) value };
-    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     switch (Store.getApp(db, request.appId)) {
       case (?app) {
         if (app.owner != request.publisher) return failure("publisher_conflict", "This app ID already belongs to a different publisher. Existing ownership was preserved.");
@@ -391,7 +391,6 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     };
   };
   public shared ({ caller }) func admin_set_burn_account(request : API.BurnAccountRequest) : async API.Result<()> {
-    ignore switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can configure the burning service accounts.");
     switch (request.account) {
       case (?account) {
@@ -402,7 +401,6 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     };
     let config = Store.config(db);
     if (Array.find<Types.TokenConfig>(config.tokens, func(token) { token.ledger == request.ledger }) == null) return failure("payment_token", "Unsupported payment token.");
-    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     Store.setConfig(db, { config with tokens = Array.map<Types.TokenConfig, Types.TokenConfig>(config.tokens, func(token) {
       if (token.ledger == request.ledger) ({ token with burnAccount = request.account }) else token;
     }) });
@@ -445,15 +443,10 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     repository.prepare(http, owner, request, Time.now());
   };
-  public shared ({ caller }) func rates_refresh(request : API.FeeVersion) : async API.Result<[Rates.RefreshResult]> {
-    ignore switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+  public shared ({ caller }) func rates_refresh(_request : API.FeeVersion) : async API.Result<[Rates.RefreshResult]> {
     if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can request an extra oracle refresh.");
-    let config = Store.config(db);
-    let quote = Billing.quote(config.fees, #update, Blob.size(to_candid(request)), 0);
-    let oracleCycles = config.fees.xrc * config.tokens.size();
-    switch (Billing.accept<system>({ quote with processingCycles = quote.processingCycles + oracleCycles; totalCycles = quote.totalCycles + oracleCycles }, request.feeVersion)) {
-      case (#err(value)) return #err(value); case (_) {};
-    };
+    // Rates.refresh still attaches the configured XRC budget to each outgoing
+    // oracle request. Administrative refreshes are funded by the protocol.
     #ok(await* Rates.refresh(db, Time.now));
   };
   public query func http_request(request : Http.Request) : async Http.Response { http.httpRequest(request, http_streaming_callback) };

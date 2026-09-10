@@ -33,10 +33,12 @@ Send the credential in an HTTP authorization header to the exact selected source
 origin. Canonical package/source URLs stay credential-free. Do not put grants
 in package manifests, provenance, displayed links or agent results. The browser
 downloads every byte directly. Reuse valid read credentials rather than making a
-backend call for each chunk or asset read. Every non-auditor grant-creation,
+backend call for each chunk or asset read. Ordinary grant-creation,
 renewal or revocation update attaches native cycles through the Neutron; there
-are no prepaid credits or browser-direct non-auditor updates. Authorized auditor
-updates retain their direct CLI route and cycle-funding exemption.
+are no prepaid credits or general browser-direct user updates. Authorized
+auditor access updates retain their direct CLI route and cycle exemption. The
+separate four admin-only exemptions do not apply to `repo_access_v1` or ordinary
+browser read-delegate changes.
 
 Batch acquisition needs a generic HTTP package path after it reads the pinned
 setup manifest. Settings and offered-source download use the same authenticated

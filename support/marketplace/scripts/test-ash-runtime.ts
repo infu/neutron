@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
 import { compileMotokoWithCandid } from "neutron-scripts/src/compile_motoko.js";
+import { exposeCandidService } from "./public-candid.ts";
 
 const execFile = promisify(execFileCallback);
 export const projectRoot = path.resolve(import.meta.dir, "..");
@@ -88,6 +89,11 @@ export async function compileAshCanister(canister: any, paths: any, options: { p
   const packages = { ...await testPackages(), ...Object.fromEntries((options.packages ?? []).map((entry) => [entry.name, entry.path])) };
   const base = path.join(paths.artifactsDir, canister.name);
   const output = await compileMotokoWithCandid({ sourcePath: canister.srcAbs, outputPath: `${base}.wasm`, cwd: projectRoot, packages, emitStableTypes: true });
+  if (path.resolve(canister.srcAbs) === path.join(projectRoot, "mo/main.mo")) {
+    // Public actor tests install the same interface visibility and bytes as the
+    // normal deployment build; private test fixtures need no metadata change.
+    await exposeCandidService(output.wasmPath);
+  }
   // IC install_code accepts gzip Wasm. The assembled public actor exceeds the
   // ingress message cap when sent raw; compression changes only its transport,
   // not the module, compiler options or state-preserving upgrade path.

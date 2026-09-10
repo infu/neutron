@@ -35,7 +35,10 @@ direct update authority.
   before any update; **Refresh cost** rechecks that quote for the same selection.
   Once prepared, **Open installer** presents the saved selection from the tile
   without charging preparation again. Saved preparations remain available after
-  navigating away or reloading. Neutron separately reviews subsequent
+  navigating away or reloading. If a saved selection refers to an older or
+  unavailable release, **Prepare latest selection** reviews a new request and
+  its current cost; the earlier request remains saved. Ordinary refresh and
+  retry retain the original request. Neutron separately reviews subsequent
   download-access and installation costs. Installed apps update through Neutron
   Settings. Revocation
   blocks downloads of the affected release while preserving ownership for a

@@ -82,12 +82,18 @@ ledger effects: restoring old internal balances cannot reverse external payments
 
 ## Protocol calls after installation
 
-Every non-auditor protocol update goes through the calling Neutron with native
+Ordinary user and publisher protocol updates go through the calling Neutron with native
 cycles attached. Use the existing generic backend-call capability; no
 marketplace-specific Kernel policy or prepaid browser-write account is needed.
 Authorized auditor-only updates are exempt and may use assigned auditor CLI
-identities directly. An auditor's unrelated marketplace operations remain
-charged. See [cycles and queries](cycles-and-queries.md) for the exact boundary.
+identities directly. The four admin endpoints `admin_auditor_set`,
+`admin_reserve_app`, `admin_set_burn_account`, and `rates_refresh` also accept
+direct authenticated CLI calls without cycles. Configure the CLI's actual
+principal in `admins`; existing canister admins remain accepted. `feeVersion`
+stays in these requests for wire compatibility but is not charged or checked
+against attached funding. Admin and auditor roles do not exempt unrelated
+marketplace operations. See [cycles and queries](cycles-and-queries.md) for the
+exact boundary and [operator commands](../OPERATIONS.md) for `icp`/Blast usage.
 
 Browser reads and certified HTTP downloads remain direct. Ordinary CLI/browser
 ingress cannot attach native cycles, and topping up the marketplace canister is

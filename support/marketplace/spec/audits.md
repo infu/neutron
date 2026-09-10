@@ -11,7 +11,12 @@ model, not supplied as an unverified acting-as field.
 Auditor review endpoints are exempt from caller cycle charges. Exemption checks
 both the endpoint and auditor authority. An auditor buying an app, changing a
 publisher listing or calling an unrelated update does not receive a blanket
-exemption. Admin role-management updates follow the ordinary charged-update rule.
+exemption. Configured administrators may call `admin_auditor_set`,
+`admin_reserve_app`, `admin_set_burn_account`, and `rates_refresh` directly from
+their authenticated CLI identity without attached cycles. Those four endpoints
+retain `feeVersion` for compatibility without a fee or funding check. Existing
+canister admins remain valid, and their attached cycles are left unaccepted.
+The marketplace app has no auditor or admin interface.
 
 Any Neutron can submit apps. Its developer pays fixed estimated cycle charges
 for upload and modification through that Neutron, including one year of app
@@ -48,7 +53,7 @@ Suggested public surface, names to finalize with Candid:
 
 | Method | Kind | Purpose |
 |---|---|---|
-| `admin_add_auditor` | Charged update | Assign a principal through admin authority |
+| `admin_auditor_set` | Exempt admin update | Assign or remove an auditor through the actual configured admin principal |
 | `audit_queue` / `audit_candidate` | Query | Assigned auditors inspect unaudited packages |
 | `audit_access` | Exempt auditor update, if a new HTTP grant is needed | Authorize exact review artifacts |
 | `audit_stamp` | Exempt auditor update | Approve or reject an exact candidate with analysis/reason |

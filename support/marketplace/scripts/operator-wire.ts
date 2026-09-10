@@ -54,7 +54,12 @@ export async function call(target: Target, method: string, args: Uint8Array, que
     return Uint8Array.from(Buffer.from(output, "hex"));
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
-export const RELAY_METHODS = new Set(["read_delegate_set", "listing_save", "rating_set", "referral_get_or_create", "purchase", "withdraw", "upload_begin", "upload_chunk", "upload_finish", "candidate_submit", "install_prepare", "admin_auditor_set", "rates_refresh", "admin_reserve_app", "admin_set_burn_account"]);
+export const ADMIN_METHODS = new Set(["admin_auditor_set", "admin_reserve_app", "admin_set_burn_account", "rates_refresh"]);
+export async function adminCall(target: Target, method: string, args: Uint8Array, run?: Run): Promise<Uint8Array> {
+  if (!ADMIN_METHODS.has(method)) throw new Error("This method is not a direct administrator marketplace update.");
+  return call(target, method, args, false, run);
+}
+export const RELAY_METHODS = new Set(["read_delegate_set", "listing_save", "rating_set", "referral_get_or_create", "purchase", "withdraw", "upload_begin", "upload_chunk", "upload_finish", "candidate_submit", "install_prepare"]);
 export async function relay(target: Target, neutron: string, method: string, args: Uint8Array, cycles: bigint, run?: Run): Promise<Uint8Array> {
   if (!RELAY_METHODS.has(method)) throw new Error("This method is not an ordinary cycle-paying marketplace update.");
   if (cycles <= 0n) throw new Error("Attach the reviewed positive cycle estimate through Neutron.");

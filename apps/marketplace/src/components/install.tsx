@@ -3,7 +3,7 @@ import type { InstallationQuote, MarketplaceClient } from "../view-types.ts";
 import { ErrorNote, Icon, errorMessage, useRead } from "./primitives.tsx";
 
 /** Installation's protocol fee is reviewed on the existing Install control. */
-export function InstallControl({ client, appIds, disabled = false, busy = false, label = "Install", onInstall, className = "mp-secondary" }: {
+export function InstallControl({ client, appIds, disabled = false, busy = false, label = "Install", onInstall, className = "mp-secondary", preparedQuote }: {
   client: MarketplaceClient;
   appIds: string[];
   disabled?: boolean;
@@ -11,16 +11,20 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   label?: string;
   onInstall: (ids: string[], quote: InstallationQuote) => Promise<void> | void;
   className?: string;
+  /** Saved ready offer permits immediate tile handoff without a background read. */
+  preparedQuote?: InstallationQuote | undefined;
 }) {
   const [revision, setRevision] = useState(0);
   const [dispatchBusy, setDispatchBusy] = useState(false);
   const [failure, setFailure] = useState<{ key: string; error: string } | null>(null);
   const dispatching = useRef(false);
   const selection = JSON.stringify(appIds);
-  const retained = useRef<{ selection: string; operationId?: string }>({ selection });
+  const initial = preparedQuote?.setupUrl && JSON.stringify(preparedQuote.appIds) === selection ? preparedQuote : undefined;
+  const retained = useRef<{ selection: string; operationId?: string }>({ selection, ...(initial ? { operationId: initial.operationId } : {}) });
   if (retained.current.selection !== selection) retained.current = { selection };
   const key = !disabled && appIds.length ? JSON.stringify([selection, revision]) : null;
-  const read = useRead(key, async () => {
+  const usePrepared = revision === 0 && initial?.operationId === retained.current.operationId && !!initial;
+  const read = useRead(usePrepared ? null : key, async () => {
     const requested = [...appIds];
     const identity = retained.current;
     const operationId = identity.operationId;
@@ -32,8 +36,17 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
     return quote;
   });
   const dispatchError = failure?.key === key ? failure.error : "";
-  const quote = read.error || read.loading || dispatchError ? null : read.data;
+  const quote = read.error || read.loading || dispatchError ? null : usePrepared ? initial : read.data;
   const working = busy || dispatchBusy;
+  const hasPreparedSelection = !!(usePrepared ? initial?.setupUrl : read.data?.setupUrl);
+  function prepareLatest() {
+    if (disabled || working || read.loading || !hasPreparedSelection) return;
+    // A fresh request is created only by this explicit action. Refresh and
+    // interrupted-request recovery continue to retain their original IDs.
+    retained.current = { selection, operationId: crypto.randomUUID().replaceAll("-", "") };
+    setFailure(null);
+    setRevision((value) => value + 1);
+  }
   async function install() {
     if (disabled || working || dispatching.current || !quote || !key) return;
     const identity = retained.current;
@@ -53,6 +66,7 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
       {!disabled && appIds.length > 0 && <button type="button" className="mp-text-button" aria-label="Refresh installation cost" title="Refresh cost" disabled={working || read.loading} onClick={() => setRevision((value) => value + 1)}><Icon name="refresh" /></button>}
       <button type="button" className={className} disabled={disabled || working || !quote} onClick={() => void install()}>{working ? "Opening install…" : quote?.setupUrl ? "Open installer" : label}</button>
     </div>
+    {!disabled && hasPreparedSelection && <button type="button" className="mp-text-button" disabled={working || read.loading} onClick={prepareLatest} title="Review a new preparation request for the latest approved releases. Your previous saved selection remains available.">Prepare latest selection</button>}
     <ErrorNote error={dispatchError || read.error} retry={!dispatchError && !working ? () => setRevision((value) => value + 1) : undefined} />
   </div>;
 }

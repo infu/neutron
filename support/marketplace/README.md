@@ -43,10 +43,19 @@ configuration are tracked in [todo.marketplace.md](../../todo.marketplace.md).
 
 The marketplace app supports browsing, checkout, My Apps, publisher submissions,
 ratings, referrals, earnings, and agent tools. Public and signed private reads
-are browser-direct. Non-auditor updates use the Neutron with native cycles; the
+are browser-direct. Ordinary user and publisher updates use Neutron with native
+cycles. Assigned auditors and administrators use their dedicated exempt CLI
+endpoints directly; the app has no admin or auditor interface. The
 app's approved call budgets are 1 trillion cycles per call and 10 trillion per
 day. These budgets do not set the protocol's initial fee coefficients, which
 remain an operator configuration decision.
+
+The admin exemption covers exactly `admin_auditor_set`, `admin_reserve_app`,
+`admin_set_burn_account`, and `rates_refresh`. They authenticate the actual
+configured admin principal, accept no attached cycles, and retain `feeVersion`
+only for Candid compatibility. Existing canister admin principals remain valid.
+Admin or auditor status does not exempt purchases, uploads, or other ordinary
+writes. See [operator commands](OPERATIONS.md) for direct CLI usage.
 
 ## Local build and validation
 

@@ -5,6 +5,20 @@ template, not deployable production configuration. The admin and all unset fees
 must be filled deliberately. The encoder rejects placeholders and missing fees.
 No private keys belong in this file.
 
+`admins` contains the actual authenticated principals authorized for protocol
+administration. An existing direct CLI identity may be listed; existing canister
+admin principals remain supported. Anonymous and management-canister principals
+are not administrators. Selecting a CLI identity does not derive authority from
+a different Neutron's principal. `auditors` similarly names explicitly assigned
+reviewer principals. Neither role requires an administration UI.
+
+Exactly four admin endpoints are exempt from caller cycle payments:
+`admin_auditor_set`, `admin_reserve_app`, `admin_set_burn_account`, and
+`rates_refresh`. They accept direct authenticated calls and retain the Candid
+`feeVersion` field without charging or funding validation. Attached cycles are
+left unaccepted. Admin status does not exempt ordinary purchases, uploads,
+withdrawals, or publisher edits; those still use Neutron with attached cycles.
+
 The three ledger and XRC principals are mainnet addresses. For local tests,
 replace them with the corresponding disposable fixture canisters and use test
 fee estimates. For production, read current ledger fees and use the reviewed

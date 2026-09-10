@@ -25,14 +25,18 @@ Use the existing signed IC browser-agent model with a recoverable read delegatio
    its granted read authority. Private queries resolve the signed caller through
    this binding. The browser delegate does not acquire update authority.
 4. Library, checkout preview/status, publisher status and earnings queries go
-   directly from browser to protocol. Every non-auditor update goes through the
+   directly from browser to protocol. Ordinary user and publisher updates use the
    Neutron's existing backend-call capability with attached native cycles.
 5. Key loss or reinstall authorizes a replacement through the same Neutron.
    Ownership, earnings and operation journals remain under the Neutron account.
 
-Update methods authenticate the actual Neutron caller. Authorized CLI auditors
-retain their separately assigned role principals and are exempt from the
-attached-cycle requirement; their authorized updates can be called directly.
+Ordinary update methods authenticate the actual Neutron caller. Assigned CLI
+auditors and administrators authenticate their own role principals at dedicated
+exempt endpoints. Those endpoints can be called directly without attached
+cycles; an existing canister admin remains valid. The admin exemption covers
+exactly `admin_auditor_set`, `admin_reserve_app`, `admin_set_burn_account`, and
+`rates_refresh`. Their retained `feeVersion` field is compatibility data, not a
+funding requirement. No admin or auditor UI is part of the marketplace app.
 A browser client cannot register itself for another account by knowing that
 account's public ID.
 
@@ -53,14 +57,15 @@ browser-agent and storage facilities, not Taggr's account-ownership semantics.
 | Catalog, rankings, images, public audit reports | Browser directly to protocol |
 | First browser read authorization or recovery | Small Neutron-to-protocol update with attached native cycles |
 | Private library, checkout previews/progress, publisher status and earnings queries | Signed browser directly to protocol after read authorization |
-| Every non-auditor update, including purchases, withdrawals, listing edits, uploads and grant changes | Existing Neutron backend calls with native cycles attached to each update |
+| Ordinary purchases, withdrawals, listing edits, uploads and grant changes | Existing Neutron backend calls with native cycles attached to each update |
 | Authorized auditor updates | Direct CLI-to-protocol calls; cycle-funding exemption |
+| The four authorized admin endpoints | Direct CLI-to-protocol calls; cycle-funding exemption |
 | Approving payment from the Neutron Wallet | Existing Wallet tools and their authority/approval flow |
 | Collection, payouts, daily XRC and forwarding | Protocol calls the ledgers/XRC |
 | Package/source bytes | Browser directly to certified HTTP, with a source access grant |
 | Settings source authorization without marketplace app | Generic Neutron repository-access broker; no marketplace app dependency |
 
-There are no prepaid cycle credits or browser-direct non-auditor mutations.
+There are no prepaid cycle credits or general browser-direct user mutations.
 This also applies to upload chunks and recovery continuations that mutate state.
 HTTP downloads and public/private queries stay browser-direct; returning a saved
 operation status does not require an update. See

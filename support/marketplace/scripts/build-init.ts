@@ -83,13 +83,13 @@ export function encodeMarketplaceInit(input: unknown): Uint8Array {
     return { appId, publisher, title };
   })];
   const admins = list(config.admins, "admins").map((value) => principal(value, "admin"));
-  // Administrative writes are sent by the configured Neutron canister, not
-  // directly by its browser or the CLI identity used to install this protocol.
+  // Assigned administrators can call their exempt endpoints directly from a
+  // CLI identity. Publisher and buyer ownership remains Neutron-based.
   if (admins.length === 0 || admins.some((value) => {
     const bytes = value.toUint8Array();
-    return bytes.length === 0 || bytes[bytes.length - 1] !== 1;
+    return bytes.length === 0 || value.isAnonymous();
   })) {
-    throw new Error("At least one admin Neutron canister principal is required; browser and CLI identities cannot perform these administrative updates");
+    throw new Error("At least one authenticated admin principal is required; anonymous and management principals cannot administer this protocol");
   }
   const auditors = list(config.auditors, "auditors").map((value) => principal(value, "auditor"));
   if (auditors.some((value) => value.isAnonymous())) throw new Error("Auditors must not be anonymous");

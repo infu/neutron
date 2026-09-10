@@ -18,7 +18,7 @@ import App from '${root}/apps/marketplace/src/app.tsx';
 import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const owner='3rurp-vyaaa-aaaay-aacua-cai',canisterId='rrkah-fqaaa-aaaaa-aaaaq-cai';
-const state=window.installRecovery={calls:[],quotes:[],preparations:[],offers:[],opened:[],gesture:false,installed:false,failed:false,saved:null};
+const state=window.installRecovery={calls:[],quotes:[],preparations:[],offers:[],opened:[],gesture:false,installed:false,failed:false,saved:null,retained:{},latestIds:[],latestFailed:false};
 const failureMode=new URL(location.href).searchParams.get('failure')||'ready';
 // Expire at the end of this click task. Microtask checkpoints can run between
 // native capture and React's delegated listener; the unit handoff test checks
@@ -26,7 +26,10 @@ const failureMode=new URL(location.href).searchParams.get('failure')||'ready';
 document.addEventListener('click',()=>{state.gesture=true;setTimeout(()=>state.gesture=false,0)},true);
 const app={id:'editor',title:'Canvas Studio',summary:'Create a canvas.',description:'A local app.',category:'Creativity',publisher:owner,priceUsdMicros:'0',version:'101',rating:null,ratingCount:0,owned:true,available:true,installedVersion:null,screenshots:[],audit:null};
 const page=items=>({items,nextCursor:null});
-const quote=(appIds,id)=>({operationId:id,appIds:[...appIds],canisterId,owner,cycles:{total:'1200000',processing:'1200000',storage:'0',schedule:'1'},fee:{feeVersion:'1',processingCycles:'1200000',storageCycles:'0',totalCycles:'1200000',processingBytes:'100',newStorageBytes:'0'}});
+const originalId='1'.padStart(32,'0');
+const quote=(appIds,id)=>{const amount=failureMode==='revoked'&&id!==originalId?'2400000':'1200000';return {operationId:id,appIds:[...appIds],canisterId,owner,cycles:{total:amount,processing:amount,storage:'0',schedule:'1'},fee:{feeVersion:'1',processingCycles:amount,storageCycles:'0',totalCycles:amount,processingBytes:'100',newStorageBytes:'0'}}};
+const setupUrl=latest=>'https://'+owner+'.icp0.io/#repo='+canisterId+'&manifest='+(latest?'c':'a').repeat(64)+'&digest='+(latest?'d':'b').repeat(64);
+if(failureMode==='revoked'){state.saved={quote:quote(['editor'],originalId),setupUrl:setupUrl(false),opened:false};state.retained[originalId]=state.saved;}
 const readyQuote=saved=>({...saved.quote,setupUrl:saved.setupUrl,cycles:{...saved.quote.cycles,total:'0',processing:'0'},fee:{...saved.quote.fee,processingCycles:'0',totalCycles:'0',processingBytes:'0'}});
 const operation=saved=>({operationId:saved.quote.operationId,appIds:saved.quote.appIds,state:'pending',nextAction:'resume',message:saved.setupUrl?'The original installation is ready. Open its installer.':'The original preparation reply was interrupted. Continue this saved request.',installation:saved.setupUrl?readyQuote(saved):saved.quote});
 function result(value){return {resultJson:JSON.stringify(value)}}
@@ -34,6 +37,7 @@ window.marketplaceTransport={callTool(call){
  if(call.target==='kernel'){
   state.offers.push({call:structuredClone(call),gesture:state.gesture});
   if(call.name!=='apps.install_offer'||!state.gesture) return Promise.reject(Object.assign(Error('USER_INTERACTION_REQUIRED: direct tile gesture required'),{code:'USER_INTERACTION_REQUIRED'}));
+  if(failureMode==='revoked'&&call.arguments.url===setupUrl(false))return Promise.reject(Error('The selected release is no longer approved'));
   if(call.arguments.url!==state.saved?.setupUrl) return Promise.reject(Error('The original setup URL was replaced'));
   return Promise.resolve({presented:true,requestId:'kernel-offer'});
  }
@@ -46,16 +50,23 @@ window.marketplaceTransport={callTool(call){
  if(method==='recentOperations')return Promise.resolve(result(state.saved&&!state.saved.opened?[operation(state.saved)]:[]));
  if(method==='operation')return Promise.resolve(result(operation(state.saved)));
  if(method==='quoteInstallation'){
-  const saved=state.saved&&!state.saved.opened&&JSON.stringify(state.saved.quote.appIds)===JSON.stringify(args.appIds)?state.saved:null;
-  const value=saved?(saved.setupUrl?readyQuote(saved):saved.quote):quote(args.appIds,args.operationId||'1'.padStart(32,'0'));
+  const saved=args.operationId?(state.retained[args.operationId]??(state.saved?.quote.operationId===args.operationId?state.saved:null)):state.saved&&!state.saved.opened&&JSON.stringify(state.saved.quote.appIds)===JSON.stringify(args.appIds)?state.saved:null;
+  const value=saved?(saved.setupUrl?readyQuote(saved):saved.quote):quote(args.appIds,args.operationId||originalId);
+  if(failureMode==='revoked'&&args.operationId&&args.operationId!==originalId&&!state.latestIds.includes(args.operationId))state.latestIds.push(args.operationId);
   state.quotes.push({requested:args.operationId??null,returned:value.operationId,ready:!!value.setupUrl});
   return Promise.resolve(result(value));
  }
  if(method==='install'){
   state.preparations.push(args.quote.operationId);
+  if(failureMode==='revoked'){
+   if(args.quote.operationId===originalId||!state.latestIds.includes(args.quote.operationId))return Promise.reject(Error('Latest preparation did not use the explicitly reviewed fresh request'));
+   state.saved=state.retained[args.quote.operationId]??{quote:structuredClone(args.quote),setupUrl:null,opened:false};state.retained[args.quote.operationId]=state.saved;
+   if(!state.latestFailed){state.latestFailed=true;return Promise.reject(Error('Latest preparation response interrupted'))}
+   state.saved.setupUrl=setupUrl(true);return Promise.resolve(result(operation(state.saved)));
+  }
   if(state.saved&&state.saved.quote.operationId!==args.quote.operationId)return Promise.reject(Error('Duplicate installation identity'));
   state.saved??={quote:structuredClone(args.quote),setupUrl:null,opened:false};
-  if(failureMode==='ready'||state.failed)state.saved.setupUrl='https://'+owner+'.icp0.io/#repo='+canisterId+'&manifest='+'a'.repeat(64)+'&digest='+'b'.repeat(64);
+  if(failureMode==='ready'||state.failed)state.saved.setupUrl=setupUrl(false);
   if(!state.failed){state.failed=true;return Promise.reject(Error('Original installation response interrupted'))}
   return Promise.resolve(result(operation(state.saved)));
  }
@@ -123,6 +134,48 @@ try {
     await page.screenshot({ path: join(output, `${mode}-recovered.png`) });
     checks.push(`${mode}: interrupted installation survives tab remount with its original ID; the ready click opens the original URL directly from the tile without another prepare.`);
   }
+  await page.goto(`${url}/?failure=revoked`);
+  await page.getByRole("button", { name: "My Apps", exact: true }).click();
+  const row = page.locator(".mp-library-row");
+  await row.getByRole("button", { name: "Open installer", exact: true }).waitFor();
+  const old = await page.evaluate(() => ({ id: window.installRecovery.saved.quote.operationId, value: JSON.stringify(window.installRecovery.saved), url: window.installRecovery.saved.setupUrl }));
+  await row.getByRole("button", { name: "Refresh installation cost", exact: true }).click();
+  await page.waitForFunction(() => window.installRecovery.quotes.length >= 2);
+  assert.equal(await page.evaluate(() => window.installRecovery.quotes.at(-1).returned), old.id, "ordinary refresh must preserve the old request");
+  await row.getByRole("button", { name: "Open installer", exact: true }).click();
+  await row.getByRole("alert").getByText("The selected release is no longer approved", { exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.installRecovery.latestIds), [], "a rejected old offer must never create a replacement automatically");
+  assert.deepEqual(await page.evaluate(() => window.installRecovery.preparations), []);
+  await row.getByRole("button", { name: "Prepare latest selection", exact: true }).click();
+  await page.waitForFunction(() => window.installRecovery.latestIds.length === 1);
+  await row.getByText("Prepare · 2,400,000 cycles", { exact: true }).waitFor();
+  const freshId = await page.evaluate(() => window.installRecovery.latestIds[0]);
+  assert.match(freshId, /^[0-9a-f]{32}$/);
+  assert.notEqual(freshId, old.id, "the explicit new selection must not rebind the old manifest");
+  assert.deepEqual(await page.evaluate(() => window.installRecovery.preparations), [], "reviewing the latest cost must not charge or prepare");
+  assert.equal(await page.evaluate(id => JSON.stringify(window.installRecovery.retained[id]), old.id), old.value);
+  await row.getByRole("button", { name: "Install", exact: true }).click();
+  await row.getByRole("alert").getByText("Latest preparation response interrupted", { exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.installRecovery.preparations), [freshId]);
+  assert.deepEqual(await page.evaluate(() => window.installRecovery.latestIds), [freshId], "a lost new response must retain that new request rather than generate another");
+  await row.getByRole("button", { name: "Refresh installation cost", exact: true }).click();
+  await row.getByText("Prepare · 2,400,000 cycles", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.installRecovery.quotes.at(-1).returned), freshId);
+  await row.getByRole("button", { name: "Install", exact: true }).click();
+  await page.waitForFunction(() => !!window.installRecovery.saved?.setupUrl);
+  await row.getByRole("button", { name: "Open installer", exact: true }).click();
+  await page.waitForFunction(() => window.installRecovery.opened.length === 1);
+  const refreshed = await page.evaluate(id => ({ preparations: window.installRecovery.preparations, latestIds: window.installRecovery.latestIds, offers: window.installRecovery.offers, old: JSON.stringify(window.installRecovery.retained[id]), current: window.installRecovery.saved }), old.id);
+  assert.deepEqual(refreshed.preparations, [freshId, freshId]);
+  assert.deepEqual(refreshed.latestIds, [freshId]);
+  assert.equal(refreshed.old, old.value, "the original unavailable record and URL remain unchanged");
+  assert.notEqual(refreshed.current.setupUrl, old.url);
+  assert.equal(refreshed.offers.length, 2);
+  assert.equal(refreshed.offers[0].call.arguments.url, old.url);
+  assert.equal(refreshed.offers[1].call.arguments.url, refreshed.current.setupUrl);
+  assert.equal(refreshed.offers[1].gesture, true);
+  await page.screenshot({ path: join(output, "latest-selection-recovered.png") });
+  checks.push("An unavailable prepared release keeps its old ID on refresh. Only Prepare latest selection reads a new ID and cost; explicit Install dispatches it, a lost reply retries that same new ID, and the old record and URL remain unchanged.");
   assert.deepEqual(errors, []);
   await writeFile(join(output, "results.json"), JSON.stringify({ checks, errors }, null, 2));
   console.log(`Marketplace installation recovery browser checks passed. Artifacts: ${output}`);

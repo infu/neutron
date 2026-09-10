@@ -9,6 +9,7 @@ import {
 } from "neutron-scripts/src/compile_motoko.js";
 import { parsePackageString, type PackageMap } from "neutron-scripts/src/walk.js";
 import { ensureStorageInputs } from "./storage-inputs.ts";
+import { exposeCandidService } from "./public-candid.ts";
 
 const execFile = promisify(execFileCallback);
 export const marketplaceProjectRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -36,13 +37,17 @@ export async function marketplacePackages(projectRoot = marketplaceProjectRoot):
 
 export async function buildMarketplace(options: MarketplaceBuildOptions = {}): Promise<CompiledMotokoPaths> {
   const projectRoot = path.resolve(options.projectRoot ?? marketplaceProjectRoot);
-  return compileMotokoWithCandid({
+  const compiled = await compileMotokoWithCandid({
     cwd: projectRoot,
     sourcePath: options.sourcePath ?? "mo/main.mo",
     outputPath: options.outputPath ?? "build/marketplace.wasm",
     emitStableTypes: true,
     packages: await marketplacePackages(projectRoot),
   });
+  // The interface is a public protocol contract. Compiler defaults otherwise
+  // make its metadata controller-only, preventing ordinary CLI discovery.
+  await exposeCandidService(compiled.wasmPath);
+  return compiled;
 }
 
 export function parseBuildArguments(args: readonly string[]): MarketplaceBuildOptions {

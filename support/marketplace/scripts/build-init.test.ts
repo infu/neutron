@@ -52,17 +52,26 @@ test("rejects template defaults, imprecise JSON numbers, incomplete fees and mal
   const input = fixture();
   expect(() => encodeMarketplaceInit({ ...input, fees: { ...input.fees, updateBase: 9007199254740993 } })).toThrow("unsigned decimal string");
   expect(() => encodeMarketplaceInit({ ...input, fees: { ...input.fees, updateBase: null } })).toThrow("unsigned decimal string");
-  expect(() => encodeMarketplaceInit({ ...input, admins: [] })).toThrow("admin Neutron canister principal");
+  expect(() => encodeMarketplaceInit({ ...input, admins: [] })).toThrow("authenticated admin principal");
   expect(() => encodeMarketplaceInit({ ...input, tokens: [{ ...input.tokens[0], burnAccount: { owner: input.admins[0], subaccountHex: "ab" } }] })).toThrow("exactly 32 bytes");
 });
 
 
-test("rejects an administrator identity that cannot call the Neutron-only admin endpoints", () => {
+test("accepts authenticated CLI administrators and retains canister administrators", () => {
   const input = fixture();
-  for (const admin of [Principal.anonymous(), Principal.selfAuthenticating(new Uint8Array([1])), Principal.fromText("aaaaa-aa")]) {
-    expect(() => encodeMarketplaceInit({ ...input, admins: [admin.toText()] })).toThrow("admin Neutron canister principal");
+  const cli = Principal.selfAuthenticating(new Uint8Array([1]));
+  for (const admins of [[cli.toText()], [...input.admins, cli.toText()]]) {
+    const [encoded] = IDL.decode([MarketplaceInit], encodeMarketplaceInit({ ...input, admins })) as [{ admins: Principal[] }];
+    expect(encoded.admins.map(value => value.toText())).toEqual(admins);
   }
-  expect(() => encodeMarketplaceInit({ ...input, admins: [...input.admins, Principal.selfAuthenticating(new Uint8Array([1])).toText()] })).toThrow("admin Neutron canister principal");
+});
+
+test("rejects anonymous and unreachable management administrators", () => {
+  const input = fixture();
+  for (const admin of [Principal.anonymous(), Principal.fromText("aaaaa-aa")]) {
+    expect(() => encodeMarketplaceInit({ ...input, admins: [admin.toText()] })).toThrow("authenticated admin principal");
+    expect(() => encodeMarketplaceInit({ ...input, admins: [...input.admins, admin.toText()] })).toThrow("authenticated admin principal");
+  }
 });
 
 test("initial owner reservations encode atomically while omitted inventories remain compatible", () => {
