@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { MarketplaceClient, PublisherProfile, PublisherProfileInput, PublisherProfileQuote } from "../view-types.ts";
-import { CycleCost, ErrorNote, errorMessage } from "./primitives.tsx";
+import { CycleCost, ErrorNote, activateOnInputEnter, errorMessage } from "./primitives.tsx";
 
 export function PublisherProfileEditor({ client, profile, saved }: {
   client: MarketplaceClient; profile: PublisherProfile | null; saved: (profile: PublisherProfile) => void;
@@ -31,13 +31,13 @@ export function PublisherProfileEditor({ client, profile, saved }: {
     } catch (cause) { setError(errorMessage(cause)); }
     finally { inFlight.current = false; setBusy(false); }
   }
-  return <form className="mp-profile-form" onSubmit={event => { event.preventDefault(); void (review ? save() : prepare()); }}>
+  return <div role="form" aria-label="Publisher profile" className="mp-profile-form" onKeyDown={event => activateOnInputEnter(event, () => { if (!review && !busy) void prepare(); })}>
     {review ? <>
       <div className="mp-profile-review"><strong>{review.input.name}</strong><span className="mp-profile-id">{review.input.id}</span>{review.input.description && <p className="mp-description">{review.input.description}</p>}</div>
       {!profile && <p className="mp-profile-permanent">Your publisher ID and name are permanent. You can change the description later.</p>}
       <CycleCost value={review.quote.cycles} />
       <ErrorNote error={error} />
-      <div className="mp-button-row"><button type="button" className="mp-secondary" disabled={busy} onClick={() => { setReview(null); setError(""); }}>Edit details</button><button type="submit" className="mp-primary" disabled={busy}>{busy ? "Saving…" : profile ? "Save description" : "Create profile"}</button></div>
+      <div className="mp-button-row"><button type="button" className="mp-secondary" disabled={busy} onClick={() => { setReview(null); setError(""); }}>Edit details</button><button type="button" className="mp-primary" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : profile ? "Save description" : "Create profile"}</button></div>
     </> : <>
       {!profile && <div className="mp-stack"><h2>Create your publisher profile</h2><p className="mp-muted">Let people know who makes your apps. Your publisher ID appears below each app’s name.</p></div>}
       <fieldset className="mp-form-group" disabled={busy}>
@@ -48,7 +48,7 @@ export function PublisherProfileEditor({ client, profile, saved }: {
         <label htmlFor="mp-publisher-description">Publisher description</label><textarea id="mp-publisher-description" rows={4} value={input.description} onChange={event => edit("description", event.target.value)} placeholder="Tell people about your work and the apps you make." />
       </fieldset>
       <ErrorNote error={error} />
-      <div className="mp-button-row"><button type="submit" className="mp-primary" disabled={busy || (!!profile && input.description.trim() === profile.description)}>{busy ? "Calculating cost…" : profile ? "Review changes" : "Review profile"}</button></div>
+      <div className="mp-button-row"><button type="button" className="mp-primary" disabled={busy || (!!profile && input.description.trim() === profile.description)} onClick={() => void prepare()}>{busy ? "Calculating cost…" : profile ? "Review changes" : "Review profile"}</button></div>
     </>}
-  </form>;
+  </div>;
 }

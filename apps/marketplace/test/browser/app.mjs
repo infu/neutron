@@ -57,10 +57,10 @@ const client={
  quotePublication:async()=>{throw Error('Unexpected publication')},publish:async()=>{throw Error('Unexpected publication')},
  quotePurchase:async input=>{const args={...input,affiliateCode:input.affiliateCode===undefined?(state.discountCode||''):input.affiliateCode};state.calls.push(['quotePurchase',args]);return quote(args)},
  purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);if(state.cancelPurchase==='ic')return {operationId:q.operationId,state:'failed',nextAction:'none',checkoutCanceled:true,message:'The Wallet approval was declined. No purchase payment was requested.'};if(state.cancelPurchase)return {operationId:q.operationId,state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'};return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
- operation:async id=>{state.calls.push(['operation',id]);return {operationId:id,state:'pending',message:'Waiting for the original payment.',nextAction:'resume'}},
- resumeOperation:async id=>{state.calls.push(['resumeOperation',id]);return {operationId:id,state:'complete',message:'Your app is ready.',nextAction:'none'}},
+ operation:async id=>{state.calls.push(['operation',id]);return state.operations.find(item=>item.operationId===id)??{operationId:id,state:'pending',message:'Waiting for the original payment.',nextAction:'resume'}},
+ resumeOperation:async id=>{state.calls.push(['resumeOperation',id]);const result={operationId:id,state:'complete',message:'Your app is ready.',nextAction:'none'};state.operations=[result,...state.operations.filter(item=>item.operationId!==id)];return result;},
  cancelEthereumCheckout:async id=>{state.calls.push(['cancelEthereumCheckout',id]);const canceled={operationId:id,paymentRail:'ethereum',state:'failed',nextAction:'none',checkoutCanceled:true,message:'Checkout canceled.'};state.operations=state.operations.map(item=>item.operationId===id?canceled:item);sessionStorage.setItem('canceledCheckoutFixture',JSON.stringify(state.operations));return canceled;},
- recentOperations:async()=>[...state.operations,...state.installations.map(installResult),...(state.restored?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[])],
+ recentOperations:async()=>{state.calls.push(['recentOperations']);return [...state.operations,...state.installations.map(installResult),...(state.restored&&!state.operations.some(item=>item.operationId==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[])];},
  quoteInstallation:async(ids,operationId)=>{const saved=state.installations.find(item=>operationId?item.operationId===operationId:JSON.stringify(item.appIds)===JSON.stringify(ids));const quote=saved??{operationId:operationId??(state.installationQuotes.length+1).toString(16).padStart(32,'0'),appIds:[...ids],canisterId:session.canisterId,owner:principal,cycles,fee:{feeVersion:'1',processingCycles:cycles.processing,storageCycles:'0',totalCycles:cycles.total,processingBytes:'1024',newStorageBytes:'0'}};state.installationQuotes.push(quote);return quote;},
  install:async(ids,quote)=>{if(!state.installationQuotes.includes(quote)||JSON.stringify(ids)!==JSON.stringify(quote.appIds))throw Error('Install must retain the exact reviewed quote and app selection.');state.calls.push(['install',ids,quote.operationId]);let saved=state.installations.find(item=>item.operationId===quote.operationId);if(!saved){saved={...quote,setupUrl:'https://example.invalid/#manifest='+quote.operationId,cycles:{...cycles,total:'0',processing:'0'},fee:{...quote.fee,totalCycles:'0',processingCycles:'0'}};state.installations.push(saved);}return installResult(saved)},
  rate:async (...args)=>{state.calls.push(['rate',...args])},
@@ -310,7 +310,16 @@ try {
   const savedWithdrawal = page.locator('.mp-activity-card').filter({ hasText: 'Saved withdrawal awaits confirmation.' });
   await savedWithdrawal.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByText("Your app is ready.", { exact: true }).waitFor();
-  assert.ok(await page.evaluate(() => window.marketplaceFixture.calls.some(x=>x[0]==='resumeOperation'&&x[1]==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')));
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.calls.filter(x=>x[0]==='resumeOperation'&&x[1]==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa').length), 1);
+  // A successful continuation persists its terminal receipt before returning.
+  // History must not fabricate the earlier pending state on the next refresh.
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.operations.find(item=>item.operationId==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa').state), 'complete');
+  const historyReads = await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='recentOperations').length);
+  await page.getByRole('button', {name:'Refresh activity', exact:true}).click();
+  await page.waitForFunction(before => window.marketplaceFixture.calls.filter(call=>call[0]==='recentOperations').length > before, historyReads);
+  const completedWithdrawal = page.locator('.mp-activity-card').filter({hasText:'Your app is ready.'});
+  await completedWithdrawal.waitFor();
+  assert.equal(await completedWithdrawal.getByRole('button', {name:'Continue', exact:true}).count(), 0);
   checks.push("Already installed apps are excluded from install selection, updates point to Settings, and restored requests resume their original identity.");
 
   await page.getByRole("button", { name: "Earnings", exact: true }).click();

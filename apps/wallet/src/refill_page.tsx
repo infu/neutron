@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import {
   IoAlertCircleOutline,
   IoArrowForward,
@@ -361,6 +368,7 @@ export function WalletRefillPage({
   const canReview = operatingCycles
     ? cyclesAttempted || operatingEstimate.quote !== null
     : estimate.quote !== null;
+  const reviewDisabled = busy || (!canReview && !(tray && operatingCycles));
 
   const percent = useMemo(() => {
     if (!maximum || !amount.trim()) return 0;
@@ -500,6 +508,16 @@ export function WalletRefillPage({
       if (mounted.current) setBusy(false);
     }
   };
+  const reviewFromKeyboard = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (
+      event.key !== "Enter" ||
+      event.nativeEvent.isComposing ||
+      event.repeat ||
+      reviewDisabled
+    ) return;
+    event.preventDefault();
+    void prepareReview();
+  };
   const confirm = async () => {
     if (inFlight.current || !review) return;
     inFlight.current = true;
@@ -622,12 +640,7 @@ export function WalletRefillPage({
             Get TCYCLES
           </button>
         </div>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void prepareReview();
-          }}
-        >
+        <div role="group" aria-label="Refill details">
           <div className="wallet-refill-source-row">
             <label htmlFor="wallet-refill-amount">
               {mode === "convert" ? "Convert" : "Pay with"}
@@ -688,6 +701,7 @@ export function WalletRefillPage({
               placeholder="0.00"
               value={amount}
               disabled={busy}
+              onKeyDown={reviewFromKeyboard}
               onChange={(event) => {
                 setAmount(event.target.value);
                 setAllowPartialCycles(false);
@@ -798,6 +812,7 @@ export function WalletRefillPage({
                     }
                     value={target}
                     disabled={busy}
+                    onKeyDown={reviewFromKeyboard}
                     spellCheck={false}
                     autoComplete="off"
                     placeholder="xxxxx-xxxxx-…"
@@ -927,8 +942,9 @@ export function WalletRefillPage({
           ) : null}
           <button
             className="nt-button nt-button--accent wallet-refill-submit"
-            type="submit"
-            disabled={busy || (!canReview && !(tray && operatingCycles))}
+            type="button"
+            disabled={reviewDisabled}
+            onClick={() => void prepareReview()}
           >
             {busy ? (
               <>
@@ -951,7 +967,7 @@ export function WalletRefillPage({
               </>
             )}
           </button>
-        </form>
+        </div>
         {snapshot?.errors.length ? (
           <details className="wallet-refill-diagnostics">
             <summary>Balance or rate details</summary>

@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 328,
+  "version": 329,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "IC token wallet, transfers and canister refills",
   "src": "main.mo",

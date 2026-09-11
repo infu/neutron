@@ -2,7 +2,7 @@
   "format": 3,
   "name": "SNS Governance",
   "id": "snsgov",
-  "version": 113,
+  "version": 114,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Explore, vote, and propose across every SNS on the Internet Computer.",
   "src": "main.mo",

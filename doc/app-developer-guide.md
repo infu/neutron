@@ -742,6 +742,26 @@ them to the app document itself. The browser owns the device prompt, indicator,
 and site settings. Media bytes stay in the frontend browser APIs: there is no
 Kernel backend media session, lease, stream proxy, or app-facing capture call.
 
+### Form Actions Inside App Frames
+
+App frames do not enable native form submission. The browser can block it
+before React's `onSubmit` handler runs, so `event.preventDefault()` there is
+not sufficient. Use explicit `type="button"` controls with local action
+handlers. An accessible `div role="form"` can group the inputs without
+starting a browser submission.
+
+If retaining a native `<form>` for constraint validation, call
+`reportValidity()` from the button handler and intercept implicit Enter
+submission in single-line inputs. Preserve required-field and numeric
+validation when replacing a form. Textarea Enter must retain its intended
+newline behavior, and composing text must not trigger an action. Reuse the
+same busy/in-flight guard for mouse and keyboard actions.
+
+Test these controls inside an actual iframe with the app's sandbox flags and
+without `allow-forms`. A top-level browser fixture does not reproduce this
+failure. Cover clicks, Enter, invalid inputs and repeated activation, and
+assert that no blocked-form console error or document navigation occurs.
+
 ## Use The Shared Design System
 
 Apps can import the shared dark UI system from the workspace package:
@@ -1153,6 +1173,13 @@ it bypasses that preliminary prompt and grant. Inside a routed handler, use
 `context.kernel`; nested Agent Mode policy applies only to that scoped request.
 Arguments are JSON objects and schemas use JSON Schema draft-07. Tool metadata
 is treated as untrusted when shown to users or agents.
+
+Tool-schema `pattern` strings must also pass the SDK's existing metadata
+validator: grouped expressions and backreferences are unsupported. Use simple
+character-class patterns and retain additional semantic checks in the handler
+(for example, an even number of hexadecimal digits). Exercise real
+`exposeTool` registration in tests; a mock that only stores handlers can miss
+a schema rejection that stops the resident process from starting.
 
 Keep tile-only control methods out of other apps' and agents' live catalogs by
 adding `annotations: { "neutron:visibility": "same_app" }`. The kernel filters

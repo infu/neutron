@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { MarketplaceClient, PublicationInput, PublicationQuote, PublishedApp, PublisherProfile } from "../view-types.ts";
-import { AppIcon, CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, dateLabel, decimalAmount, errorMessage, parseAmount, usd, useRead } from "./primitives.tsx";
+import { AppIcon, CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, activateOnInputEnter, dateLabel, decimalAmount, errorMessage, parseAmount, usd, useRead } from "./primitives.tsx";
 import { EXCERPT_MAX_CHARACTERS, DESCRIPTION_MAX_CHARACTERS, listingCharacterCount, validateListingText } from "../listing-text.ts";
 import { PublisherIdentity } from "./publisher_profile.tsx";
 import { PublisherLink } from "./app_card.tsx";
@@ -147,6 +147,7 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
     actionInFlight.current = true;
     setQuoting(true); setError("");
     try {
+      if (!draft.title.trim() || !draft.appId.trim() || !draft.summary.trim() || !draft.description.trim()) throw new Error("Add the app name, ID, excerpt and description.");
       validateListingText(draft);
       const priceUsdMicros = draft.paid ? parseAmount(draft.price, 6) : "0";
       if (draft.paid && (BigInt(priceUsdMicros) < 1_000_000n || BigInt(priceUsdMicros) > 50_000_000n)) throw new Error("Choose a price from $1 to $50, or make your app free.");
@@ -200,7 +201,7 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
     {editorOpen && <Modal wide title={success ? "Publication saved" : review ? "Review publication" : editing ? `Manage ${editing.title}` : "Publish an app"} close={() => setEditorOpen(false)} footer={success ? <button type="button" className="mp-button mp-button-primary" onClick={() => setEditorOpen(false)}>Done</button> : review ? <>
       {!attempted && <button type="button" className="mp-button" disabled={publishing} onClick={() => { setReview(null); setError(""); }}>Edit details</button>}
       <button type="button" className="mp-button mp-button-primary" disabled={publishing} onClick={() => void publish()}>{publishing ? "Uploading…" : attempted ? "Continue this upload" : review.input.packageFile ? "Upload for review" : "Save changes"}</button>
-    </> : <><button type="button" className="mp-button" disabled={editorBusy} onClick={() => { setDraftStarted(false); setDraft(newDraft()); setError(""); setEditorOpen(false); }}>Discard draft</button><button type="submit" form="mp-publication-form" className="mp-button mp-button-primary" disabled={editorBusy || !!detailError}>{quoting ? "Calculating cost…" : "Review publication"}</button></>}>
+    </> : <><button type="button" className="mp-button" disabled={editorBusy} onClick={() => { setDraftStarted(false); setDraft(newDraft()); setError(""); setEditorOpen(false); }}>Discard draft</button><button type="button" className="mp-button mp-button-primary" disabled={editorBusy || !!detailError} onClick={() => void prepare()}>{quoting ? "Calculating cost…" : "Review publication"}</button></>}>
       {success ? <div className="mp-publication-success" role="status"><Icon name="check" /><p>{success}</p><p className="mp-muted">Your publications show the latest review status and any feedback.</p></div> : review ? <div className="mp-publication-review">
         <div className="mp-publication-summary"><div><h3>{review.input.title}</h3><p>{review.input.summary}</p></div><strong>{usd(review.input.priceUsdMicros)}</strong></div>
         <dl className="mp-facts"><div><dt>App ID</dt><dd>{review.input.appId}</dd></div><div><dt>Upload size</dt><dd>{bytesLabel(review.quote.bytes)}</dd></div>{review.input.packageFile && <div><dt>Package</dt><dd>{review.input.packageFile.name}</dd></div>}{review.input.sourceFile && <div><dt>Offered source</dt><dd>{review.input.sourceFile.name}</dd></div>}{review.quote.coverageEndsAt && <div><dt>Prepaid through</dt><dd>{dateLabel(review.quote.coverageEndsAt)}</dd></div>}</dl>
@@ -210,7 +211,7 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
         {(publishing || attempted) && <div className="mp-upload-progress" role="status"><label htmlFor="mp-publication-progress">{publishing ? "Uploading your publication" : "Upload progress"}<span>{Math.round(progress)}%</span></label><progress id="mp-publication-progress" max={100} value={progress} /></div>}
         <ErrorNote error={error} />
         {error && attempted && <p className="mp-muted">Your reviewed files and upload are retained here. Continue this upload to resume it.</p>}
-      </div> : <form id="mp-publication-form" className="mp-publication-form" onSubmit={(event) => { event.preventDefault(); void prepare(); }}>
+      </div> : <div role="form" aria-label="App publication" id="mp-publication-form" className="mp-publication-form" onKeyDown={event => activateOnInputEnter(event, () => { if (!editorBusy && !detailError) void prepare(); })}>
         {detailLoading && <Loading label="Loading listing details…" />}
         <ErrorNote error={detailError} retry={editing ? () => void loadDetail(editing) : undefined} />
         {editing?.rejectionReason && <div className="mp-review-feedback"><strong>Reviewer feedback</strong><p>{editing.rejectionReason}</p></div>}
@@ -239,7 +240,7 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
         </fieldset>
         <p className="mp-muted">You’ll review the cycle cost before uploading. It covers processing and the first year of storage. The operator funds storage afterward; no renewal is required.</p>
         <ErrorNote error={error} />
-      </form>}
+      </div>}
     </Modal>}
   </section>;
 }

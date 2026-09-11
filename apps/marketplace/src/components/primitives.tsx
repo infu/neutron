@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { AppListing, CycleEstimate, Money } from "../view-types.ts";
 
 export function acquisitionStats(app: AppListing): { count: string; label: string } | null {
@@ -35,6 +35,15 @@ export function dateLabel(value: string | undefined): string {
   return Number.isFinite(milliseconds) ? new Date(milliseconds).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
 }
 export function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+
+/** App frames intentionally lack allow-forms; Enter activates the local action. */
+export function activateOnInputEnter(event: KeyboardEvent<HTMLElement>, action: () => void) {
+  if (event.key !== "Enter" || event.repeat || event.defaultPrevented || event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || !["text", "number"].includes(target.type) || target.disabled || target.readOnly) return;
+  event.preventDefault();
+  action();
+}
 
 export function useRead<T>(key: string | null, read: () => Promise<T>, refresh = 0, delay = 0) {
   const [state, setState] = useState<{ key: string | null; data: T | null; error: string; loading: boolean }>({ key: null, data: null, error: "", loading: false });

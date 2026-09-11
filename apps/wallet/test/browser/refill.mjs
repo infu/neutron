@@ -20,14 +20,58 @@ await build({ absWorkingDir:root, entryPoints:['refill-entry'], outfile:out+'/ma
   b.onResolve({filter:/^\.\/refill\.ts$/},args=>args.importer.endsWith('refill_page.tsx')?{path:fixture}:undefined);
   b.onResolve({filter:/^\.\/cycles_conversion\.ts$/},()=>({path:cyclesFixture}));
 }},sassPlugin()] });
-const server=createServer(async(req,res)=>{const name=req.url?.split('?')[0]; if(name==='/main.js'||name==='/main.css'){res.setHeader('Content-Type',name.endsWith('css')?'text/css':'text/javascript');res.end(await readFile(out+name));}else{res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/main.css"></head><body><div id="root"></div><script type="module" src="/main.js"></script></body></html>');}});
+const server=createServer(async(req,res)=>{
+  const url=new URL(req.url,'http://fixture'),name=url.pathname;
+  if(name==='/main.js'||name==='/main.css'){
+    res.setHeader('Content-Type',name.endsWith('css')?'text/css':'text/javascript');res.end(await readFile(out+name));
+  }else if(name==='/app'){
+    res.setHeader('Content-Type','text/html');res.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/main.css"></head><body><div id="root"></div><script type="module" src="/main.js"></script></body></html>');
+  }else{
+    // Match ordinary production app frames: scripts + origin, without native forms.
+    res.setHeader('Content-Type','text/html');res.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%}iframe{width:100%;height:100%;border:0;display:block}</style></head><body><iframe title="IC Wallet" sandbox="allow-scripts allow-same-origin" src="/app?scenario=${encodeURIComponent(url.searchParams.get('scenario')||'normal')}"></iframe></body></html>`);
+  }
+});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const origin=`http://127.0.0.1:${server.address().port}`;
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/run/current-system/sw/bin/google-chrome-stable',args:['--no-sandbox']});
 const errors=[], checks=[];
 const calls=page=>page.evaluate(()=>window.__refill.calls.filter(row=>['prepare','execute','continue'].includes(row.method)));
-async function open(scenario='normal', width=380){const page=await browser.newPage({viewport:{width,height:860}});page.on('pageerror',error=>errors.push(String(error)));await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():(errors.push('Unexpected network '+route.request().url()),route.abort()));await page.goto(origin+'/?scenario='+scenario);await page.locator('.wallet-refill-balance').getByText('Available',{exact:false}).waitFor();return page;}
+async function open(scenario='normal', width=380){
+  const page=await browser.newPage({viewport:{width,height:860}});
+  page.on('pageerror',error=>errors.push(String(error)));
+  page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
+  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():(errors.push('Unexpected network '+route.request().url()),route.abort()));
+  await page.goto(origin+'/?scenario='+scenario);
+  assert.equal(await page.locator('iframe').getAttribute('sandbox'),'allow-scripts allow-same-origin');
+  const frame=()=>page.frames().find(item=>item.url().startsWith(origin+'/app?'));
+  const pageMethods=new Set(['setViewportSize','screenshot','close','reload']);
+  const view=new Proxy({}, {get(_target,key){const target=pageMethods.has(key)?page:frame();const value=target[key];return typeof value==='function'?value.bind(target):value;}});
+  await view.locator('.wallet-refill-balance').getByText('Available',{exact:false}).waitFor();return view;
+}
 try {
+  const keyboard=await open();
+  const amountInput=keyboard.getByRole('textbox',{name:'Amount of ICP'});
+  await amountInput.fill('0.1');
+  const snapshots=()=>keyboard.evaluate(()=>window.__refill.calls.filter(row=>row.method==='snapshot').length);
+  const before=await snapshots();
+  await amountInput.dispatchEvent('keydown',{key:'Enter',isComposing:true});
+  await amountInput.dispatchEvent('keydown',{key:'Enter',repeat:true});
+  assert.equal(await snapshots(),before);assert.equal(await keyboard.getByRole('dialog').count(),0);
+  await amountInput.press('Enter');await keyboard.getByRole('dialog').waitFor();
+  assert.equal(await snapshots(),before+1);assert.deepEqual(await calls(keyboard),[]);
+  await keyboard.getByRole('button',{name:'Cancel',exact:true}).click();
+  await keyboard.getByText('Advanced options',{exact:true}).click();
+  await keyboard.getByRole('checkbox',{name:'Refill another canister'}).check();
+  const recipient=keyboard.getByRole('textbox',{name:'Canister ID'});
+  await recipient.fill('bad');await recipient.press('Enter');
+  assert.equal(await snapshots(),before+1);assert.equal(await keyboard.getByRole('dialog').count(),0);
+  await recipient.fill(other);await recipient.press('Enter');await keyboard.getByRole('dialog').waitFor();
+  assert.equal(await snapshots(),before+2);assert((await keyboard.getByRole('dialog').innerText()).includes(other));
+  await keyboard.getByRole('button',{name:'Cancel',exact:true}).click();
+  await keyboard.getByRole('button',{name:'Review refill',exact:true}).evaluate(button=>{button.click();button.click();});
+  await keyboard.getByRole('dialog').waitFor();assert.equal(await snapshots(),before+3);assert.deepEqual(await calls(keyboard),[]);
+  checks.push('Production sandbox without allow-forms supports one exact review per click/Enter; duplicate clicks, composition, repeated keys and invalid recipients do not prepare or dispatch extra actions.');
+  await keyboard.close();
   const page=await open();
   for(const width of [320,380,960]){await page.setViewportSize({width,height:860});await page.getByRole('textbox',{name:'Amount of ICP'}).fill('0.1');assert.equal(await page.locator('.wallet-refill').evaluate(node=>node.scrollWidth<=node.clientWidth),true);await page.screenshot({path:`${out}/refill-${width}.png`});}
   await page.setViewportSize({width:380,height:860});
@@ -57,7 +101,8 @@ try {
   await convert.getByText('Advanced options',{exact:true}).click();await convert.getByRole('checkbox',{name:'Send TCYCLES to another account'}).check();await convert.getByRole('textbox',{name:'Recipient principal'}).fill(other);
   await convert.getByRole('button',{name:'Review conversion',exact:true}).click();const reviewText=await convert.getByRole('dialog').innerText();assert(reviewText.includes('0.1298 TCYCLES'));assert(reviewText.includes('0.0002 TCYCLES'));
   await convert.getByRole('button',{name:'Convert ICP',exact:true}).click();await convert.getByText('TCYCLES received',{exact:true}).first().waitFor();assert((await convert.locator('.wallet-refill-result').innerText()).includes('0.1298 TCYCLES added'));
-  checks.push('ICP→TCYCLES advanced recipient review includes both mint and forwarding fees; completed receipt displays actual net credit rather than gross minted cycles.');await convert.close();
+  assert.deepEqual((await calls(convert)).map(row=>row.method),['prepare','execute']);
+  checks.push('ICP→TCYCLES advanced recipient review includes both mint and forwarding fees; completed receipt displays actual net credit rather than gross minted cycles. Sandbox button activation prepares and executes exactly once.');await convert.close();
 
   const recovery=await open('interrupted');await recovery.getByRole('textbox',{name:'Amount of ICP'}).fill('0.1');await recovery.getByRole('button',{name:'Review refill',exact:true}).click();await recovery.getByRole('button',{name:'Refill now',exact:true}).click();await recovery.getByRole('button',{name:'Continue',exact:true}).waitFor();const original=(await calls(recovery))[0].id;
   await recovery.reload();await recovery.getByRole('button',{name:'Continue',exact:true}).click();await recovery.getByText('Refill complete',{exact:true}).first().waitFor();assert.deepEqual(await calls(recovery),[{method:'continue',id:original}]);
@@ -110,4 +155,4 @@ try {
   const tray=await open('tray');await tray.getByRole('textbox',{name:'Amount of ICP'}).fill('0.1');await tray.getByRole('button',{name:'Open Wallet to continue',exact:true}).click();assert.equal(await tray.evaluate(()=>window.__refill.opened),1);assert.deepEqual(await calls(tray),[]);assert.equal(await tray.getByRole('dialog').count(),0);
   checks.push('Tray offers read/quote UI and opens the Wallet tile before financial execution.');await tray.close();
   assert.deepEqual(errors,[]);await writeFile(out+'/results.json',JSON.stringify({checks,errors},null,2));console.log(JSON.stringify({checks,errors},null,2));
-} finally {await browser.close();await new Promise(resolve=>server.close(resolve));}
+} finally {await writeFile(out+'/console-errors.json',JSON.stringify(errors,null,2));await browser.close();await new Promise(resolve=>server.close(resolve));}

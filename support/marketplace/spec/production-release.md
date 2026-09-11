@@ -538,3 +538,62 @@ all 27 packages and offered sources `unchanged`. Versions, URLs, paths, lengths
 and SHA-256 digests match all 54 frozen artifacts. Publication request:
 `a7428718dc496ffbb4acaa9cb35005ebb7abe4656f8f6eb9910c79ad987be7c2`. Existing Neutrons install the updates through Settings.
 No Git push is included.
+
+
+## Sandboxed form actions and SNS tool registration
+
+Wallet `0.3.29`, Marketplace `0.1.17`, SNS Governance `0.1.14` and Kitchen Sink
+`0.3.18` were published together in catalog batch `11` on 2026-09-11.
+Only those four packages changed in the 27-package transaction. Kernel,
+Marketplace protocol, legacy source and Dispenser starter were unchanged.
+
+| Package | Archive bytes | Archive SHA-256 | Offered-source bytes | Offered-source SHA-256 |
+| --- | ---: | --- | ---: | --- |
+| kitchensink 318 | 479,150 | `07433bd7e88994ade59e4a4d33470efb9367706054bc6b9a3c30bb1ee29a8e33` | 540,647 | `7013ce317461342cf809a7c3cfe46128ed6900260042432b3812d9a91ce0f82c` |
+| wallet 329 | 941,108 | `48e56391089ca7e2d22552690bb33e73804ecaa0b7eb51a224a0b88d2aebd7b1` | 853,831 | `34daf241a956b2627ac2afaa023e8fb265189890d9e00515201ce7049c7d6d13` |
+| snsgov 114 | 582,749 | `69581edf07bd4c4f995d11797a7570c6109201e763c4758f5f6eecc8f0fa3ad0` | 624,248 | `94b7dbcab331f089de8474b79bbe3ca7f76ffafea104a94ab484d46457b52350` |
+| marketplace 117 | 489,552 | `695059aef8314a2546ae14a4118b0903d97b0c7860a931581c260a07f529fe04` | 1,796,708 | `d9f20cd6ab428684bc50f905f085e7eb22e2361ac8cbdaebdc3c4301b5629231` |
+
+SNS's `sns_draft_proposal` used a grouped hexadecimal schema pattern unsupported
+by the existing SDK metadata validator, stopping resident registration. The
+schema now uses a supported character class and minimum length; existing
+even-byte and Candid payload checks remain. All 17 tools register through the
+real validator, and the actual packed resident starts in a sandboxed iframe
+without the reported exception. Shared validation and app permissions did not
+change.
+
+Wallet's Refill/Get TCYCLES review, Marketplace publication/profile setup, and
+Kitchen Sink's profile review depended on native form submission. The browser
+blocked it before React's submit handler could run. Those flows now use explicit
+button actions and input Enter handlers, with validation, busy guards and
+multiline/composition behavior preserved. Browser tests run inside actual app
+sandboxes without `allow-forms` and verify the action occurs once without native
+submission or navigation. The developer guide records this existing iframe
+contract and the need to test real tool registration.
+
+Inventory of other app/shared frontend code found no further native-submit
+dependencies. EVM Wallet's 55 existing sandbox browser checks and a focused
+Gemma sandbox composer check passed on their unchanged packages. Agent's
+composer/search handlers already intercept Enter and use explicit buttons;
+trusted Kernel host forms remain unchanged.
+
+All four apps retain their released memory declarations, schemas and locks.
+Full package commands, TypeScript, memory initialization/restoration and relevant
+predecessor upgrade checks passed. Wallet passed 323 unit tests, 19 Motoko suites
+and five browser suites. Marketplace passed 152 unit tests, its memory program
+and six browser suites. SNS passed 129 tests, with eight opt-in mainnet cases
+skipped; Kitchen Sink passed 68 tests plus its sandbox and memory checks.
+No production financial action was used for testing.
+
+The Marketplace browser fixture previously returned completion while continuing
+to synthesize the same withdrawal as pending; it now retains the completed
+record and tests refresh persistence. No payment runtime changed. Wallet's
+all-predecessor archive test exceeded its former five-second harness timeout as
+the inventory grew; that one test now has a 30-second timeout. An unrelated SNS
+browser workflow timeout passed both isolated and unchanged full-suite retries.
+
+Publication request `605405310f12983f93de89c100f6a3b315155e79d0754cac32f6bd2eb6db7255` was verified, and the identical-byte
+repeat returned receipt-v2 `batch_id: null`: all 27 packages and offered sources
+were `unchanged`, with matching versions, URLs, paths, sizes and SHA-256 digests
+across all 54 frozen artifacts. Install the updates through Settings.
+No Git push is included.

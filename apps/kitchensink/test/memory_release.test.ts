@@ -72,3 +72,21 @@ test("Kitchensink 0.3.17 keeps the exact production 0.3.15 root across the sourc
     candidateVersion: 317,
   });
 });
+
+
+test("Kitchen Sink 0.3.18 preserves the released 0.3.17 v1 root for iframe form fixes", async () => {
+  await assertManagedMemoryCodeOnlyRelease({
+    appId: "kitchensink",
+    memoryId: "kitchensink",
+    memoryVersion: 1,
+    productionArchive: new URL("../kitchensink.v0.3.17.neutron", import.meta.url),
+    candidateArchive: new URL("../kitchensink.v0.3.18.neutron", import.meta.url),
+    lock: new URL("../neutron.lock.json", import.meta.url),
+    production: {
+      version: 317,
+      bytes: 479045,
+      sha256: "ab681c4f6b5bc601bfd646cbaf6b1db99690f1e4849e664cedfc2fb0f5c28ff4",
+    },
+    candidateVersion: 318,
+  });
+});

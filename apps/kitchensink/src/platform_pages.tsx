@@ -408,12 +408,28 @@ function MemoryPage({ runtime }: { runtime: PlatformRuntime }) {
   const operation = useOperation();
   const nameErrorId = useId();
   const emailErrorId = useId();
+  const emailInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("Ada Lovelace");
   const [email, setEmail] = useState("ada@example.test");
   const [notes, setNotes] = useState("Stored in Kitchen Sink's managed memory root.");
   const [subscribed, setSubscribed] = useState(true);
   const nameError = name.trim() ? null : "Name is required.";
   const emailError = /^[^@\s]+@[^@\s]+$/u.test(email) ? null : "Enter an email-like value.";
+  const saveProfile = () => {
+    if (!runtime.client || operation.busy || nameError || emailError) return;
+    if (emailInput.current && !emailInput.current.reportValidity()) return;
+    void operation.run("reviewed save", () => runtime.client!.callDialog(
+      "save_profile",
+      [[name.trim(), email.trim(), notes, subscribed]],
+      60,
+    ));
+  };
+  const saveOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing || event.repeat
+      || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    event.preventDefault();
+    saveProfile();
+  };
 
   return (
     <section className="ks-platform-page">
@@ -421,31 +437,23 @@ function MemoryPage({ runtime }: { runtime: PlatformRuntime }) {
         <div><p className="nt-eyebrow">Managed backend memory</p><h2>Durable profile form</h2></div>
         <span className="nt-tag nt-tag--success">memory v1</span>
       </header>
-      <form className="nt-form ks-form-surface" onSubmit={(event) => {
-        event.preventDefault();
-        if (!runtime.client || nameError || emailError) return;
-        void operation.run("reviewed save", () => runtime.client!.callDialog(
-          "save_profile",
-          [[name.trim(), email.trim(), notes, subscribed]],
-          60,
-        ));
-      }}>
+      <div className="nt-form ks-form-surface" role="form" aria-label="Durable profile">
         <div className="nt-form-grid nt-form-grid--two">
           <label className="nt-field">
             <span className="nt-label">Name</span>
-            <input aria-describedby={nameError ? nameErrorId : undefined} aria-invalid={Boolean(nameError)} className="nt-input" maxLength={80} value={name} onChange={(event) => setName(event.currentTarget.value)} />
+            <input aria-describedby={nameError ? nameErrorId : undefined} aria-invalid={Boolean(nameError)} className="nt-input" maxLength={80} onKeyDown={saveOnEnter} value={name} onChange={(event) => setName(event.currentTarget.value)} />
             {nameError ? <span className="nt-error" id={nameErrorId}>{nameError}</span> : null}
           </label>
           <label className="nt-field">
             <span className="nt-label">Email</span>
-            <input aria-describedby={emailError ? emailErrorId : undefined} aria-invalid={Boolean(emailError)} className="nt-input" maxLength={160} type="email" value={email} onChange={(event) => setEmail(event.currentTarget.value)} />
+            <input aria-describedby={emailError ? emailErrorId : undefined} aria-invalid={Boolean(emailError)} className="nt-input" maxLength={160} onKeyDown={saveOnEnter} ref={emailInput} type="email" value={email} onChange={(event) => setEmail(event.currentTarget.value)} />
             {emailError ? <span className="nt-error" id={emailErrorId}>{emailError}</span> : null}
           </label>
         </div>
         <label className="nt-field"><span className="nt-label">Notes</span><textarea className="nt-textarea" maxLength={2000} rows={5} value={notes} onChange={(event) => setNotes(event.currentTarget.value)} /></label>
         <label className="ks-check-row"><input checked={subscribed} className="nt-checkbox" onChange={(event) => setSubscribed(event.currentTarget.checked)} type="checkbox" /><span>Subscribed to release notes</span></label>
         <div className="nt-command-bar">
-          <button className="nt-button" disabled={Boolean(operation.busy) || !runtime.client || Boolean(nameError || emailError)} type="submit">Review save in kernel</button>
+          <button className="nt-button" disabled={Boolean(operation.busy) || !runtime.client || Boolean(nameError || emailError)} onClick={saveProfile} type="button">Review save in kernel</button>
           <button className="nt-button nt-button--secondary" disabled={Boolean(operation.busy)} onClick={() => void operation.run("profile read", async () => {
             const result = await querySelf<string>("read_profile", [null], 20);
             const profile = parseProfile(result);
@@ -456,7 +464,7 @@ function MemoryPage({ runtime }: { runtime: PlatformRuntime }) {
             return result;
           })} type="button">Read into form</button>
         </div>
-      </form>
+      </div>
       <OperationResult {...operation} />
       <aside className="ks-note"><strong>Lifecycle boundary</strong><span>The schema is compiler-owned and app-namespaced. A tile cannot safely upgrade or uninstall its containing actor, so the real lifecycle proof runs outside the sandbox.</span></aside>
       <CopyValue label="Compiler lifecycle invariants" value="npm --workspace neutron-compiler test" />

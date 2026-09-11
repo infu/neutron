@@ -14,7 +14,8 @@
     "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "watch": "bun build.ts watch",
     "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo",
-    "test": "npm run package && bun test && npm run test:memory"
+    "test": "npm run package && bun test && npm run test:memory",
+    "test:browser": "node test/browser/profile.mjs"
   },
   "author": "",
   "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",

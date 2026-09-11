@@ -844,7 +844,9 @@ exposeTool(
           description: "Required for a Motion. This is the motion itself, not the summary.",
         },
         functionId: { type: "string", description: "For ExecuteGenericNervousSystemFunction." },
-        payloadHex: { type: "string", pattern: "^(?:[0-9a-fA-F]{2})+$", description: "Exact Candid payload returned by sns_validate_payload, or copied from a previous custom proposal. Required for a custom action." },
+        // Shared tool schemas support character classes, but not regex groups.
+        // The handler below also checks byte alignment and the Candid header.
+        payloadHex: { type: "string", minLength: 2, pattern: "^[0-9a-fA-F]+$", description: "Even-length hex encoding of the exact Candid payload returned by sns_validate_payload, or copied from a previous custom proposal. Required for a custom action." },
       },
     },
     annotations: { "neutron:effects": ["read", "network", "write", "user_visible_ui"] },

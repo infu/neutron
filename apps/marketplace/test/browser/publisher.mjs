@@ -9,6 +9,7 @@ import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { sandboxHtml, sandboxPage } from "./sandbox.mjs";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const out = process.env.MARKETPLACE_PUBLISHER_ARTIFACTS || "/tmp/neutron-marketplace-browser/publisher";
@@ -82,19 +83,20 @@ await build({ absWorkingDir: root, stdin: { contents: fixture, loader: "tsx", re
 const server = createServer(async (req, res) => {
   const file = req.url === "/main.js" ? "main.js" : req.url === "/main.css" ? "main.css" : null;
   res.setHeader("Content-Type", file === "main.js" ? "text/javascript" : file ? "text/css" : "text/html");
-  res.end(file ? await readFile(join(out, file)) : '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/main.css"></head><body style="margin:0"><div id="root"></div><script type="module" src="/main.js"></script></body></html>');
+  res.end(file ? await readFile(join(out, file)) : sandboxHtml(req.url));
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 let browser, page;
 const checks = [], errors = [];
 try {
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || "/run/current-system/sw/bin/google-chrome-stable", args: ["--no-sandbox"] });
-  page = await browser.newPage();
+  page = sandboxPage(await browser.newPage(), errors);
   page.on("pageerror", error => errors.push(String(error)));
   await page.route("**/*", route => route.request().url().startsWith("http://127.0.0.1:") ? route.continue() : route.abort());
   const reset = async width => {
     await page.setViewportSize({ width, height: 720 });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    await page.assertSandbox();
     await page.getByRole("heading", { name: "Field Notes", exact: true }).waitFor();
   };
   const snapshot = () => page.evaluate(() => ({
@@ -133,10 +135,18 @@ try {
   checks.push("Publisher pagination appends the next page and stops at its terminal cursor.");
 
   await page.getByRole("button", { name: "Publish an app", exact: true }).click();
+  assert.equal(await page.getByRole("form", { name: "App publication", exact: true }).count(), 1);
+  assert.equal(await page.locator("form").count(), 0, "sandboxed publication must not depend on native forms");
+  await page.getByRole("textbox", { name: "App name", exact: true }).press("Enter");
+  assert.equal((await snapshot()).quotes.length, 0, "Enter must still validate required publication fields");
   await page.getByRole("textbox", { name: "App name", exact: true }).fill("Pocket Journal");
   await page.getByRole("textbox", { name: "App ID", exact: true }).fill("pocket-journal");
   await page.getByRole("textbox", { name: "Excerpt", exact: true }).fill("A journal in your workspace.");
   await page.getByRole("textbox", { name: "Description", exact: true }).fill("Write private notes and organize your ideas.");
+  await page.getByRole("textbox", { name: "Description", exact: true }).press("End");
+  await page.getByRole("textbox", { name: "Description", exact: true }).press("Enter");
+  assert.equal(await page.getByRole("textbox", { name: "Description", exact: true }).inputValue(), "Write private notes and organize your ideas.\n");
+  assert.equal((await snapshot()).quotes.length, 0, "textarea Enter adds a newline without requesting review");
   assert.equal(await page.getByRole("textbox", { name: "Category", exact: true }).count(), 0);
   assert.equal(await page.getByRole("textbox", { name: /^Website/ }).count(), 0);
   assert.equal(await page.getByRole("textbox", { name: /^Release notes/ }).count(), 0);
@@ -173,7 +183,7 @@ try {
   assert.equal(await description.getAttribute("aria-invalid"), "false");
   assert.match(await page.locator("#mp-publication-excerpt-help").innerText(), /255 \/ 255 characters/);
   assert.match(await page.locator("#mp-publication-description-help").innerText(), /5,000 \/ 5,000 characters/);
-  await page.getByRole("button", { name: "Review publication", exact: true }).click();
+  await page.getByRole("textbox", { name: "App name", exact: true }).press("Enter");
   await page.getByText("Temporary quote connection error.", { exact: true }).waitFor();
   assert.deepEqual(await page.evaluate(() => window.publisherState.quotes.map(input => [Array.from(input.summary).length, Array.from(input.description).length])), [[255, 5000]]);
   checks.push("Excerpt and description count Unicode characters, preserve the exact 255/5,000-character values and reject overlong text before quoting or uploading.");
@@ -188,7 +198,7 @@ try {
   assert.equal(await page.getByRole("textbox", { name: "App name", exact: true }).inputValue(), "Pocket Journal");
   assert.match(await page.getByRole("dialog").innerText(), /journal\.neutron/);
   assert.match(await page.getByRole("dialog").innerText(), /screen\.svg/);
-  await page.getByRole("button", { name: "Review publication", exact: true }).click();
+  await page.getByRole("button", { name: "Review publication", exact: true }).evaluate(button => { button.click(); button.click(); });
   await page.getByRole("button", { name: "Upload for review", exact: true }).waitFor();
   assert.match(await page.locator('.mp-publication-summary').innerText(), /\$1\.999999/);
   assert.deepEqual((await snapshot()).quotes.map(quote => quote.price), ['1999999', '1999999']);
@@ -213,7 +223,7 @@ try {
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.getByRole("button", { name: "Continue publication", exact: true }).click();
   await page.evaluate(() => { window.publisherState.holdUpload = true; window.publisherState.throwRefresh = true; });
-  await page.getByRole("button", { name: "Continue this upload", exact: true }).click();
+  await page.getByRole("button", { name: "Continue this upload", exact: true }).press("Enter");
   await page.waitForFunction(() => window.publisherState.releaseUpload !== null);
   value = await snapshot();
   assert.equal(value.quotes.length, 2, "resuming does not create a new quote or upload identity");
@@ -229,6 +239,7 @@ try {
   assert.equal((await snapshot()).refreshes, 1);
   assert.deepEqual((await snapshot()).unexpected, []);
   checks.push("Interrupted upload retries the same quoted identity and original File objects, concurrent clicks dispatch once, and a surrounding refresh exception cannot change a successful upload into another retry.");
+  checks.push("Publication runs inside Neutron's iframe sandbox without allow-forms: text-input Enter requests one review, textarea Enter preserves newlines, review double clicks quote once, and keyboard upload activation dispatches once without blocked-form console errors.");
 
   assert.deepEqual(errors, []);
   await writeFile(join(out, "results.json"), JSON.stringify({ checks, errors, viewports: [320, 360, 480, 960] }, null, 2));

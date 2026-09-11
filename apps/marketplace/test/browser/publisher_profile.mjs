@@ -8,6 +8,7 @@ import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { sandboxHtml, sandboxPage } from "./sandbox.mjs";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const out = process.env.MARKETPLACE_PROFILE_ARTIFACTS || "/tmp/neutron-marketplace-browser/publisher-profile";
@@ -53,7 +54,7 @@ await build({ stdin: { contents: fixture, loader: "tsx", resolveDir: root }, bun
 const server = createServer(async (req, res) => {
   const file = req.url === "/main.js" ? "main.js" : req.url === "/main.css" ? "main.css" : null;
   res.setHeader("Content-Type", file === "main.js" ? "text/javascript" : file ? "text/css" : "text/html");
-  res.end(file ? await readFile(join(out, file)) : '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/main.css"></head><body style="margin:0"><div id="root"></div><script type="module" src="/main.js"></script></body></html>');
+  res.end(file ? await readFile(join(out, file)) : sandboxHtml(req.url));
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const url = `http://127.0.0.1:${server.address().port}`;
@@ -61,10 +62,10 @@ let browser, page;
 const checks = [], errors = [];
 try {
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || "/run/current-system/sw/bin/google-chrome-stable", args: ["--no-sandbox"] });
-  page = await browser.newPage({ viewport: { width: 960, height: 760 } });
+  page = sandboxPage(await browser.newPage({ viewport: { width: 960, height: 760 } }), errors);
   page.on("pageerror", error => errors.push(String(error)));
   await page.route("**/*", route => route.request().url().startsWith(url) ? route.continue() : route.abort());
-  const reset = async query => { await page.goto(url + (query ? `?${query}` : "")); await page.getByRole("button", { name: "Atlas", exact: true }).waitFor(); };
+  const reset = async query => { await page.goto(url + (query ? `?${query}` : "")); await page.assertSandbox(); await page.getByRole("button", { name: "Atlas", exact: true }).waitFor(); };
   const state = () => page.evaluate(() => ({ calls:window.profileFixture.calls,quotes:window.profileFixture.quotes,writes:window.profileFixture.writes,profile:window.profileFixture.profile }));
   const noOverflow = async width => {
     const bounds=await page.evaluate(()=>({document:document.documentElement.scrollWidth,viewport:innerWidth,dialog:[...document.querySelectorAll('dialog')].map(node=>({modal:node.open&&node.matches(':modal'),scroll:node.scrollWidth,client:node.clientWidth,right:node.getBoundingClientRect().right,bodyScroll:node.querySelector('.mp-modal-body').scrollWidth,bodyClient:node.querySelector('.mp-modal-body').clientWidth}))}));
@@ -115,7 +116,13 @@ try {
   const id=page.getByRole('textbox',{name:'Publisher ID',exact:true});
   const name=page.getByRole('textbox',{name:'Publisher name',exact:true});
   const description=page.getByRole('textbox',{name:'Publisher description',exact:true});
+  assert.equal(await page.getByRole('form',{name:'Publisher profile',exact:true}).count(),1);
+  assert.equal(await page.locator('form').count(),0,'sandboxed registration must not depend on native forms');
   await name.fill('Future Studio');await description.fill('Our apps help people do more.');
+  await description.press('End');await description.press('Enter');
+  assert.equal(await description.inputValue(),'Our apps help people do more.\n');
+  assert.equal((await state()).quotes.length,0,'textarea Enter adds a newline without requesting review');
+  await description.fill('Our apps help people do more.');
   for(const invalid of ['aa','Aae','abc1','a-b','a'.repeat(21)]){
     await id.fill(invalid);await page.getByRole('button',{name:'Review profile',exact:true}).click();
     assert.equal((await state()).quotes.length,0,`invalid publisher ID ${invalid} must be rejected before a quote`);
@@ -123,16 +130,18 @@ try {
   }
   await id.fill('future');
   await page.evaluate(()=>{window.profileFixture.failQuote=true});
-  await page.getByRole('button',{name:'Review profile',exact:true}).click();
+  await name.press('Enter');
   await page.getByText('Profile quote temporarily unavailable.',{exact:true}).waitFor();
+  assert.equal((await state()).quotes.length,1,'text-input Enter requests exactly one profile review');
   assert.equal(await id.inputValue(),'future');assert.equal(await name.inputValue(),'Future Studio');assert.equal(await description.inputValue(),'Our apps help people do more.');
-  await page.getByRole('button',{name:'Review profile',exact:true}).click();
+  await page.getByRole('button',{name:'Review profile',exact:true}).evaluate(button=>{button.click();button.click()});
   await page.getByRole('button',{name:'Create profile',exact:true}).waitFor();
+  assert.equal((await state()).quotes.length,2,'concurrent review clicks quote exactly once');
   assert.equal((await state()).writes.length,0,'profile review alone does not write');
   assert.match(await page.locator('.mp-profile-form').innerText(),/permanent|cannot be changed/i);
   for(const width of [320,380,960]){await page.setViewportSize({width,height:760});await noOverflow(width);await page.screenshot({path:join(out,`profile-registration-review-${width}.png`)});}
   await page.evaluate(()=>{window.profileFixture.failSave=true});
-  await page.getByRole('button',{name:'Create profile',exact:true}).click();
+  await page.getByRole('button',{name:'Create profile',exact:true}).press('Enter');
   await page.getByText('Profile update temporarily unavailable.',{exact:true}).waitFor();
   assert.equal((await state()).writes.length,1);
   await page.evaluate(()=>{window.profileFixture.holdSave=true});
@@ -151,6 +160,8 @@ try {
   await id.waitFor();
   assert.equal(await id.inputValue(),'future');assert.equal(await id.getAttribute('readonly'),'');
   assert.equal(await name.inputValue(),'Future Studio');assert.equal(await name.getAttribute('readonly'),'');
+  await id.press('Enter');
+  assert.equal((await state()).quotes.length,2,'read-only identity fields must not trigger another review');
   await description.fill('Updated description for all our apps.');
   await page.getByRole('button',{name:'Review changes',exact:true}).click();
   await page.getByRole('button',{name:'Save description',exact:true}).waitFor();
@@ -169,6 +180,7 @@ try {
   await page.getByRole('button',{name:'Close dialog',exact:true}).click();
   assert.deepEqual((await state()).calls.filter(call=>call[0]==='unexpected'),[]);
   checks.push('An established publisher can change only its description; permanent ID and name remain read-only and survive the exact reviewed update; Refresh imports later CLI changes.');
+  checks.push('Registration and description editing run inside Neutron\'s iframe sandbox without allow-forms; text-input Enter, keyboard confirmation and concurrent clicks dispatch exactly once, textarea Enter remains a newline, and no blocked-form console errors occur.');
   assert.deepEqual(errors,[]);
   await writeFile(join(out,'results.json'),JSON.stringify({checks,errors},null,2));
   console.log(`Publisher profile browser checks passed; artifacts: ${out}`);

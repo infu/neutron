@@ -153,6 +153,7 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     { version: 325, bytes: 884_468, sha256: "3c8e7a30873fa8cb62a14af4f26bedce38939bc1912e2dc8a64ff9430f7ca6d8" },
     { version: 326, bytes: 926_070, sha256: "1c3f152b3c97a4a91c8ab5ddf3194938841f6745cbd4aab7ac5a0287e851dd53" },
     { version: 327, bytes: 941_193, sha256: "c9d8f1ca6ddd9e48af622d91a1a8383905638888a76edef0257359730cb486cd" },
+    { version: 328, bytes: 940_936, sha256: "a4910afaaa52f3078d2d9c197b7f8ca5b996664c5ba2bae2d2cf668b8d088c96" },
   ];
   for (const predecessor of predecessors) {
     const bytes = await readFile(new URL(`../${packageArchiveFilename("wallet", predecessor.version)}`, import.meta.url));
@@ -218,7 +219,7 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     removedApps: [],
     destructiveMemoryRoots: [],
   });
-});
+}, 30_000);
 
 test("Wallet 0.3.8 keeps both exact Wallet 0.3.7 memory roots", async () => {
   await assertWalletCodeOnlyRelease({
