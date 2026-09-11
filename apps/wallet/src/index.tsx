@@ -2541,19 +2541,6 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             )}
           </section>
         )}
-        {surface === "tile" ? (
-          <aside
-            aria-label="Wallet alpha warning"
-            className="wallet-alpha-notice"
-            role="note"
-          >
-            <IoWarningOutline aria-hidden="true" />
-            <span>
-              Alpha - not battle tested, don't put more tokens than you can
-              afford to lose
-            </span>
-          </aside>
-        ) : null}
       </div>
     </main>
   );

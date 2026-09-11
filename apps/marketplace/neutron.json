@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 115,
+  "version": 116,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
@@ -161,6 +161,16 @@
           "kind": "exact",
           "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
           "method": "repo_access_v1"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "publisher_profile_register"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "publisher_profile_update"
         }
       ]
     },

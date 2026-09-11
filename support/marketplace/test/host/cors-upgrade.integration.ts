@@ -1,7 +1,7 @@
 // All rights reserved. See ../../LICENSE.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
@@ -52,6 +52,8 @@ export const cases: IntegrationCase[] = [{
       try {
         await cp(path.join(projectRoot, "mo"), path.join(temporary, "mo"), { recursive: true });
         await symlink(path.join(projectRoot, ".ashroot"), path.join(temporary, ".ashroot"), "dir");
+        await mkdir(path.join(temporary, ".private"));
+        await symlink(path.join(projectRoot, ".private/publishers"), path.join(temporary, ".private/publishers"), "dir");
         const httpPath = path.join(temporary, "mo/Http.mo");
         const current = await readFile(httpPath, "utf8");
         const old = current.replace(/("Access-Control-Expose-Headers", "[^"\n]*), Vary"/g, '$1"');
@@ -91,6 +93,12 @@ export const cases: IntegrationCase[] = [{
       const publisher = as(publisherPrincipal), auditor = as(auditorPrincipal), browser = as(browserPrincipal);
       const charged = async (name: string, value: unknown) => success(await relayCall(buyer, market, name, [value], 1_000_000_000n));
       const direct = async (name: string, value: unknown) => success(await publisher[name](value));
+      const registerPublisher = () => direct("publisher_profile_register", {
+        publisherId: "corspublisher", name: "CORS publisher", description: "Certified response upgrade fixture.", feeVersion: 1n,
+      });
+      // Only the synthetic baseline contains the new profile API. Archived
+      // deployed bytes retain their original setup until after the upgrade.
+      if (!previousProtocolPath) await registerPublisher();
       const listing = (appId: string, priceUsdMicros: bigint) => ({
         appId, title: appId, summary: "CORS upgrade fixture", description: "Opaque bytes test storage and HTTP transport, not package-format validity.",
         priceUsdMicros, iconArtifact: [], screenshots: [], expectedRevision: [], feeVersion: 1n,
@@ -203,6 +211,9 @@ export const cases: IntegrationCase[] = [{
       assert.equal(purchase.order.id, acquisition.order.id);
       assert.ok("complete" in purchase.order.state);
       assert.equal((await ledger.actor.stats()).appliedTransactions, 0n, "Free acquisition does not generate a ledger transfer");
+      // Register an archived publisher only after verifying that the upgrade
+      // itself restored every certified route without any intervening update.
+      if (previousProtocolPath) await registerPublisher();
     } finally { await env.shutdown(); }
   },
 }];

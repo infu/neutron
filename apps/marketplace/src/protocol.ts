@@ -14,7 +14,8 @@ export const feeType = rec({ feeVersion: nat, processingCycles: nat, storageCycl
 const cursor = rec({ generation: nat64, offset: nat });
 const pageRequest = rec({ cursor: opt(nat64), limit: nat });
 const historyCursor = IDL.Variant({ start: IDL.Null, after: nat64, done: IDL.Null });
-const app = rec({ appId: text, publisher: principal, title: text, summary: text, description: text, priceUsdMicros: nat, revision: nat64, version: opt(nat), iconUrl: opt(text), screenshots: vec(text), iconArtifact: opt(nat64), screenshotArtifacts: vec(nat64), ratingCount: nat, ratingTotal: nat, acquisitionCounts: opt(rec({ free: nat, paid: nat })), owned: bool, visible: bool });
+const app = rec({ appId: text, publisher: principal, publisherProfile: opt(rec({ publisherId: text, name: text })), title: text, summary: text, description: text, priceUsdMicros: nat, revision: nat64, version: opt(nat), iconUrl: opt(text), screenshots: vec(text), iconArtifact: opt(nat64), screenshotArtifacts: vec(nat64), ratingCount: nat, ratingTotal: nat, acquisitionCounts: opt(rec({ free: nat, paid: nat })), owned: bool, visible: bool });
+const publisherProfile = rec({ publisherId: text, name: text, description: text, principal, ratingCount: nat, ratingTotal: nat, totalUsers: nat, statsComplete: bool, createdAtNs: int, updatedAtNs: int });
 const candidate = rec({ id: nat64, appId: text, version: nat, publisher: principal, digest: blob, sourceDigest: opt(blob), state: variant("pending", "approved", "rejected", "revoked"), createdAtNs: int });
 const audit = rec({ auditor: principal, decision: variant("approved", "rejected", "revoked"), analysis: text, reason: opt(text), createdAtNs: int });
 const rating = rec({ stars: nat, review: text });
@@ -62,6 +63,11 @@ export const CONTRACT: Contract = {
   app_detail: read([text], result(rec({ app, candidate: opt(candidate), audit: opt(audit), rating: opt(rating) }))),
   library_query: read([pageRequest], result(rec({ apps: vec(app), nextCursor: opt(nat64) }))),
   publisher_apps: read([pageRequest], result(rec({ apps: vec(app), nextCursor: opt(nat64) }))),
+  publisher_profile: read([text], result(publisherProfile)),
+  publisher_profile_for: read([principal], result(opt(publisherProfile))),
+  publisher_profile_apps: read([rec({ publisherId: text, cursor: opt(nat64), limit: nat })], result(rec({ apps: vec(app), nextCursor: opt(nat64) }))),
+  publisher_profile_register: update([rec({ publisherId: text, name: text, description: text, feeVersion: nat })], publisherProfile),
+  publisher_profile_update: update([rec({ description: text, feeVersion: nat })], publisherProfile),
   earnings_query: read([], result(rec({ credits: vec(rec({ ledger: principal, owner: principal, available: nat, reserved: nat })), referral: opt(rec({ code: text })) }))),
   ethereum_fees: read([], ethereumFeesType),
   ethereum_quote: read([purchaseRequest], result(checkoutType)),
@@ -96,7 +102,8 @@ export const first = <T>(value: Option<T>): T | null => value[0] ?? null;
 export type Fee = { feeVersion: bigint; processingCycles: bigint; storageCycles: bigint; totalCycles: bigint; processingBytes: bigint; newStorageBytes: bigint };
 export type Token = { ledger: Principal; symbol: string; decimals: number; fee: bigint; rateSymbol: string; burnAccount: Option<{ owner: Principal; subaccount: Option<Uint8Array> }> };
 export type Info = { version: bigint; canister: Principal; tokens: Token[]; fees: Record<string, bigint>; referralTerms: { version: bigint; discountBps: bigint; affiliateBps: bigint; developerBps: bigint } };
-export type WireApp = { appId: string; publisher: Principal; title: string; summary: string; description: string; priceUsdMicros: bigint; revision: bigint; version: Option<bigint>; iconUrl: Option<string>; screenshots: string[]; iconArtifact: Option<bigint>; screenshotArtifacts: bigint[]; ratingCount: bigint; ratingTotal: bigint; acquisitionCounts?: Option<{ free: bigint; paid: bigint }>; owned: boolean; visible: boolean };
+export type WireApp = { appId: string; publisher: Principal; publisherProfile?: Option<{ publisherId: string; name: string }>; title: string; summary: string; description: string; priceUsdMicros: bigint; revision: bigint; version: Option<bigint>; iconUrl: Option<string>; screenshots: string[]; iconArtifact: Option<bigint>; screenshotArtifacts: bigint[]; ratingCount: bigint; ratingTotal: bigint; acquisitionCounts?: Option<{ free: bigint; paid: bigint }>; owned: boolean; visible: boolean };
+export type WirePublisherProfile = { publisherId: string; name: string; description: string; principal: Principal; ratingCount: bigint; ratingTotal: bigint; totalUsers: bigint; statsComplete: boolean; createdAtNs: bigint; updatedAtNs: bigint };
 export type PurchaseItem = { appId: string; listingRevision: bigint; publisher: Principal; priceUsdMicros: bigint; paidAtoms: bigint; developerAtoms: bigint; affiliateAtoms: bigint; burnAtoms: bigint; releaseDigest: Uint8Array };
 export type Checkout = { request: { requestId: string; appIds: string[]; ledger: Principal; referralCode: Option<string> }; buyer: Principal; items: PurchaseItem[]; amount: bigint; fee: bigint; affiliate: Option<Principal>; rate: Option<{ id: bigint; ledger: Principal; symbol: string; usdRate: bigint; decimals: number; observedAtNs: bigint; refreshedAtNs: bigint; lastError: Option<string> }>; spender: { owner: Principal; subaccount: Option<Uint8Array> }; commitment: Uint8Array; cycles: Fee; quotedAtNs: bigint };
 export type WithdrawQuote = { request: { requestId: string; ledger: Principal; to: { owner: Principal; subaccount: Option<Uint8Array> }; totalDebit: bigint }; owner: Principal; fee: bigint; netAmount: bigint; available: bigint; commitment: Uint8Array; cycles: Fee };

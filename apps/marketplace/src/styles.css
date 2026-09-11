@@ -61,14 +61,21 @@
   .mp-discount-link.is-active { color: #ace0c4; }
   .mp-chart-controls select { min-width: 90px; background: transparent; border-color: var(--mp-line); font-size: 12px; padding-block: 6px; }
   .mp-app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; }
-  .mp-app-card { display: flex; flex-direction: column; border: 1px solid var(--mp-line); border-radius: var(--mp-radius); padding: 14px; background: linear-gradient(145deg, #181a23, #101218); color: inherit; text-align: left; min-width: 0; width: 100%; transition: border-color 140ms, background 140ms; }
+  .mp-app-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--mp-line); border-radius: var(--mp-radius); padding: 14px; background: linear-gradient(145deg, #181a23, #101218); color: inherit; text-align: left; min-width: 0; width: 100%; transition: border-color 140ms, background 140ms; }
   .mp-app-card:hover { border-color: #514767; background: linear-gradient(145deg, #1c1e29, #15171e); }
+  .mp-card-open { border: 0; padding: 0; background: none; color: inherit; text-align: left; min-width: 0; }
+  .mp-card-open::after { content: ""; position: absolute; inset: 0; border-radius: var(--mp-radius); }
+  .mp-card-open:focus-visible { outline: none !important; }
+  .mp-card-open:focus-visible::after { outline: 2px solid var(--nt-accent); outline-offset: 3px; }
+  .mp-publisher-link { align-self: flex-start; color: var(--nt-accent); background: none; border: 0; padding: 1px 0; font-size: 11px !important; line-height: 1.6; text-align: left; }
+  .mp-publisher-link:hover { text-decoration: underline; }
+  .mp-app-card .mp-publisher-link { position: relative; z-index: 1; }
   .mp-card-main { display: flex; gap: 10px; align-items: flex-start; width: 100%; }
   .mp-app-icon { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 23px; font-weight: 600; box-shadow: inset 0 0 0 1px #ffffff0b; overflow: hidden; }
   .mp-app-icon img { object-fit: cover; width: 100%; height: 100%; }
   .mp-app-icon-large { width: 76px; height: 76px; flex-basis: 76px; border-radius: 18px; font-size: 34px; }
   .mp-card-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .mp-card-copy strong { color: var(--nt-text-strong); font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mp-card-copy strong { display: block; color: var(--nt-text-strong); font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mp-card-category { color: var(--mp-muted); font-size: 11px; }
   .mp-card-summary { font-size: 11px; color: #acb1be; white-space: pre-wrap; overflow-wrap: anywhere; }
   .mp-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 13px; margin-top: auto; width: 100%; }
@@ -120,8 +127,11 @@
   .mp-app input[type=checkbox], .mp-modal input[type=checkbox] { appearance: auto; accent-color: var(--nt-accent); width: 16px; height: 16px; min-width: 16px; padding: 0; margin: 0; }
   .mp-library-list { display: flex; flex-direction: column; }
   .mp-library-row { display: flex; align-items: center; gap: 12px; padding-block: 15px; border-top: 1px solid var(--mp-line); min-width: 0; }
-  .mp-library-app { flex: 1; display: flex; align-items: center; gap: 12px; text-align: left; background: transparent; border: 0; padding: 0; min-width: 0; color: var(--nt-text-strong); }
-  .mp-library-app > span:last-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .mp-library-app { position: relative; flex: 1; display: flex; align-items: center; gap: 12px; text-align: left; background: transparent; border: 0; padding: 0; min-width: 0; color: var(--nt-text-strong); }
+  .mp-library-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .mp-library-title { border: 0; padding: 0; background: none; color: inherit; text-align: left; }
+  .mp-library-title::after { content: ""; position: absolute; inset: 0; border-radius: 6px; }
+  .mp-library-app .mp-publisher-link { position: relative; z-index: 1; }
   .mp-library-app strong { font-weight: 600; overflow-wrap: anywhere; }
   .mp-library-app small { color: var(--mp-muted); font-size: 11px; }
   .mp-selection-bar { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; border: 1px solid #4f4165; border-radius: 10px; background: #211b30f5; box-shadow: 0 -6px 24px #0007; }
@@ -139,6 +149,8 @@
   .mp-detail-hero { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; }
   .mp-detail-hero h2 { font-size: 28px; margin: 3px 0 5px; }
   .mp-detail-hero p { color: #b0b5c1; }
+  .mp-detail-hero > div { min-width: 0; }
+  .mp-detail-hero .mp-publisher-link { display: block; margin: 0 0 7px; font-size: 12px !important; }
   .mp-detail-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); margin-bottom: 24px; border-block: 1px solid var(--mp-line); padding-block: 15px; }
   .mp-detail-stats > div { padding-inline: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
   .mp-detail-stats > div + div { border-left: 1px solid var(--mp-line); }
@@ -159,6 +171,27 @@
   .mp-audit-warning > summary { color: #e6cc96; }
   .mp-publisher-info { display: flex; flex-direction: column; gap: 9px; }
   .mp-publisher-info a { font-size: 12px; }
+  .mp-profile-page, .mp-profile-apps, .mp-profile-form { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .mp-profile-identity { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .mp-profile-identity > div { min-width: 0; }
+  .mp-profile-identity h2 { font-size: 23px; overflow-wrap: anywhere; }
+  .mp-profile-avatar { display: grid; place-items: center; flex: 0 0 56px; height: 56px; border-radius: 16px; background: linear-gradient(145deg, #3a3150, #242234); color: #d7c1f4; border: 1px solid #514365; font-size: 24px; }
+  .mp-profile-id { display: block; font-size: 12px; color: var(--nt-accent); margin-top: 3px; }
+  .mp-profile-stats { margin: 0 !important; }
+  .mp-profile-stats-note { font-size: 10px; line-height: 1.6; margin-top: -9px !important; }
+  .mp-profile-principal { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--mp-muted); border-top: 1px solid var(--mp-line); padding-top: 14px; }
+  .mp-profile-setup { max-width: 590px; margin-inline: auto; padding: 20px; border: 1px solid var(--mp-line); background: var(--mp-paper); border-radius: var(--mp-radius); }
+  .mp-profile-form .mp-form-group { gap: 8px; }
+  .mp-profile-form input + small { margin-bottom: 9px; }
+  .mp-profile-form input[readonly] { color: var(--mp-muted); background: transparent; }
+  .mp-profile-review { display: flex; flex-direction: column; gap: 5px; }
+  .mp-profile-review > strong { font-size: 20px; overflow-wrap: anywhere; }
+  .mp-profile-review .mp-description { margin-top: 9px; }
+  .mp-profile-permanent { background: #29233b; border: 1px solid #443755; border-radius: 8px; padding: 12px; font-size: 12px; color: #d8c5ed; }
+  .mp-own-profile { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 16px; background: var(--mp-paper); border: 1px solid var(--mp-line); border-radius: var(--mp-radius); }
+  .mp-own-profile .mp-profile-identity h2 { font-size: 18px; }
+  .mp-own-profile .mp-profile-avatar { flex-basis: 42px; height: 42px; font-size: 20px; border-radius: 12px; }
+  .mp-own-profile-actions { display: flex; gap: 14px; align-items: center; margin-left: auto; }
   .mp-star-picker { display: flex; gap: 8px; }
   .mp-star-picker button { border: 0; background: transparent; padding: 0; color: #4c4956; font-size: 30px; }
   .mp-star-picker .mp-star-active, .mp-own-review > span { color: #e3c17b; }
@@ -284,6 +317,7 @@
     .mp-body { padding: 12px; }
     .mp-selection-bar { padding: 10px; font-size: 11px; }
     .mp-selection-bar button { padding-inline: 10px; font-size: 11px !important; }
+    .mp-profile-setup { padding: 14px; }
   }
   @media (max-width: 480px) {
     .mp-modal, .mp-modal-wide { width: calc(100vw - 12px); max-width: calc(100vw - 12px); max-height: calc(100dvh - 12px); border-radius: 12px; }

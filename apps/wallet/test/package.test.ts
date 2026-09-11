@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.27.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.28.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 327,
+    version: 328,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: {
       path: "service.html",
@@ -371,10 +371,6 @@ test("Wallet setup replaces one v1 ledger selection through one permission batch
   expect(frontend).toContain('requested === "activity"');
   expect(frontend).toContain('requested === "approvals"');
   expect(frontend).toContain("/^(receive|deposit|send)");
-  expect(frontend).toContain("Wallet alpha warning");
-  expect(frontend).toContain(
-    "Alpha - not battle tested, don't put more tokens than you can",
-  );
 });
 
 test("Wallet rechecks current ledger authority before funding persistence and dispatch", async () => {

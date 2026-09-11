@@ -14,7 +14,7 @@ import type { EthereumFundingKind, EthereumFundingRecord } from "./ethereum.ts";
 import { first, type Option, type WireResult } from "./protocol.ts";
 import { beginPublication, beginArtifact, writeArtifact, finishPublication, quotePublication } from "./publishing.ts";
 import type { PublicationPlan } from "./publication.ts";
-import type { PurchaseQuote, WithdrawalQuote, PublicationQuote, PaymentToken, AppTier, RankingWindow, EthereumPurchaseSelection, InstallationQuote } from "./view-types.ts";
+import type { PurchaseQuote, WithdrawalQuote, PublicationQuote, PublisherProfileInput, PublisherProfileQuote, PaymentToken, AppTier, RankingWindow, EthereumPurchaseSelection, InstallationQuote } from "./view-types.ts";
 
 const string = { type: "string" }, id = { type: "string", pattern: "^[0-9a-f]{32}$" }, token = { type: "string", enum: ["ICP", "ckBTC", "ckUSDC"] };
 const object = (properties: JsonObject = {}, required: string[] = Object.keys(properties)): JsonObject => ({ type: "object", properties, required, additionalProperties: false });
@@ -64,6 +64,10 @@ async function uiRead(context: MsgBusToolContext, method: string, args: JsonObje
     case "detail": return client.detail(String(args.appId));
     case "library": return client.library(typeof args.cursor === "string" ? args.cursor : undefined);
     case "publisherApps": return client.publisherApps(typeof args.cursor === "string" ? args.cursor : undefined);
+    case "publisherProfile": return client.publisherProfile(text(args.id));
+    case "ownPublisherProfile": return client.ownPublisherProfile();
+    case "publisherCatalog": return client.publisherCatalog(text(args.id), typeof args.cursor === "string" ? args.cursor : undefined);
+    case "quotePublisherProfile": return client.quotePublisherProfile(args as unknown as PublisherProfileInput);
     case "earnings": return client.earnings();
     case "quotePurchase": {
       if (args.ethereum) {
@@ -118,6 +122,7 @@ async function uiWrite(context: MsgBusToolContext, method: string, args: JsonObj
     case "installationOpened": return markInstallationOpened(context, args.quote as unknown as InstallationQuote);
     case "rate": await client.update("rating_set", { appId: String(args.appId), stars: BigInt(Number(args.stars)), review: String(args.text) }); return null;
     case "createReferralCode": return (await client.update<{ code: string }>("referral_get_or_create", {})).code;
+    case "savePublisherProfile": return client.savePublisherProfile(args.input as unknown as PublisherProfileInput, args.quote as unknown as PublisherProfileQuote);
     case "beginPublication": return beginPublication(context, args.quote as unknown as PublicationQuote);
     case "beginArtifact": return beginArtifact(context, String(args.requestId), Number(args.index));
     case "writeArtifact": return writeArtifact(context, args as unknown as { requestId: string; index: number; offset: number; bytes: string });
@@ -141,6 +146,11 @@ function register(name: string, title: string, description: string, properties: 
 }
 register("marketplace_catalog_v1", "Discover marketplace apps", "Browse audited free or paid apps ranked by distinct acquisitions over rolling 7/30 days or all time. Queries go directly to the protocol. Follow nextCursor for another page.", { tier: { enum: ["free", "paid"] }, window: { enum: ["week", "month", "all"] }, search: string, cursor: string }, [], reads, async (args, context) => (await protocolClient(context)).catalog({ tier: args.tier === "paid" ? "paid" : "free", window: args.window === "month" || args.window === "all" ? args.window : "week", search: text(args.search), ...(typeof args.cursor === "string" ? { cursor: args.cursor } : {}) }));
 register("marketplace_app_v1", "Inspect a marketplace app", "Read listing, current release audit and own rating. Approval identifies the exact package digest; ownership survives uninstall.", { appId: string }, ["appId"], reads, async (args, context) => (await protocolClient(context)).detail(text(args.appId)));
+register("marketplace_publisher_v1", "Inspect a marketplace publisher", "Read a publisher's permanent ID and name, editable description, principal, review-weighted rating, distinct acquiring Neutron count and a page of audited apps. Follow nextCursor for further apps. A Neutron owning several apps counts once for this publisher; installs and retries do not add users. statsComplete=false means historical counters are still being rebuilt, not that users or ratings are zero. Queries go directly to the protocol.", { publisherId: { type: "string", pattern: "^[a-z]{3,20}$" }, cursor: string }, ["publisherId"], reads, async (args, context) => {
+  const client = await protocolClient(context);
+  const [profile, apps] = await Promise.all([client.publisherProfile(text(args.publisherId)), client.publisherCatalog(text(args.publisherId), typeof args.cursor === "string" ? args.cursor : undefined)]);
+  return { profile, ...apps };
+});
 register("marketplace_library_v1", "Read acquired apps", "List this Neutron's free and purchased app entitlements. Revoked packages cannot be downloaded; ownership remains for a later approved replacement.", { cursor: string }, [], reads, async (args, context) => (await protocolClient(context)).library(typeof args.cursor === "string" ? args.cursor : undefined));
 register("marketplace_earnings_v1", "Read marketplace earnings", "Read available and reserved earnings plus this Neutron's referral code. Balances are exact atomic amounts; no withdrawal occurs.", {}, [], reads, async (_args, context) => (await protocolClient(context)).earnings());
 register("marketplace_connect_v1", "Restore marketplace access", "Reuse this Neutron's saved browser read delegate, or register it once through Neutron with the protocol's fixed attached cycle fee if missing. The app sets up access automatically on opening. This explicit recovery tool can restore revoked access; transient read failures never trigger registration. Purchases still belong to this Neutron, and no browser update authority is granted.", {}, [], writes, async (_args, context) => connect(context));

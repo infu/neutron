@@ -474,3 +474,67 @@ lengths and SHA-256 digests across all 54 frozen artifacts. Publication request:
 `87ac78efd271bcd265774fc1d1b577ec6c62feb709c46236c3b18995e1705052`. These updates are installed through the existing Settings
 upgrade flow; publication does not install them into an existing Neutron.
 No Git push is included.
+
+
+## Publisher profiles and IC Wallet title — Marketplace116 / Wallet328
+
+Marketplace `0.1.16` and Wallet `0.3.28` were published together in catalog
+batch `10` on 2026-09-11. Only those two packages changed in the 27-package
+transaction. Kernel, legacy source and Dispenser starter were unchanged.
+
+| Package | Archive bytes | Archive SHA-256 | Offered-source bytes | Offered-source SHA-256 |
+| --- | ---: | --- | ---: | --- |
+| wallet 328 | 940,936 | `a4910afaaa52f3078d2d9c197b7f8ca5b996664c5ba2bae2d2cf668b8d088c96` | 852,892 | `19796e6fdd6063c793a6f3a90dcd970770c507bc30c49c51abb836d0257c48b3` |
+| marketplace 116 | 489,339 | `24d5f63a9bd8e8795696c4246e8fb796a1fe0a0d36591b1fe3d4148ef9812d35` | 1,795,057 | `95bb7030654590c43fd0abbefb25576fd375223338e53e7369169e08912845e2` |
+
+The Marketplace protocol was upgraded in place to module
+`62538acd0b35afad2d4222a82c4d5476ea200266dbab49516046711efd0eb438` using ICP CLI upgrade mode with Wasm memory kept.
+The first invocation omitted the actor's required initialization argument and
+was rejected; the previous module remained active. Reusing the retained
+production argument file with the same qualified Wasm succeeded. Controller
+principals and the before/after representations of all 27 existing listings,
+approved releases and media remained unchanged.
+
+The existing first-party owner registered publisher ID `aae` and permanent name
+`aae`. Its 27 listings retain their original owner and gain that profile byline;
+25 apps are displayed in the storefront, which continues to omit Kernel and
+Marketplace. Anonymous profile reads, listing summaries and paginated portfolio
+reads were verified against the live canister. The editable description is
+recorded in `content/publisher.json`.
+
+Publisher IDs contain 3–20 lowercase letters and are globally unique. Both ID
+and name are permanent. Publish requires profile setup; only the description
+can subsequently change. Registration retries return the current profile
+without overwriting later edits. Publisher links open a profile with principal,
+description, audited apps, review-weighted rating and distinct acquiring Neutron
+count. Free and paid acquisitions count once per Neutron across that publisher's
+portfolio. Reinstalls, another app from the same publisher and retries do not
+inflate the total. Stored counters and the owner index keep profile queries
+independent of purchase-history size. Historical backfill is resumable and
+marks partial statistics explicitly until complete.
+
+The protocol adds an independent publisher root and preserves its previous
+roots. The app retains its released state v2 and v1→v2 migration unchanged.
+PocketIC checks cover a keep upgrade from the exact previously deployed
+`f3665ba9677b98df17c6c85fde1207e205bfe3e8bded609a864e5648e3bd2d5e`
+module, concurrent registration, permanent identity, paid/free user deduplication,
+rating edits during backfill, pagination and retained uploads. Protocol unit,
+Ash and existing integration suites passed. Marketplace's 152 unit tests,
+memory initialization/restoration/migration checks, real Candid SDK integration,
+TypeScript and six browser suites passed, including compact profile layouts.
+The final Unicode name normalization was rechecked on the exact deployed module.
+
+Wallet's tile title is now **IC Wallet**, and its obsolete alpha footer is
+removed. Its eight v1 memory roots and lock lineage remain unchanged.
+Wallet qualification passed 323 unit tests, 19 Motoko suites, clean/restored
+memory checks, five browser suites and TypeScript; immutable predecessor checks
+include Wallet327. No production financial action was used for qualification.
+
+The first repeat check stopped in the local Wasm response verifier with an
+out-of-bounds memory error. Frozen package/source bytes were retained and the
+same command was retried without bypassing verification. The successful
+identical-byte repeat publication returned receipt-v2 `batch_id: null` with
+all 27 packages and offered sources `unchanged`. Versions, URLs, paths, lengths
+and SHA-256 digests match all 54 frozen artifacts. Publication request:
+`a7428718dc496ffbb4acaa9cb35005ebb7abe4656f8f6eb9910c79ad987be7c2`. Existing Neutrons install the updates through Settings.
+No Git push is included.

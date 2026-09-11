@@ -6,6 +6,7 @@ import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Catalog "./Catalog";
 import Store "./Store";
+import PublisherStore "./PublisherStore";
 import Types "./Types";
 
 module {
@@ -47,9 +48,9 @@ module {
 
   // Use only as the persistent root's initializer. Motoko preserves that root
   // on upgrade; fresh init arguments must never replace existing marketplace data.
-  public func memory(initial : Types.Init, now : Int) : Store.Mem {
+  public func memory(initial : Types.Init, now : Int, publishers : PublisherStore.Mem) : Store.Mem {
     let retained = Store.init(initial);
-    let db = Store.Use(retained);
+    let db = Store.Use(retained, publishers);
     switch (initial.trustedPublishingPrincipal) {
       case null {};
       case (?principal) {

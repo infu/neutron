@@ -1,13 +1,23 @@
 // Proprietary marketplace protocol. All rights reserved.
 import Runtime "mo:core/Runtime";
 import Result "mo:core/Result";
+import Iter "mo:core/Iter";
+import List "mo:core/List";
+import Nat64 "mo:core/Nat64";
+import Principal "mo:core/Principal";
+import Set "mo:core/Set";
 import StableBlob "mo:ashroot/stable_blob";
+import IndexCore "mo:ashroot/index_core";
 import Generated "../.ashroot/lib";
+import PublisherStore "./PublisherStore";
 import Types "./Types";
 
 module {
   public type Mem = Generated.Mem;
-  public type DB = Generated.DB;
+  public type DB = Generated.DB and {
+    publishers : PublisherStore.DB;
+    publisherApps : (Principal, ?Nat64) -> Iter.Iter<(Nat64, Types.App)>;
+  };
   public type Error = Types.Error;
 
   public func init(config : Types.Config) : Mem {
@@ -26,9 +36,32 @@ module {
 
   // Construct once as a transient actor value. Existing retained records are
   // restored directly; initialization is never used as an upgrade fallback.
-  public func Use(mem : Mem) : DB {
+  public func Use(mem : Mem, publisherMem : PublisherStore.Mem) : DB {
     let ?retained = mem.store.value else Runtime.trap("Marketplace storage is not initialized");
-    Generated.Use(mem, retained);
+    {
+      Generated.Use(mem, retained) with
+      publishers = PublisherStore.Use(publisherMem);
+      // Existing ownership index stores (owner, physical row slot). Retain that
+      // slot as the cursor, including across sparse IDs or deleted row reuse.
+      publisherApps = func(owner : Principal, after : ?Nat64) : Iter.Iter<(Nat64, Types.App)> {
+        let start = switch (after) { case (?slot) slot; case null (0 : Nat64) };
+        let values = Set.valuesFrom(mem.apps.idx_by_owner, IndexCore.cmpStoreKey<Principal>(Principal.compare), (owner, start));
+        object {
+          public func next() : ?(Nat64, Types.App) {
+            label scan loop {
+              let ?(foundOwner, slot) = values.next() else return null;
+              if (foundOwner != owner) return null;
+              switch (after) { case (?previous) if (slot <= previous) continue scan; case null {} };
+              switch (List.get(mem.apps.rows, Nat64.toNat(slot))) {
+                case (??app) return ?(slot, app);
+                case (_) {};
+              };
+            };
+            null;
+          };
+        };
+      };
+    };
   };
 
   public func config(db : DB) : Types.Config { db.store.get().config };

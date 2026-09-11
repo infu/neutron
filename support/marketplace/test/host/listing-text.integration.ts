@@ -9,9 +9,10 @@ import { gzipSync } from "node:zlib";
 import { IDL } from "@dfinity/candid";
 import { Ed25519KeyIdentity } from "@dfinity/identity";
 import { Principal } from "@dfinity/principal";
+import { disposeMotokoCompiler, loadMotoko } from "neutron-motoko-wasm";
 import { buildMarketplace } from "../../scripts/build.ts";
 import { prepareAsh, projectRoot } from "../../scripts/test-ash-runtime.ts";
-import { installFixture, relayCall, session, wire, type IntegrationCase } from "./helpers.ts";
+import { installFixture, method, relayCall, session, wire, type IntegrationCase } from "./helpers.ts";
 
 const previousPath = process.env.MARKETPLACE_LISTING_PREVIOUS_WASM;
 const deployedHash = "7ec8262e5067d5e8c20c990767eeb5c214c7741bb1fb3cb1da4477efe29af0a5";
@@ -79,6 +80,14 @@ export const cases: IntegrationCase[] = [{
         appId, title: "Listing text fixture", summary: "Short excerpt", description: "Expanded description.",
         priceUsdMicros: 0n, iconArtifact: [], screenshots: [], expectedRevision: [], feeVersion: 1n,
       });
+      async function registerPublishers(ctx: ReturnType<typeof actors>) {
+        success(await ctx.publisher.publisher_profile_register({
+          publisherId: "trustedpublisher", name: "Trusted publisher", description: "Listing text fixture.", feeVersion: 1n,
+        }));
+        success(await ctx.call("publisher_profile_register", {
+          publisherId: "ordinarypublisher", name: "Ordinary publisher", description: "Charged listing text fixture.", feeVersion: 1n,
+        }));
+      }
       async function exerciseBounds(ctx: ReturnType<typeof actors>, prefix: string) {
         // Exercise both ingress paths; native cycle charging remains unchanged.
         for (const [kind, writer, reader] of [
@@ -110,18 +119,29 @@ export const cases: IntegrationCase[] = [{
       await env.pic.installCode({ canisterId: freshId, wasm: compiled.wasmPath, arg });
       const fresh = actors(freshId);
       assert.equal(success(await fresh.publisher.app_detail("reserved_listing")).app.description, "");
+      await registerPublishers(fresh);
       await exerciseBounds(fresh, "fresh");
 
       const previous = await readFile(previousPath ?? compiled.rawWasmPath);
       if (previousPath) {
         assert.equal(hash(previous), deployedHash, "Qualification uses the exact deployed predecessor");
         assert.notEqual(compiled.wasmHash, deployedHash);
-        assert.deepEqual(await readFile(compiled.stableTypesPath!), await readFile(`${previousPath}.most`), "Both retained memory roots have unchanged stable types");
-        assert.deepEqual(await readFile(compiled.candidPath), await readFile(`${previousPath}.did`), "Public protocol Candid is unchanged");
+        const compiler = await loadMotoko();
+        try {
+          const compatibility = await compiler.stableCompatible(
+            await readFile(`${previousPath}.most`, "utf8"), await readFile(compiled.stableTypesPath!, "utf8"),
+          );
+          assert.equal(compatibility.compatible, true, `Existing memory remains compatible with the added publisher root: ${wire(compatibility.diagnostics)}`);
+        } finally { await disposeMotokoCompiler(); }
+        assert.deepEqual(method(compiled, "publisher_profile_register").annotations, [], "Publisher registration is an added update endpoint");
+        assert.deepEqual(method(compiled, "publisher_profile").annotations, ["query"], "Public publisher reads remain queries");
       }
       const canisterId = await env.pic.createCanister({ cycles: 100_000_000_000_000n });
       await env.pic.installCode({ canisterId, wasm: gzipSync(previous, { level: 9 }), arg });
       const ctx = actors(canisterId);
+      // An archived predecessor predates profiles and must be seeded using only
+      // its original interface. The same-module fixture already requires them.
+      if (!previousPath) await registerPublishers(ctx);
       success(await ctx.call("read_delegate_set", { browser: browserPrincipal, active: true, feeVersion: 1n }));
       success(await ctx.call("referral_get_or_create", { feeVersion: 1n }));
       const retainedInput = {
@@ -166,13 +186,15 @@ export const cases: IntegrationCase[] = [{
       assert.equal(before.library.apps.length, 1);
       await env.pic.upgradeCanister({ canisterId, wasm: compiled.wasmPath, arg, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
       assert.deepEqual(await snapshot(), before, "Keep upgrade preserves listings, approvals, purchases, referrals, delegation, settings, receipts, blobs and access grants");
+      if (previousPath) await registerPublishers(ctx);
+      const registered = await snapshot();
       assert.deepEqual(success(await ctx.publisher.trusted_publish_batch(batchInput)), receipt, "Historical publication replay keeps its exact receipt");
       assert.equal(success(await ctx.publisher.listing_save(retainedInput)).revision, retained.revision, "Historical listing replay remains a no-op");
       if (previousPath) {
         rejected(await ctx.publisher.listing_save({ ...retainedInput, title: "Edited title", expectedRevision: [retained.revision] }), excerptError);
         rejected(await ctx.publisher.listing_save({ ...retainedInput, summary: "Valid excerpt", expectedRevision: [retained.revision] }), descriptionError);
       }
-      assert.deepEqual(await snapshot(), before, "Replays and rejected new revisions do not alter retained state");
+      assert.deepEqual(await snapshot(), registered, "Replays and rejected new revisions do not alter retained state");
       await exerciseBounds(ctx, "upgraded");
       const corrected = success(await ctx.publisher.listing_save({ ...retainedInput, summary: "Corrected excerpt", description: "Corrected expanded description", expectedRevision: [retained.revision] }));
       assert.equal(corrected.revision, retained.revision + 1n);

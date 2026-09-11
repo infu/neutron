@@ -4,6 +4,7 @@ import Runtime "mo:core/Runtime";
 import Store "Store";
 import Types "Types";
 import Rankings "Rankings";
+import Publishers "Publishers";
 import Pricing "Pricing";
 
 module {
@@ -157,6 +158,7 @@ module {
       };
     };
     Rankings.refreshEligibility(db, app);
+    Publishers.syncApp(db, app);
     #ok(app);
   };
 

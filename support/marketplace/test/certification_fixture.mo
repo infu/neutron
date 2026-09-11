@@ -5,6 +5,7 @@ import Certification "../mo/Certification";
 import Encoding "../mo/Encoding";
 import Http "../mo/Http";
 import Retention "../mo/Retention";
+import PublisherStore "../mo/PublisherStore";
 import Store "../mo/Store";
 import Types "../mo/Types";
 import Array "mo:core/Array";
@@ -29,7 +30,8 @@ persistent actor {
   let httpMemory = Http.init();
   var candidateId : ?Nat64 = null;
   var paths : [Text] = [];
-  transient let db = Store.Use(memory);
+  let publisherMemory = PublisherStore.init();
+  transient let db = Store.Use(memory, publisherMemory);
   transient let http = Http.Store(httpMemory, {
     artifact = func(path : Text) : ?Http.Artifact { Certification.artifact(db, path) };
     authorize = func(path : Text, bearer : ?Text) : Bool { Access.authorizeHttp(db, path, bearer) };

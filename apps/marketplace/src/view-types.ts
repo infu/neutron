@@ -7,6 +7,7 @@ export type Money = { atoms: string; decimals: number; symbol: string };
 export type Page<T> = { items: T[]; nextCursor: string | null; asOf?: string; warning?: string };
 export type AppListing = {
   id: string; title: string; summary: string; category: string; publisher: string;
+  publisherId?: string | null; publisherName?: string | null;
   priceUsdMicros: string; iconUrl?: string; version: string;
   rating: number | null; ratingCount: number;
   /** Acquisition recorded by Marketplace, independent of local installation. */
@@ -18,6 +19,13 @@ export type AppListing = {
   freeAcquisitions?: string; paidPurchases?: string;
 };
 export type AuditView = { auditor: string; verdict: "approved" | "rejected" | "revoked"; analysis: string; date: string; packageHash: string };
+export type PublisherProfileInput = { id: string; name: string; description: string };
+export type PublisherProfileQuote = { input: PublisherProfileInput; operation: "register" | "update"; cycles: CycleEstimate };
+export type PublisherProfile = PublisherProfileInput & {
+  principal: string; rating: number | null; ratingCount: number;
+  /** Distinct acquiring Neutrons across this publisher's apps. */
+  totalUsers: string; statsComplete: boolean;
+};
 export type AppDetail = AppListing & {
   description: string; screenshots: { url: string; caption?: string }[];
   website?: string; sourceUrl?: string; audit: AuditView | null;
@@ -96,6 +104,11 @@ export interface MarketplaceClient {
   detail(appId: string): Promise<AppDetail>;
   library(cursor?: string): Promise<Page<LibraryApp>>;
   publisherApps(cursor?: string): Promise<Page<PublishedApp>>;
+  publisherProfile(id: string): Promise<PublisherProfile>;
+  ownPublisherProfile(): Promise<PublisherProfile | null>;
+  publisherCatalog(id: string, cursor?: string): Promise<Page<AppListing>>;
+  quotePublisherProfile(input: PublisherProfileInput): Promise<PublisherProfileQuote>;
+  savePublisherProfile(input: PublisherProfileInput, quote: PublisherProfileQuote): Promise<PublisherProfile>;
   earnings(): Promise<Earnings>;
   createReferralCode(): Promise<string>;
   quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode?: string | undefined; ethereum?: EthereumPurchaseSelection }): Promise<PurchaseQuote>;

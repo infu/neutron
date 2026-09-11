@@ -9,7 +9,7 @@ import { bytes, unwrap, validateHost } from "./store.ts";
 export type Method = { args: IDL.Type[]; returns: IDL.Type[]; update?: boolean };
 export type Contract = Record<string, Method>;
 export type QueryAgent = Pick<HttpAgent, "query">;
-export const UPDATE_METHODS = ["read_delegate_set", "purchase", "withdraw", "referral_get_or_create", "rating_set", "listing_save", "upload_begin", "upload_chunk", "upload_finish", "candidate_submit", "install_prepare", "repo_access_v1", "ethereum_prepare", "ethereum_verify", "ethereum_settle", "ethereum_cancel"] as const;
+export const UPDATE_METHODS = ["read_delegate_set", "purchase", "withdraw", "referral_get_or_create", "rating_set", "listing_save", "upload_begin", "upload_chunk", "upload_finish", "candidate_submit", "install_prepare", "repo_access_v1", "ethereum_prepare", "ethereum_verify", "ethereum_settle", "ethereum_cancel", "publisher_profile_register", "publisher_profile_update"] as const;
 
 export async function makeAgent(state: StoredState, identity?: Identity): Promise<HttpAgent> {
   const host = validateHost(state.host);

@@ -5,6 +5,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Rankings "../../mo/Rankings";
+import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
 import Fixtures "../motoko/Fixtures";
 
@@ -12,7 +13,8 @@ import Fixtures "../motoko/Fixtures";
 // is split across messages so it cannot conceal the maintenance call's budget.
 persistent actor {
   let mem = Fixtures.memory();
-  transient let db = Store.Use(mem);
+  let publisherMemory = PublisherStore.init();
+  transient let db = Store.Use(mem, publisherMemory);
   var apps = 0;
   var acquisitions = 0;
 

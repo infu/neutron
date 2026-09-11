@@ -15,6 +15,7 @@ import Billing "../mo/Billing";
 import Catalog "../mo/Catalog";
 import Publishing "../mo/Publishing";
 import Store "../mo/Store";
+import PublisherStore "../mo/PublisherStore";
 import Types "../mo/Types";
 import Fixtures "motoko/Fixtures";
 
@@ -22,9 +23,9 @@ persistent actor {
   func trusted() : Principal {
     Principal.fromText("y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe");
   };
-  func memory() : Store.Mem {
+  func memory(publisherMemory : PublisherStore.Mem) : Store.Mem {
     let mem = Fixtures.memory();
-    Store.setTrustedPublishingPrincipal(Store.Use(mem), ?trusted());
+    Store.setTrustedPublishingPrincipal(Store.Use(mem, publisherMemory), ?trusted());
     mem;
   };
   func good<T>(result : API.Result<T>) : T {
@@ -80,7 +81,8 @@ persistent actor {
 
   public func trusted_cli_publishes_two_apps_and_exact_retry_survives_memory_rebind() : async Test.Metrics {
     Test.test(func () {
-      let mem = memory(); let db = Store.Use(mem);
+      let publisherMemory = PublisherStore.init();
+      let mem = memory(publisherMemory); let db = Store.Use(mem, publisherMemory);
       assert not Access.isAdmin(db, trusted()) and not Access.isAuditor(db, trusted());
       let alpha = candidate(db, trusted(), "batch_alpha", 100, "alpha-100");
       let bravo = candidate(db, trusted(), "batch_bravo", 100, "bravo-100");
@@ -104,7 +106,7 @@ persistent actor {
       let repeated = good(BatchPublishing.publish(db, trusted(), input, 20));
       assert repeated.batch == result.batch and repeated.retiredArtifacts.size() == 0;
       assert db.audits.size() == 2 and db.publishBatches.size() == 1;
-      let restored = Store.Use(mem);
+      let restored = Store.Use(mem, publisherMemory);
       assert Store.getPublishBatch(restored, trusted(), input.requestId) == ?result.batch;
       assert good(BatchPublishing.publish(restored, trusted(), input, 30)).batch == result.batch;
       assert restored.audits.size() == 2 and restored.publishBatches.size() == 1;
@@ -113,7 +115,8 @@ persistent actor {
 
   public func trusted_successor_retires_old_bytes_and_keeps_batch_candidate_and_audit_history() : async Test.Metrics {
     Test.test(func () {
-      let mem = memory(); let db = Store.Use(mem);
+      let publisherMemory = PublisherStore.init();
+      let mem = memory(publisherMemory); let db = Store.Use(mem, publisherMemory);
       let appId = "batch_successor";
       let first = candidate(db, trusted(), appId, 100, "successor-100");
       let firstInput = request([first]);
@@ -155,7 +158,7 @@ persistent actor {
       assert Store.getUploadByRequest(db, trusted(), sourceUpload.requestId) == ?sourceUpload;
       assert db.artifacts.size() == 2 and db.candidates.size() == 2 and db.audits.size() == 2 and db.publishBatches.size() == 2;
 
-      let restored = Store.Use(mem);
+      let restored = Store.Use(mem, publisherMemory);
       let repeat = good(BatchPublishing.publish(restored, trusted(), secondInput, 30));
       assert repeat.batch == published.batch and repeat.retiredArtifacts == [] and repeat.appIds == [];
       let historical = good(BatchPublishing.publish(restored, trusted(), firstInput, 31));
@@ -172,7 +175,8 @@ persistent actor {
 
   public func ordinary_admin_auditor_and_removed_trusted_identity_cannot_use_batch_path() : async Test.Metrics {
     Test.test(func () {
-      let db = Store.Use(memory());
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory(publisherMemory), publisherMemory);
       let value = candidate(db, trusted(), "batch_roles", 100, "roles-100");
       let input = request([value]);
       for (caller in [Fixtures.owner(), Fixtures.auditor(), Fixtures.other(), Principal.fromText("2vxsx-fae")].vals()) {
@@ -189,7 +193,8 @@ persistent actor {
 
   public func a_foreign_candidate_rejects_the_entire_batch_before_first_approval() : async Test.Metrics {
     Test.test(func () {
-      let db = Store.Use(memory());
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory(publisherMemory), publisherMemory);
       let own = candidate(db, trusted(), "batch_owned", 100, "owned-100");
       let foreign = candidate(db, Fixtures.other(), "batch_foreign", 100, "foreign-100");
       denied(BatchPublishing.publish(db, trusted(), request([own, foreign]), 10));
@@ -200,7 +205,8 @@ persistent actor {
 
   public func last_package_or_source_digest_error_leaves_every_candidate_pending() : async Test.Metrics {
     Test.test(func () {
-      let db = Store.Use(memory());
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory(publisherMemory), publisherMemory);
       let alpha = candidate(db, trusted(), "batch_hash_alpha", 100, "hash-alpha");
       let bravo = candidate(db, trusted(), "batch_hash_bravo", 100, "hash-bravo");
       let base = request([alpha, bravo]);
@@ -219,7 +225,8 @@ persistent actor {
 
   public func a_saved_request_cannot_change_its_candidate_set_hashes_or_analysis() : async Test.Metrics {
     Test.test(func () {
-      let db = Store.Use(memory());
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory(publisherMemory), publisherMemory);
       let alpha = candidate(db, trusted(), "batch_retry_alpha", 100, "retry-alpha");
       let bravo = candidate(db, trusted(), "batch_retry_bravo", 100, "retry-bravo");
       let input = request([alpha, bravo]);
@@ -236,7 +243,8 @@ persistent actor {
 
   public func duplicate_candidate_or_two_releases_of_one_app_are_rejected_without_changes() : async Test.Metrics {
     Test.test(func () {
-      let db = Store.Use(memory());
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory(publisherMemory), publisherMemory);
       let first = candidate(db, trusted(), "batch_duplicate", 100, "duplicate-100");
       let second = candidate(db, trusted(), "batch_duplicate", 101, "duplicate-101");
       denied(BatchPublishing.publish(db, trusted(), request([first, first]), 10));
@@ -248,7 +256,8 @@ persistent actor {
 
   public func empty_batch_request_identity_or_analysis_cannot_create_an_audit() : async Test.Metrics {
     Test.test(func () {
-      let db = Store.Use(memory());
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory(publisherMemory), publisherMemory);
       let value = candidate(db, trusted(), "batch_empty", 100, "empty-100");
       let input = request([value]);
       denied(BatchPublishing.publish(db, trusted(), request([]), 10));
@@ -261,7 +270,8 @@ persistent actor {
 
   public func automatic_analysis_is_retained_separately_from_an_assigned_auditor_review() : async Test.Metrics {
     Test.test(func () {
-      let db = Store.Use(memory());
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory(publisherMemory), publisherMemory);
       let automated = candidate(db, trusted(), "batch_automated", 100, "automated-100");
       let manual = candidate(db, Fixtures.owner(), "batch_manual", 100, "manual-100");
       let input = request([automated]);

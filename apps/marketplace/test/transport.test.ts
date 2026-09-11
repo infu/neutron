@@ -63,7 +63,7 @@ test("existing exact access needs only a context-scoped read and no consent requ
   });
   await transport.reserve();
   await transport.reserve();
-  expect(UPDATE_METHODS).toHaveLength(16);
+  expect(UPDATE_METHODS).toHaveLength(18);
   expect(calls).toEqual(Array.from({ length: 2 }, () => ({ target: "kernel", name: "backend_calls.list", arguments: {} })));
   expect(requests).toBe(0);
 });

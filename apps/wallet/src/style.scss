@@ -857,25 +857,6 @@ body {
     }
   }
 
-  .wallet-alpha-notice {
-    align-items: center;
-    background: #7f1d1d;
-    box-shadow: inset 0 1px #ef4444;
-    color: #fff;
-    display: flex;
-    flex: 0 0 auto;
-    font-size: 0.62rem;
-    gap: 7px;
-    line-height: 1.35;
-    min-height: 36px;
-    padding: 7px 12px;
-
-    > svg {
-      flex: 0 0 auto;
-      font-size: 0.86rem;
-    }
-  }
-
   .wallet-selection-count {
     color: var(--nt-text-faint);
     font-size: 0.62rem;

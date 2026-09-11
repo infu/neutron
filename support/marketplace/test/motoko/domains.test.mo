@@ -1,6 +1,7 @@
 import Test "mo:test";
 import Fixtures "Fixtures";
 import Store "../../mo/Store";
+import PublisherStore "../../mo/PublisherStore";
 import Types "../../mo/Types";
 import Catalog "../../mo/Catalog";
 import Publishing "../../mo/Publishing";
@@ -12,7 +13,7 @@ import Principal "mo:core/Principal";
 persistent actor {
   public func listing_retries_and_revision_conflicts() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Fixtures.memory());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init());
       let initial = Fixtures.draft(db, "testapp", 0);
       assert Catalog.save(db, Fixtures.owner(), Fixtures.listing("testapp", 0, null), 9) == #ok(initial);
       assert db.listings.size() == 1 and db.apps.size() == 1;
@@ -27,7 +28,7 @@ persistent actor {
 
   public func listing_cannot_publish_another_publishers_private_image() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Fixtures.memory());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init());
       ignore Fixtures.draft(db, "testapp", 0);
       let image = Fixtures.upload(db, "testapp", "private-image", #image);
       let owned = Fixtures.ok(Catalog.save(db, Fixtures.owner(), { Fixtures.listing("testapp", 0, ?1) with iconArtifact = ?image.id }, 3));
@@ -39,7 +40,7 @@ persistent actor {
 
   public func exact_audits_retry_and_revocation_preserve_ownership() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Fixtures.memory());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init());
       ignore Fixtures.draft(db, "testapp", 1_000_000);
       let candidate = Fixtures.candidate(db, "testapp", 100, "submit-1");
       let request = { requestId = "approve-1"; candidateId = candidate.id; expectedDigest = candidate.digest; expectedSourceDigest = candidate.sourceDigest; decision = #approved; analysis = "Inspected exact bytes"; reason = null };
@@ -73,7 +74,7 @@ persistent actor {
 
   public func candidate_idempotency_and_published_version_monotonicity() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Fixtures.memory());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init());
       ignore Fixtures.draft(db, "testapp", 0);
       let lower = Fixtures.candidate(db, "testapp", 100, "lower");
       let higher = Fixtures.candidate(db, "testapp", 101, "higher");
@@ -92,7 +93,8 @@ persistent actor {
   public func rolling_expiry_retries_backlog_and_live_visibility() : async Test.Metrics {
     Test.test(func() {
       let mem = Fixtures.memory();
-      let db = Store.Use(mem);
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(mem, publisherMemory);
       ignore Fixtures.draft(db, "alpha", 0);
       ignore Fixtures.draft(db, "bravo", 0);
       let alpha = Fixtures.approve(db, Fixtures.candidate(db, "alpha", 100, "alpha-package"), "alpha-audit");
@@ -116,7 +118,7 @@ persistent actor {
       let hidden = Fixtures.ok(Rankings.chart(db, #free, #week, null, 1, cutoff));
       assert hidden.entries == [{ appId = "bravo"; score = 1 }];
       ignore Rankings.recordAcquisition(db, { input with owner = Principal.fromText("aaaaa-aa"); appId = "bravo"; orderId = 4; atNs = cutoff });
-      let current = Rankings.advance(Store.Use(mem), cutoff, 10);
+      let current = Rankings.advance(Store.Use(mem, publisherMemory), cutoff, 10);
       assert current.published and current.generation > chart.generation;
       let fresh = Fixtures.ok(Rankings.chart(db, #free, #week, null, 2, cutoff));
       assert fresh.entries == [{ appId = "bravo"; score = 2 }] and not fresh.refreshing;
@@ -129,7 +131,7 @@ persistent actor {
       assert Fixtures.ok(Rankings.chart(db, #paid, #all, null, 10, cutoff + 1)).entries == [{ appId = "bravo"; score = 0 }];
       let ?bravoStats = Store.getRanking(db, "bravo") else { assert false; loop {} };
       assert bravoStats.freeAll == 2 and bravoStats.paidAll == 0;
-      ignore Rankings.advance(Store.Use(mem), cutoff + Rankings.monthNs + 1, 100);
+      ignore Rankings.advance(Store.Use(mem, publisherMemory), cutoff + Rankings.monthNs + 1, 100);
       let ?expiredStats = Store.getRanking(db, "bravo") else { assert false; loop {} };
       assert expiredStats.free7 == 0 and expiredStats.free30 == 0 and expiredStats.freeAll == 2;
     });
@@ -137,7 +139,7 @@ persistent actor {
 
   public func catalog_search_continues_beyond_nonmatching_rank_pages() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Fixtures.memory());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init());
       for (appId in ["alpha", "bravo", "zulu"].vals()) {
         ignore Fixtures.draft(db, appId, 0);
         ignore Fixtures.approve(db, Fixtures.candidate(db, appId, 100, appId # "package"), appId # "approve");
@@ -158,7 +160,8 @@ persistent actor {
   public func public_views_keep_lifetime_free_and_paid_acquisitions_distinct() : async Test.Metrics {
     Test.test(func() {
       let memory = Fixtures.memory();
-      let db = Store.Use(memory);
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory, publisherMemory);
       ignore Fixtures.draft(db, "countedapp", 0);
       let published = Fixtures.approve(db, Fixtures.candidate(db, "countedapp", 100, "counted-package"), "counted-audit");
       assert Views.app(db, Fixtures.owner(), null, published.app).acquisitionCounts == ?{ free = 0; paid = 0 };
@@ -179,7 +182,7 @@ persistent actor {
       let #ok(publisher) = Views.publisherApps(db, Fixtures.owner(), Fixtures.owner(), { cursor = null; limit = 10 }) else { assert false; loop {} };
       assert publisher.apps.size() == 1 and publisher.apps[0].acquisitionCounts == ?{ free = 1; paid = 1 };
       ignore Rankings.advance(db, Rankings.monthNs + 13, 10);
-      let restored = Store.Use(memory);
+      let restored = Store.Use(memory, publisherMemory);
       let ?ranking = Store.getRanking(restored, paidApp.appId) else { assert false; loop {} };
       assert ranking.paid30 == 0 and ranking.free30 == 0;
       assert Views.app(restored, Fixtures.owner(), null, paidApp).acquisitionCounts == ?{ free = 1; paid = 1 };
@@ -189,7 +192,7 @@ persistent actor {
 
   public func private_library_and_earnings_preserve_revoked_ownership() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Fixtures.memory());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init());
       ignore Fixtures.draft(db, "draftapp", 0);
       switch (Views.detail(db, Fixtures.owner(), null, "draftapp")) { case (#err(_)) {}; case _ assert false };
       let #ok(draft) = Views.detail(db, Fixtures.owner(), ?Fixtures.owner(), "draftapp") else { assert false; loop {} };
@@ -211,7 +214,7 @@ persistent actor {
 
   public func operation_history_has_independent_owner_scoped_cursors() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Fixtures.memory());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init());
       for (requestId in ["purchase-old", "purchase-middle", "purchase-new"].vals()) {
         ignore Fixtures.stored(Store.insertOrder(db, {
           owner = Fixtures.owner(); requestId; intentHash = ""; quoteCommitment = ""; ledger = Fixtures.other();

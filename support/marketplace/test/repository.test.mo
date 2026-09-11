@@ -5,6 +5,7 @@ import Encoding "../mo/Encoding";
 import Http "../mo/Http";
 import Repository "../mo/Repository";
 import Store "../mo/Store";
+import PublisherStore "../mo/PublisherStore";
 import Types "../mo/Types";
 import F "motoko/Fixtures";
 import Array "mo:core/Array";
@@ -16,6 +17,7 @@ import Test "mo:test";
 persistent actor RepositoryTests {
   type Context = {
     memory : Store.Mem;
+    publisherMemory : PublisherStore.Mem;
     db : Store.DB;
     certification : Http.Memory;
     repo : Repository.Service;
@@ -24,7 +26,8 @@ persistent actor RepositoryTests {
 
   func setup() : Context {
     let memory = F.memory();
-    let db = Store.Use(memory);
+    let publisherMemory = PublisherStore.init();
+    let db = Store.Use(memory, publisherMemory);
     let certification = Http.init();
     let repo = Repository.Service(db, certification, Principal.fromActor(RepositoryTests));
     let http = Http.Store(certification, {
@@ -34,7 +37,7 @@ persistent actor RepositoryTests {
     });
     http.initialize();
     repo.initialize(http);
-    { memory; db; certification; repo; http };
+    { memory; publisherMemory; db; certification; repo; http };
   };
 
   func accepted<T>(result : API.Result<T>) : T {

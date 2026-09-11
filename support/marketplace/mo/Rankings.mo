@@ -4,6 +4,7 @@ import List "mo:core/List";
 import Iter "mo:core/Iter";
 import Store "Store";
 import Types "Types";
+import Publishers "Publishers";
 
 module {
   public type Kind = { #free; #paid };
@@ -116,6 +117,7 @@ module {
     let ?prior = db.rankings.by_app.lookup(input.appId) else Runtime.trap("Acquisition ranking missing");
     let counters = add(prior, input.kind);
     let id = must(db.acquisitions.insert(input));
+    Publishers.recordAcquisition(db, app.owner, input.owner);
     ignore must(db.rankings.update({ prior with
       free7 = counters.free7; free30 = counters.free30; freeAll = counters.freeAll;
       paid7 = counters.paid7; paid30 = counters.paid30; paidAll = counters.paidAll;

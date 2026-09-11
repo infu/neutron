@@ -1,5 +1,6 @@
 import Catalog "../../mo/Catalog";
 import Store "../../mo/Store";
+import PublisherStore "../../mo/PublisherStore";
 import Fixtures "Fixtures";
 import Array "mo:core/Array";
 import Text "mo:core/Text";
@@ -60,7 +61,7 @@ persistent actor {
   public func listing_text_rejections_preserve_apps_and_listing_history() : async Test.Metrics {
     Test.test(func() {
       for (character in ['a', '🚀'].vals()) {
-        let db = Store.Use(Fixtures.memory());
+        let db = Store.Use(Fixtures.memory(), PublisherStore.init());
         let input = {
           Fixtures.listing("testapp", 0, null) with
           summary = repeated(character, 255); description = repeated(character, 5_000);
@@ -108,7 +109,8 @@ persistent actor {
   public func historical_overlimit_listing_retries_preserve_retained_records() : async Test.Metrics {
     Test.test(func() {
       let memory = Fixtures.memory();
-      let db = Store.Use(memory);
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(memory, publisherMemory);
       let input = {
         Fixtures.listing("legacyapp", 0, ?1) with
         summary = repeated('🚀', 256); description = repeated('🚀', 5_001);
@@ -127,7 +129,7 @@ persistent actor {
         priceUsdMicros = input.priceUsdMicros; iconArtifact = input.iconArtifact;
         screenshots = input.screenshots; createdAtNs = historical.updatedAtNs;
       }));
-      let restored = Store.Use(memory);
+      let restored = Store.Use(memory, publisherMemory);
       assert Catalog.save(restored, Fixtures.owner(), input, 3) == #ok(historical);
       assert restored.apps.size() == 1 and restored.listings.size() == 1;
       assert Store.getApp(restored, input.appId) == ?historical;

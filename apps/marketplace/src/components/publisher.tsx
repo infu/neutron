@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import type { MarketplaceClient, PublicationInput, PublicationQuote, PublishedApp } from "../view-types.ts";
-import { AppIcon, CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, dateLabel, decimalAmount, errorMessage, parseAmount, usd } from "./primitives.tsx";
+import type { MarketplaceClient, PublicationInput, PublicationQuote, PublishedApp, PublisherProfile } from "../view-types.ts";
+import { AppIcon, CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, dateLabel, decimalAmount, errorMessage, parseAmount, usd, useRead } from "./primitives.tsx";
 import { EXCERPT_MAX_CHARACTERS, DESCRIPTION_MAX_CHARACTERS, listingCharacterCount, validateListingText } from "../listing-text.ts";
+import { PublisherIdentity } from "./publisher_profile.tsx";
+import { PublisherLink } from "./app_card.tsx";
+import { PublisherProfileEditor } from "./publisher_profile_editor.tsx";
 
 type Props = {
   client: MarketplaceClient;
   connected: boolean;
   refresh: number;
   onChanged: () => void;
+  publisher?: ((id: string) => void) | undefined;
 };
 type Draft = Omit<PublicationInput, "priceUsdMicros"> & { paid: boolean; price: string };
 type Review = { input: PublicationInput; quote: PublicationQuote };
@@ -34,7 +38,28 @@ function FilePreview({ file, remove }: { file: File; remove: () => void }) {
   </div>;
 }
 
-export function PublisherPanel({ client, connected, refresh, onChanged }: Props) {
+export function PublisherPanel({ client, connected, refresh, onChanged, publisher }: Props) {
+  const [retry, setRetry] = useState(0), [editingProfile, setEditingProfile] = useState(false);
+  const [savedProfile, setSavedProfile] = useState<PublisherProfile | null>(null);
+  const read = useRead(connected ? "own-publisher-profile" : null, async () => ({ profile: await client.ownPublisherProfile() }), refresh + retry);
+  const profile = savedProfile ?? read.data?.profile;
+  useEffect(() => { if (read.data?.profile) setSavedProfile(null); }, [read.data]);
+  function saved(value: PublisherProfile) {
+    setSavedProfile(value); setEditingProfile(false); setRetry(previous => previous + 1);
+    onChanged();
+  }
+  if (!connected) return <EmptyState icon="publish" title="Your publications are unavailable">Retry setup above to load your publications and saved releases.</EmptyState>;
+  if (read.loading && !read.data && !profile) return <Loading label="Loading your publisher profile…" />;
+  if (read.error && !read.data && !profile) return <ErrorNote error={read.error} retry={() => setRetry(previous => previous + 1)} />;
+  if (!profile) return <section className="mp-profile-setup" aria-label="Publisher setup"><ErrorNote error={read.error} retry={() => setRetry(previous => previous + 1)} /><PublisherProfileEditor client={client} profile={null} saved={saved} /></section>;
+  return <div className="mp-stack">
+    <section className="mp-own-profile" aria-label="Your publisher profile"><PublisherIdentity profile={profile} /><div className="mp-own-profile-actions">{publisher && <button type="button" className="mp-text-button" onClick={() => publisher(profile.id)}>View profile</button>}<button type="button" className="mp-secondary" onClick={() => setEditingProfile(true)}>Edit profile</button></div></section>
+    <PublicationsList client={client} connected={connected} refresh={refresh} onChanged={onChanged} publisher={publisher} />
+    {editingProfile && <Modal title="Edit publisher profile" close={() => setEditingProfile(false)}><PublisherProfileEditor client={client} profile={profile} saved={saved} /></Modal>}
+  </div>;
+}
+
+function PublicationsList({ client, connected, refresh, onChanged, publisher }: Props) {
   const [apps, setApps] = useState<PublishedApp[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -165,7 +190,7 @@ export function PublisherPanel({ client, connected, refresh, onChanged }: Props)
     <ErrorNote error={readError} retry={() => setReload((value) => value + 1)} />
     {loading ? <Loading label="Loading your publications…" /> : apps.length === 0 && !readError ? <EmptyState icon="publish" title="Your first app starts here">Add your package, screenshots and a description. You can offer it for free or set a price from $1 to $50.</EmptyState> : <div className="mp-publisher-list">
       {apps.map((app) => <article key={app.id} className="mp-publisher-card">
-        <div className="mp-publisher-card-main"><AppIcon app={app} /><div className="mp-publisher-card-copy"><h3>{app.title}</h3><p className="mp-muted">{app.id}{app.version ? ` · v${app.version}` : ""} · {usd(app.priceUsdMicros)}</p></div><span className={`mp-status mp-status-${app.status}`}>{statusLabels[app.status]}</span></div>
+        <div className="mp-publisher-card-main"><AppIcon app={app} /><div className="mp-publisher-card-copy"><h3>{app.title}</h3>{publisher && <PublisherLink app={app} open={publisher} />}<p className="mp-muted">{app.id}{app.version ? ` · v${app.version}` : ""} · {usd(app.priceUsdMicros)}</p></div><span className={`mp-status mp-status-${app.status}`}>{statusLabels[app.status]}</span></div>
         {app.rejectionReason && <div className="mp-review-feedback"><strong>{app.status === "revoked" ? "Why this release is unavailable" : "Reviewer feedback"}</strong><p>{app.rejectionReason}</p></div>}
         <div className="mp-publisher-card-footer"><span className="mp-muted">{app.coverageEndsAt ? `Prepaid storage through ${dateLabel(app.coverageEndsAt)}` : app.summary}</span><button type="button" className="mp-text-button" disabled={editorBusy || retainedDraft} onClick={() => openEditor(app)}>Manage</button></div>
       </article>)}

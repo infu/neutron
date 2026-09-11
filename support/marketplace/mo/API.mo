@@ -10,6 +10,15 @@ module {
   public type Tier = { #free; #paid };
   public type Cursor = { generation : Nat64; offset : Nat };
   public type PageRequest = { cursor : ?Nat64; limit : Nat };
+  public type PublisherSummary = { publisherId : Text; name : Text };
+  public type PublisherProfile = {
+    publisherId : Text; name : Text; description : Text; principal : Principal;
+    ratingCount : Nat; ratingTotal : Nat; totalUsers : Nat; statsComplete : Bool;
+    createdAtNs : Int; updatedAtNs : Int;
+  };
+  public type PublisherRegister = { publisherId : Text; name : Text; description : Text; feeVersion : Nat };
+  public type PublisherUpdate = { description : Text; feeVersion : Nat };
+  public type PublisherPageRequest = { publisherId : Text; cursor : ?Nat64; limit : Nat };
   public type CatalogRequest = {
     search : Text;
     tier : Tier;
@@ -20,6 +29,7 @@ module {
   public type App = {
     appId : Text;
     publisher : Principal;
+    publisherProfile : ?PublisherSummary;
     title : Text;
     summary : Text;
     description : Text;

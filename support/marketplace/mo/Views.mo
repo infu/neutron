@@ -3,6 +3,7 @@ import API "API";
 import Access "Access";
 import Catalog "Catalog";
 import Rankings "Rankings";
+import Publishers "Publishers";
 import Store "Store";
 import Types "Types";
 import List "mo:core/List";
@@ -31,6 +32,7 @@ module {
     };
     {
       appId = record.appId; publisher = record.owner; title = record.title;
+      publisherProfile = Publishers.summary(db, record.owner);
       summary = record.summary; description = record.description; priceUsdMicros = record.priceUsdMicros;
       revision = record.revision; version; iconArtifact = record.iconArtifact;
       iconUrl = switch (record.iconArtifact) { case null null; case (?id) imageUrl(db, source, id) };
@@ -132,6 +134,26 @@ module {
         List.add(apps, app(db, source, ?owner, record));
         last := ?record.id;
       };
+    };
+    #ok({ apps = List.toArray(apps); nextCursor = null });
+  };
+
+  public func publicPublisherApps(db : Store.DB, source : Principal, viewer : ?Principal, request : API.PublisherPageRequest) : API.Result<API.AppPage> {
+    if (request.limit == 0) return failure("invalid_page", "Choose a positive publisher page size.");
+    let profile = switch (Publishers.profile(db, request.publisherId)) {
+      case (#err(value)) return #err(value);
+      case (#ok(value)) value;
+    };
+    let apps = List.empty<API.App>();
+    var last = request.cursor;
+    // Seek directly into this publisher's ownership index. Skip unaudited or
+    // hidden rows without exposing them, including on a publisher's own page.
+    for ((cursor, record) in db.publisherApps(profile.principal, request.cursor)) {
+      if (Catalog.eligible(db, record)) {
+        if (List.size(apps) == request.limit) return #ok({ apps = List.toArray(apps); nextCursor = last });
+        List.add(apps, app(db, source, viewer, record));
+      };
+      last := ?cursor;
     };
     #ok({ apps = List.toArray(apps); nextCursor = null });
   };

@@ -86,13 +86,13 @@ test("adaptive agent history reads keep invocation context, sync once, and retur
   const ctx = context(), handlers = createHistoryToolHandlers();
   const original = ctx.value.kernel.querySelf;
   const cursor = { ledger: LEDGER, timestamp_ns: "1788900000000000000", kind_order: "0", id: ID };
-  ctx.value.kernel.querySelf = async (method, args) => {
+  ctx.value.kernel.querySelf = (async (method, args = []) => {
     if (method !== "wallet_history_page") return original(method, args);
     ctx.calls.push([method, args]);
     const request = args[0] as JsonObject;
     if (Number(request.limit) > 12) throw new Error("Self-call result exceeds the metadata byte limit");
     return { records: [], next: { ...cursor, kind_order: 0, id: "100" }, has_more: true, inspected: "1000" };
-  };
+  }) as typeof original;
   const result = await handlers.history({ refresh: true, ledger: LEDGER, cursor }, ctx.value);
   expect(result.error).toBeNull();
   expect(result.hasMore).toBe(true);

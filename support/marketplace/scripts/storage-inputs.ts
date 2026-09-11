@@ -12,6 +12,7 @@ interface StorageInputs {
   generatedManifestSha256: string;
   runtimeManifestSha256: string;
   runtimePatchSha256: string;
+  publishers: { schemaSha256: string; generatedManifestSha256: string };
 }
 const digest = (value: Uint8Array): string => createHash("sha256").update(value).digest("hex");
 
@@ -52,12 +53,18 @@ export async function ensureStorageInputs(projectRoot: string): Promise<Record<s
   if (receipt.format !== "marketplace-private-storage-inputs-v1" || !/^[0-9a-f]{40}$/u.test(receipt.ashrootRevision)) {
     throw new Error("Invalid marketplace private storage-input receipt");
   }
+  if (!receipt.publishers || !/^[0-9a-f]{64}$/u.test(receipt.publishers.schemaSha256) ||
+      !/^[0-9a-f]{64}$/u.test(receipt.publishers.generatedManifestSha256)) {
+    throw new Error("Marketplace publisher storage inputs are not prepared");
+  }
   await verifiedFile(path.join(root, "ashroot.json"), receipt.schemaSha256);
+  await verifiedFile(path.join(root, ".private/publishers/ashroot.json"), receipt.publishers.schemaSha256);
   await verifiedFile(path.join(root, ".private/ashroot-no-expiry.patch"), receipt.runtimePatchSha256);
   const runtime = path.join(root, ".private/ashroot");
   await Promise.all([
     verifyManifest(path.join(root, ".ashroot"), "manifest.json", receipt.generatedManifestSha256),
     verifyManifest(runtime, ".ashroot-runtime.json", receipt.runtimeManifestSha256),
+    verifyManifest(path.join(root, ".private/publishers/.ashroot"), "manifest.json", receipt.publishers.generatedManifestSha256),
   ]);
   return { ashroot: runtime };
 }

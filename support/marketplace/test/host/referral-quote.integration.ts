@@ -123,6 +123,9 @@ export const cases: IntegrationCase[] = [{
       await env.pic.installCode({ canisterId, wasm: gzipSync(previous, { level: 9 }), arg });
       const ctx = actors(canisterId);
       const referrals = await seedAccess(ctx);
+      // The archived predecessor predates publisher profiles. Same-module
+      // initialization must satisfy the current publishing prerequisite.
+      if (!previousPath) success(await ctx.publisher.publisher_profile_register({ publisherId: "referralpublisher", name: "Referral publisher", description: "Retained referral fixture", feeVersion: 1n }));
       const appId = "retained_referral";
       success(await ctx.publisher.listing_save({
         appId, title: "Retained app", summary: "Referral upgrade fixture", description: "Retains listing, approval, ownership and attribution.",

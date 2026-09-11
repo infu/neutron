@@ -19,7 +19,7 @@ owner-trusted apps and live agents, not a cold-storage boundary against the
 installed Wallet package. Installing or updating Wallet is therefore a
 consequential trust decision.
 
-Release 327 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
+Release 328 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
 All eight released version-1 roots and their lineage remain unchanged, including
 the `wallet_refills` journal added in release 326.
 

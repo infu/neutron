@@ -16,6 +16,7 @@ import Ledger "../../mo/Ledger";
 import Journal "../../mo/PaymentStore";
 import Purchases "../../mo/Purchases";
 import Quotes "../../mo/Quotes";
+import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
 
@@ -23,7 +24,8 @@ persistent actor class EvmPaymentHarness(config : Types.Config, ledgerId : Princ
   let memory = Store.init(config);
   var failRevenueFinalization = false;
   var failGrant = false;
-  transient let db = Store.Use(memory);
+  let publisherMemory = PublisherStore.init();
+  transient let db = Store.Use(memory, publisherMemory);
   transient let marketplace = Principal.fromActor(self);
   transient let ledger : Ledger.Client = {
     transfer = func(expected : Principal, args : Ledger.TransferArgs) : async* Ledger.Outcome {

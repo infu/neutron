@@ -49,6 +49,10 @@ export const cases: IntegrationCase[] = [{
       const browser = caller(browserPrincipal);
       const auditor = caller(auditorPrincipal);
       const charged = async (neutron: any, name: string, arg: unknown) => succeeded(await relayCall(neutron, marketplace, name, [arg], 1_000_000_000n));
+      // Registration is explicit so the following tests still exercise the
+      // listing's reservation and cycle boundaries rather than a missing profile.
+      await charged(publisher, "publisher_profile_register", { publisherId: "publisher", name: "Test publisher", description: "Protocol fixture publisher", feeVersion: 1n });
+      await charged(buyer, "publisher_profile_register", { publisherId: "buyer", name: "Test buyer", description: "Reservation boundary fixture", feeVersion: 1n });
       const listing = { appId: "test_free", title: "Test free app", summary: "Local fixture listing", description: "Local integration artifact", priceUsdMicros: 0n, iconArtifact: [], screenshots: [], expectedRevision: [], feeVersion: 1n };
       assert.ok("err" in await relayCall(buyer, marketplace, "listing_save", [{ ...listing, appId: "reserved_app" }], 1_000_000_000n), "Initial app-ID reservations prevent another Neutron taking an existing publisher's ID");
       assert.ok("err" in await browser.listing_save(listing), "Browser ingress cannot create a charged listing");

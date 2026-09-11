@@ -47,7 +47,9 @@ Uninstall still removes app-local journals and browser signing data.
   descriptions, screenshots and the release's audit under **Audited by AI**,
   including its actual auditor and analysis. Cards and app details show lifetime
   paid-purchase or free-acquisition counts; reinstalls and retries do not add to
-  them. Listing icons and screenshots are served from the marketplace. Checkout
+  them. The publisher ID beneath an app's name opens its profile, description,
+  principal, portfolio rating, total users and audited apps. Listing icons and
+  screenshots are served from the marketplace. Checkout
   shows the token price, ledger fees, referral discount, developer/affiliate
   shares and allocation toward burning NTN before purchase. **Discount code**
   validates an affiliate code directly with the protocol and remembers it in
@@ -66,8 +68,11 @@ Uninstall still removes app-local journals and browser signing data.
   control reopens the saved selection. **Refresh cost** retains the original request. **Prepare latest selection**
   explicitly reviews a new request if the old release is unavailable or newer
   releases are wanted. Installed apps update through Neutron Settings.
-- **Publish:** create or edit a listing, attach a `.neutron` package and matching
-  offered source, and add an icon or screenshots. List prices are free or
+- **Publish:** first set up this Neutron's publisher profile. Choose an available
+  ID containing 3–20 lowercase letters (`a`–`z`) and a public name. The ID and name
+  are permanent; the description can be edited later. Review the profile's cycle
+  charge before saving. Then create or edit a listing, attach a `.neutron` package
+  and matching offered source, and add an icon or screenshots. List prices are free or
   $1–$50 before discounts. Review upload costs before submitting; uploads prepay
   the first year of storage, and the operator funds storage afterward without
   annual renewal. Rejected submissions display the auditor's reason.
@@ -85,6 +90,13 @@ owner can leave one editable rating. Upload review retains the selected files
 and quote while the app remains open, including when switching tabs; use
 **Continue this upload** after an interrupted reply.
 
+A publisher's total users counts distinct Neutron principals that acquired at
+least one of its apps, free or paid. Acquiring another app from that publisher,
+reinstalling or retrying does not add another user. The portfolio rating combines
+all of its apps' review totals and review counts, so each review has equal weight;
+it is not an unweighted average of app ratings. These statistics are maintained
+when acquisitions and ratings change, so profile reads do not scan the portfolio.
+
 ## Agent tools and recovery
 
 Tools are exposed on `app:marketplace:background`. Inspect their current schemas
@@ -93,6 +105,7 @@ before calling them; atomic amounts are decimal strings.
 | Tools | Purpose |
 |---|---|
 | `marketplace_catalog_v1`, `marketplace_app_v1` | Discover and inspect apps |
+| `marketplace_publisher_v1` | Read a publisher profile, aggregate statistics and a page of audited apps |
 | `marketplace_library_v1`, `marketplace_earnings_v1` | Read owned apps and earnings |
 | `marketplace_discount_v1` | Read and validate the remembered discount and current terms |
 | `marketplace_connect_v1` | Restore automatic browser read access through this Neutron |
@@ -103,6 +116,14 @@ before calling them; atomic amounts are decimal strings.
 | `marketplace_withdraw_v1` | Review and withdraw earnings |
 | `marketplace_install_quote_v1`, `marketplace_install_v1` | Quote exact preparation cycles and offer installation with scoped owner/Root review |
 | `marketplace_rate_v1` | Rate acquired apps |
+
+`marketplace_publisher_v1` accepts the permanent `publisherId` and an optional
+`cursor`; follow `nextCursor` to read more apps. It returns the principal, permanent
+ID and name, editable description, review-weighted rating and distinct acquiring
+Neutron count. `totalUsers` is an exact decimal string. If `statsComplete` is false,
+historical counters are still rebuilding; the partial values do not establish a
+zero audience or a final rating. Profile and app-page queries go directly to the
+protocol; checking installation status uses the existing Kernel app list.
 
 For a new IC or Ethereum purchase, omitting `affiliateCode` uses this Neutron's
 remembered discount. An explicit empty string buys without a code for that

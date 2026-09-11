@@ -7,9 +7,9 @@ import { readIdentity, readState, configureState, readDiscountCode, saveDiscount
 import { createDiscountPreferences, type ReferralQuote } from "./discount.ts";
 import { makeAgent, makeTransport } from "./transport.ts";
 import { readAccess } from "./read_access.ts";
-import { CONTRACT, first, some, encodeOpaque, checkoutType, withdrawalType, type Info, type WireApp, type Fee, type Checkout, type WithdrawQuote, type WireResult, type Option, type Token } from "./protocol.ts";
+import { CONTRACT, first, some, encodeOpaque, checkoutType, withdrawalType, type Info, type WireApp, type WirePublisherProfile, type Fee, type Checkout, type WithdrawQuote, type WireResult, type Option, type Token } from "./protocol.ts";
 import { readWalletTokenInfo } from "./wallet.ts";
-import type { AppDetail, AppListing, Page, LibraryApp, PublishedApp, Earnings, Session, Money, CycleEstimate, OperationResult, PurchaseQuote, WithdrawalQuote, PaymentToken, AppTier, RankingWindow } from "./view-types.ts";
+import type { AppDetail, AppListing, Page, LibraryApp, PublishedApp, PublisherProfile, PublisherProfileInput, PublisherProfileQuote, Earnings, Session, Money, CycleEstimate, OperationResult, PurchaseQuote, WithdrawalQuote, PaymentToken, AppTier, RankingWindow } from "./view-types.ts";
 
 export class ProtocolError extends Error { constructor(public readonly code: string, message: string) { super(message); } }
 export function response<T>(value: { ok: T } | { err: { code: string; message: string } }): T {
@@ -20,6 +20,20 @@ export function randomId(): string { return [...crypto.getRandomValues(new Uint8
 export function date(ns: bigint): string { return new Date(Number(ns / 1_000_000n)).toISOString(); }
 export function hex(value: Uint8Array): string { return [...value].map(x => x.toString(16).padStart(2, "0")).join(""); }
 export function cycleView(fee: Fee): CycleEstimate { return { total: String(fee.totalCycles), processing: String(fee.processingCycles), storage: String(fee.storageCycles), schedule: String(fee.feeVersion) }; }
+export function publisherView(profile: WirePublisherProfile): PublisherProfile {
+  return { id: profile.publisherId, name: profile.name, description: profile.description, principal: profile.principal.toText(),
+    rating: profile.statsComplete && profile.ratingCount > 0n ? Number(profile.ratingTotal) / Number(profile.ratingCount) : null,
+    ratingCount: Number(profile.ratingCount), totalUsers: String(profile.totalUsers), statsComplete: profile.statsComplete };
+}
+export function publisherInput(input: PublisherProfileInput): PublisherProfileInput {
+  if (typeof input?.id !== "string" || !/^[a-z]{3,20}$/.test(input.id)) throw new Error("Publisher ID must contain 3–20 lowercase letters, with no numbers or spaces.");
+  // Match the protocol's canonicalization; editing a description must not
+  // silently normalize a permanent name registered through another client.
+  const name = typeof input.name === "string" ? input.name.replace(/^[\p{White_Space}\uFEFF]+|[\p{White_Space}\uFEFF]+$/gu, "") : "";
+  if (!name) throw new Error("Enter a publisher name. It will be permanent.");
+  if (typeof input.description !== "string") throw new Error("Enter a publisher description.");
+  return { id: input.id, name, description: input.description };
+}
 export function money(token: Token, value: bigint): Money { return { atoms: String(value), decimals: token.decimals, symbol: token.symbol }; }
 export function operationView(result: WireResult): OperationResult {
   const operation = result.order ?? result.withdrawal;
@@ -159,7 +173,19 @@ export async function protocolClient(context: MsgBusToolContext) {
   function listing(value: WireApp, installed?: ReadonlySet<string> | null): AppListing {
     const icon = first(value.iconUrl);
     const counts = first(value.acquisitionCounts ?? []);
-    return { id: value.appId, title: value.title, summary: value.summary, category: "Apps", publisher: value.publisher.toText(), priceUsdMicros: String(value.priceUsdMicros), ...(icon ? { iconUrl: artifactUrl(icon) } : {}), version: String(first(value.version) ?? 0n), rating: value.ratingCount ? Number(value.ratingTotal) / Number(value.ratingCount) : null, ratingCount: Number(value.ratingCount), ...(counts ? { freeAcquisitions: String(counts.free), paidPurchases: String(counts.paid) } : {}), owned: value.owned, ...(installed ? { installed: installed.has(value.appId) } : {}) };
+    const publisher = first(value.publisherProfile ?? []);
+    return { id: value.appId, title: value.title, summary: value.summary, category: "Apps", publisher: value.publisher.toText(), publisherId: publisher?.publisherId ?? null, publisherName: publisher?.name ?? null, priceUsdMicros: String(value.priceUsdMicros), ...(icon ? { iconUrl: artifactUrl(icon) } : {}), version: String(first(value.version) ?? 0n), rating: value.ratingCount ? Number(value.ratingTotal) / Number(value.ratingCount) : null, ratingCount: Number(value.ratingCount), ...(counts ? { freeAcquisitions: String(counts.free), paidPurchases: String(counts.paid) } : {}), owned: value.owned, ...(installed ? { installed: installed.has(value.appId) } : {}) };
+  }
+  async function ownPublisherProfile(): Promise<PublisherProfile | null> {
+    const value = first(await query<Option<WirePublisherProfile>>("publisher_profile_for", [Principal.fromText(state.owner)]));
+    return value ? publisherView(value) : null;
+  }
+  async function profileWrite(input: PublisherProfileInput) {
+    const values = publisherInput(input), existing = await ownPublisherProfile();
+    if (existing && (existing.id !== values.id || existing.name !== values.name)) throw new Error("This Neutron already has a publisher profile. Its ID and name cannot be changed.");
+    const method = existing ? "publisher_profile_update" : "publisher_profile_register";
+    const request = existing ? { description: values.description } : { publisherId: values.id, name: values.name, description: values.description };
+    return { existing, values, method, request, fee: await estimateUpdate(method, request) };
   }
   async function detailWire(appId: string): Promise<Detail> { return query("app_detail", [appId]); }
   async function detail(appId: string): Promise<AppDetail> {
@@ -202,6 +228,32 @@ export async function protocolClient(context: MsgBusToolContext) {
     return { operationId: quote.request.requestId, token: selected.symbol as PaymentToken, destination: quote.request.to.owner.toText(), debit: money(selected, quote.request.totalDebit), fee: money(selected, quote.fee), receive: money(selected, quote.netAmount), cycles: cycleView(quote.cycles), warnings: [], opaque: encodeOpaque(withdrawalType, quote) };
   }
   return { state, transport, info, token, query, fee, update,
+    ownPublisherProfile,
+    async publisherProfile(id: string): Promise<PublisherProfile> { return publisherView(await query<WirePublisherProfile>("publisher_profile", [id])); },
+    async publisherCatalog(id: string, cursor?: string): Promise<Page<AppListing>> {
+      const [value, installed] = await Promise.all([
+        query<{ apps: WireApp[]; nextCursor: Option<bigint> }>("publisher_profile_apps", [{ publisherId: id, cursor: cursor ? [BigInt(cursor)] : [], limit: 24n }]),
+        installedApps(context),
+      ]);
+      return { items: value.apps.filter(app => app.appId !== "kernel" && app.appId !== "marketplace").map(app => listing(app, installed)), nextCursor: first(value.nextCursor)?.toString() ?? null,
+        ...(installed === null ? { warning: "Installed-app status is unavailable." } : {}) };
+    },
+    async quotePublisherProfile(input: PublisherProfileInput): Promise<PublisherProfileQuote> {
+      const prepared = await profileWrite(input);
+      return { input: prepared.values, operation: prepared.existing ? "update" : "register", cycles: cycleView(prepared.fee) };
+    },
+    async savePublisherProfile(input: PublisherProfileInput, quote: PublisherProfileQuote): Promise<PublisherProfile> {
+      const prepared = await profileWrite(input), current = cycleView(prepared.fee);
+      if (!quote || !quote.input || quote.input.id !== prepared.values.id || quote.input.name !== prepared.values.name || quote.input.description !== prepared.values.description || !["register", "update"].includes(quote.operation)) throw new Error("The publisher details changed. Review them again before saving.");
+      // An interrupted registration stays a registration. It must not become
+      // a description edit that could undo a newer edit by the same publisher.
+      if (quote.operation === "register" && prepared.existing) return prepared.existing;
+      if (quote.operation === "update" && !prepared.existing) throw new Error("The original publisher profile is unavailable. Refresh before editing it.");
+      if (prepared.existing?.description === prepared.values.description) return prepared.existing;
+      const shown = quote.cycles;
+      if (!shown || current.total !== shown.total || current.processing !== shown.processing || current.storage !== shown.storage || current.schedule !== shown.schedule) throw new Error("The profile update cost changed. Review it again before saving.");
+      return publisherView(await update<WirePublisherProfile>(prepared.method, prepared.request, prepared.fee));
+    },
     discount: () => preference.discount(discountAccess),
     setDiscountCode: (code: string) => preference.set(discountAccess, code),
     purchaseCode: (explicit: string | undefined) => preference.purchaseCode(discountAccess, explicit), estimateUpdate, grantSourceAccess, listing, detailWire, detail, purchaseView, withdrawalView,

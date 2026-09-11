@@ -1,6 +1,7 @@
 import Test "mo:test";
 import Principal "mo:core/Principal";
 import Store "../mo/Store";
+import PublisherStore "../mo/PublisherStore";
 import Types "../mo/Types";
 import Rates "../mo/Rates";
 import Journal "../mo/PaymentStore";
@@ -14,7 +15,7 @@ persistent actor {
             fees = { version = 1; updateBase = 0; updateByte = 0; storageByteYear = 0; purchase = 0; withdraw = 0; grant = 0; xrc = 1_000_000_000 };
             referralTerms = { version = 1; discountBps = 1_000; affiliateBps = 3_000; developerBps = 3_000 };
         };
-        (Store.Use(Store.init(config)), token);
+        (Store.Use(Store.init(config), PublisherStore.init()), token);
     };
     func rate(symbol : Text, at : Nat64, value : Nat64) : Rates.ExchangeRate {
         { base_asset = { symbol; class_ = #Cryptocurrency }; quote_asset = { symbol = "USD"; class_ = #FiatCurrency };

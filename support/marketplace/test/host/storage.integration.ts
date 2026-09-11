@@ -28,6 +28,17 @@ export const cases: IntegrationCase[] = [{
     }
   },
 }, {
+  name: "publisher ownership pagination retains sparse IDs and reused storage slots",
+  scope: "fixture",
+  async run() {
+    const { pic, shutdown } = await session();
+    try {
+      const { actor } = await installFixture(pic, "storage_fixture", "test/fixtures/Storage.mo");
+      await actor.seed();
+      assert.equal(await actor.checkPublisherPagination(), true);
+    } finally { await shutdown(); }
+  },
+}, {
   name: "storage allocation failure rolls back accepted cycles and partial state",
   scope: "fixture",
   async run() {

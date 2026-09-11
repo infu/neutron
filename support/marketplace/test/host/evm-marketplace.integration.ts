@@ -79,6 +79,7 @@ export const cases: IntegrationCase[] = [{
       const browser = as(browserPrincipal), auditor = as(auditorPrincipal);
       const charged = async (neutron: any, name: string, arg: unknown, cycles = 1_000_000_000n) => success(await relayCall(neutron, market, name, [arg], cycles));
       const earnings = async (owner: any) => success(await relayCall(owner, market, "earnings_query", []));
+      await charged(publisher, "publisher_profile_register", { publisherId: "evmpublisher", name: "EVM fixture publisher", description: "Ethereum checkout fixture", feeVersion: 1n });
       await charged(buyer, "read_delegate_set", { browser: browserPrincipal, active: true, feeVersion: 1n });
 
       async function publish(appId: string, byte: number) {

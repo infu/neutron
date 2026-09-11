@@ -26,7 +26,7 @@ const fixture = `
   };
   const rejected: PublishedApp = {
     id: 'field-notes', title: 'Field Notes', summary: 'Organize notes in your workspace.',
-    category: 'Productivity', publisher: 'fixture-publisher', priceUsdMicros: '1999999',
+    category: 'Productivity', publisher: 'fixture-publisher', publisherId: 'aae', publisherName: 'AAE', priceUsdMicros: '1999999',
     version: '3', rating: null, ratingCount: 0, status: 'rejected',
     rejectionReason: 'Source archive does not match the submitted package. Include the matching source and submit a corrected release.',
   };
@@ -41,6 +41,9 @@ const fixture = `
     quoteInstallation: async (appIds, operationId) => ({operationId: operationId ?? '11111111111111111111111111111111', appIds: [...appIds], canisterId: 'rrkah-fqaaa-aaaaa-aaaaq-cai', owner: '3rurp-vyaaa-aaaay-aacua-cai', cycles: {total: '1100000', processing: '1100000', schedule: 'fixed-fixture'}, fee: {feeVersion: '1', processingCycles: '1100000', storageCycles: '0', totalCycles: '1100000', processingBytes: '1024', newStorageBytes: '0'}}),
     install: () => unexpected('install'), rate: () => unexpected('rate'),
     quoteWithdrawal: () => unexpected('quoteWithdrawal'), withdraw: () => unexpected('withdraw'),
+    ownPublisherProfile: async () => ({id: 'aae', name: 'AAE', description: 'Apps for your Neutron.', principal: '3rurp-vyaaa-aaaay-aacua-cai', rating: 4.5, ratingCount: 12, totalUsers: '14', statsComplete: true}),
+    publisherProfile: () => unexpected('publisherProfile'), publisherCatalog: () => unexpected('publisherCatalog'),
+    quotePublisherProfile: () => unexpected('quotePublisherProfile'), savePublisherProfile: () => unexpected('savePublisherProfile'),
     publisherApps: async (cursor) => {
       state.pageRequests.push(cursor ?? null);
       return cursor ? {items: [other], nextCursor: null} : {items: [rejected], nextCursor: 'page-2'};

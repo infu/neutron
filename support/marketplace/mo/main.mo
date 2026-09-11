@@ -27,6 +27,8 @@ import Jobs "./Jobs";
 import Ledger "./Ledger";
 import Operations "./Operations";
 import Publishing "./Publishing";
+import Publishers "./Publishers";
+import PublisherStore "./PublisherStore";
 import Rankings "./Rankings";
 import Rates "./Rates";
 import Ratings "./Ratings";
@@ -37,11 +39,12 @@ import Types "./Types";
 import Views "./Views";
 
 persistent actor class Marketplace(initial : Types.Init) = this {
-  // These two roots are retained on upgrades. Constructors never substitute
+  // These roots are retained on upgrades. Constructors never substitute
   // new data for an existing root, and no reinstall path is used for releases.
-  let memory = Initialization.memory(initial, Time.now());
+  let publisherMemory = PublisherStore.init();
+  let memory = Initialization.memory(initial, Time.now(), publisherMemory);
   let certificationMemory = Http.init();
-  transient let db = Store.Use(memory);
+  transient let db = Store.Use(memory, publisherMemory);
   transient let source = Principal.fromActor(this);
   transient let operations = Operations.Service(db, source, Time.now);
   transient let repository = Repository.Service(db, certificationMemory, source);
@@ -137,6 +140,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
         maintenanceActive := true;
         try {
           await async {
+            ignore Publishers.advance(db, 500);
             ignore await* jobs.tick();
             // This is an internal work batch, not a limit on purchases or apps.
             // A backlog retains its coherent generation until caught up.
@@ -166,6 +170,9 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     });
   };
   validateConfig();
+  // Bounded, idempotent backfill also runs on upgrades. Existing purchases and
+  // ratings remain authoritative; reads never rebuild portfolio statistics.
+  ignore Publishers.advance(db, 500);
   http.initialize();
   repository.initialize(http);
   armTimer<system>();
@@ -199,6 +206,25 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     Views.publisherApps(db, source, owner, request);
   };
+  public query func publisher_profile(publisherId : Text) : async API.Result<API.PublisherProfile> {
+    Publishers.profile(db, publisherId);
+  };
+  public query func publisher_profile_for(owner : Principal) : async API.Result<?API.PublisherProfile> {
+    #ok(Publishers.profileFor(db, owner));
+  };
+  public shared query ({ caller }) func publisher_profile_apps(request : API.PublisherPageRequest) : async API.Result<API.AppPage> {
+    Views.publicPublisherApps(db, source, viewer(caller), request);
+  };
+  public shared ({ caller }) func publisher_profile_register(request : API.PublisherRegister) : async API.Result<API.PublisherProfile> {
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    Publishers.register(db, owner, request, Time.now());
+  };
+  public shared ({ caller }) func publisher_profile_update(request : API.PublisherUpdate) : async API.Result<API.PublisherProfile> {
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    Publishers.update(db, owner, request.description, Time.now());
+  };
   public shared query ({ caller }) func earnings_query() : async API.Result<API.Earnings> {
     let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     #ok(Views.earnings(db, owner));
@@ -210,6 +236,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   };
   public shared ({ caller }) func listing_save(request : API.ListingRequest) : async API.Result<API.App> {
     let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (Publishers.requireProfile(db, owner)) { case (#err(value)) return #err(value); case (_) {} };
     switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     let visible = switch (Store.getApp(db, request.appId)) { case null true; case (?value) value.visible };
     switch (Catalog.save(db, owner, { request with visible }, Time.now())) {
@@ -322,6 +349,11 @@ persistent actor class Marketplace(initial : Types.Init) = this {
 
   public shared ({ caller }) func upload_begin(request : API.UploadBegin) : async API.Result<API.UploadStatus> {
     let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    // An existing upload can still resume after upgrading from profile-less
+    // releases. Only creating a new publication requires profile setup.
+    if (Store.getUploadByRequest(db, owner, request.requestId) == null) {
+      switch (Publishers.requireProfile(db, owner)) { case (#err(value)) return #err(value); case (_) {} };
+    };
     let bytes = switch (Assets.estimateNewStorage(db, owner, request)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     let estimate = Billing.quote(Store.config(db).fees, #upload, Blob.size(to_candid(request)), bytes);
     if (Access.isTrustedPublisher(db, caller)) {
@@ -354,6 +386,9 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   };
   public shared ({ caller }) func candidate_submit(request : API.CandidateRequest) : async API.Result<Types.Candidate> {
     let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    if (Store.getCandidateByRequest(db, owner, request.requestId) == null) {
+      switch (Publishers.requireProfile(db, owner)) { case (#err(value)) return #err(value); case (_) {} };
+    };
     switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     switch (Publishing.submit(db, owner, request, Time.now())) {
       case (#err(message)) failure("candidate", message);

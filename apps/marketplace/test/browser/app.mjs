@@ -32,7 +32,7 @@ const entries=[
  ['focus','Focus','A considered space for your best work.','1999999'],
  ['folio','Folio','Your portfolio, beautifully in view.','5000000'],
 ];
-const listing=([id,title,summary,priceUsdMicros])=>({id,title,summary,priceUsdMicros,category:'Productivity',publisher:principal,version:'3',rating:id==='studio'?null:4.8,ratingCount:id==='studio'?0:42,owned:state.owned.includes(id),installed:state.installed.includes(id),freeAcquisitions:priceUsdMicros==='0'?'42':'0',paidPurchases:priceUsdMicros==='0'?'0':'1234'});
+const listing=([id,title,summary,priceUsdMicros])=>({id,title,summary,priceUsdMicros,category:'Productivity',publisher:principal,publisherId:'aae',publisherName:'AAE',version:'3',rating:id==='studio'?null:4.8,ratingCount:id==='studio'?0:42,owned:state.owned.includes(id),installed:state.installed.includes(id),freeAcquisitions:priceUsdMicros==='0'?'42':'0',paidPurchases:priceUsdMicros==='0'?'0':'1234'});
 const money=atoms=>({atoms,decimals:6,symbol:'ckUSDC'});
 const cycles={total:'1100000',processing:'1100000',schedule:'fixed-v1'};
 const quote=(args)=>{
@@ -50,6 +50,10 @@ const client={
  detail:async id=>({...listing(entries.find(x=>x[0]===id)),description:${JSON.stringify(listingDescription)},screenshots:[],audit:{auditor:principal,verdict:'approved',analysis:'The submitted package was checked for malware. No malicious behavior was found in this review.',date:'2026-09-10T00:00:00Z',packageHash:'a'.repeat(64)},ownRating:null}),
  library:async()=>({items:entries.filter(x=>state.owned.includes(x[0])).map(x=>({...listing(x),acquiredAt:'2026-09-10',installedVersion:state.installed.includes(x[0])?'1':null,available:true})),nextCursor:null}),
  publisherApps:async()=>({items:[],nextCursor:null}),
+ ownPublisherProfile:async()=>({id:'aae',name:'AAE',description:'Apps for your Neutron.',principal,rating:4.8,ratingCount:42,totalUsers:'1234',statsComplete:true}),
+ publisherProfile:async()=>({id:'aae',name:'AAE',description:'Apps for your Neutron.',principal,rating:4.8,ratingCount:42,totalUsers:'1234',statsComplete:true}),
+ publisherCatalog:async()=>({items:entries.map(listing),nextCursor:null}),
+ quotePublisherProfile:async()=>{throw Error('Unexpected profile quote')},savePublisherProfile:async()=>{throw Error('Unexpected profile update')},
  quotePublication:async()=>{throw Error('Unexpected publication')},publish:async()=>{throw Error('Unexpected publication')},
  quotePurchase:async input=>{const args={...input,affiliateCode:input.affiliateCode===undefined?(state.discountCode||''):input.affiliateCode};state.calls.push(['quotePurchase',args]);return quote(args)},
  purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);if(state.cancelPurchase==='ic')return {operationId:q.operationId,state:'failed',nextAction:'none',checkoutCanceled:true,message:'The Wallet approval was declined. No purchase payment was requested.'};if(state.cancelPurchase)return {operationId:q.operationId,state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'};return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
@@ -89,6 +93,16 @@ try {
   page = await browser.newPage({ viewport: { width: 960, height: 760 } });
   page.on("pageerror", error => errors.push(String(error)));
   await page.route("**/*", route => route.request().url().startsWith(url) ? route.continue() : route.abort());
+  const clickCardPrice = async card => {
+    const price = card.locator('.mp-card-price');
+    await price.scrollIntoViewIfNeeded();
+    const bounds = await price.boundingBox();
+    assert.ok(bounds, "card price has visible click coordinates");
+    // The native title button's stretched hit area owns this entire region.
+    // A real pointer click verifies that price text still opens app details.
+    await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  };
+  const appCard = title => page.locator("article.mp-app-card").filter({ has: page.getByRole("button", { name: title, exact: true }) });
   await page.goto(url);
   await page.getByRole("button", { name: /Quiet Notes/ }).waitFor();
   assert.equal(await page.evaluate(() => window.marketplaceFixture.initializations), 1);
@@ -105,9 +119,10 @@ try {
   assert.equal(await page.getByRole("region", { name: "Top paid", exact: true }).getByText("1,234 purchases", { exact: true }).count(), 3);
   assert.equal(await page.getByRole("region", { name: "Top free", exact: true }).getByText("42 added", { exact: true }).count(), 3);
   assert.equal(await page.locator('.mp-app-card').count(), 6);
-  assert.equal(await page.locator('button.mp-app-card[aria-haspopup="dialog"]').count(), 6);
-  assert.equal(await page.locator('.mp-app-card button, .mp-app-card a, .mp-app-card [tabindex]').count(), 0, "each card has one native keyboard-accessible target");
-  assert.equal(await page.getByRole("button", { name: /Atlas Productivity/ }).locator('.mp-card-summary').innerText(), listingExcerpt);
+  assert.equal(await page.locator('article.mp-app-card button.mp-card-open[aria-haspopup="dialog"]').count(), 6);
+  assert.equal(await page.locator('.mp-app-card button button, .mp-app-card button a').count(), 0, "app and publisher are separate native controls without nested interaction");
+  assert.equal(await page.locator('.mp-app-card button').count(), 12, "each card exposes app details and its publisher independently");
+  assert.equal(await appCard('Atlas').locator('.mp-card-summary').innerText(), listingExcerpt);
   checks.push("Marketplace initializes automatically for this Neutron, without a Connect action; paid then free charts are visible together with no rank numbers.");
   for (const width of [320, 380, 480, 960]) {
     await page.setViewportSize({ width, height: 760 });
@@ -142,7 +157,7 @@ try {
   await page.locator(".mp-card-price").getByText("$1.999999", { exact: true }).waitFor();
   assert.ok(await page.evaluate(() => ['paid','free'].every(tier=>window.marketplaceFixture.calls.some(x=>x[0]==='catalog' && x[1].tier===tier && x[1].window==='month'))));
   checks.push("Ranking controls request the selected rolling window; exact micro-dollar list prices are not truncated.");
-  await page.getByRole("button", { name: /Atlas Productivity/ }).locator('.mp-card-price').click();
+  await clickCardPrice(appCard('Atlas'));
   const appDetail = page.getByRole("dialog", { name: "Atlas", exact: true });
   await appDetail.getByText("Audited by AI", { exact: true }).waitFor();
   assert.equal(await page.getByRole("dialog", { name: "Review purchase", exact: true }).count(), 0);
@@ -159,7 +174,7 @@ try {
   assert.match(await appDetail.locator('.mp-audit').innerText(), /3rurp-vyaaa-aaaay-aacua-cai/);
   assert.match(await appDetail.locator('.mp-audit').innerText(), /submitted package was checked for malware/);
   await appDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await page.getByRole("button", { name: /Quiet Notes Productivity/ }).focus();
+  await page.getByRole("button", { name: 'Quiet Notes', exact: true }).focus();
   await page.keyboard.press("Enter");
   const freeDetail = page.getByRole("dialog", { name: "Quiet Notes", exact: true });
   const additions = freeDetail.locator('.mp-detail-stats > div').filter({ hasText: 'Added · All time' });
@@ -170,14 +185,14 @@ try {
   await freeDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.setViewportSize({ width: 380, height: 760 });
   checks.push("Paid and free details show their all-time acquisition counts on narrow tiles; Audited by AI retains the auditor principal and exact review analysis.");
-  checks.push("Whole cards, including price and Owned labels, open details with one keyboard-accessible target; 255-character excerpts wrap and full 5,000-character descriptions preserve paragraphs.");
+  checks.push("Whole cards, including price and Owned labels, open details; separate native app and publisher controls remain keyboard-accessible; 255-character excerpts wrap and full 5,000-character descriptions preserve paragraphs.");
   const installationQuotesBefore = await page.evaluate(() => window.marketplaceFixture.installationQuotes.length);
   await page.evaluate(() => { window.marketplaceFixture.installed = ['atlas', 'studio']; });
   await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
   for (const title of ['Atlas', 'Canvas Studio']) {
-    const card = page.getByRole("button", { name: new RegExp(title + " Productivity") });
+    const card = appCard(title);
     await card.locator('.mp-card-price').getByText('Owned', { exact: true }).waitFor();
-    await card.locator('.mp-card-price').click();
+    await clickCardPrice(card);
     const installedDetail = page.getByRole("dialog", { name: title, exact: true });
     await installedDetail.getByText("Audited by AI", { exact: true }).waitFor();
     assert.equal(await installedDetail.getByRole("button", { name: "Installed", exact: true }).isDisabled(), true);
@@ -193,7 +208,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.owned), ['notes', 'garden'], "installed app display leaves durable entitlements unchanged");
   await page.evaluate(() => { window.marketplaceFixture.installed = []; });
   await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
-  await page.getByRole("button", { name: /Atlas Productivity/ }).locator('.mp-card-price').getByText('$10.00', { exact: true }).waitFor();
+  await appCard('Atlas').locator('.mp-card-price').getByText('$10.00', { exact: true }).waitFor();
   checks.push("Locally installed free and paid apps display Owned immediately on refreshed cards and Installed in details, without acquisition/installation calls or implied marketplace rating entitlements.");
   const headerDiscount = page.locator('.mp-header').getByRole('button', { name: /^Discount code/ });
   await headerDiscount.click();
@@ -209,7 +224,7 @@ try {
   await page.screenshot({ path: join(output, 'discount-activated-380.png') });
   await discountDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   assert.match(await headerDiscount.getAttribute('aria-label'), /10%/);
-  const atlasCard = page.getByRole('button', { name: /Atlas Productivity/ });
+  const atlasCard = appCard('Atlas');
   assert.match(await atlasCard.locator('del').innerText(), /\$10\.00$/);
   assert.match(await atlasCard.locator('.mp-card-price').innerText(), /\$9\.00/);
   for (const width of [320, 380, 960]) {
@@ -234,11 +249,11 @@ try {
   await discountDialog.getByText('10% discount activated!', { exact: true }).waitFor();
   await discountDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await atlasCard.locator('del').waitFor();
   assert.match(await headerDiscount.getAttribute('aria-label'), /10%/);
   checks.push('A saved discount activates once, renders crossed-out original and exact discounted prices, restores after reload, rejects invalid/self-code changes without dropping the old code, supports change/clear, and fits alongside the bell tab at 320px.');
-  await atlasCard.locator('.mp-card-price').click();
+  await clickCardPrice(atlasCard);
   await page.getByRole('dialog', { name: 'Atlas', exact: true }).getByRole('button', { name: 'Get · $9.00', exact: true }).click();
   const checkout = page.getByRole("dialog", { name: "Review purchase", exact: true });
   assert.equal(await checkout.getByLabel(/Affiliate code/).count(), 0);
@@ -379,8 +394,8 @@ try {
   await discountDialog.getByRole('button', { name: 'Remove code', exact: true }).click();
   await discountDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole("button", { name: "Explore", exact: true }).click();
-  const studio = page.getByRole('button', { name: /Canvas Studio/ });
-  await studio.locator(".mp-card-price").click();
+  const studio = appCard('Canvas Studio');
+  await clickCardPrice(studio);
   await page.getByRole("dialog", { name: "Canvas Studio", exact: true }).getByRole("button", { name: "Get app", exact: true }).click();
   const freeRoot = page.getByRole("dialog", { name: "Add to My Apps", exact: true });
   await freeRoot.getByRole("button", { name: "Review costs", exact: true }).click();
@@ -404,7 +419,7 @@ try {
   assert.equal(await page.evaluate(() => window.marketplaceFixture.purchased.length), beforeOwnerReview + 1);
   checks.push("A free Canvas Studio root with paid Folio dependency shows both quoted apps, labels the required app, changes to paid checkout, and waits for explicit 5 ckUSDC purchase confirmation.");
   await page.goto(url);
-  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await page.evaluate(() => {
     window.marketplaceFixture.operations = [
       {operationId:'cccccccccccccccccccccccccccccccc',state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'},
@@ -432,7 +447,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), [], 'opening activity cannot dispatch or replay a payment');
   checks.push('The bell is a fifth Activity tab; confirmed pre-submission browser cancellation is absent, uncertain and unclassified failures remain recoverable, and no wallet status is pinned over browsing. Activity fits 320/380/960px without replay.');
   await page.goto(url);
-  await page.getByRole('button', { name: /Atlas Productivity/ }).click();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).click();
   await page.getByRole('dialog', { name: 'Atlas', exact: true }).getByRole('button', { name: 'Get · $10.00', exact: true }).click();
   await page.evaluate(() => { window.marketplaceFixture.cancelPurchase = true; });
   const canceledCheckout = page.getByRole('dialog', { name: 'Review purchase', exact: true });
@@ -450,7 +465,7 @@ try {
   checks.push('A later durable receipt supersedes a locally canceled observation on refresh; visibility is based on the newest evidence, without a replacement purchase.');
 
   await page.goto(url);
-  await page.getByRole('button', { name: /Atlas Productivity/ }).click();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).click();
   await page.getByRole('dialog', { name: 'Atlas', exact: true }).getByRole('button', { name: 'Get · $10.00', exact: true }).click();
   await page.evaluate(() => { window.marketplaceFixture.cancelPurchase = 'ic'; });
   const declinedIcCheckout = page.getByRole('dialog', { name: 'Review purchase', exact: true });
@@ -464,7 +479,7 @@ try {
   checks.push('An explicitly rejected IC approval closes Checkout quietly and leaves no Activity card or badge.');
 
   await page.goto(url);
-  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await page.evaluate(() => {
     window.marketplaceFixture.operations = [{operationId:'ffffffffffffffffffffffffffffffff',paymentRail:'ethereum',state:'pending',nextAction:'resume',message:'An unpaid checkout is waiting.'}];
   });
@@ -483,7 +498,7 @@ try {
   }
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.calls.filter(call => call[0]==='cancelEthereumCheckout')), [['cancelEthereumCheckout','ffffffffffffffffffffffffffffffff']]);
   await page.reload();
-  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await activityTab.click();
   await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
   assert.equal(await page.locator('.mp-notification-badge').count(), 0, 'the persisted protocol cancellation also stays quiet after a browser reload');
@@ -498,7 +513,7 @@ try {
   checks.push('Cancel checkout removes the unpaid card and badge immediately, survives app refresh and browser reload, and later payment evidence restores recovery without another cancellation or payment.');
 
   await page.goto(url);
-  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await page.evaluate(() => {
     window.marketplaceFixture.operations = [
       {operationId:'11111111111111111111111111111111',state:'approval_required',nextAction:'resume',canDismiss:true,message:'An ICP approval is saved. No marketplace payment is recorded.'},
@@ -516,7 +531,7 @@ try {
   await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
   await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
   await page.reload();
-  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await activityTab.click();
   await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
   assert.equal(await page.locator('.mp-notification-badge').count(), 0, 'dismissed approval-only history remains quiet after browser reload');
@@ -535,14 +550,14 @@ try {
   checks.push('Rejected IC approvals disappear; approval-only reminders can be dismissed across refresh/reload, while later unknown payments resurface and retain recovery without replay.');
 
   await page.goto(`${url}/?discount=delayed`);
-  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await headerDiscount.click();
   assert.equal(await discountDialog.getByLabel('Discount code', { exact: true }).inputValue(), '');
   await page.evaluate(() => window.marketplaceFixture.discountRelease());
   await discountDialog.getByText('10% discount activated!', { exact: true }).waitFor();
   assert.equal(await discountDialog.getByLabel('Discount code', { exact: true }).inputValue(), 'QUIET-CODE', 'a pristine modal adopts the saved code once its initial read resolves');
   await page.goto(`${url}/?discount=delayed`);
-  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await headerDiscount.click();
   await discountDialog.getByLabel('Discount code', { exact: true }).fill('OTHER-CODE');
   await page.evaluate(() => window.marketplaceFixture.discountRelease());
@@ -551,12 +566,12 @@ try {
   checks.push('Opening the discount dialog before saved preferences resolve fills a pristine input when ready while preserving any edits already typed.');
   await page.goto(`${url}/?catalog=paged`);
   await page.getByRole("button", { name: "Show more paid apps", exact: true }).click();
-  await page.getByRole("button", { name: /Focus Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Focus', exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Show more paid apps", exact: true }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "Show more free apps", exact: true }).count(), 1);
-  assert.equal(await page.getByRole("button", { name: /Garden Productivity/ }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: 'Garden', exact: true }).count(), 0);
   await page.getByRole("button", { name: "Show more free apps", exact: true }).click();
-  await page.getByRole("button", { name: /Garden Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Garden', exact: true }).waitFor();
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='catalog'&&call[1].cursor).map(call=>[call[1].tier,call[1].cursor])), [['paid','paid-next'],['free','free-next']]);
   await page.getByRole("searchbox", { name: "Search apps", exact: true }).fill("Atlas");
   await page.getByText("No matching free apps.", { exact: true }).waitFor();
@@ -567,12 +582,12 @@ try {
   await page.getByText("Paid charts are temporarily unavailable.", { exact: true }).waitFor();
   await page.getByRole("button", { name: /Quiet Notes/ }).waitFor();
   await page.getByRole("region", { name: "Top paid", exact: true }).getByRole("button", { name: "Try again", exact: true }).click();
-  await page.getByRole("button", { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   checks.push("One chart's read error does not block the other chart, and its retry recovers in place.");
 
   await page.goto(`${url}/?setup=delegate`);
   await page.getByText("Read access could not be prepared.", { exact: true }).waitFor();
-  await page.getByRole("button", { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   await page.getByRole("button", { name: "My Apps", exact: true }).click();
   await page.getByRole("heading", { name: "Your library is unavailable", exact: true }).waitFor();
   assert.equal(await page.getByText("Opening marketplace…", { exact: true }).count(), 0);
@@ -587,7 +602,7 @@ try {
   await page.getByText("Neutron is temporarily unavailable.", { exact: true }).waitFor();
   assert.equal(await page.getByText("Opening marketplace…", { exact: true }).count(), 0);
   await page.getByRole("button", { name: "Retry setup", exact: true }).click();
-  await page.getByRole("button", { name: /Atlas Productivity/ }).waitFor();
+  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.marketplaceFixture.initializations), 2);
   assert.equal(await page.evaluate(() => window.marketplaceFixture.connections), 0);
   checks.push("A failed initial Neutron request stops loading and offers a working initialization retry.");

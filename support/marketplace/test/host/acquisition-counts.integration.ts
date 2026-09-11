@@ -64,11 +64,15 @@ export const cases: IntegrationCase[] = [{
         actor.setPrincipal(sender);
         return actor;
       };
+      const registerPublisher = async (publisher: ReturnType<typeof actorAs>) => success(await publisher.publisher_profile_register({
+        publisherId: "countspublisher", name: "Counts publisher", description: "Acquisition count fixture.", feeVersion: 1n,
+      }));
 
       // Clean initialization must return actual zeros rather than absent data.
       const freshId = await env.pic.createCanister({ cycles: 100_000_000_000_000n });
       await env.pic.installCode({ canisterId: freshId, wasm: compiled.wasmPath, arg });
       const freshPublisher = actorAs(freshId, publisherPrincipal);
+      await registerPublisher(freshPublisher);
       const fresh = success(await freshPublisher.listing_save(listing("clean_count", 0n)));
       assert.deepEqual(fresh.acquisitionCounts, [{ free: 0n, paid: 0n }]);
       assert.deepEqual(success(await freshPublisher.app_detail("clean_count")).app.acquisitionCounts, [{ free: 0n, paid: 0n }]);
@@ -87,6 +91,9 @@ export const cases: IntegrationCase[] = [{
       const publisher = actorAs(canisterId, publisherPrincipal);
       const auditor = actorAs(canisterId, auditorPrincipal);
       const call = async (buyer: typeof firstBuyer, name: string, value: unknown, cycles = 1_000_000_000n) => success(await relayCall(buyer, market, name, [value], cycles));
+      // The archived module has no profile endpoint; do not mutate its fixture
+      // using APIs introduced by the target release.
+      if (!previousPath) await registerPublisher(publisher);
       const appId = "historical_counts";
       const saved = success(await publisher.listing_save(listing(appId, 0n)));
       const bytes = Uint8Array.of(67, 79, 85, 78, 84);
@@ -142,6 +149,10 @@ export const cases: IntegrationCase[] = [{
       await call(secondBuyer, "install_prepare", { requestId: "counts-install-again", appIds: [appId], feeVersion: 1n });
       assert.deepEqual(success(await actor.app_detail(appId)).app.acquisitionCounts, [{ free: 1n, paid: 1n }]);
       assert.deepEqual(await ledger.actor.stats(), statsBefore);
+      if (previousPath) {
+        await registerPublisher(publisher);
+        assert.deepEqual(success(await actor.app_detail(appId)).app.acquisitionCounts, [{ free: 1n, paid: 1n }], "Profile adoption preserves retained acquisition counts");
+      }
     } finally { await env.shutdown(); }
   },
 }];

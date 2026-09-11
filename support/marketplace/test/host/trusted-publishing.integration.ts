@@ -44,6 +44,10 @@ async function setup() {
     const trusted = as(trustedPrincipal), auditor = as(auditorPrincipal);
     const charged = async (sender: any, name: string, input: unknown) => success(await relayCall(sender, market, name, [input], 1_000_000_000n));
     const direct = async (name: string, input: unknown) => success(await trusted[name](input));
+    await direct("publisher_profile_register", { publisherId: "trustedpublisher", name: "Trusted fixture publisher", description: "First-party publishing fixture", feeVersion: 1n });
+    for (const [sender, publisherId] of [[admin, "adminpublisher"], [ordinary, "ordinarypublisher"], [buyer, "buyerpublisher"]] as const) {
+      await charged(sender, "publisher_profile_register", { publisherId, name: publisherId, description: "Ordinary publisher authorization fixture", feeVersion: 1n });
+    }
     const listing = (appId: string, priceUsdMicros = 1_000_000n) => ({
       appId, title: appId, summary: "Local first-party publication test", description: "Opaque transport fixtures; package and image formats are not qualified by this test.",
       priceUsdMicros, iconArtifact: [], screenshots: [], expectedRevision: [], feeVersion: 1n,

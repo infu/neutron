@@ -5,6 +5,7 @@ import Certification "../../mo/Certification";
 import Encoding "../../mo/Encoding";
 import Http "../../mo/Http";
 import Repository "../../mo/Repository";
+import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
 import Fixtures "../motoko/Fixtures";
@@ -18,7 +19,8 @@ persistent actor Fixture {
   var seeded = false;
   var packageId : Nat64 = 0;
   var extraPackageIds : [Nat64] = [];
-  transient let db = Store.Use(memory);
+  let publisherMemory = PublisherStore.init();
+  transient let db = Store.Use(memory, publisherMemory);
   transient let repo = Repository.Service(db, certification, Principal.fromActor(Fixture));
   transient let http = Http.Store(certification, {
     artifact = func(path) { switch (repo.artifact(path)) { case (?value) ?value; case null Certification.artifact(db, path) } };

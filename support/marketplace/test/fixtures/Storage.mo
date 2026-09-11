@@ -3,6 +3,7 @@ import Principal "mo:core/Principal";
 import Iter "mo:core/Iter";
 import Result "mo:core/Result";
 import Runtime "mo:core/Runtime";
+import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
 
@@ -11,7 +12,8 @@ persistent actor {
   let mem = Store.init({ admins = [owner]; auditors = [owner]; tokens = []; xrc = owner;
     fees = { version = 1; updateBase = 12; updateByte = 2; storageByteYear = 3; purchase = 4; withdraw = 5; grant = 6; xrc = 7 };
     referralTerms = { version = 1; discountBps = 1_000; affiliateBps = 3_000; developerBps = 3_000 } });
-  transient let db = Store.Use(mem);
+  let publisherMemory = PublisherStore.init();
+  transient let db = Store.Use(mem, publisherMemory);
   var seeded = false;
   func require<T,E>(r : Result.Result<T,E>) : T { switch (r) { case (#ok(v)) v; case (#err(_)) Runtime.trap("Fixture setup failed") } };
 
@@ -44,6 +46,11 @@ persistent actor {
     ignore require(db.jobs.insert({ key = "key-fixture"; kind = #xrc; ledger = null; scheduledAtNs = 1; state = #waiting; operationId = ?1; attempts = 1; lastError = ?"source unavailable"; updatedAtNs = 1 }));
     assert Store.allocateReferralCodeId(db) == 1;
     Store.setRankingMaintenance(db, { expiry7 = ?{atNs = 20; id = 0}; expiry30 = null; generation = 2; asOfNs = 21; dirty = true; charts = { free7 = [{ appId = "test-app"; score = 4 }]; free30 = []; freeAll = []; paid7 = []; paid30 = []; paidAll = [] } });
+    ignore require(db.publishers.publisherProfiles.insert({ owner; publisherId = "fixture"; name = "Fixture Publisher"; description = "Retained publisher profile"; createdAtNs = 7; updatedAtNs = 8 }));
+    ignore require(db.publishers.publisherStats.insert({ owner; ratingCount = 1; ratingTotal = 4; totalUsers = 1 }));
+    ignore require(db.publishers.publisherUsers.insert({ owner; buyer = owner }));
+    ignore require(db.publishers.publisherAppStats.insert({ appId = "test-app"; owner; ratingCount = 1; ratingTotal = 4 }));
+    db.publishers.store.set({ appsCursor = ?1; acquisitionsCursor = ?1; appsComplete = true; acquisitionsComplete = false });
     seeded := true;
   };
 
@@ -73,6 +80,11 @@ persistent actor {
       uploads = Iter.toArray(db.uploads.iterPrimary(#fwd, null));
       charges = Iter.toArray(db.charges.iterPrimary(#fwd, null));
       jobs = Iter.toArray(db.jobs.iterPrimary(#fwd, null));
+      publisherProfiles = Iter.toArray(db.publishers.publisherProfiles.iterPrimary(#fwd, null));
+      publisherStats = Iter.toArray(db.publishers.publisherStats.iterPrimary(#fwd, null));
+      publisherUsers = Iter.toArray(db.publishers.publisherUsers.iterPrimary(#fwd, null));
+      publisherAppStats = Iter.toArray(db.publishers.publisherAppStats.iterPrimary(#fwd, null));
+      publisherMaintenance = db.publishers.store.get();
     });
   };
 
@@ -85,6 +97,11 @@ persistent actor {
     if (not db.candidates.by_source_artifact.exists(1)) return false;
     if (not db.candidates.by_state.exists(#approved)) return false;
     if (not db.rankings.by_free7.exists((4, "test-app"))) return false;
+    let ?profile = db.publishers.publisherProfiles.by_publisherId.lookup("fixture") else return false;
+    if (profile.owner != owner or db.publishers.publisherProfiles.by_owner.lookup(owner) != ?profile) return false;
+    if (db.publishers.publisherStats.by_owner.lookup(owner) == null) return false;
+    if (db.publishers.publisherUsers.by_owner_buyer.lookup((owner, owner)) == null) return false;
+    if (db.publishers.publisherAppStats.by_appId.lookup("test-app") == null) return false;
     true;
   };
 
@@ -99,4 +116,25 @@ persistent actor {
   };
 
   public func nextReferralCode() : async Nat64 { Store.allocateReferralCodeId(db) };
+
+  public func checkPublisherPagination() : async Bool {
+    let ?template = Store.getApp(db, "test-app") else Runtime.trap("Seed fixture first");
+    let another = Principal.fromText("aaaaa-aa");
+    ignore require(db.apps.upsert({ template with id = 50; appId = "other-owner"; owner = another }));
+    ignore require(db.apps.upsert({ template with id = 100; appId = "sparse-owner-app" }));
+    ignore require(db.apps.delete(template.id));
+    ignore require(db.apps.upsert({ template with id = 200; appId = "reused-owner-app" }));
+    let first = db.publisherApps(owner, null);
+    let ?(firstCursor, firstApp) = first.next() else return false;
+    // The row in the reused physical slot has the largest primary ID. An
+    // id-based guess for the ownership cursor would drop the sparse row.
+    if (firstCursor != 0 or firstApp.id != 200) return false;
+    let next = db.publisherApps(owner, ?firstCursor);
+    let ?(secondCursor, secondApp) = next.next() else return false;
+    if (secondCursor != 2 or secondApp.id != 100) return false;
+    if (next.next() != null or db.publisherApps(owner, ?secondCursor).next() != null) return false;
+    let onlyOther = db.publisherApps(another, null);
+    let ?(_, otherApp) = onlyOther.next() else return false;
+    otherApp.id == 50 and onlyOther.next() == null;
+  };
 };

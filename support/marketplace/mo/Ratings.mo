@@ -2,6 +2,7 @@
 import Runtime "mo:core/Runtime";
 import Store "Store";
 import Types "Types";
+import Publishers "Publishers";
 
 module {
   public type Result<T> = { #ok : T; #err : Text };
@@ -35,7 +36,7 @@ module {
       case (#err(error)) Runtime.trap("Could not save the rating: " # debug_show(error));
     };
     switch (db.apps.update({ app with ratingCount = summary.count; ratingTotal = summary.total })) {
-      case (#ok(_)) {};
+      case (#ok(updated)) { Publishers.syncApp(db, updated) };
       // Both writes belong to the same synchronous message segment. A trap
       // rolls back the rating too; returning an error here would not do that.
       case (#err(error)) Runtime.trap("Could not update the rating summary: " # debug_show(error));

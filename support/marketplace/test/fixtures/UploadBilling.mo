@@ -8,6 +8,7 @@ import Sha256 "mo:sha2/Sha256";
 import API "../../mo/API";
 import Assets "../../mo/Assets";
 import Billing "../../mo/Billing";
+import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
 
 // PocketIC only: makes allocation fail deterministically without growing memory.
@@ -17,7 +18,8 @@ persistent actor class UploadBilling() = self {
     fees = { version = 1; updateBase = 12; updateByte = 2; storageByteYear = 100_000_000_000; purchase = 4; withdraw = 5; grant = 6; xrc = 7 };
     referralTerms = { version = 1; discountBps = 1_000; affiliateBps = 3_000; developerBps = 3_000 } });
   let mem = { initial with blobs = StableBlob.initWith({ StableBlob.defaults with maxPages = 0; uploadTtl = 0 }) };
-  transient let db = Store.Use(mem);
+  let publisherMemory = PublisherStore.init();
+  transient let db = Store.Use(mem, publisherMemory);
   var effects = 0;
 
   public func seed() : async () {

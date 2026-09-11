@@ -4,6 +4,7 @@ import Runtime "mo:core/Runtime";
 import Catalog "../mo/Catalog";
 import Initialization "../mo/Initialization";
 import Store "../mo/Store";
+import PublisherStore "../mo/PublisherStore";
 import Types "../mo/Types";
 
 persistent actor {
@@ -17,7 +18,8 @@ persistent actor {
   };
   public func entire_inventory_is_validated_before_mutation() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Store.init(config()));
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(Store.init(config()), publisherMemory);
       let original = reservation();
       for (invalid in [
         { original with appId = "second_app"; title = "" },
@@ -31,15 +33,16 @@ persistent actor {
   };
   public func reservations_are_atomic_hidden_and_never_overwrite_existing_rows() : async Test.Metrics {
     Test.test(func() {
+      let publisherMemory = PublisherStore.init();
       let original = reservation();
-      let mem = Initialization.memory({ config() with reservations = ?[original, original]; trustedPublishingPrincipal = null }, 1);
-      let db = Store.Use(mem);
+      let mem = Initialization.memory({ config() with reservations = ?[original, original]; trustedPublishingPrincipal = null }, 1, publisherMemory);
+      let db = Store.Use(mem, publisherMemory);
       assert db.apps.size() == 1 and db.listings.size() == 1;
       let ?first = Store.getApp(db, original.appId) else Runtime.trap("Reservation missing");
       assert first.owner == original.publisher and first.title == original.title;
       assert first.approvedCandidate == null and not Catalog.eligible(db, first);
       assert Initialization.initialize(db, [{ original with title = "Do not replace" }], 100) == #ok;
-      assert Store.getApp(Store.Use(mem), original.appId) == ?first;
+      assert Store.getApp(Store.Use(mem, publisherMemory), original.appId) == ?first;
       assert db.listings.size() == 1;
       let newcomer = { original with appId = "new_app" };
       let conflict = { original with publisher = Principal.fromText("mxzaz-hqaaa-aaaar-qaada-cai") };
@@ -50,7 +53,8 @@ persistent actor {
   };
   public func omitted_reservations_keep_clean_initialization_compatible() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Initialization.memory({ config() with reservations = null; trustedPublishingPrincipal = null }, 0));
+      let publisherMemory = PublisherStore.init();
+      let db = Store.Use(Initialization.memory({ config() with reservations = null; trustedPublishingPrincipal = null }, 0, publisherMemory), publisherMemory);
       assert db.apps.size() == 0 and Store.config(db) == config();
     });
   };

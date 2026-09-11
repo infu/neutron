@@ -8,13 +8,15 @@ import Access "../../mo/Access";
 import Audits "../../mo/Audits";
 import Catalog "../../mo/Catalog";
 import Publishing "../../mo/Publishing";
+import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
 import F "../motoko/Fixtures";
 
 persistent actor {
   let memory = F.memory();
-  transient let db = Store.Use(memory);
+  let publisherMemory = PublisherStore.init();
+  transient let db = Store.Use(memory, publisherMemory);
   var phase : Nat = 0;
   var seeded = false;
   var candidates : [Types.Candidate] = [];

@@ -102,6 +102,8 @@ export const cases: IntegrationCase[] = [{
       }
       denied(await admin.admin_reserve_app({ ...reservation, appId: "invalid_identity_publisher", publisher: adminPrincipal }), "neutron_required", "An admin exemption does not make a signing identity an app publisher");
 
+      const charged = async (name: string, request: unknown) => succeeded(await relayCall(canisterAdmin, market, name, [request], 1_000_000_000n));
+      await charged("publisher_profile_register", { publisherId: "adminpublisher", name: "Admin publisher", description: "Ordinary publishing cycle boundary fixture", feeVersion: 1n });
       const listing = {
         appId: "ordinary_admin_app", title: "Ordinary publisher app", summary: "Local authorization regression",
         description: "A real free package for checkout authorization tests", priceUsdMicros: 0n,
@@ -109,7 +111,6 @@ export const cases: IntegrationCase[] = [{
       };
       denied(await admin.listing_save(listing), "neutron_required", "Self-authenticating admins cannot bypass ordinary publisher identity requirements");
       denied(await relayCall(canisterAdmin, market, "listing_save", [listing], 0n), "cycles_required", "Canister admins cannot bypass ordinary publisher charges");
-      const charged = async (name: string, request: unknown) => succeeded(await relayCall(canisterAdmin, market, name, [request], 1_000_000_000n));
       await charged("listing_save", listing);
       async function artifact(purpose: "package" | "source", byte: number) {
         const bytes = Uint8Array.of(byte, 23, 31, 41);

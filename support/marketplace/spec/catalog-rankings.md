@@ -1,5 +1,8 @@
 # Catalog prices and acquisition rankings
 
+Publisher bylines, permanent profiles and portfolio statistics are defined in
+[publisher profiles](publisher-profiles.md).
+
 ## Listing text
 
 The existing `summary` field is the app excerpt: new listing revisions accept

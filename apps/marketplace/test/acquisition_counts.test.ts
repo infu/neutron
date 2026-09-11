@@ -17,7 +17,7 @@ const legacyPage = IDL.Variant({
   err: IDL.Record({ code: IDL.Text, message: IDL.Text }),
 });
 const listing: WireApp = {
-  appId: "sample", publisher: Principal.anonymous(), title: "Sample", summary: "",
+  appId: "sample", publisher: Principal.anonymous(), publisherProfile: [], title: "Sample", summary: "",
   description: "", priceUsdMicros: 0n, revision: 1n, version: [100n], iconUrl: [],
   screenshots: [], iconArtifact: [], screenshotArtifacts: [], ratingCount: 0n,
   ratingTotal: 0n, owned: false, visible: true,

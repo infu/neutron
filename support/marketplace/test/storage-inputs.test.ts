@@ -15,6 +15,7 @@ async function fixture() {
   roots.push(root);
   await mkdir(path.join(root, ".private/ashroot"), { recursive: true });
   await mkdir(path.join(root, ".ashroot"));
+  await mkdir(path.join(root, ".private/publishers/.ashroot"), { recursive: true });
   const schema = "private reviewed input";
   const generated = "generated content";
   const runtime = "runtime content";
@@ -22,6 +23,7 @@ async function fixture() {
   const manifest = (name: string, content: string) => JSON.stringify({ files: [{ path: name, sha256: hash(content), size: Buffer.byteLength(content) }] });
   const generatedManifest = manifest("lib.mo", generated);
   const runtimeManifest = manifest("stable_blob.mo", runtime);
+  const publisherManifest = manifest("lib.mo", "publisher content");
   const files = {
     "ashroot.json": schema,
     ".ashroot/lib.mo": generated,
@@ -29,10 +31,14 @@ async function fixture() {
     ".private/ashroot/stable_blob.mo": runtime,
     ".private/ashroot/.ashroot-runtime.json": runtimeManifest,
     ".private/ashroot-no-expiry.patch": patch,
+    ".private/publishers/ashroot.json": "publisher schema",
+    ".private/publishers/.ashroot/lib.mo": "publisher content",
+    ".private/publishers/.ashroot/manifest.json": publisherManifest,
     ".private/storage-inputs.json": JSON.stringify({
       format: "marketplace-private-storage-inputs-v1", ashrootRevision: "1".repeat(40),
       schemaSha256: hash(schema), generatedManifestSha256: hash(generatedManifest),
       runtimeManifestSha256: hash(runtimeManifest), runtimePatchSha256: hash(patch),
+      publishers: { schemaSha256: hash("publisher schema"), generatedManifestSha256: hash(publisherManifest) },
     }),
   };
   await Promise.all(Object.entries(files).map(([name, content]) => writeFile(path.join(root, name), content)));
@@ -50,7 +56,7 @@ test("prepared inputs verify repeatedly without rewriting source or receipts", a
   }
 });
 
-for (const name of ["ashroot.json", ".ashroot/lib.mo", ".private/ashroot/stable_blob.mo", ".private/ashroot-no-expiry.patch"]) {
+for (const name of ["ashroot.json", ".ashroot/lib.mo", ".private/ashroot/stable_blob.mo", ".private/ashroot-no-expiry.patch", ".private/publishers/ashroot.json", ".private/publishers/.ashroot/lib.mo"]) {
   test(`changed reviewed input is rejected: ${name}`, async () => {
     const { root } = await fixture();
     await writeFile(path.join(root, name), "changed");
@@ -62,4 +68,12 @@ test("missing private inputs fail before compiler execution", async () => {
   const { root } = await fixture();
   await rm(path.join(root, ".private/storage-inputs.json"));
   await expect(ensureStorageInputs(root)).rejects.toThrow("restore the reviewed private build inputs");
+});
+
+test("missing publisher receipt fails before compiler execution", async () => {
+  const { root, files } = await fixture();
+  const receipt = JSON.parse(files[".private/storage-inputs.json"]);
+  delete receipt.publishers;
+  await writeFile(path.join(root, ".private/storage-inputs.json"), JSON.stringify(receipt));
+  await expect(ensureStorageInputs(root)).rejects.toThrow("publisher storage inputs are not prepared");
 });
