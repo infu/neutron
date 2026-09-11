@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { IDL } from "@dfinity/candid";
+import { encodeSelfCallResult, normalizeSelfCallResult } from "../../kernel/src/self_calls.ts";
 import {
   encodeSelfCallValues,
   normalizeToolDescriptor,
@@ -1413,5 +1415,45 @@ test("failed original-command lookup cannot fabricate a no-submit cancellation",
     (async () => { throw new Error("status unavailable"); }) as MsgBusToolContext["kernel"]["querySelf"],
   )).rejects.toThrow("status unavailable");
 });
+
+test("cancellation accepts the actual Candid reply with an omitted empty preparation", async () => {
+  const reply = emptyFundingPreviewWireReply();
+  expect(reply).toEqual({ funding_preview: { ok: { durable: false } } });
+  const context = fundingContext(async () => preparedDirect());
+  const operation = { ...(await prepareWalletFundingOperation(directRequest, context, false)), durable: false };
+  let updates = 0;
+  const result = await rejectWalletFundingOperation(operation, async () => {
+    updates++;
+    throw new Error("An unsigned cancellation must not persist or execute a command");
+  }, (async () => reply) as MsgBusToolContext["kernel"]["querySelf"]);
+  expect(result).toMatchObject({ status: "rejected", blockIndex: null, commandId: `${callerApp}:${requestId}` });
+  expect(updates).toBe(0);
+});
+
+test("empty Candid preview preserves the public-ledger failure instead of a shape error", async () => {
+  const context = fundingContext(async () => { throw new Error("Must not prepare"); });
+  context.kernel.querySelf = (async () => emptyFundingPreviewWireReply()) as MsgBusToolContext["kernel"]["querySelf"];
+  const ledgerError = new Error("Public ledger temporarily unavailable");
+  await expect(previewWalletFundingOperation(directRequest, context, async () => { throw ledgerError; })).rejects.toBe(ledgerError);
+});
+
+test("missing preparation cannot turn a claimed durable command into an unsigned cancellation", async () => {
+  const context = fundingContext(async () => preparedDirect());
+  const operation = { ...(await prepareWalletFundingOperation(directRequest, context, false)), durable: false };
+  await expect(rejectWalletFundingOperation(operation,
+    async () => { throw new Error("Malformed status must not update a command"); },
+    (async () => emptyFundingPreviewWireReply(true)) as MsgBusToolContext["kernel"]["querySelf"],
+  )).rejects.toThrow("Invalid Wallet funding cancellation status");
+});
+
+function emptyFundingPreviewWireReply(durable = false) {
+  // An empty option has no payload. Encode/decode it and use the production
+  // Kernel projector so this fixture cannot confuse omission with explicit null.
+  const type = IDL.Variant({ funding_preview: IDL.Variant({
+    ok: IDL.Record({ durable: IDL.Bool, preparation: IDL.Opt(IDL.Null) }), err: IDL.Text,
+  }) });
+  const [decoded] = IDL.decode([type], IDL.encode([type], [{ funding_preview: { ok: { durable, preparation: [] } } }]));
+  return encodeSelfCallResult(normalizeSelfCallResult(decoded, type)).value;
+}
 
 function previewReply(payload: unknown) { return { funding_preview: { ok: payload } }; }

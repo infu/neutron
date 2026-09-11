@@ -666,3 +666,47 @@ The identical-byte repeat returned `batch_id: null`, all 27 packages and offered
 sources `unchanged`, and matching versions, URLs, paths, sizes and SHA-256 digests
 for all 54 frozen artifacts. Update both apps through Settings. No Git push is
 included.
+
+
+## Wallet331 unsigned approval cancellation
+
+Wallet `0.3.31` was published in catalog batch `13` on 2026-09-11.
+Only Wallet changed in the 27-package catalog. The archive is
+957,817 bytes, SHA-256 `8c6a93776de78da165526f9dfde1b557bac78a743815ffd70d909249eb815ccf`; its offered source is
+863,305 bytes, SHA-256 `0d8c6370aa9329c853115fe3ea6570a8d9c75e2a70c537b45225d4a68ce38726`.
+
+Wallet330 incorrectly required the optional `preparation` field when canceling
+a query-only approval preview. The existing Kernel Candid projection omits that
+field when no durable command exists, returning `{ durable: false }`. Wallet
+rejected that valid result as “Invalid Wallet funding cancellation status” and
+kept the dialog open. Its earlier mocks used explicit null and missed the
+production representation.
+
+Both preview and cancellation parsers now accept an omitted preparation while
+still requiring the durability flag and rejecting unexpected fields. Canceling
+a confirmed unsigned preview closes it without an update or payment. Existing
+pending/completed commands continue through the original durable outcome path;
+failed status reads and malformed durable results are not treated as a safe
+cancellation. The same correction preserves the underlying public-ledger error
+when a preview cannot obtain fresh facts.
+
+The regression was reproduced in the actual allowance dialog using the prior
+parser loaded from an external test override. With the fix, omitted and explicit
+null replies both close the dialog after its status lookup, return declined, and
+make zero update/payment calls in a sandbox without `allow-forms`. Unit coverage
+also runs a real Candid encode/decode through the Kernel result projector.
+
+Complete Wallet packaging, 337 unit tests, 19 Motoko suites, clean/restored
+memory, historical predecessor checks including Wallet330, TypeScript and six browser
+suites passed. All eight v1 memory roots, released schema files, lock lineage
+and installed permissions are unchanged. No Kernel or Marketplace app/protocol
+change was required, and no production financial action was used for testing.
+
+The initial read-only publication review hit the previously observed local
+Wasm response-verifier error. Repeating with identical artifacts succeeded;
+verification was not bypassed. Publication request
+`7755701aea5c440b5239915f73d26dcd56edc758589c18952a753ed2479bed38` and its identical-byte repeat passed receipt-v2 checks.
+The repeat returned `batch_id: null`, with all 27 packages and offered sources
+`unchanged`, matching every version, URL/path, size and SHA-256 across all 54
+frozen artifacts. Existing users obtain this fix through the Wallet update in
+Settings. The legacy source and Dispenser starter are unchanged.

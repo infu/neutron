@@ -271,7 +271,8 @@ export async function previewWalletFundingOperation(
   const raw = await queryWalletReview(context.kernel.querySelf, "funding_preview", {
     request: fundingPrepareArgs(request, caller, false), facts, lookup_only: false,
   });
-  const result = exactObject(raw, ["preparation", "durable"], "Wallet funding preview");
+  // Empty Candid options are omitted from self-call record replies.
+  const result = exactObject(raw, ["durable"], "Wallet funding preview", ["preparation"]);
   if (typeof result.durable !== "boolean") throw new Error("Invalid Wallet funding preview durability");
   if (result.preparation == null) throw readError ?? new Error("Fresh ledger observations are unavailable for this Wallet review");
   const preparation = parseFundingPrepareResult(result.preparation);
@@ -323,7 +324,7 @@ export async function rejectWalletFundingOperation(
     const raw = await queryWalletReview(query, "funding_preview", {
       request: fundingPrepareArgs(operation.request, operation.caller, false), facts: null, lookup_only: true,
     });
-    const saved = exactObject(raw, ["preparation", "durable"], "Wallet funding cancellation status");
+    const saved = exactObject(raw, ["durable"], "Wallet funding cancellation status", ["preparation"]);
     if (saved.preparation != null) {
       const preparation = parseFundingPrepareResult(saved.preparation);
       assertPreparedFundingMatchesRequest(preparation.value.review, fundingPreparationCommand(preparation), operation.request, operation.caller);

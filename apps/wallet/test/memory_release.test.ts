@@ -130,6 +130,7 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
   }
   const predecessors = [
     { version: 329, bytes: 941108, sha256: "48e56391089ca7e2d22552690bb33e73804ecaa0b7eb51a224a0b88d2aebd7b1" },
+    { version: 330, bytes: 957812, sha256: "091af7f6bd5ef870e727db265bd549a2024a090c7dede70d6647d25709819e2b" },
     { version: 302, bytes: 575_530, sha256: "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43" },
     { version: 303, bytes: 634_054, sha256: "df4d3689c30a119a91dbf97d4dcdb67bc0226cc0149ebdf24db6cbd78b9c74e9" },
     { version: 304, bytes: 634_055, sha256: "0b32d7afaad101955d94887833f499d7e76d92c413bb28ddd457b3712bd69ea9" },
