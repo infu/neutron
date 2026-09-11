@@ -4,8 +4,8 @@ Implementation is on `plan/app-marketplace`. The production marketplace is
 deployed at `sj2r4-haaaa-aaaay-aadgq-cai`, with 27 initial free app releases
 published. The old source also has the 26 transition releases for existing
 Neutrons. Publication does not install apps into users' Neutrons. The owner
-authorized deployment and publication; Git pushes remain on hold. Exact release
-and verification status is in the
+authorized deployment and publication, and authorized pushing this branch to the
+existing PR on 2026-09-11. Exact release and verification status is in the
 [production release record](support/marketplace/spec/production-release.md).
 
 Protocol specifications, pinned ledger references, configuration and operator
@@ -334,7 +334,7 @@ for these tests.
   Git. Verify initial ICP/USD, BTC/USD and USDC/USD refreshes.
 - [ ] Supply the three ICP/ckBTC/ckUSDC conversion-service receiving accounts.
   They may remain unset initially; allocations then stay in the protocol.
-- [ ] Obtain authorization before pushing the local Git commits.
+- [x] Obtain authorization before pushing the local Git commits (2026-09-11).
 - [x] Publish all 27 initial free releases and offered-source artifacts as Blast
   ID 0 in marketplace batch 1, with exact-byte automated audit records. Verify
   the live catalog's ownership, prices, approvals and versions.
