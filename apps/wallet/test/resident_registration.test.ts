@@ -28,6 +28,8 @@ test("Wallet resident registers every bridge, quote, and released tool through t
     "wallet_bridge_refresh_v1", "wallet_bridge_status_v1",
     "wallet_conversion_routes_v1",
     "wallet_fund_root_v1", "wallet_fund_v1", "wallet_history_v1", "wallet_overview",
+    "wallet_refill_continue_root_v1", "wallet_refill_continue_v1", "wallet_refill_quote_v1",
+    "wallet_refill_root_v1", "wallet_refill_status_v1", "wallet_refill_v1", "wallet_refills_v1",
     "wallet_refresh", "wallet_token_info_v1", "wallet_transaction_v1", "wallet_unwrap_root_v1", "wallet_unwrap_status_v1", "wallet_withdrawal_quote_v1",
     "wallet_wrap_pending_v1", "wallet_wrap_root_v1", "wallet_wrap_status_v1",
   ]);

@@ -64,6 +64,15 @@
         }
       },
       "migrations": {}
+    },
+    "wallet_refills": {
+      "schemas": {
+        "1": {
+          "hash": "688e9bc4f8e3bd3e97311b2c6e25aa43f52f68d0eb011c060f8b494a5bd86707",
+          "entry": "303b5fc2cfee4a6ab0cd43abae6846ba4a066d7885567284e9609632caf128aa"
+        }
+      },
+      "migrations": {}
     }
   }
 }

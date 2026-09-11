@@ -19,8 +19,66 @@ owner-trusted apps and live agents, not a cold-storage boundary against the
 installed Wallet package. Installing or updating Wallet is therefore a
 consequential trust decision.
 
-Release 325 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`. All
-seven version-1 memory roots and their released lineage remain unchanged.
+Release 326 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
+The seven released version-1 roots and their lineage remain unchanged. A new,
+independent `wallet_refills` version-1 root retains refill and conversion progress.
+
+## Refill a Neutron
+
+The Refill tab offers ICP or TCYCLES funding for **My Neutron**, with another
+canister under Advanced. **Get TCYCLES** converts ICP into tokens held by this
+Neutron; Advanced can select another recipient principal. Fresh Wallets include
+TCYCLES with ICP, ckBTC and ckUSDC. Upgrades retain the owner's selected tokens;
+refilling can read both supported ledgers even when either is not selected.
+
+Balances, fees and the ICP conversion rate are browser-to-canister queries.
+The amount slider and Max reserve the source ledger fee. One review shows the
+destination, total debit and estimated cycles or net TCYCLES. Estimates use the
+CMC's timestamped ICP/XDR rate and can change before conversion. TCYCLES has
+12 decimal places: one TCYCLES token represents one trillion cycles.
+
+| Action | Protocol flow |
+| --- | --- |
+| Refill with ICP | Transfer ICP to the CMC's target-canister subaccount with the top-up memo, then notify the CMC using the original ledger block. |
+| Refill with TCYCLES | Withdraw from the cycles ledger to the selected canister. This converts the tokens into operating cycles. |
+| Get TCYCLES | Transfer ICP with the mint memo, then notify the CMC to mint into this Neutron's cycles-ledger account. An alternative recipient adds one TCYCLES transfer. |
+
+The [CMC interface](https://github.com/dfinity/ic/blob/18a551adafb15fdbfce04c0b1ab2397d4a9a4b59/rs/nns/cmc/cmc.did)
+and [cycles-ledger interface](https://github.com/dfinity/cycles-ledger/blob/2703d3630ef91ad23b4b10e7e4781c2825af4df0/cycles-ledger/cycles-ledger.did)
+define these flows. CMC minting always credits the caller; it cannot directly
+mint to an arbitrary recipient. The cycles-ledger deposit fee is deducted from
+the gross minted amount, and an onward transfer has its own fee. Direct ICP
+refilling avoids these extra cycles-ledger steps.
+
+Wallet saves exact requests before dispatch. A closed tile or interrupted reply
+does not discard a paid ICP transfer, pending CMC notification or recipient
+transfer. Continue uses the original request and deduplication identity; it never
+substitutes a new payment to recover an uncertain result. CMC refunds and ledger
+errors remain visible with their evidence. A cycles-ledger withdrawal Duplicate
+identifies the earlier burn but does not prove delivery to the canister. Such an
+operation remains unverified unless its original successful response is retained.
+If an onward transfer cannot finish, already-minted TCYCLES remain in this Wallet.
+
+Agent tools expose the same flows:
+
+| Tool | Purpose |
+| --- | --- |
+| `wallet_refill_quote_v1` | Read direct balances/rate and preview a refill or conversion without payment. |
+| `wallet_refill_v1` | Present one exact Wallet review before executing. |
+| `wallet_refill_root_v1` | Execute under the active root agent's existing authority without interactive review. |
+| `wallet_refill_status_v1`, `wallet_refills_v1` | Read retained progress and receipt evidence without financial effects; history pages expose a cursor and an unfinished-only filter. |
+| `wallet_refill_continue_v1`, `wallet_refill_continue_root_v1` | Continue the returned durable request ID, with normal-mode review or root authority respectively. |
+
+The frontend uses `wallet_read_v1` for snapshot, catalog and refill reads, and
+`wallet_refill_action_v1` for prepare/execute/continue. This keeps the existing
+32-method frontend grant inventory. Released individual snapshot and catalog
+owner APIs remain available; no Kernel change is required.
+
+Keep `callerRequestId` with the original execution input. `operation.requestId`
+is Wallet's durable identity for status and continuation. Reusing that returned
+identity with the original execution tool also recognizes the saved request
+instead of preparing a second payment. History retains every operation and
+loads in pages; older unfinished work has its own Load more control.
 
 ## Agent token selection
 

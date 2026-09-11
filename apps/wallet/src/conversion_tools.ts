@@ -1,3 +1,4 @@
+import { queryWalletRead } from "./wallet_read.ts";
 import { Principal } from "@dfinity/principal";
 import { getAddress, keccak256, stringToHex } from "viem";
 import { exposeTool, type JsonObject, type MsgBusToolContext, type SelfCallObject } from "neutron-tools/app";
@@ -59,8 +60,8 @@ export function registerConversionTools(): void {
 
 export async function handleWalletConversionRoutes(_args: JsonObject, context: MsgBusToolContext): Promise<JsonObject> {
   const [catalog, snapshot] = await Promise.all([
-    context.kernel.querySelf("wallet_catalog", [null]).then(parseWalletCatalog),
-    context.kernel.querySelf("wallet_snapshot", [null]).then(parseWalletSnapshot),
+    queryWalletRead(context.kernel.querySelf, "catalog").then(parseWalletCatalog),
+    queryWalletRead(context.kernel.querySelf, "snapshot").then(parseWalletSnapshot),
   ]);
   return {
     chainId: "1", network: "Ethereum Mainnet",

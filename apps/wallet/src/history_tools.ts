@@ -1,3 +1,4 @@
+import { queryWalletRead } from "./wallet_read.ts";
 import { Principal } from "@dfinity/principal";
 import { exposeTool, isJsonObject, type JsonObject, type MsgBusToolContext } from "neutron-tools/app";
 import { createHistoryReader, type HistoryAccount } from "./history_reads.ts";
@@ -42,7 +43,7 @@ function message(error: unknown): string { return error instanceof Error ? error
 
 async function resolveAccount(ledger: string, context: MsgBusToolContext): Promise<HistoryAccount> {
   const [snapshot, catalog] = await Promise.all([
-    context.kernel.querySelf("wallet_snapshot", [null]), context.kernel.querySelf("wallet_catalog", [null]),
+    queryWalletRead(context.kernel.querySelf, "snapshot"), queryWalletRead(context.kernel.querySelf, "catalog"),
   ]);
   context.signal?.throwIfAborted();
   if (!isJsonObject(snapshot) || typeof snapshot.owner !== "string" || !Array.isArray(catalog)) throw new Error("Wallet account or canonical ledger catalog unavailable");

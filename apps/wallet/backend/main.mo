@@ -41,6 +41,8 @@ import BridgeProviderMemory "./memory/wallet_bridge_provider/v1";
 import BridgeProvider "./bridge/BridgeProvider";
 import BridgeActivityMemory "./memory/wallet_bridge_activity/v1";
 import BridgeActivity "./bridge/Activity";
+import RefillMemory "./memory/wallet_refills/v1";
+import Refill "./refill/Service";
 
 module {
     let BATCH_SIZE = 20;
@@ -59,6 +61,38 @@ module {
     let MAX_ALLOWANCE_LIFETIME_NS : Nat64 = 600_000_000_000;
     let COMMAND_RETENTION_NS : Int = 86_400_000_000_000;
     let MAX_ALLOWANCE_PAGE_SIZE = 100;
+
+    // Public Candid DTOs stay visible to the application's method-schema
+    // generator. Service and immutable memory types are structurally identical.
+    public type WalletRefillKindV1 = { #icp_topup; #tcycles_topup; #icp_to_tcycles };
+    public type WalletRefillPhaseV1 = {
+        #prepared; #transfer_pending; #notify_pending; #withdraw_pending;
+        #forward_pending; #complete; #refunded; #stopped;
+    };
+    public type WalletRefillRequestV1 = {
+        id : Blob; kind : WalletRefillKindV1; target : Principal; amount : Nat;
+        icp_fee : Nat; cycles_fee : Nat; estimated_cycles : Nat;
+    };
+    public type WalletRefillViewV1 = {
+        id : Blob; kind : WalletRefillKindV1; target : Principal; amount : Nat;
+        icp_fee : Nat; cycles_fee : Nat; estimated_cycles : Nat;
+        created_at : Int; updated_at : Int; phase : WalletRefillPhaseV1;
+        source_block : ?Nat; mint_block : ?Nat; minted_cycles : ?Nat;
+        forward_block : ?Nat; refund_block : ?Nat; credited_cycles : ?Nat;
+        duplicate : Bool; error : ?Text; can_continue : Bool;
+    };
+    public type WalletRefillResultV1 = { #ok : WalletRefillViewV1; #err : Text };
+    public type WalletRefillCursorV1 = { created_at : Int; id : Blob };
+    public type WalletRefillPageRequestV1 = { before : ?WalletRefillCursorV1; limit : Nat; pending_only : Bool };
+    public type WalletRefillPageV1 = { operations : [WalletRefillViewV1]; next_cursor : ?WalletRefillCursorV1 };
+    public type WalletReadRequestV1 = { #snapshot; #catalog; #refill_status : Blob; #refills : WalletRefillPageRequestV1 };
+    public type WalletReadResultV1 = {
+        #snapshot : WalletSnapshot;
+        #catalog : [CatalogLedger];
+        #refill_status : WalletRefillResultV1;
+        #refills : WalletRefillPageV1;
+    };
+    public type WalletRefillActionV1 = { #prepare : WalletRefillRequestV1; #execute : Blob; #continue_ : Blob };
 
     public type CatalogLedger = {
         principal : Principal;
@@ -893,6 +927,7 @@ module {
             wallet_bridge_replacements : BridgeReplacementMemory.Mem;
             wallet_bridge_provider : BridgeProviderMemory.Mem;
             wallet_bridge_activity : BridgeActivityMemory.Mem;
+            wallet_refills : RefillMemory.Mem;
         };
         app_calls : AppCalls;
         capabilities : {
@@ -910,8 +945,29 @@ module {
         let bridge = Bridge.ServiceWithReplacements(env.stable_memory.wallet_bridge, env.stable_memory.wallet_bridge_replacements, calls);
         let bridgeProvider = BridgeProvider.Service(env.stable_memory.wallet_bridge_provider, env.stable_memory.wallet_bridge);
         let bridgeActivity = BridgeActivity.Service(env.stable_memory.wallet_bridge_activity, env.stable_memory.wallet_bridge);
+        let refills = Refill.Service(env.stable_memory.wallet_refills, calls);
         var transferInFlight = false;
         let refundCursors = Map.empty<Blob, RefundCursor>();
+
+        public func /*query*/wallet_read_v1(request : WalletReadRequestV1) : WalletReadResultV1 {
+            switch (request) {
+                case (#snapshot) #snapshot(snapshot());
+                case (#catalog) #catalog(wallet_catalog(()));
+                case (#refill_status(id)) #refill_status(refills.status(id));
+                case (#refills(request)) #refills(refills.page(request));
+            };
+        };
+        public func /*update*/wallet_refill_action_v1(request : WalletRefillActionV1) : async* WalletRefillResultV1 {
+            switch (request) {
+                case (#prepare(value)) refills.prepare(value);
+                case (#execute(id)) await* refills.execute(id);
+                case (#continue_(id)) await* refills.resume(id);
+            };
+        };
+        public func /*update*/wallet_refill_prepare_v1(request : WalletRefillRequestV1) : WalletRefillResultV1 { refills.prepare(request) };
+        public func /*update*/wallet_refill_execute_v1(id : Blob) : async* WalletRefillResultV1 { await* refills.execute(id) };
+        public func /*update*/wallet_refill_continue_v1(id : Blob) : async* WalletRefillResultV1 { await* refills.resume(id) };
+        public func /*query*/wallet_refill_status_v1(id : Blob) : WalletRefillResultV1 { refills.status(id) };
 
         public func /*query*/wallet_snapshot(()) : WalletSnapshot {
             snapshot();
@@ -5233,6 +5289,24 @@ module {
     };
 
 /*---NEUTRON GENERATED BEGIN---*/
+
+public type wallet_read_v1_Input = (request : WalletReadRequestV1);
+public type wallet_read_v1_Output = WalletReadResultV1;
+
+public type wallet_refill_action_v1_Input = (request : WalletRefillActionV1);
+public type wallet_refill_action_v1_Output = WalletRefillResultV1;
+
+public type wallet_refill_prepare_v1_Input = (request : WalletRefillRequestV1);
+public type wallet_refill_prepare_v1_Output = WalletRefillResultV1;
+
+public type wallet_refill_execute_v1_Input = (id : Blob);
+public type wallet_refill_execute_v1_Output = WalletRefillResultV1;
+
+public type wallet_refill_continue_v1_Input = (id : Blob);
+public type wallet_refill_continue_v1_Output = WalletRefillResultV1;
+
+public type wallet_refill_status_v1_Input = (id : Blob);
+public type wallet_refill_status_v1_Output = WalletRefillResultV1;
 
 public type wallet_snapshot_Input = (());
 public type wallet_snapshot_Output = WalletSnapshot;

@@ -33,9 +33,10 @@ function kernelFixture({ owner, ledger, appOrigin }) {
   } }));
   function result(message) {
     const { method, args } = message;
-    if (method === "wallet_snapshot") return { owner, configured: true,
-      ledgers: [{ id: "1", principal: ledger, symbol: "ICP", name: "Internet Computer", decimals: "8", balance: "123456789", fee: "10000", logo }] };
-    if (method === "wallet_catalog" || method === "wallet_transfers_pending_v2") return [];
+    if (method === "wallet_read_v1" && "snapshot" in args[0]) return { snapshot: { owner, configured: true,
+      ledgers: [{ id: "1", principal: ledger, symbol: "ICP", name: "Internet Computer", decimals: "8", balance: "123456789", fee: "10000", logo }] } };
+    if (method === "wallet_read_v1" && "catalog" in args[0]) return { catalog: [] };
+    if (method === "wallet_transfers_pending_v2") return [];
     if (method === "wallet_history_status") {
       if (state.statusUnavailable) throw Error("History index temporarily unavailable");
       return { running: false, ledgers: [] };
@@ -116,7 +117,7 @@ try {
   const requests = state.calls.filter(call => call.method === "wallet_history_page").map(call => call.args[0]);
   assert.deepEqual(requests.map(request => [request.limit, request.before?.id ?? null]),
     [["40", null], ["20", null], ["40", "981"], ["20", "981"], ["40", "961"], ["20", "961"], ["40", "941"], ["20", "941"]]);
-  assert(state.calls.every(call => ["wallet_snapshot", "wallet_catalog", "wallet_transfers_pending_v2", "wallet_history_page", "wallet_history_status"].includes(call.method)));
+  assert(state.calls.every(call => ["wallet_read_v1", "wallet_transfers_pending_v2", "wallet_history_page", "wallet_history_status"].includes(call.method)));
   checks.push("Load more reaches all 65 records through exact cursors, exposes the oldest block, clears recovered status errors, and makes only read calls.");
   assert.deepEqual(errors, []);
   await writeFile(`${out}/results.json`, JSON.stringify({ checks, errors }, null, 2));

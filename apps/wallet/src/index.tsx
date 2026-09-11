@@ -1,3 +1,4 @@
+import { queryWalletRead } from "./wallet_read.ts";
 import {
   WALLET_ADD_LEDGER_PRESENT_TOOL,
   handleWalletAddLedgerPresentation,
@@ -17,6 +18,7 @@ import {
   IoClose,
   IoCopyOutline,
   IoGlobeOutline,
+  IoFlashOutline,
   IoOptionsOutline,
   IoOpenOutline,
   IoPeopleOutline,
@@ -61,6 +63,8 @@ import {
   type ButtonHTMLAttributes,
 } from "react";
 import "./style.scss";
+import { WalletRefillPage, WalletRefillPromptHost, requestWalletRefillReview } from "./refill_page.tsx";
+import { WALLET_REFILL_PRESENT_TOOL, handleWalletRefillPresentation, walletRefillPresentationInputSchema, walletRefillOutputSchema } from "./refill_tools.ts";
 import { readWalletWithdrawalQuote, quoteAuthorizationWire, type WalletWithdrawalQuote } from "./withdrawal_quote.ts";
 import {
   finishSavedWalletTransfer,
@@ -193,7 +197,7 @@ type WalletTransferReceipt = {
 };
 
 export type WalletSurface = "tile" | "tray";
-type WalletView = "assets" | "activity" | "approvals";
+type WalletView = "assets" | "activity" | "approvals" | "refill";
 
 type WalletSurfaceContextValue = {
   surface: WalletSurface;
@@ -526,6 +530,14 @@ function isWalletTileRuntime(): boolean {
 }
 
 if (isWalletTileRuntime()) {
+  exposeTool(WALLET_REFILL_PRESENT_TOOL, {
+    title: "Review a canister refill",
+    description: "Review one exact ICP or TCYCLES refill or conversion before Wallet saves and executes it.",
+    inputSchema: walletRefillPresentationInputSchema,
+    outputSchema: walletRefillOutputSchema,
+    annotations: { "neutron:audience": "foreground_tile", "neutron:visibility": "same_app", "neutron:audit": "metadata_only", "neutron:effects": ["write", "network", "user_visible_ui"] },
+  }, (args, context) => handleWalletRefillPresentation(args, context, (quote) => requestWalletRefillReview(quote, context.signal)));
+
   exposeTool(WALLET_ADD_LEDGER_PRESENT_TOOL, {
     title: "Add a token in Wallet",
     description: "Review exact ledger access and add this token without replacing any other selection.",
@@ -590,7 +602,7 @@ export function WalletApp({
   return (
     <WalletSurfaceContext.Provider value={{ openInTile, surface }}>
       <WalletAppContent surface={surface} />
-      {surface === "tile" ? <WalletFundingPromptHost /> : null}
+      {surface === "tile" ? <><WalletFundingPromptHost /><WalletRefillPromptHost /></> : null}
     </WalletSurfaceContext.Provider>
   );
 }
@@ -894,6 +906,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const { openInTile } = useWalletSurface();
   const [view, setView] = useState<WalletView>("assets");
   const [snapshot, setSnapshot] = useState<WalletSnapshot | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadInFlight = useRef(false);
+  const [refillRevision, setRefillRevision] = useState(0);
   const [catalog, setCatalog] = useState<CatalogLedger[]>([]);
   const [setupOpen, setSetupOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -961,8 +976,8 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
 
   const load = useCallback(async () => {
     const [snapshotValue, catalogValue] = await Promise.all([
-      querySelf("wallet_snapshot", [null]),
-      querySelf("wallet_catalog", [null]),
+      queryWalletRead(querySelf, "snapshot"),
+      queryWalletRead(querySelf, "catalog"),
     ]);
     const nextSnapshot = parseWalletSnapshot(snapshotValue);
     const nextCatalog = parseWalletCatalog(catalogValue);
@@ -978,7 +993,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   }, []);
 
   const reloadSnapshot = useCallback(async () => {
-    setSnapshot(parseWalletSnapshot(await querySelf("wallet_snapshot", [null])));
+    setSnapshot(parseWalletSnapshot(await queryWalletRead(querySelf, "snapshot")));
   }, []);
 
   useEffect(
@@ -991,9 +1006,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     [],
   );
 
-  useEffect(() => {
-    void load().catch((reason) => setError(errorMessage(reason)));
+  const retryInitialLoad = useCallback(async () => {
+    if (initialLoadInFlight.current) return;
+    initialLoadInFlight.current = true;
+    setInitialLoading(true);
+    setError(null);
+    try { await load(); }
+    catch (reason) { setError(errorMessage(reason)); }
+    finally { initialLoadInFlight.current = false; setInitialLoading(false); }
   }, [load]);
+
+  useEffect(() => { void retryInitialLoad(); }, [retryInitialLoad]);
 
   useEffect(
     () =>
@@ -1776,6 +1799,14 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       return;
     }
 
+    if (requested === "refill") {
+      setSetupOpen(false);
+      setDepositLedgerId(null);
+      setDestinationLedgerId(null);
+      setView("refill");
+      return;
+    }
+
     if (requested === "approvals") {
       setSetupOpen(false);
       setDepositLedgerId(null);
@@ -2008,10 +2039,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   if (!snapshot) {
     return (
       <main
-        className={`nt-app wallet-app wallet-app--${surface} wallet-loading`}
-        aria-label="Loading Wallet"
+        className={`nt-app wallet-app wallet-app--${surface} wallet-startup`}
+        aria-label={initialLoading ? "Loading Wallet" : "Wallet unavailable"}
       >
-        <span className="wallet-spinner" />
+        {initialLoading ? <div className="wallet-loading"><span className="wallet-spinner" />Loading Wallet</div> : (
+          <div className="wallet-startup-error">
+            <IoAlertCircleOutline aria-hidden="true" />
+            <h2>Wallet couldn't load</h2>
+            {error ? <WalletNotice message={error} /> : null}
+            <button className="nt-button" disabled={initialLoading} onClick={() => void retryInitialLoad()} type="button"><IoRefresh aria-hidden="true" />Retry</button>
+          </div>
+        )}
       </main>
     );
   }
@@ -2290,6 +2328,14 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             >
               <IoShieldCheckmarkOutline aria-hidden="true" />
             </IconButton>
+            <IconButton
+              aria-pressed={view === "refill"}
+              className="wallet-view-button"
+              label="Refill"
+              onClick={() => chooseView("refill")}
+            >
+              <IoFlashOutline aria-hidden="true" />
+            </IconButton>
           </div>
           <span className="wallet-toolbar-spacer" />
           {view === "assets" && portfolio.eligible > 0 ? (
@@ -2339,11 +2385,11 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
                 ? "Sync activity"
                 : view === "approvals"
                   ? "Refresh approvals"
-                  : "Refresh balances"
+                  : view === "refill" ? "Refresh refill balances" : "Refresh balances"
             }
             disabled={
               busy !== null ||
-              snapshot.ledgers.length === 0 ||
+              (snapshot.ledgers.length === 0 && view !== "refill") ||
               (view === "activity" && historySyncing) ||
               (view === "approvals" &&
                 (allowancesLoading ||
@@ -2360,6 +2406,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             onClick={() => {
               if (view === "activity") void syncHistory();
               else if (view === "approvals") void loadAllowances();
+              else if (view === "refill") setRefillRevision((current) => current + 1);
               else {
                 void update("wallet_refresh_balances", [null], "balances");
                 void refreshPrices(true);
@@ -2421,6 +2468,8 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             onRevoke={(entry, page) => void revokeAllowance(entry, page)}
             pages={allowancePages}
           />
+        ) : view === "refill" ? (
+          <WalletRefillPage owner={snapshot.owner} refreshRevision={refillRevision + projectionRevision} tray={surface === "tray"} openInTile={() => openInTile("refill")} />
         ) : depositLedger ? (
           <WalletDeposit
             catalog={depositCatalog}

@@ -32,10 +32,10 @@ function fixture(initial: string[] = [other]) {
     requestApproval: async (review: JsonObject) => { calls.push({ kind: "judge", value: review }); },
     presentUserInterface: async () => { throw new Error("Root must not open owner UI"); },
     kernel: {
-      querySelf: async (method: string) => {
+      querySelf: async (method: string, args: JsonObject[]) => {
         calls.push({ kind: "query", value: method });
-        if (method === "wallet_snapshot") return snapshot();
-        if (method === "wallet_catalog") return [];
+        if (method === "wallet_read_v1" && "snapshot" in args[0]!) return { snapshot: snapshot() };
+        if (method === "wallet_read_v1" && "catalog" in args[0]!) return { catalog: [] };
         throw new Error(`Unexpected query ${method}`);
       },
       callTool: async (request: { name: string }) => {

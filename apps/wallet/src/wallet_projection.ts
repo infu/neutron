@@ -366,13 +366,14 @@ function parseActivitySync(value: JsonValue | undefined): WalletActivitySync {
 }
 
 export function walletTileView(
-  action: "assets" | "activity" | "approvals" | "setup" | "receive" | "send",
+  action: "assets" | "activity" | "approvals" | "refill" | "setup" | "receive" | "send",
   ledgerId?: string,
 ): string {
   if (
     action === "assets" ||
     action === "activity" ||
     action === "approvals" ||
+    action === "refill" ||
     action === "setup"
   ) {
     return action;

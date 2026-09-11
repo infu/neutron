@@ -49,9 +49,13 @@ for ((symbol, ledgerId, index, contract) in supported.vals()) {
     };
 };
 
-// Expanding available routes must not change installed or fresh selections.
+// Fresh wallets include TCYCLES; configured selections are preserved by Main.
 assert Catalog.defaultLedgers == [
     "ryjl3-tyaaa-aaaaa-aaaba-cai",
     "mxzaz-hqaaa-aaaar-qaada-cai",
     "xevnm-gaaaa-aaaar-qafnq-cai",
+    "um5iw-rqaaa-aaaaq-qaaba-cai",
 ];
+
+let ?cycles = Catalog.find(Principal.fromText("um5iw-rqaaa-aaaaq-qaaba-cai")) else Runtime.trap("Missing TCYCLES preset");
+assert cycles.symbol == "TCYCLES";

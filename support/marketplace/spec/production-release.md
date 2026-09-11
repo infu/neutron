@@ -371,3 +371,50 @@ matched. Listing-copy postflight separately verified all 27 exact descriptions,
 preserved prices/media/releases, and all six public ranking views. No live
 purchase or wallet transaction was used for qualification, and no Git push is
 included.
+
+
+## Wallet canister refills — Wallet326
+
+Wallet `0.3.26` was published in catalog batch `8` on 2026-09-11.
+The archive is 926,070 bytes with SHA-256
+`1c3f152b3c97a4a91c8ab5ddf3194938841f6745cbd4aab7ac5a0287e851dd53`.
+Its offered source is 830,756 bytes with SHA-256
+`78b81eb6714a76108df5a44e3ec559237393ccf3d55a1672277e3d018bbcf015`.
+Only Wallet changed in the 27-package transaction. Kernel, Marketplace protocol,
+legacy source and Dispenser starter were not changed.
+
+The compact Refill tab supports ICP and TCYCLES canister funding, plus ICP to
+TCYCLES conversion. My Neutron is the default destination; another canister or
+recipient principal is available under Advanced. Amount sliders and Max account
+for fees. Public balances, fees and the CMC rate use browser queries. One review
+precedes payment; normal agents share that review, while root agents can execute
+under their existing authority. Fresh Wallets select TCYCLES with the existing
+presets; configured Wallets preserve their selected tokens and can use the refill
+tab's direct TCYCLES reads regardless of selection.
+
+Seven released memory roots and lock lineages are unchanged. The independent
+`wallet_refills` v1 root saves exact ledger requests, conversion notifications,
+refunds and onward transfers. Same-ID recovery never invents a replacement debit.
+Cycles-ledger withdrawal duplicates remain unverified unless original successful
+delivery evidence is retained. Paginated unfinished/history views retain access
+to older recovery records. Prepared requests reopen review before first dispatch.
+Initial Wallet read failures now show Retry, and a failed query-agent initializer
+is evicted so a subsequent refresh can recover.
+
+Complete packaging, 310 Wallet tests (2,680 assertions), 19 Motoko suites,
+semantic clean-initialization/restoration and production-predecessor migration
+planning passed. Browser release suites cover existing connections, ledger
+selection and activity, eight refill scenarios at 320/380/960px, and four initial
+read-failure cases across tile and tray. TypeScript passes. PocketIC fixtures
+cover all three money flows, refunds, interrupted replies, duplicate semantics,
+concurrent recovery and pagination. No live financial action was used for testing.
+
+The first publication verified batch `8`. Two repeat attempts stopped in the
+local Wasm response verifier; the same frozen files and request identity were
+retained. The subsequent identical-byte repeat passed receipt-v2 with
+`batch_id: null`, all 27 packages and offered sources `unchanged`, and matching
+versions, paths, URLs, lengths and SHA-256 digests across all 54 artifacts.
+No verifier checks were bypassed and no runtime workaround was needed. The
+intermittent local verifier trap remains undiagnosed. Publication request:
+`f2b1031284c93bbaeae7f0076b9db486151f7473e8f93b5f148183076a0167c4`.
+No Git push is included.

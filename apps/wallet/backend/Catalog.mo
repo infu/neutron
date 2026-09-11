@@ -260,7 +260,7 @@ module {
             index = ?"ul4oc-4iaaa-aaaaq-qaabq-cai";
             history_kind = #icrc;
             name = "Cycles";
-            symbol = "CYCLES";
+            symbol = "TCYCLES";
             price_asset = null;
             networks = [#internet_computer];
             native_route = null;
@@ -271,6 +271,7 @@ module {
         ICP_LEDGER,
         CKBTC_LEDGER,
         CKUSDC_LEDGER,
+        "um5iw-rqaaa-aaaaq-qaaba-cai",
     ];
 
     public func find(principal : Principal) : ?Ledger {

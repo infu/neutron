@@ -2,9 +2,9 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 325,
+  "version": 326,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
-  "description": "Canister-owned ICRC token balances",
+  "description": "IC token wallet, transfers and canister refills",
   "src": "main.mo",
   "backend": {
     "capabilities": {
@@ -35,8 +35,6 @@
     "preapproved_self_calls": {
       "api": 1,
       "methods": [
-        "wallet_snapshot",
-        "wallet_catalog",
         "wallet_contact_destinations",
         "wallet_refresh_metadata",
         "wallet_refresh_balances",
@@ -66,7 +64,9 @@
         "wallet_bridge_provider_prepare_v1",
         "wallet_bridge_provider_binding_v1",
         "wallet_bridge_activity_v1",
-        "wallet_bridge_step_v2"
+        "wallet_bridge_step_v2",
+        "wallet_read_v1",
+        "wallet_refill_action_v1"
       ]
     },
     "scheduled_tasks": {
@@ -190,6 +190,25 @@
           "kind": "exact",
           "principal": "lh22c-kyaaa-aaaar-qb5nq-cai",
           "method": "withdrawal_status"
+        },
+        {
+          "kind": "principal",
+          "principal": "um5iw-rqaaa-aaaaq-qaaba-cai"
+        },
+        {
+          "kind": "exact",
+          "principal": "ul4oc-4iaaa-aaaaq-qaabq-cai",
+          "method": "get_account_transactions"
+        },
+        {
+          "kind": "exact",
+          "principal": "rkp4c-7iaaa-aaaaa-aaaca-cai",
+          "method": "notify_top_up"
+        },
+        {
+          "kind": "exact",
+          "principal": "rkp4c-7iaaa-aaaaa-aaaca-cai",
+          "method": "notify_mint_cycles"
         }
       ],
       "max_concurrency": 20,
@@ -239,6 +258,30 @@
     }
   ],
   "func": {
+    "wallet_read_v1": {
+      "type": "query",
+      "async": false
+    },
+    "wallet_refill_action_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_refill_prepare_v1": {
+      "type": "update",
+      "async": false
+    },
+    "wallet_refill_execute_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_refill_continue_v1": {
+      "type": "update",
+      "async": "async*"
+    },
+    "wallet_refill_status_v1": {
+      "type": "query",
+      "async": false
+    },
     "wallet_snapshot": {
       "type": "query",
       "async": false
@@ -467,6 +510,15 @@
       "schemas": {
         "1": {
           "src": "memory/wallet_bridge_activity/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "wallet_refills": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/wallet_refills/v1.mo"
         }
       },
       "migrations": []

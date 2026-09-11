@@ -102,8 +102,8 @@ function kernelFixture({ owner, ledger, original, appOrigin }) {
     if (message.type === "neutron:self-call:exec") {
       if (message.tool === "backend_calls.request") {
         if (message.context?.invocation) applySelection(frame, message); else review(frame, message);
-      } else if (message.method === "wallet_snapshot") reply(frame, message, snapshot());
-      else if (message.method === "wallet_catalog") reply(frame, message, []);
+      } else if (message.method === "wallet_read_v1" && "snapshot" in message.args[0]) reply(frame, message, { snapshot: snapshot() });
+      else if (message.method === "wallet_read_v1" && "catalog" in message.args[0]) reply(frame, message, { catalog: [] });
       else if (message.method === "wallet_token_info_v1") {
         if (JSON.stringify(message.args) !== JSON.stringify([{ ledger }])) throw Error("Wrong metadata ledger");
         reply(frame, message, {
