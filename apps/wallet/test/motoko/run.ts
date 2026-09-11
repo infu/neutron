@@ -17,6 +17,7 @@ const cwd = process.cwd();
 const testRoot = path.resolve("test/motoko");
 const compiledIcTests = [
   "transfer_journal_test.mo",
+  "refill_main_test.mo",
   "bridge_test.mo",
   "bridge_replacements_test.mo",
   "bridge_provider_test.mo",
@@ -32,6 +33,7 @@ const compiledIcTests = [
 ];
 const availableTests = [
   "catalog_test.mo",
+  "refill_test.mo",
   "allowances_test.mo",
   "funding_test.mo",
   "history_test.mo",

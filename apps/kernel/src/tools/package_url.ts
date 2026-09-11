@@ -1,4 +1,10 @@
 import { REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS } from "neutron-compiler/src/install.js";
+import {
+  fetchWithRepositoryAccess,
+  RepositoryAccessError,
+  type RepositoryAccessApproval,
+  type RepositoryPreparedAccess,
+} from "../repository_access/client.ts";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
 
 export const URL_PACKAGE_MAX_BYTES =
@@ -8,6 +14,10 @@ export const URL_PACKAGE_MAX_CHARACTERS = 4_096;
 export type FetchPackageUrlOptions = {
   fetch?: typeof fetch;
   maxBytes?: number;
+  resourcePaths?: readonly string[];
+  approvedAccess?: readonly RepositoryAccessApproval[];
+  preparedAccess?: RepositoryPreparedAccess;
+  allowAccessAcquisition?: boolean;
   signal?: AbortSignal;
 };
 
@@ -17,7 +27,6 @@ export async function fetchPackageFromUrl(
 ): Promise<Uint8Array> {
   const allowLoopbackHttp = getRuntimeDeployment().allowLoopbackHttp;
   const packageUrl = parsePackageUrl(rawUrl, { allowLoopbackHttp });
-  const fetchPackage = options.fetch ?? globalThis.fetch;
   const maxBytes = options.maxBytes ?? URL_PACKAGE_MAX_BYTES;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
     throw new Error("URL package byte limit is invalid");
@@ -25,20 +34,31 @@ export async function fetchPackageFromUrl(
 
   let response: Response;
   try {
-    response = await fetchPackage(packageUrl.href, {
-      cache: "no-store",
-      credentials: "omit",
-      headers: {
-        accept: "application/octet-stream, application/x-neutron, */*;q=0.1",
+    response = await fetchWithRepositoryAccess(
+      packageUrl.href,
+      {
+        cache: "no-store",
+        credentials: "omit",
+        headers: {
+          accept: "application/octet-stream, application/x-neutron, */*;q=0.1",
+        },
+        method: "GET",
+        mode: "cors",
+        redirect: "error",
+        referrerPolicy: "no-referrer",
+        ...(options.signal ? { signal: options.signal } : {}),
       },
-      method: "GET",
-      mode: "cors",
-      redirect: "error",
-      referrerPolicy: "no-referrer",
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
+      {
+        fetch: options.fetch,
+        resourcePaths: options.resourcePaths,
+        approvedAccess: options.approvedAccess,
+        preparedAccess: options.preparedAccess,
+        allowAccessAcquisition: options.allowAccessAcquisition,
+        signal: options.signal,
+      },
+    );
   } catch (error) {
-    if (isAbortError(error)) throw error;
+    if (isAbortError(error) || error instanceof RepositoryAccessError) throw error;
     throw new Error(
       "Could not download this URL. Check the address, CORS settings, and that it does not redirect, or use File.",
       { cause: error },
@@ -88,6 +108,13 @@ export async function fetchPackageFromUrl(
       chunks.push(value);
     }
   } catch (error) {
+    if (options.preparedAccess) {
+      if (isAbortError(error)) throw new DOMException("The download was canceled.", "AbortError");
+      if (isPackageUrlError(error) && error instanceof Error && !error.message.includes(options.preparedAccess.token)) {
+        throw new Error(error.message);
+      }
+      throw new Error("Package download was interrupted");
+    }
     if (isAbortError(error) || isPackageUrlError(error)) throw error;
     throw new Error("Package download was interrupted", { cause: error });
   } finally {

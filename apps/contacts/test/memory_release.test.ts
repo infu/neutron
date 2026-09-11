@@ -36,3 +36,20 @@ test("Contacts 0.3.6 keeps the exact production 0.3.5 v2 memory root", async () 
     candidateVersion: 306,
   });
 });
+
+test("Contacts 0.3.7 keeps the exact production 0.3.6 root across the source transition", async () => {
+  await assertManagedMemoryCodeOnlyRelease({
+    appId: "contacts",
+    memoryId: "contacts",
+    memoryVersion: 2,
+    productionArchive: new URL("../contacts.v0.3.6.neutron", import.meta.url),
+    candidateArchive: new URL("../contacts.v0.3.7.neutron", import.meta.url),
+    lock: new URL("../neutron.lock.json", import.meta.url),
+    production: {
+      version: 306,
+      bytes: 298018,
+      sha256: "2e420226252b93ce1ab1d4ee2ce4278c395c81324384fc4edebfd613a942885f",
+    },
+    candidateVersion: 307,
+  });
+});

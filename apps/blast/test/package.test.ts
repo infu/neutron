@@ -103,8 +103,8 @@ describe("Blast first-release package shape", () => {
     expect(manifest).toMatchObject({
       format: 3,
       id: "blast",
-      version: 102,
-      update_source: "233tv-xiaaa-aaaay-aacta-cai",
+      version: 103,
+      update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
       background: {
         path: "service.html",
       },
@@ -235,7 +235,7 @@ describe("Blast first-release package shape", () => {
     }
     expect(source.revision).toBe(`source-sha256:${source.sha256}`);
     expect(source.url).toBe(
-      "https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/" +
+      "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/" +
         neutronAppSourceArchiveFilename(source.sha256),
     );
     const sourceArtifact = await readBytes(

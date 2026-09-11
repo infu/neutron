@@ -71,8 +71,8 @@ test("the manifest validates against the shared schema", async () => {
   expect(result.valid).toBe(true);
   expect(manifest.format).toBe(3);
   expect(manifest.id).toBe("icpswap");
-  expect(manifest.version).toBe(209);
-  expect(manifest.update_source).toBe("233tv-xiaaa-aaaay-aacta-cai");
+  expect(manifest.version).toBe(210);
+  expect(manifest.update_source).toBe("sj2r4-haaaa-aaaay-aadgq-cai");
 });
 
 test("the app declares exactly one tile and one resident background", async () => {
@@ -407,12 +407,12 @@ test("ordinary resident tools use the existing invocation and Wallet review cont
 test("the release offers complete source and the shared application license", async () => {
   const unpacked = unpackNeutronPackage(new Uint8Array(await readFile(packageUrl)));
   const record = JSON.parse(decoder.decode(unpacked["legal/package-record.v1.json"]!));
-  expect(record.package).toMatchObject({ id: "icpswap", version: 209 });
+  expect(record.package).toMatchObject({ id: "icpswap", version: 210 });
   expect(record.license.id).toBe("LicenseRef-Neutron-Sovereign-Application-Use-License-1.0");
   expect(unpacked["legal/LICENSE.APP.USE.txt"]).toEqual(new Uint8Array(await readFile(new URL("../../../LICENSE.APP.USE", import.meta.url))));
   expect(record.source.kind).toBe("https");
   expect(record.source.sha256).toMatch(/^[a-f0-9]{64}$/);
-  expect(record.source.url).toBe(`https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/${record.source.sha256}.source.v1.msgpack.gz`);
+  expect(record.source.url).toBe(`https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/${record.source.sha256}.source.v1.msgpack.gz`);
   expect(record.source.bytes).toBeGreaterThan(0);
   expect(Object.keys(unpacked).some((path) => path.startsWith("legal/archive-only/") || path.startsWith("legal/source/"))).toBe(false);
 });

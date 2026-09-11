@@ -25,6 +25,7 @@ import { beforeAll, expect, mock, test } from "bun:test";
 import { IDL } from "@dfinity/candid";
 import { idlFactory as governanceIdl } from "../src/candid/sns_governance.did.js";
 import type { MsgBusToolContext, ScopedKernelClient } from "neutron-tools/app";
+import { normalizeToolDescriptor, type MsgBusToolDescriptor } from "neutron-tools/protocol";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,9 +87,12 @@ mock.module("neutron-tools/app", () => ({
   onTileViewRequest: () => () => {},
   exposeTool: (
     name: string,
-    _options: unknown,
+    options: Omit<MsgBusToolDescriptor, "name">,
     handler: (args: unknown, context: MsgBusToolContext) => Promise<unknown>,
   ) => {
+    // A valid handler is unreachable if the resident fails schema registration.
+    // Keep the shared production validator even with the Kernel calls stubbed.
+    normalizeToolDescriptor({ name, ...options });
     handlers.set(name, async (args) => {
       insideTool += 1;
       try { return await handler(args, { kernel: scopedKernel, reportProgress() {} }); }
@@ -622,6 +626,13 @@ test("custom drafts retain the exact payload and refuse missing bytes before sav
   captured.length = 0;
   await expect(draft(input)).rejects.toThrow(/payloadHex/);
   expect(captured.filter((row) => row.method === "snsgov_draft_save")).toEqual([]);
+  // Byte alignment is enforced by the handler because the shared schema
+  // deliberately accepts only simple regexes, without repeated byte groups.
+  for (const payloadHex of ["4449444c000", "4449444c000g", "0x4449444c0000", "44 49444c0000", "000000000000"]) {
+    captured.length = 0;
+    await expect(draft({ ...input, payloadHex })).rejects.toThrow(/payloadHex/);
+    expect(captured.filter((row) => row.method === "snsgov_draft_save")).toEqual([]);
+  }
   await draft({ ...input, payloadHex: "4449444c0000" });
   const saved = captured.find((row) => row.method === "snsgov_draft_save")!.args[0] as { payload: Uint8Array };
   expect(Array.from(saved.payload)).toEqual([68, 73, 68, 76, 0, 0]);

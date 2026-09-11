@@ -17,3 +17,20 @@ test("Mail 0.3.5 keeps the exact production v1 memory root", async () => {
     candidateVersion: 305,
   });
 });
+
+test("Mail 0.3.6 keeps the exact production 0.3.5 root across the source transition", async () => {
+  await assertManagedMemoryCodeOnlyRelease({
+    appId: "mail",
+    memoryId: "mail",
+    memoryVersion: 1,
+    productionArchive: new URL("../mail.v0.3.5.neutron", import.meta.url),
+    candidateArchive: new URL("../mail.v0.3.6.neutron", import.meta.url),
+    lock: new URL("../neutron.lock.json", import.meta.url),
+    production: {
+      version: 305,
+      bytes: 724878,
+      sha256: "d82e7251b67ed250e47e730df49cea4e88f27ec9187de3033abe5a923b7ecdd1",
+    },
+    candidateVersion: 306,
+  });
+});

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { bls12_381 } from "@noble/curves/bls12-381";
 import {
   Cbor,
+  LookupPathStatus,
   NodeType,
   domain_sep,
   reconstruct,
@@ -16,6 +17,7 @@ import {
   decodeCertifiedAssetBytes,
   decodeCertifiedAssetJson,
   decodeCertifiedAssetText,
+  lookupCertifiedAssetPath,
   type CertifiedAssetLimits,
   type KernelStaticRead,
   type KernelStaticReadResponse,
@@ -146,6 +148,52 @@ function reader(
   });
 }
 
+describe("certified asset byte-label lookup", () => {
+  const lookup = (label: string | Uint8Array, tree: HashTree) =>
+    lookupCertifiedAssetPath([typeof label === "string" ? encoder.encode(label) : label], tree);
+  const value = new Uint8Array([1, 2, 3]);
+  const hidden = () => pruned(new Uint8Array(32));
+
+  test("uses the first differing byte and handles prefixes and binary labels", () => {
+    const tree = fork(labeled("az", leaf(value)), labeled("ba", leaf(value)));
+    expect(lookup("az", tree)).toEqual({ status: LookupPathStatus.Found, value });
+    expect(lookup("ba", tree)).toEqual({ status: LookupPathStatus.Found, value });
+    expect(lookup("b", tree).status).toBe(LookupPathStatus.Absent);
+    expect(lookup("b0", tree).status).toBe(LookupPathStatus.Absent);
+    expect(lookup("baz", tree).status).toBe(LookupPathStatus.Absent);
+    const prefixes = fork(labeled("a", leaf(value)), labeled("aa", leaf(value)));
+    expect(lookup("a", prefixes).status).toBe(LookupPathStatus.Found);
+    expect(lookup("aa", prefixes).status).toBe(LookupPathStatus.Found);
+    expect(lookup("", prefixes).status).toBe(LookupPathStatus.Absent);
+    const binary = fork(labeled(new Uint8Array([0, 255]), leaf(value)), labeled(new Uint8Array([1, 0]), leaf(value)));
+    expect(lookup(new Uint8Array([1]), binary).status).toBe(LookupPathStatus.Absent);
+    expect(lookup(new Uint8Array([1, 0]), binary).status).toBe(LookupPathStatus.Found);
+  });
+
+  test("only proves absence when visible neighbors bound every pruned gap", () => {
+    const bounded = fork(fork(hidden(), labeled("az", hidden())), fork(labeled("ba", hidden()), hidden()));
+    expect(lookup("b", bounded).status).toBe(LookupPathStatus.Absent);
+    expect(lookup("a", bounded).status).toBe(LookupPathStatus.Unknown);
+    expect(lookup("bz", bounded).status).toBe(LookupPathStatus.Unknown);
+    const gap = fork(labeled("az", hidden()), fork(hidden(), labeled("ba", hidden())));
+    expect(lookup("b", gap).status).toBe(LookupPathStatus.Unknown);
+    expect(lookup("az", gap).status).toBe(LookupPathStatus.Unknown);
+    expect(lookup("a", gap).status).toBe(LookupPathStatus.Absent);
+    expect(lookup("bz", gap).status).toBe(LookupPathStatus.Absent);
+    expect(lookup("a", empty()).status).toBe(LookupPathStatus.Absent);
+    expect(lookup("a", hidden()).status).toBe(LookupPathStatus.Unknown);
+    expect(lookupCertifiedAssetPath([], labeled("a", leaf(value))).status).toBe(LookupPathStatus.Error);
+  });
+
+  test("copies the exact leaf view without applying its byte offset twice", () => {
+    const backing = new Uint8Array([9, 1, 2, 3, 9]);
+    const result = lookupCertifiedAssetPath([], leaf(backing.subarray(1, 4)));
+    expect(result).toEqual({ status: LookupPathStatus.Found, value });
+    backing[1] = 8;
+    expect(result).toEqual({ status: LookupPathStatus.Found, value });
+  });
+});
+
 describe("certified asset proof reader", () => {
   test("verifies and assembles exact single- and multi-chunk bytes", async () => {
     const key = "/mo/base/Array.mo";
@@ -169,6 +217,20 @@ describe("certified asset proof reader", () => {
       key
     );
     expect(value).toBeUndefined();
+  });
+
+  test("accepts the exact paid two-app repository absence witness", async () => {
+    // Captured from actual Marketplace102 repo_package in isolated PocketIC,
+    // after a paid two-app acquisition and install_prepare. The old SDK returned
+    // Unknown for this valid witness. Re-sign its unchanged root at current time
+    // so the regression retains certificate verification without a stale fixture.
+    const key = "/repo/v1/packages/ce4d679b3a1533ef9e4ed42acf63e0ab65183fbbf7cf94d8a72ddb459c923e62.neutron";
+    const witness = Uint8Array.from(Buffer.from("2dn3gwGDAktodHRwX2Fzc2V0c4MBgwGCBFgg8Yq7ksfMAGiLleLdSSIQCoKuet2nk8+1wT02RDJ8H8WDAYIEWCB/fNKAoSTq5yLJANkAHBchsABwjLU4Mdc79yhZrxINyoMBggRYIIu5gQsiorkCQGF470uiFAa32hirpp0yio8YmgjDtJZkgwJYWC9yZXBvL3YxL21hbmlmZXN0cy8xN2M1Mzc1YWRkNjE3NDQ5ZWRjZWRmN2ExNjFkOWQ3MDAwMTUxYWRiYWExYTNmYjRhMzU4NTk5NWRkMmI3YzEwLmpzb26CBFggXIaIUb5FTFmk3F4DGhkdw+bvQknieuy+SXJLMMoVsyeDAYMCWCEvcmVwby92MS9yZWxlYXNlcy9wYWlkX2FscGhhLmpzb26CBFggbgydpZ6NlP1B5hb+SzIfrIh41anOqZWPnHBJhfJ+zESCBFggg0l4/jOsL5rT4Klk27y5WtmBsZ/HS0jZXX4wPy4zRmSCBFggDSiCVCaOADaE5SgmsmzRTRMOqeRk36j+ijfyJUIixqw=", "base64"));
+    const proof = await proofFor(Cbor.decode<HashTree>(witness));
+    expect(await reader(async () => ({ ...proof, witness, asset: [] })).readRaw(key)).toBeUndefined();
+    await expect(reader(async () => ({ ...proof, witness,
+      asset: [{ content: new Uint8Array([1]), chunks: 1n }],
+    })).readRaw(key)).rejects.toMatchObject({ code: "presence_mismatch" });
   });
 
   test("rejects Unknown, forged null, and present/absent mismatches", async () => {

@@ -1,8 +1,11 @@
 import {
   type JsonObject,
   type JsonValue,
+  type MsgBusToolContext,
   type SelfCallObject,
 } from "neutron-tools/app";
+import { readTokenFacts, type TokenFacts } from "./funding_reads.ts";
+import { queryWalletReview } from "./wallet_read.ts";
 import {
   parseCandidIcrcAccount,
   parsePrincipal,
@@ -19,6 +22,24 @@ import {
 
 export const WALLET_TOKEN_INFO_TOOL = "wallet_token_info_v1";
 export const WALLET_TOKEN_INFO_METHOD = WALLET_TOKEN_INFO_TOOL;
+
+export async function handleWalletTokenInfo(
+  args: JsonObject,
+  context: Pick<MsgBusToolContext, "kernel" | "signal">,
+  readFacts: (ledger: string, signal?: AbortSignal) => Promise<TokenFacts> = readTokenFacts,
+): Promise<JsonObject> {
+  context.signal?.throwIfAborted();
+  const request = walletTokenInfoRequest(args);
+  const facts = await readFacts(request.ledger, context.signal);
+  context.signal?.throwIfAborted();
+  const value = await queryWalletReview(
+    context.kernel.querySelf,
+    "token_info_preview",
+    { ledger: request.ledger, ...facts },
+  );
+  context.signal?.throwIfAborted();
+  return walletTokenInfoJson(parseWalletTokenInfo(value, request.ledger));
+}
 
 export const walletTokenInfoInputSchema: JsonObject = {
   type: "object",

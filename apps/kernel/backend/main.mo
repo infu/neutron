@@ -11,6 +11,8 @@ import FrontendRuntimeAdmission "./frontend_runtime/Admission";
 import BackendCallsService "./backend_calls/Service";
 import BackendCallsRaw "./backend_calls/Raw";
 import BackendCallTypes "./backend_calls/Types";
+import RepositoryAccessService "./repository_access/Service";
+import RepositoryAccessTypes "./repository_access/Types";
 import RandomnessAdapter "./randomness/Adapter";
 import RandomnessService "./randomness/Service";
 import RandomnessTypes "./randomness/Types";
@@ -47,6 +49,9 @@ import GatewayAuthority "./http_routes/GatewayAuthority";
 import RouteNamespace "./http_routes/Namespace";
 import KernelMemory "./memory/kernel/v4";
 import ActivationMemory "./memory/activation/v1";
+import OwnerCycleMemory "./memory/kernel_cycle_calls/v1";
+import OwnerCycleService "./owner_cycle_calls/Service";
+import OwnerCycleTypes "./owner_cycle_calls/Types";
 import ActivationService "./activation/Service";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
@@ -110,6 +115,10 @@ module {
     public type PublicIngressUpdateHandlerV1 = PublicIngressTypes.UpdateHandlerV1;
     public type PublicIngressHandlerRegistrationV1 = PublicIngressTypes.HandlerRegistrationV1;
     public type TaskInvocationLease = SchedulerTypes.InvocationLease;
+    public type RepositoryAccessRequestV1 = RepositoryAccessTypes.Request;
+    public type RepositoryAccessResultV1 = RepositoryAccessTypes.AccessResult;
+    public type RepositoryAccessInputV1 = RepositoryAccessTypes.Input;
+    public type RepositoryAccessOutputV1 = RepositoryAccessTypes.Output;
 
     // Released assembler contract: add new capability initialization through
     // separate hooks instead of requiring predecessor-generated records to
@@ -927,6 +936,7 @@ module {
     public class Init(
         mem : KernelMemory.Mem,
         activationMem : ActivationMemory.Mem,
+        ownerCycleMem : OwnerCycleMemory.Mem,
         runningDeploymentId : Text,
         activeAppInstanceInventory : [InstallTypes.RuntimeApp],
         canisterPrincipal : Principal,
@@ -1067,6 +1077,14 @@ module {
             BackendCallsRaw.transport(),
             outgoingCycleAccounting,
         );
+        let ownerCycleCalls = OwnerCycleService.Service(
+            ownerCycleMem,
+            backendCalls,
+            func(scope) { InstallMemory.scopeActive(mem.install, runningDeploymentId, scope) },
+            func(principal) { Set.contains(mem.core.authorized, Principal.compare, principal) },
+            canisterPrincipal,
+            nowNanos,
+        );
         let randomness = RandomnessService.Service(
             RandomnessAdapter.management(),
             func(scope) {
@@ -1074,6 +1092,12 @@ module {
             },
             runtimeCapabilityRegistry,
             outgoingCycleAccounting,
+        );
+        let repositoryAccess = RepositoryAccessService.Service(
+            RepositoryAccessService.transport(),
+            func(principal) {
+                Set.contains(mem.core.authorized, Principal.compare, principal);
+            },
         );
         let httpsOutcallTransformActor : HttpsOutcallsTypes.TransformActor =
             actor (Principal.toText(canisterPrincipal));
@@ -3856,6 +3880,15 @@ module {
             SettingsService.snapshot();
         };
 
+        // Owner-only generic repository transport. Ordinary app capabilities
+        // cannot invoke it, and repository rules remain outside the Kernel.
+        public func /*update*/kernel_repository_access_v1(
+            input : RepositoryAccessInputV1,
+            /*caller*/ caller : Principal,
+        ) : async* RepositoryAccessOutputV1 {
+            await* repositoryAccess.access(input, caller);
+        };
+
         public func /*query*/kernel_certified_assets_scope_info(
             scope : CapabilityTypes.AppScope,
         ) : CertifiedAssetsTypes.ScopeInfoResult {
@@ -3976,6 +4009,25 @@ module {
             /*this*/ self : actor {},
         ) : async* SettingsTypes.MemorySnapshot {
             await* SettingsService.memorySnapshot(self);
+        };
+
+        public func /*query*/kernel_owner_cycle_call_quote_v1(input : OwnerCycleTypes.Request) : OwnerCycleTypes.QuoteResult {
+            ownerCycleCalls.quote(input);
+        };
+
+        public func /*update*/kernel_owner_cycle_call_execute_v1(
+            input : OwnerCycleTypes.Request,
+            /*caller*/ caller : Principal,
+        ) : async* OwnerCycleTypes.Result {
+            await* ownerCycleCalls.execute(input, caller);
+        };
+
+        public func /*query*/kernel_owner_cycle_call_status_v1(input : OwnerCycleTypes.StatusInput) : ?OwnerCycleTypes.Receipt {
+            ownerCycleCalls.status(input);
+        };
+
+        public func /*query*/kernel_owner_cycle_call_list_v1(input : OwnerCycleTypes.ListInput) : OwnerCycleTypes.Page {
+            ownerCycleCalls.list(input);
         };
 
         public func /*query*/kernel_backend_reservations_snapshot(
@@ -4552,6 +4604,9 @@ public type kernel_install_status_Output = ?InstallTypes.Status;
 public type kernel_settings_snapshot_Input = (());
 public type kernel_settings_snapshot_Output = SettingsTypes.Snapshot;
 
+public type kernel_repository_access_v1_Input = (input : RepositoryAccessInputV1);
+public type kernel_repository_access_v1_Output = RepositoryAccessOutputV1;
+
 public type kernel_certified_assets_scope_info_Input = (scope : CapabilityTypes.AppScope,);
 public type kernel_certified_assets_scope_info_Output = CertifiedAssetsTypes.ScopeInfoResult;
 
@@ -4599,6 +4654,18 @@ public type kernel_app_usage_snapshot_Output = AppUsageTypes.SnapshotV2;
 
 public type kernel_memory_snapshot_Input = (());
 public type kernel_memory_snapshot_Output = SettingsTypes.MemorySnapshot;
+
+public type kernel_owner_cycle_call_quote_v1_Input = (input : OwnerCycleTypes.Request);
+public type kernel_owner_cycle_call_quote_v1_Output = OwnerCycleTypes.QuoteResult;
+
+public type kernel_owner_cycle_call_execute_v1_Input = (input : OwnerCycleTypes.Request);
+public type kernel_owner_cycle_call_execute_v1_Output = OwnerCycleTypes.Result;
+
+public type kernel_owner_cycle_call_status_v1_Input = (input : OwnerCycleTypes.StatusInput);
+public type kernel_owner_cycle_call_status_v1_Output = ?OwnerCycleTypes.Receipt;
+
+public type kernel_owner_cycle_call_list_v1_Input = (input : OwnerCycleTypes.ListInput);
+public type kernel_owner_cycle_call_list_v1_Output = OwnerCycleTypes.Page;
 
 public type kernel_backend_reservations_snapshot_Input = ((),);
 public type kernel_backend_reservations_snapshot_Output = [BackendCallTypes.ReservationSummary];

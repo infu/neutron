@@ -271,7 +271,11 @@ test("backend-call facts disclose normalized modes and concurrency without a tar
     maxCyclesPerCall: 0,
     maxCyclesPerDay: 0,
   });
-  expect(backend?.installReservations).toHaveLength(21);
+  expect(backend?.installReservations).toHaveLength(25);
+  expect(backend?.installReservations).toContainEqual({
+    kind: "principal",
+    principal: "um5iw-rqaaa-aaaaq-qaaba-cai",
+  });
   for (const method of ["get_minter_info", "get_events", "retrieve_eth_status"]) {
     expect(backend?.installReservations).toContainEqual({
       kind: "exact",

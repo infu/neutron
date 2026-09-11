@@ -14,13 +14,13 @@
     "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
     "watch": "bun build.ts watch",
     "test": "npm run package && bun test && npm run test:motoko && npm run test:memory && npm run test:browser",
-    "test:browser": "node test/browser/bridge_connection.mjs && node test/browser/ledger_selection.mjs && node test/browser/activity.mjs",
+    "test:browser": "node test/browser/bridge_connection.mjs && node test/browser/ledger_selection.mjs && node test/browser/activity.mjs && node test/browser/refill.mjs && node test/browser/startup.mjs && node test/browser/funding_cancel.mjs",
     "test:memory": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/memory_release.test.mo",
     "test:motoko": "bun test/motoko/run.ts"
   },
   "author": "",
   "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",
-  "description": "Canister-owned ICRC token balances",
+  "description": "IC token wallet, transfers and canister refills",
   "dependencies": {
     "@dfinity/agent": "^3.4.3",
     "@dfinity/principal": "^3.4.3",

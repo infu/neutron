@@ -13,6 +13,8 @@ import ReplacementMemory "../backend/memory/wallet_bridge_replacements/v1";
 import BridgeActivityMemory "../backend/memory/wallet_bridge_activity/v1";
 import BridgeProviderMemory "../backend/memory/wallet_bridge_provider/v1";
 import TransferMemory "../backend/memory/wallet_transfers/v1";
+import RefillMemory "../backend/memory/wallet_refills/v1";
+import RefillJournal "../backend/refill/Journal";
 import BridgeJournal "../backend/bridge/Journal";
 import TransferJournal "../backend/transfers/Journal";
 import BridgeCapabilities "../backend/capabilities/Types";
@@ -446,3 +448,38 @@ assert (Map.get(freshActivity.dismissed, Blob.compare, bridgeId) == null);
 assert (Map.get(freshActivity.dismissed, Blob.compare, evmBridgeId) == ?50_100);
 assert (Map.get(freshBridges.intents, Blob.compare, bridgeId) == exactBridgeBeforeDismissal);
 assert (Map.size(BridgeActivityMemory.init().dismissed) == 0);
+
+// Refills have an independent v1 root. Initializing this journal leaves every
+// released wallet, command, transfer and bridge root intact. Recovery restores
+// the original payment identity and CMC notification evidence after a reload.
+let freshRefills = RefillMemory.init();
+assert Map.size(freshRefills.commands) == 0 and freshRefills.last_timestamp == 0;
+let refillRequest : RefillMemory.Request = {
+    id = Blob.fromArray(Array.repeat<Nat8>(0x6f, 16)); kind = #icp_topup;
+    target = ckUsdcLedger; amount = 100_000_000; icp_fee = 10_000;
+    cycles_fee = 100_000_000; estimated_cycles = 3_000_000_000_000;
+};
+switch (RefillJournal.prepare(freshRefills, ledgerPrincipal, refillRequest, 10_000)) {
+    case (#ok(value)) assert value.phase == #prepared;
+    case (#err(_)) assert false;
+};
+let ?savedRefill = Map.get(freshRefills.commands, Blob.compare, refillRequest.id) else Runtime.trap("Saved refill missing");
+savedRefill.phase := #notify_pending;
+savedRefill.source_args := ?("exact CMC transfer bytes" : Blob);
+savedRefill.source_timestamp := ?RefillJournal.nextTimestamp(freshRefills, 10_000);
+savedRefill.source_block := ?177;
+savedRefill.error := ?"CMC is processing this original payment";
+let restoredRefills : RefillMemory.Mem = freshRefills;
+let ?retainedRefill = Map.get(restoredRefills.commands, Blob.compare, refillRequest.id) else Runtime.trap("Refill root was not restored");
+assert retainedRefill.request == refillRequest and retainedRefill.owner == ledgerPrincipal;
+assert retainedRefill.source_args == ?("exact CMC transfer bytes" : Blob);
+assert retainedRefill.source_timestamp == ?10_000 and retainedRefill.source_block == ?177;
+assert retainedRefill.phase == #notify_pending;
+assert RefillJournal.nextTimestamp(restoredRefills, 10_000) == 10_001;
+assert freshRefills.last_timestamp == 10_001;
+retainedRefill.phase := #complete;
+retainedRefill.credited_cycles := ?3_000_000_000_000;
+assert savedRefill.phase == #complete and savedRefill.credited_cycles == ?3_000_000_000_000;
+assert restored.next_id == 8 and Map.size(freshCommands.commands) == 1;
+assert Map.size(freshTransfers.commands) == 1;
+assert Map.get(freshBridges.intents, Blob.compare, bridgeId) == exactBridgeBeforeDismissal;

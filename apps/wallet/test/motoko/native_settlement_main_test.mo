@@ -1,3 +1,4 @@
+import RefillMemory "../../backend/memory/wallet_refills/v1";
 import BridgeActivityMemory "../../backend/memory/wallet_bridge_activity/v1";
 import BridgeProviderMemory "../../backend/memory/wallet_bridge_provider/v1";
 import Array "mo:core/Array";
@@ -123,7 +124,7 @@ persistent actor NativeSettlementMain {
                 };
             };
             public let env : Main.AppBackendEnvironment = {
-                stable_memory = { wallet_bridge_activity = BridgeActivityMemory.init();
+                stable_memory = { wallet_refills = RefillMemory.init(); wallet_bridge_activity = BridgeActivityMemory.init();
                     wallet; wallet_transfers = transfers;
                     wallet_commands = CommandMemory.init(); wallet_bridge = BridgeMemory.init();
                     wallet_bridge_provider = BridgeProviderMemory.init(); wallet_bridge_replacements = ReplacementMemory.init();

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "ashCommit": "43af862e510e526b9bb82a56c8be137052e7dbe6",
+  "ashTestRunnerSha256": "113a6b78acedcf484138eb1b5288560033265d7dc0d162692da960c4032e053c",
+  "ashPocketIcAdapterSha256": "2dd0d0b03765ca15308c18e1c612ecbb294bcca728ea3cba710e1be2fedcfb74",
+  "ashStdioPatchSha256": "5a1ad1e0cceb7569f0f3844fd4be758abc634e95a51bdc008bdc3f0b60ec0a66",
+  "pocketIcClient": "0.16.1",
+  "pocketIcVersion": "pocket-ic-server 10.0.0",
+  "pocketIcSha256": "6303d3418bb20eb3b67e21cecbe68cc450b08dcbf2ec0896d831da4ccca6a990",
+  "didcVersion": "didc 0.5.3",
+  "didcSha256": "40a7dc485b48d75b584c3a13dc4786bcf4d8504ee7d00e634858a9f7b245bd78"
+}

@@ -1,3 +1,6 @@
+import { queryWalletRead } from "./wallet_read.ts";
+import { registerOperatingCyclesTools } from "./cycles_conversion_tools.ts";
+import { registerRefillTools } from "./refill_tools.ts";
 import { registerLedgerTools } from "./ledger_tools.ts";
 import { registerHistoryTools } from "./history_tools.ts";
 import {
@@ -49,15 +52,14 @@ import {
   type WalletSnapshot,
 } from "./wallet_data.ts";
 import {
-  WALLET_TOKEN_INFO_METHOD,
   WALLET_TOKEN_INFO_TOOL,
-  parseWalletTokenInfo,
+  handleWalletTokenInfo,
   walletTokenInfoInputSchema,
-  walletTokenInfoJson,
   walletTokenInfoOutputSchema,
-  walletTokenInfoRequest,
 } from "./token_info.ts";
 
+registerOperatingCyclesTools();
+registerRefillTools();
 registerLedgerTools();
 registerHistoryTools();
 registerBridgeTools();
@@ -121,19 +123,7 @@ exposeTool(
     outputSchema: walletTokenInfoOutputSchema,
     annotations: { "neutron:effects": ["read", "network"] },
   },
-  async (args, context) => {
-    const request = walletTokenInfoRequest(args);
-    return walletTokenInfoJson(
-      parseWalletTokenInfo(
-        await context.kernel.updateSelf(
-          WALLET_TOKEN_INFO_METHOD,
-          [request.wire],
-          60,
-        ),
-        request.ledger,
-      ),
-    );
-  },
+  handleWalletTokenInfo,
 );
 
 exposeTool(
@@ -242,8 +232,8 @@ async function loadProjection(
 ): Promise<WalletProjection> {
   const snapshotPromise = suppliedSnapshot
     ? Promise.resolve(suppliedSnapshot)
-    : querySelf("wallet_snapshot", [null]).then(parseWalletSnapshot);
-  const catalogPromise = querySelf("wallet_catalog", [null]).then(
+    : queryWalletRead(querySelf, "snapshot").then(parseWalletSnapshot);
+  const catalogPromise = queryWalletRead(querySelf, "catalog").then(
     parseWalletCatalog,
   );
   const historyPromise = queryHistoryPage(null, null, WALLET_PROJECTION_ACTIVITY_LIMIT + 1);

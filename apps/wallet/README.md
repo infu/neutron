@@ -19,6 +19,91 @@ owner-trusted apps and live agents, not a cold-storage boundary against the
 installed Wallet package. Installing or updating Wallet is therefore a
 consequential trust decision.
 
+Release 331 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
+All eight released version-1 roots and their lineage remain unchanged, including
+the `wallet_refills` journal added in release 326.
+
+## Refill a Neutron
+
+The Refill tab offers ICP or TCYCLES funding for **My Neutron**, with another
+canister under Advanced. **Get TCYCLES** accepts ICP or this Neutron's operating
+cycles; Advanced can select another recipient principal. Fresh Wallets include
+TCYCLES with ICP, ckBTC and ckUSDC. Upgrades retain the owner's selected tokens;
+refilling can read both supported ledgers even when either is not selected.
+
+Balances, fees and the ICP conversion rate are browser-to-canister queries.
+The amount slider and Max reserve the source ledger fee. One review shows the
+destination, total debit and estimated cycles or net TCYCLES. Estimates use the
+CMC's timestamped ICP/XDR rate and can change before conversion. TCYCLES has
+12 decimal places: one TCYCLES token represents one trillion cycles.
+
+| Action | Protocol flow |
+| --- | --- |
+| Refill with ICP | Transfer ICP to the CMC's target-canister subaccount with the top-up memo, then notify the CMC using the original ledger block. |
+| Refill with TCYCLES | Withdraw from the cycles ledger to the selected canister. This converts the tokens into operating cycles. |
+| Get TCYCLES with ICP | Transfer ICP with the mint memo, then notify the CMC to mint into this Neutron's cycles-ledger account. An alternative recipient adds one TCYCLES transfer. |
+| Get TCYCLES with Neutron cycles | Attach operating cycles to the cycles ledger's `deposit`, which credits the selected recipient directly, less its mint fee. |
+
+The [CMC interface](https://github.com/dfinity/ic/blob/18a551adafb15fdbfce04c0b1ab2397d4a9a4b59/rs/nns/cmc/cmc.did)
+and [cycles-ledger interface](https://github.com/dfinity/cycles-ledger/blob/2703d3630ef91ad23b4b10e7e4781c2825af4df0/cycles-ledger/cycles-ledger.did)
+define these flows. CMC minting always credits the caller; it cannot directly
+mint to an arbitrary recipient. The cycles-ledger deposit fee is deducted from
+the gross minted amount, and an onward transfer has its own fee. Direct ICP
+refilling avoids these extra cycles-ledger steps.
+
+Operating-cycle conversion uses Kernel's generic one-time cycle call, available
+in Kernel 360. Its red warning shows the amount, app, destination and estimated
+remaining balance, and requires the owner's acknowledgment even for root-agent
+requests. This one decision replaces the Wallet review for this flow. It never
+raises Wallet's recurring zero-cycle spending allowance. Max approves an upper
+amount that can decrease at dispatch to preserve five trillion operating cycles
+and the call cost. With 55T available, approximately 50T can be converted.
+
+Kernel's independent journal retains the exact cycle call and raw ledger reply;
+no new Wallet memory root is needed. A successful decoded `deposit` reply proves
+the recorded ledger block. Its `balance` is the recipient's total balance, not
+this conversion's amount. The displayed net amount is an estimate using actual
+attached cycles and the fee retained in the deposit memo. This method has no
+remote deduplication: status/history reads recover the original result, and
+reusing its request ID never attaches cycles again. An unresolved result must
+not be replaced with another deposit.
+
+`wallet_cycles_conversion_quote_v1` previews the operating-cycle flow;
+`wallet_cycles_conversion_v1` requests its Kernel owner confirmation.
+`wallet_cycles_conversion_status_v1` decodes the retained receipt and
+`wallet_cycles_conversions_v1` pages compact history. There is no root bypass.
+
+Wallet saves exact requests before dispatch. A closed tile or interrupted reply
+does not discard a paid ICP transfer, pending CMC notification or recipient
+transfer. Continue uses the original request and deduplication identity; it never
+substitutes a new payment to recover an uncertain result. CMC refunds and ledger
+errors remain visible with their evidence. A cycles-ledger withdrawal Duplicate
+identifies the earlier burn but does not prove delivery to the canister. Such an
+operation remains unverified unless its original successful response is retained.
+If an onward transfer cannot finish, already-minted TCYCLES remain in this Wallet.
+
+Agent tools expose the same flows:
+
+| Tool | Purpose |
+| --- | --- |
+| `wallet_refill_quote_v1` | Read direct balances/rate and preview a refill or conversion without payment. |
+| `wallet_refill_v1` | Present one exact Wallet review before executing. |
+| `wallet_refill_root_v1` | Execute under the active root agent's existing authority without interactive review. |
+| `wallet_refill_status_v1`, `wallet_refills_v1` | Read retained progress and receipt evidence without financial effects; history pages expose a cursor and an unfinished-only filter. |
+| `wallet_refill_continue_v1`, `wallet_refill_continue_root_v1` | Continue the returned durable request ID, with normal-mode review or root authority respectively. |
+
+The frontend uses `wallet_read_v1` for snapshot, catalog and refill reads, and
+`wallet_refill_action_v1` for prepare/execute/continue. This keeps the existing
+32-method frontend grant inventory. Released individual snapshot and catalog
+owner APIs remain available. Those three ledger-funded flows also work on
+earlier compatible Kernels; operating-cycle conversion requires Kernel 360.
+
+Keep `callerRequestId` with the original execution input. `operation.requestId`
+is Wallet's durable identity for status and continuation. Reusing that returned
+identity with the original execution tool also recognizes the saved request
+instead of preparing a second payment. History retains every operation and
+loads in pages; older unfinished work has its own Load more control.
+
 ## Agent token selection
 
 `wallet_add_ledger_v1({ ledger })` adds one catalog or custom ICRC ledger at
@@ -72,15 +157,20 @@ routes the opaque request only to Wallet's private
 `wallet_funding_present_v1` tool. That tool is annotated with
 `"neutron:visibility":"same_app"` and
 `"neutron:audience":"foreground_tile"`; it checks Kernel's audience
-attestation for the Kernel-selected Wallet tile, reads authoritative ledger
-metadata, decimals, current fees, and allowance state, freezes the command,
-and renders Wallet's modal. Later browser-focus or workspace-selection changes
+attestation for the Kernel-selected Wallet tile. For a new review it queries
+ledger metadata, current fee and allowance directly from the browser in parallel,
+then uses one query-only Wallet call to validate the selected ledger, authority,
+original command identity and exact review arithmetic. Opening the modal creates
+no durable command and performs no update. Later browser-focus or workspace-selection changes
 do not replace or cancel that exact endpoint-bound interaction; closing the
 Wallet tile before private dispatch does.
 
-The owner makes one decision in Wallet. The primary action executes the frozen
-command through Wallet's exact preapproved self call; Cancel records a definite
-rejection without a ledger call. Kernel displays no approval dialog and never
+The primary action prepares the original durable command using fresh backend
+ledger facts, compares every displayed term, and then executes it. If those terms
+changed, Wallet shows the updated review and requires another owner decision.
+Cancel checks the original command first: an unsaved preview creates no rejection
+record, while any already accepted or completed command keeps its real result.
+Saved commands remain recoverable when browser ledger reads are unavailable. Kernel displays no approval dialog and never
 interprets token semantics. The presentation capability is bound to the
 original caller, provider, and originating live public handler call and can be
 consumed only once. A calling app cannot invoke the private tile tool directly,
@@ -250,7 +340,8 @@ The non-persistent resident retains four released public tools:
 refreshes selected ledger balances, attempts one history synchronization and
 returns that same projection,
 `wallet_token_info_v1` reads live metadata, the authoritative current fee, and
-the Wallet default-account balance for one selected ICRC ledger, and
+the Wallet default-account balance for one selected ICRC ledger through parallel
+browser-to-ledger queries and one local policy/normalization query, and
 `wallet_fund_v1` performs the human funding flow above. The token-info fee is an
 advisory quote; funding reads it again before dispatch. The resident also
 declares the private, direct-root-only `wallet_fund_root_v1` automation tool.

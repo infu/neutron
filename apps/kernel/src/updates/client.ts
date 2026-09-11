@@ -20,11 +20,14 @@ import {
   type FetchedRelease,
 } from "./model.ts";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
+import { fetchWithRepositoryAccess, RepositoryAccessError, type RepositoryAccessApproval } from "../repository_access/client.ts";
 
 export type UpdateHttpClientOptions = Readonly<{
   fetch?: typeof fetch;
   signal?: AbortSignal;
   timeoutMs?: number;
+  resourcePaths?: readonly string[];
+  approvedAccess?: readonly RepositoryAccessApproval[];
 }>;
 
 export async function fetchUpdateRelease(
@@ -81,6 +84,7 @@ export async function fetchUpdatePackage(
     cache: "default",
     maxBytes: REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS.maxRawBytes,
     notFound: false,
+    repositoryAccess: true,
     validateResponse: assertPackageResponse,
   });
   if (response === null) {
@@ -108,12 +112,14 @@ type BoundedGetOptions = UpdateHttpClientOptions &
     maxBytes: number;
     notFound: boolean;
     validateResponse?: (response: Response) => void;
+    repositoryAccess?: boolean;
   }>;
 
 async function boundedGet(
   url: URL,
   options: BoundedGetOptions,
 ): Promise<{ bytes: Uint8Array; response: Response } | null> {
+  if (options.signal?.aborted) throw abortError();
   const fetchValue = options.fetch ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? UPDATE_CHECK_TIMEOUT_MS;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
@@ -123,14 +129,14 @@ async function boundedGet(
   let timedOut = false;
   const onAbort = () => timeoutController.abort(options.signal?.reason);
   options.signal?.addEventListener("abort", onAbort, { once: true });
-  const timer = globalThis.setTimeout(() => {
+  const timer = options.repositoryAccess ? undefined : globalThis.setTimeout(() => {
     timedOut = true;
     timeoutController.abort();
   }, timeoutMs);
 
   let response: Response;
   try {
-    response = await fetchValue(url.href, {
+    const init: RequestInit = {
       cache: options.cache,
       credentials: "omit",
       headers: { accept: options.accept },
@@ -139,9 +145,19 @@ async function boundedGet(
       redirect: "error",
       referrerPolicy: "no-referrer",
       signal: timeoutController.signal,
-    });
+    };
+    response = options.repositoryAccess
+      ? await fetchWithRepositoryAccess(url.href, init, {
+          fetch: fetchValue,
+          signal: timeoutController.signal,
+          timeoutMs,
+          ...(options.resourcePaths ? { resourcePaths: options.resourcePaths } : {}),
+          ...(options.approvedAccess ? { approvedAccess: options.approvedAccess } : {}),
+        })
+      : await fetchValue(url.href, init);
   } catch (cause) {
     if (options.signal?.aborted) throw abortError();
+    if (cause instanceof RepositoryAccessError) throw cause;
     if (timedOut) {
       throw new UpdateCheckError(
         "timed_out",

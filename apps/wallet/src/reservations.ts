@@ -61,7 +61,8 @@ export function reservationActions(
     if (!currentByKey.has(key)) actions.push({ kind: "reserve", scope });
   }
   for (const [key, scope] of currentByKey) {
-    if (!desiredByKey.has(key)) actions.push({ kind: "release", scope });
+    // Refill permissions belong to the app feature, not to the Assets watchlist.
+    if (!desiredByKey.has(key) && !walletRefillReservationScopes().some((entry) => reservationScopeKey(entry) === key)) actions.push({ kind: "release", scope });
   }
   return actions;
 }
@@ -179,4 +180,17 @@ function addScope(
   scope: BackendCallReservationScope,
 ): void {
   scopes.set(reservationScopeKey(scope), scope);
+}
+
+/** Refill recovery stays available even when a source token is hidden in Assets. */
+export function walletRefillReservationScopes(): BackendCallReservationScope[] {
+  return [
+    exact("ryjl3-tyaaa-aaaaa-aaaba-cai", "icrc1_transfer"),
+    exact("ryjl3-tyaaa-aaaaa-aaaba-cai", "icrc1_fee"),
+    exact("um5iw-rqaaa-aaaaq-qaaba-cai", "withdraw"),
+    exact("um5iw-rqaaa-aaaaq-qaaba-cai", "icrc1_transfer"),
+    exact("um5iw-rqaaa-aaaaq-qaaba-cai", "icrc1_fee"),
+    exact("rkp4c-7iaaa-aaaaa-aaaca-cai", "notify_top_up"),
+    exact("rkp4c-7iaaa-aaaaa-aaaca-cai", "notify_mint_cycles"),
+  ];
 }

@@ -312,7 +312,8 @@ RPC, command recovery, provider and browser tests. Preserve the published schema
 and lock lineage after release. Installation and publication follow
 [`doc/package-updates.md`](../../doc/package-updates.md) and
 [`doc/memory-migrations-and-uninstall.md`](../../doc/memory-migrations-and-uninstall.md).
-The production update source is `233tv-xiaaa-aaaay-aacta-cai`.
+Release 126 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai` and
+retains all three version-1 memory roots and their exact released lineage.
 
 Release 120 supports Hyperliquid's qualified EIP-712 struct names, including
 `HyperliquidTransaction:ApproveAgent` and `HyperliquidTransaction:SendToEvmWithData`.

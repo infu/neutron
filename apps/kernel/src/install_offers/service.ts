@@ -1,3 +1,4 @@
+import type { RepositoryAccessApproval } from "../repository_access/client.ts";
 import { KernelPolicyError } from "neutron-tools/protocol";
 import {
   admitOwnerAttention,
@@ -95,9 +96,12 @@ export function requestInstallOffer({
 /**
  * Accepts the pre-contact prompt and hands ownership to the existing install
  * flow. The dialog and attention reservation are cleared before the callback,
- * so any network activity belongs to that next flow rather than this module.
+ * so package acquisition belongs to that next flow rather than this module.
  */
-export function approveInstallOffer(requestId: string): void {
+export function approveInstallOffer(
+  requestId: string,
+  approvedAccess: readonly RepositoryAccessApproval[] = [],
+): void {
   const active = runtime;
   const pending = useInstallOfferStore.getState().pending;
   if (
@@ -120,6 +124,14 @@ export function approveInstallOffer(requestId: string): void {
   }
 
   const approval: InstallOfferApproval = Object.freeze({
+    ...(approvedAccess.length
+      ? {
+          approvedAccess: Object.freeze(approvedAccess.map((value) => Object.freeze({
+            source: value.source,
+            descriptor: Object.freeze({ ...value.descriptor }),
+          }))),
+        }
+      : {}),
     requestId: pending.requestId,
     offer: pending.offer,
     requester: pending.requester,

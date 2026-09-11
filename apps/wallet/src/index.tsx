@@ -1,3 +1,4 @@
+import { queryWalletRead } from "./wallet_read.ts";
 import {
   WALLET_ADD_LEDGER_PRESENT_TOOL,
   handleWalletAddLedgerPresentation,
@@ -17,6 +18,7 @@ import {
   IoClose,
   IoCopyOutline,
   IoGlobeOutline,
+  IoFlashOutline,
   IoOptionsOutline,
   IoOpenOutline,
   IoPeopleOutline,
@@ -61,6 +63,8 @@ import {
   type ButtonHTMLAttributes,
 } from "react";
 import "./style.scss";
+import { WalletRefillPage, WalletRefillPromptHost, requestWalletRefillReview } from "./refill_page.tsx";
+import { WALLET_REFILL_PRESENT_TOOL, handleWalletRefillPresentation, walletRefillPresentationInputSchema, walletRefillOutputSchema } from "./refill_tools.ts";
 import { readWalletWithdrawalQuote, quoteAuthorizationWire, type WalletWithdrawalQuote } from "./withdrawal_quote.ts";
 import {
   finishSavedWalletTransfer,
@@ -100,7 +104,8 @@ import {
   mergeWalletAllowancesPages,
   parseFundingPrepareResult,
   parseWalletAllowancesPage,
-  prepareWalletFundingOperation,
+  previewWalletFundingOperation,
+  persistWalletFundingPreview,
   rejectWalletFundingOperation,
   resolveWalletFundingPreparation,
   walletAllowancesPageArgs,
@@ -193,7 +198,7 @@ type WalletTransferReceipt = {
 };
 
 export type WalletSurface = "tile" | "tray";
-type WalletView = "assets" | "activity" | "approvals";
+type WalletView = "assets" | "activity" | "approvals" | "refill";
 
 type WalletSurfaceContextValue = {
   surface: WalletSurface;
@@ -234,6 +239,7 @@ type WalletFundingPrompt = {
   removeAbortListener: (() => void) | null;
   signal: AbortSignal | undefined;
   updateSelf: MsgBusToolContext["kernel"]["updateSelf"];
+  querySelf: MsgBusToolContext["kernel"]["querySelf"];
 };
 
 let walletFundingPrompt: WalletFundingPrompt | null = null;
@@ -377,6 +383,14 @@ async function executePresentedWalletFunding(
   prompt.error = null;
   notifyWalletFundingPrompt();
   try {
+    if (prompt.operation.durable === false) {
+      const saved = await persistWalletFundingPreview(prompt.operation, prompt.updateSelf);
+      prompt.operation = saved.operation;
+      if (saved.reviewChanged) {
+        restoreOrAbortWalletFundingPrompt(prompt, new Error("The ledger fee, metadata or allowance changed. Review the updated Wallet details before approving."));
+        return;
+      }
+    }
     const result = await executeWalletFundingOperation(
       prompt.operation,
       (args) =>
@@ -388,7 +402,8 @@ async function executePresentedWalletFunding(
     }
     finishWalletFundingPrompt(prompt, result);
   } catch (reason) {
-    markWalletFundingExecutionUncertain(prompt, reason);
+    if (prompt.operation.durable === false) restoreOrAbortWalletFundingPrompt(prompt, reason);
+    else markWalletFundingExecutionUncertain(prompt, reason);
   } finally {
     publishWalletInvalidation();
   }
@@ -418,6 +433,7 @@ async function rejectPresentedWalletFunding(
     const result = await rejectWalletFundingOperation(
       prompt.operation,
       (args) => prompt.updateSelf(WALLET_FUNDING_REJECT_METHOD, [args], 30),
+      prompt.querySelf,
     );
     finishWalletFundingPrompt(prompt, result);
   } catch (reason) {
@@ -430,15 +446,12 @@ async function rejectPresentedWalletFunding(
 export async function handleWalletFundingPresentation(
   args: JsonObject,
   context: MsgBusToolContext,
+  readFacts?: Parameters<typeof previewWalletFundingOperation>[2],
 ): Promise<JsonObject> {
   if (context.audience !== "foreground_tile") {
     throw new Error("Wallet funding UI requires foreground-tile attestation");
   }
-  const operation = await prepareWalletFundingOperation(
-    args,
-    context,
-    false,
-  );
+  const operation = await previewWalletFundingOperation(args, context, readFacts);
 
   // A pending command proves that Wallet already dispatched a previously
   // accepted operation. Reconcile it without asking the owner a second time.
@@ -479,6 +492,7 @@ export async function handleWalletFundingPresentation(
           [rejectArgs],
           30,
         ),
+      context.kernel.querySelf,
     )
       .catch(() => undefined)
       .finally(() => publishWalletInvalidation());
@@ -497,6 +511,7 @@ export async function handleWalletFundingPresentation(
       signal: context.signal,
       updateSelf: (method, selfArgs, timeout) =>
         context.kernel.updateSelf(method, selfArgs, timeout),
+      querySelf: (method, selfArgs, timeout) => context.kernel.querySelf(method, selfArgs, timeout),
     };
     const abort = () => {
       if (!removeWalletFundingPrompt(prompt)) return;
@@ -526,6 +541,14 @@ function isWalletTileRuntime(): boolean {
 }
 
 if (isWalletTileRuntime()) {
+  exposeTool(WALLET_REFILL_PRESENT_TOOL, {
+    title: "Review a canister refill",
+    description: "Review one exact ICP or TCYCLES refill or conversion before Wallet saves and executes it.",
+    inputSchema: walletRefillPresentationInputSchema,
+    outputSchema: walletRefillOutputSchema,
+    annotations: { "neutron:audience": "foreground_tile", "neutron:visibility": "same_app", "neutron:audit": "metadata_only", "neutron:effects": ["write", "network", "user_visible_ui"] },
+  }, (args, context) => handleWalletRefillPresentation(args, context, (quote) => requestWalletRefillReview(quote, context.signal)));
+
   exposeTool(WALLET_ADD_LEDGER_PRESENT_TOOL, {
     title: "Add a token in Wallet",
     description: "Review exact ledger access and add this token without replacing any other selection.",
@@ -590,7 +613,7 @@ export function WalletApp({
   return (
     <WalletSurfaceContext.Provider value={{ openInTile, surface }}>
       <WalletAppContent surface={surface} />
-      {surface === "tile" ? <WalletFundingPromptHost /> : null}
+      {surface === "tile" ? <><WalletFundingPromptHost /><WalletRefillPromptHost /></> : null}
     </WalletSurfaceContext.Provider>
   );
 }
@@ -894,6 +917,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const { openInTile } = useWalletSurface();
   const [view, setView] = useState<WalletView>("assets");
   const [snapshot, setSnapshot] = useState<WalletSnapshot | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadInFlight = useRef(false);
+  const [refillRevision, setRefillRevision] = useState(0);
   const [catalog, setCatalog] = useState<CatalogLedger[]>([]);
   const [setupOpen, setSetupOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -961,8 +987,8 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
 
   const load = useCallback(async () => {
     const [snapshotValue, catalogValue] = await Promise.all([
-      querySelf("wallet_snapshot", [null]),
-      querySelf("wallet_catalog", [null]),
+      queryWalletRead(querySelf, "snapshot"),
+      queryWalletRead(querySelf, "catalog"),
     ]);
     const nextSnapshot = parseWalletSnapshot(snapshotValue);
     const nextCatalog = parseWalletCatalog(catalogValue);
@@ -978,7 +1004,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   }, []);
 
   const reloadSnapshot = useCallback(async () => {
-    setSnapshot(parseWalletSnapshot(await querySelf("wallet_snapshot", [null])));
+    setSnapshot(parseWalletSnapshot(await queryWalletRead(querySelf, "snapshot")));
   }, []);
 
   useEffect(
@@ -991,9 +1017,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     [],
   );
 
-  useEffect(() => {
-    void load().catch((reason) => setError(errorMessage(reason)));
+  const retryInitialLoad = useCallback(async () => {
+    if (initialLoadInFlight.current) return;
+    initialLoadInFlight.current = true;
+    setInitialLoading(true);
+    setError(null);
+    try { await load(); }
+    catch (reason) { setError(errorMessage(reason)); }
+    finally { initialLoadInFlight.current = false; setInitialLoading(false); }
   }, [load]);
+
+  useEffect(() => { void retryInitialLoad(); }, [retryInitialLoad]);
 
   useEffect(
     () =>
@@ -1776,6 +1810,14 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       return;
     }
 
+    if (requested === "refill") {
+      setSetupOpen(false);
+      setDepositLedgerId(null);
+      setDestinationLedgerId(null);
+      setView("refill");
+      return;
+    }
+
     if (requested === "approvals") {
       setSetupOpen(false);
       setDepositLedgerId(null);
@@ -2008,10 +2050,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   if (!snapshot) {
     return (
       <main
-        className={`nt-app wallet-app wallet-app--${surface} wallet-loading`}
-        aria-label="Loading Wallet"
+        className={`nt-app wallet-app wallet-app--${surface} wallet-startup`}
+        aria-label={initialLoading ? "Loading Wallet" : "Wallet unavailable"}
       >
-        <span className="wallet-spinner" />
+        {initialLoading ? <div className="wallet-loading"><span className="wallet-spinner" />Loading Wallet</div> : (
+          <div className="wallet-startup-error">
+            <IoAlertCircleOutline aria-hidden="true" />
+            <h2>Wallet couldn't load</h2>
+            {error ? <WalletNotice message={error} /> : null}
+            <button className="nt-button" disabled={initialLoading} onClick={() => void retryInitialLoad()} type="button"><IoRefresh aria-hidden="true" />Retry</button>
+          </div>
+        )}
       </main>
     );
   }
@@ -2290,6 +2339,14 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             >
               <IoShieldCheckmarkOutline aria-hidden="true" />
             </IconButton>
+            <IconButton
+              aria-pressed={view === "refill"}
+              className="wallet-view-button"
+              label="Refill"
+              onClick={() => chooseView("refill")}
+            >
+              <IoFlashOutline aria-hidden="true" />
+            </IconButton>
           </div>
           <span className="wallet-toolbar-spacer" />
           {view === "assets" && portfolio.eligible > 0 ? (
@@ -2339,11 +2396,11 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
                 ? "Sync activity"
                 : view === "approvals"
                   ? "Refresh approvals"
-                  : "Refresh balances"
+                  : view === "refill" ? "Refresh refill balances" : "Refresh balances"
             }
             disabled={
               busy !== null ||
-              snapshot.ledgers.length === 0 ||
+              (snapshot.ledgers.length === 0 && view !== "refill") ||
               (view === "activity" && historySyncing) ||
               (view === "approvals" &&
                 (allowancesLoading ||
@@ -2360,6 +2417,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             onClick={() => {
               if (view === "activity") void syncHistory();
               else if (view === "approvals") void loadAllowances();
+              else if (view === "refill") setRefillRevision((current) => current + 1);
               else {
                 void update("wallet_refresh_balances", [null], "balances");
                 void refreshPrices(true);
@@ -2421,6 +2479,8 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             onRevoke={(entry, page) => void revokeAllowance(entry, page)}
             pages={allowancePages}
           />
+        ) : view === "refill" ? (
+          <WalletRefillPage owner={snapshot.owner} refreshRevision={refillRevision + projectionRevision} tray={surface === "tray"} openInTile={() => openInTile("refill")} />
         ) : depositLedger ? (
           <WalletDeposit
             catalog={depositCatalog}
@@ -2492,19 +2552,6 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             )}
           </section>
         )}
-        {surface === "tile" ? (
-          <aside
-            aria-label="Wallet alpha warning"
-            className="wallet-alpha-notice"
-            role="note"
-          >
-            <IoWarningOutline aria-hidden="true" />
-            <span>
-              Alpha - not battle tested, don't put more tokens than you can
-              afford to lose
-            </span>
-          </aside>
-        ) : null}
       </div>
     </main>
   );

@@ -8,12 +8,12 @@ import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 import type { NeutronManifest } from "neutron-tools/src/schema.js";
 
 const manifest = async () => JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
-const archive = async () => unpackNeutronPackage(await readFile(new URL("../uniswap.v0.1.18.neutron", import.meta.url)));
+const archive = async () => unpackNeutronPackage(await readFile(new URL("../uniswap.v0.1.19.neutron", import.meta.url)));
 
 test("Uniswap owns its managed journal and declares exact public Wallet access", async () => {
   const value = await manifest();
   expect(validate_neutron_conf(value).errors).toEqual([]);
-  expect(value).toMatchObject({ id: "uniswap", version: 118, update_source: "233tv-xiaaa-aaaay-aacta-cai", memory: {
+  expect(value).toMatchObject({ id: "uniswap", version: 119, update_source: "sj2r4-haaaa-aaaay-aadgq-cai", memory: {
     uniswap: { version: 1, schemas: { "1": { src: "memory/uniswap/v1.mo" } }, migrations: [] },
     uniswap_actions: { version: 1, schemas: { "1": { src: "memory/uniswap_actions/v1.mo" } }, migrations: [] },
   } });
@@ -31,7 +31,7 @@ test("the packaged tile, resident service and managed-memory root are installabl
   expect(Object.keys(files)).toEqual(expect.arrayContaining(["neutron.json", "schema.json", "web/index.html", "web/main.css", "web/main.js", "web/service.html", "web/service.js", "web/static/icon.svg"]));
   const prepared = preparePackageInstall(files);
   expect(prepared.manifest.id).toBe("uniswap");
-  expect(prepared.manifest.version).toBe(118);
+  expect(prepared.manifest.version).toBe(119);
   const compiled = JSON.parse(new TextDecoder().decode(files["neutron.json"]!));
   const lock = JSON.parse(await readFile(new URL("../neutron.lock.json", import.meta.url), "utf8"));
   expect(compiled.memory.uniswap.schemas["1"]).toMatchObject(lock.memory.uniswap.schemas["1"]);
@@ -88,7 +88,8 @@ test.each([
   [115, "0.1.15", "791a1a609d1318ae13a2bd032002916b78bd65d7966d6676cff2cc48b761fa7b"],
   [116, "0.1.16", "715ffdfa5fcd9d689cd9020e5e978807715c7721f1e78aa2ac055828a9a83bfd"],
   [117, "0.1.17", "e98e1b6492ae07f4ddf6d5a5aefbc48612b151fbdb1d7c4c000694be8ed19f6f"],
-] as const)("release 118 preserves production %s backend and both root dependency closures", async (version, release, digest) => {
+  [118, "0.1.18", "3d1271a87dc28b7494fd2734885c81f1fe21bdc2ee3d7492097a92e239df6f53"],
+] as const)("release 119 preserves production %s backend and both root dependency closures", async (version, release, digest) => {
   const previousBytes = await readFile(new URL(`../uniswap.v${release}.neutron`, import.meta.url));
   if (version === 113) expect(previousBytes.byteLength).toBe(1_002_257);
   if (version === 116) expect(previousBytes.byteLength).toBe(1_009_025);
@@ -97,7 +98,7 @@ test.each([
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!)), next = JSON.parse(decode(files["neutron.json"]!));
   expect(old.version).toBe(version);
-  expect(next.version).toBe(118);
+  expect(next.version).toBe(119);
   expect(next.memory).toEqual(old.memory);
   expect(files["neutron.lock.json"]).toEqual(previous["neutron.lock.json"]);
   // This release changes frontend code only: equality of every backend module also
@@ -108,7 +109,7 @@ test.each([
   for (const path of modules) expect(files[path]).toEqual(previous[path]);
   const schema = JSON.parse(decode(files["schema.json"]!)), priorSchema = JSON.parse(decode(previous["schema.json"]!));
   expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await readFile(new URL("../backend/main.mo", import.meta.url), "utf8")));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Uniswap", version: 118 } });
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Uniswap", version: 119 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
   const upgraded = planMemoryMigrations({ kernel, uniswap: old }, { kernel, uniswap: next });
   expect(upgraded.upgrades).toEqual([

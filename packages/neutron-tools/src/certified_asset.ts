@@ -2,7 +2,7 @@ import {
   Cbor,
   Certificate,
   LookupPathStatus,
-  lookup_path,
+  NodeType,
   reconstruct,
   type HashTree,
 } from "@icp-sdk/core/agent";
@@ -467,7 +467,7 @@ async function verifyResponseProof(
     );
   }
 
-  const assetLookup = lookup_path(
+  const assetLookup = lookupCertifiedAssetPath(
     [textEncoder.encode("http_assets"), textEncoder.encode(key)],
     witness
   );
@@ -512,6 +512,59 @@ async function verifyResponseProof(
     );
   }
   return { status: "found", hash: assetLookup.value.slice(), asset };
+}
+
+type AssetPathLookup =
+  | { status: LookupPathStatus.Found; value: Uint8Array }
+  | { status: LookupPathStatus.Absent }
+  | { status: LookupPathStatus.Unknown }
+  | { status: LookupPathStatus.Error };
+
+/**
+ * A certified witness uses lexicographically ordered byte labels. The pinned
+ * agent's lookup comparator checks later bytes even after an earlier difference,
+ * which incorrectly rejects absence between a manifest and a release label.
+ * Keep certificate/BLS/root verification above unchanged; walk only this already
+ * verified asset witness, preserving Unknown for every unresolved pruned range.
+ */
+export function lookupCertifiedAssetPath(path: readonly Uint8Array[], tree: HashTree): AssetPathLookup {
+  let subtree = tree;
+  for (const label of path) {
+    // Flatten one level's forks lazily. A visible lower label rules out earlier
+    // pruned ranges; an upper label proves absence only if no gap remains.
+    const pending: HashTree[] = [subtree];
+    let unknown = false;
+    let found: HashTree | undefined;
+    while (pending.length) {
+      const node = pending.pop()!;
+      if (node[0] === NodeType.Fork) {
+        pending.push(node[2], node[1]);
+      } else if (node[0] === NodeType.Pruned) {
+        unknown = true;
+      } else if (node[0] === NodeType.Labeled) {
+        const order = compareAssetLabels(label, node[1]);
+        if (order === 0) { found = node[2]; break; }
+        if (order < 0) return { status: unknown ? LookupPathStatus.Unknown : LookupPathStatus.Absent };
+        unknown = false;
+      }
+    }
+    if (found === undefined) return { status: unknown ? LookupPathStatus.Unknown : LookupPathStatus.Absent };
+    subtree = found;
+  }
+  switch (subtree[0]) {
+    case NodeType.Leaf: return { status: LookupPathStatus.Found, value: new Uint8Array(subtree[1]) };
+    case NodeType.Empty: return { status: LookupPathStatus.Absent };
+    case NodeType.Pruned: return { status: LookupPathStatus.Unknown };
+    default: return { status: LookupPathStatus.Error };
+  }
+}
+
+function compareAssetLabels(left: Uint8Array, right: Uint8Array): number {
+  for (let index = 0; index < Math.min(left.length, right.length); index++) {
+    const difference = left[index]! - right[index]!;
+    if (difference !== 0) return difference;
+  }
+  return left.length - right.length;
 }
 
 function resolveLimits(

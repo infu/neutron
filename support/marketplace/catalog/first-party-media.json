@@ -1,0 +1,189 @@
+{
+  "format": 1,
+  "apps": [
+    {
+      "appId": "aave",
+      "icon": "media/aave/icon.svg",
+      "screenshots": [
+        "media/aave/overview.png",
+        "media/aave/compact.png"
+      ]
+    },
+    {
+      "appId": "agent",
+      "icon": "media/agent/icon.svg",
+      "screenshots": [
+        "media/agent/overview.png"
+      ]
+    },
+    {
+      "appId": "chess",
+      "icon": "media/chess/icon.svg",
+      "screenshots": [
+        "media/chess/overview.png"
+      ]
+    },
+    {
+      "appId": "contacts",
+      "icon": "media/contacts/icon.svg",
+      "screenshots": [
+        "media/contacts/overview.png"
+      ]
+    },
+    {
+      "appId": "curve",
+      "icon": "media/curve/icon.svg",
+      "screenshots": [
+        "media/curve/overview.png",
+        "media/curve/compact.png"
+      ]
+    },
+    {
+      "appId": "evm_wallet",
+      "icon": "media/evm_wallet/icon.svg",
+      "screenshots": [
+        "media/evm_wallet/overview.png",
+        "media/evm_wallet/compact.png"
+      ]
+    },
+    {
+      "appId": "files",
+      "icon": "media/files/icon.svg",
+      "screenshots": [
+        "media/files/overview.png"
+      ]
+    },
+    {
+      "appId": "gemma",
+      "icon": "media/gemma/icon.svg",
+      "screenshots": [
+        "media/gemma/overview.png"
+      ]
+    },
+    {
+      "appId": "hello",
+      "icon": "media/hello/icon.png",
+      "screenshots": [
+        "media/hello/overview.png"
+      ]
+    },
+    {
+      "appId": "hullshift",
+      "icon": "media/hullshift/icon.svg",
+      "screenshots": [
+        "media/hullshift/overview.png",
+        "media/hullshift/entry.png"
+      ]
+    },
+    {
+      "appId": "hyperliquid",
+      "icon": "media/hyperliquid/icon.svg",
+      "screenshots": [
+        "media/hyperliquid/overview.png",
+        "media/hyperliquid/compact.png"
+      ]
+    },
+    {
+      "appId": "icpswap",
+      "icon": "media/icpswap/icon.svg",
+      "screenshots": [
+        "media/icpswap/overview.png",
+        "media/icpswap/compact.png",
+        "media/icpswap/positions.png"
+      ]
+    },
+    {
+      "appId": "jetcreeper",
+      "icon": "media/jetcreeper/icon.svg",
+      "screenshots": [
+        "media/jetcreeper/overview.png",
+        "media/jetcreeper/entry.png"
+      ]
+    },
+    {
+      "appId": "kitchensink",
+      "icon": "media/kitchensink/icon.svg",
+      "screenshots": [
+        "media/kitchensink/overview.png",
+        "media/kitchensink/design.png"
+      ]
+    },
+    {
+      "appId": "mail",
+      "icon": "media/mail/icon.svg",
+      "screenshots": [
+        "media/mail/overview.png"
+      ]
+    },
+    {
+      "appId": "mysubnet",
+      "icon": "media/mysubnet/icon.svg",
+      "screenshots": [
+        "media/mysubnet/overview.png"
+      ]
+    },
+    {
+      "appId": "nuance",
+      "icon": "media/nuance/icon.svg",
+      "screenshots": [
+        "media/nuance/overview.png",
+        "media/nuance/compact.png"
+      ]
+    },
+    {
+      "appId": "openchat",
+      "icon": "media/openchat/icon.svg",
+      "screenshots": [
+        "media/openchat/overview.png",
+        "media/openchat/compact.png"
+      ]
+    },
+    {
+      "appId": "snsgov",
+      "icon": "media/snsgov/icon.svg",
+      "screenshots": [
+        "media/snsgov/overview.png",
+        "media/snsgov/compact.png"
+      ]
+    },
+    {
+      "appId": "spreadsheet",
+      "icon": "media/spreadsheet/icon.svg",
+      "screenshots": [
+        "media/spreadsheet/overview.png",
+        "media/spreadsheet/summary.png"
+      ]
+    },
+    {
+      "appId": "taggr",
+      "icon": "media/taggr/icon.svg",
+      "screenshots": [
+        "media/taggr/overview.png",
+        "media/taggr/compact.png"
+      ]
+    },
+    {
+      "appId": "uniswap",
+      "icon": "media/uniswap/icon.svg",
+      "screenshots": [
+        "media/uniswap/overview.png",
+        "media/uniswap/compact.png"
+      ]
+    },
+    {
+      "appId": "wagyu",
+      "icon": "media/wagyu/icon.png",
+      "screenshots": [
+        "media/wagyu/overview.png"
+      ]
+    },
+    {
+      "appId": "wallet",
+      "icon": "media/wallet/icon.svg",
+      "screenshots": [
+        "media/wallet/overview.png",
+        "media/wallet/compact.png"
+      ]
+    }
+  ]
+}

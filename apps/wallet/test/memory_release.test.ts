@@ -55,8 +55,8 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-const allMemoryRoots = ["wallet", "wallet_bridge", "wallet_bridge_activity", "wallet_bridge_provider", "wallet_bridge_replacements", "wallet_commands", "wallet_transfers"] as const;
-const addedMemoryRoots = ["wallet_bridge", "wallet_bridge_activity", "wallet_bridge_provider", "wallet_bridge_replacements", "wallet_transfers"] as const;
+const allMemoryRoots = ["wallet", "wallet_bridge", "wallet_bridge_activity", "wallet_bridge_provider", "wallet_bridge_replacements", "wallet_commands", "wallet_refills", "wallet_transfers"] as const;
+const addedMemoryRoots = ["wallet_bridge", "wallet_bridge_activity", "wallet_bridge_provider", "wallet_bridge_replacements", "wallet_refills", "wallet_transfers"] as const;
 
 test("Wallet candidate keeps the original root and initializes independent journals", async () => {
   const [productionBytes, sourceText, lockText] = await Promise.all([
@@ -113,7 +113,8 @@ test("Wallet candidate keeps the original root and initializes independent journ
 // These immutable archives cover the production schema baseline and later
 // releases carrying wallet_commands, then the published four-root Wallet315.
 // Skipping app versions keeps every existing v1 root and initializes only the
-// missing journals. The Wallet315 successor adds the independent replacement journal.
+// missing journals. Wallet326 added the independent refill journal; subsequent
+// code releases retain that root alongside every earlier memory lineage.
 test("Current Wallet archive keeps every predecessor root and initializes only missing journals", async () => {
   const source = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8")) as NeutronManifest;
   expect(source.version).toBeGreaterThan(315);
@@ -128,6 +129,8 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     expect(sourceShape(requiredMemory(candidate, memoryId))).toEqual(requiredMemory(source, memoryId));
   }
   const predecessors = [
+    { version: 329, bytes: 941108, sha256: "48e56391089ca7e2d22552690bb33e73804ecaa0b7eb51a224a0b88d2aebd7b1" },
+    { version: 330, bytes: 957812, sha256: "091af7f6bd5ef870e727db265bd549a2024a090c7dede70d6647d25709819e2b" },
     { version: 302, bytes: 575_530, sha256: "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43" },
     { version: 303, bytes: 634_054, sha256: "df4d3689c30a119a91dbf97d4dcdb67bc0226cc0149ebdf24db6cbd78b9c74e9" },
     { version: 304, bytes: 634_055, sha256: "0b32d7afaad101955d94887833f499d7e76d92c413bb28ddd457b3712bd69ea9" },
@@ -147,6 +150,12 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     { version: 320, bytes: 806_428, sha256: "88769f296095a1a9c5ebd4200e8890fbc8640f6097e0f19fdeafe14d3afdf56f" },
     { version: 321, bytes: 810_689, sha256: "12e17e9cb83a65b2e4c1cce81a3c0ba88db27a7b64c9de363868c83698375b84" },
     { version: 322, bytes: 815_214, sha256: "16060e1485e0ffb80b813d4a5f5082735982f1502e43e3843f32c4b84baeabea" },
+    { version: 323, bytes: 883_259, sha256: "dd413ebeece8ed14a7dd606df145f9aead7371fb569184051186f5b9b44cc1c9" },
+    { version: 324, bytes: 884_423, sha256: "c0017c3480b778f62f6bf16430a077b75952596cf3a46fef9b8996aeaaf91c31" },
+    { version: 325, bytes: 884_468, sha256: "3c8e7a30873fa8cb62a14af4f26bedce38939bc1912e2dc8a64ff9430f7ca6d8" },
+    { version: 326, bytes: 926_070, sha256: "1c3f152b3c97a4a91c8ab5ddf3194938841f6745cbd4aab7ac5a0287e851dd53" },
+    { version: 327, bytes: 941_193, sha256: "c9d8f1ca6ddd9e48af622d91a1a8383905638888a76edef0257359730cb486cd" },
+    { version: 328, bytes: 940_936, sha256: "a4910afaaa52f3078d2d9c197b7f8ca5b996664c5ba2bae2d2cf668b8d088c96" },
   ];
   for (const predecessor of predecessors) {
     const bytes = await readFile(new URL(`../${packageArchiveFilename("wallet", predecessor.version)}`, import.meta.url));
@@ -168,7 +177,13 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
       // while every released schema and its full dependency closure remain
       // immutable, including bridge identities and unresolved transfers.
       const productionFiles = unpackNeutronPackage(bytes);
-      expect(candidateFiles["neutron.lock.json"]).toEqual(productionFiles["neutron.lock.json"]);
+      // A new independent refill root extends the lock. Every existing root's
+      // lineage and schema dependency bytes remain unchanged.
+      const releasedLock = JSON.parse(decoder.decode(productionFiles["neutron.lock.json"]!)) as ReturnType<typeof createMemoryLock>;
+      const candidateLock = JSON.parse(decoder.decode(candidateFiles["neutron.lock.json"]!)) as ReturnType<typeof createMemoryLock>;
+      for (const memoryId of Object.keys(releasedLock.memory)) {
+        expect(candidateLock.memory[memoryId]).toEqual(releasedLock.memory[memoryId]);
+      }
       const checkedModules = new Set<string>();
       function preserveModuleClosure(entry: string): void {
         if (checkedModules.has(entry)) return;
@@ -206,7 +221,7 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     removedApps: [],
     destructiveMemoryRoots: [],
   });
-});
+}, 30_000);
 
 test("Wallet 0.3.8 keeps both exact Wallet 0.3.7 memory roots", async () => {
   await assertWalletCodeOnlyRelease({

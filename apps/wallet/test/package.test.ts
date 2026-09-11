@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.24.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.31.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,8 +63,8 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 324,
-    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+    version: 331,
+    update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: {
       path: "service.html",
       description: expect.any(String),
@@ -90,8 +90,6 @@ test("Wallet declares managed memory and generic backend calls", async () => {
       preapproved_self_calls: {
         api: 1,
         methods: [
-          "wallet_snapshot",
-          "wallet_catalog",
           "wallet_contact_destinations",
           "wallet_refresh_metadata",
           "wallet_refresh_balances",
@@ -122,6 +120,8 @@ test("Wallet declares managed memory and generic backend calls", async () => {
           "wallet_bridge_provider_binding_v1",
           "wallet_bridge_activity_v1",
           "wallet_bridge_step_v2",
+          "wallet_read_v1",
+          "wallet_refill_action_v1",
         ],
       },
       backend_calls: {
@@ -165,10 +165,15 @@ test("Wallet declares managed memory and generic backend calls", async () => {
       wallet_bridge_replacements: { version: 1 },
       wallet_bridge_provider: { version: 1 },
       wallet_bridge_activity: { version: 1 },
+      wallet_refills: { version: 1 },
     },
   });
   expect(value).not.toHaveProperty("init_arg");
   expect(value.func).toHaveProperty("wallet_catalog");
+  expect(value.func?.wallet_read_v1).toEqual({ type: "query", async: false });
+  expect(value.func?.wallet_refill_action_v1).toEqual({ type: "update", async: "async*" });
+  expect(value.capabilities?.preapproved_self_calls?.methods).not.toContain("wallet_snapshot");
+  expect(value.capabilities?.preapproved_self_calls?.methods).not.toContain("wallet_catalog");
   expect(value.func).toHaveProperty("wallet_set_ledgers");
   expect(value.func?.wallet_add_ledger_v1).toEqual({ type: "update", async: "async*" });
   expect(value.capabilities?.preapproved_self_calls?.methods).not.toContain("wallet_add_ledger_v1");
@@ -189,7 +194,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value.func).not.toHaveProperty("wallet_remove_ledger");
   expect(value.background).not.toHaveProperty("storage");
   expect(value.capabilities?.backend_calls?.install_reservations).toHaveLength(
-    21,
+    25,
   );
   expect(
     value.capabilities?.backend_calls?.install_reservations?.map(
@@ -218,6 +223,10 @@ test("Wallet declares managed memory and generic backend calls", async () => {
     "exact:mqygn-kiaaa-aaaar-qaadq-cai:retrieve_btc_status_v2",
     "exact:eqltq-xqaaa-aaaar-qb3vq-cai:retrieve_doge_status",
     "exact:lh22c-kyaaa-aaaar-qb5nq-cai:withdrawal_status",
+    "principal:um5iw-rqaaa-aaaaq-qaaba-cai:",
+    "exact:ul4oc-4iaaa-aaaaq-qaabq-cai:get_account_transactions",
+    "exact:rkp4c-7iaaa-aaaaa-aaaca-cai:notify_top_up",
+    "exact:rkp4c-7iaaa-aaaaa-aaaca-cai:notify_mint_cycles",
   ]);
 });
 
@@ -296,6 +305,9 @@ test("generated API-1 ICRC Account inputs use the canonical string shorthand", a
   collectIcrcAccountSchemaPaths(artifact.methods, "", paths);
 
   expect(paths.sort()).toEqual([
+    "wallet_read_v1/input/prefixItems/0/oneOf/4/properties/funding_preview/properties/request/properties/intent/oneOf/0/properties/direct/properties/to",
+    "wallet_read_v1/input/prefixItems/0/oneOf/4/properties/funding_preview/properties/request/properties/intent/oneOf/1/properties/allowance/properties/spender",
+    "wallet_read_v1/input/prefixItems/0/oneOf/4/properties/funding_preview/properties/request/properties/intent/oneOf/2/properties/revoke/properties/spender/oneOf/0/properties/icrc",
     "wallet_transfer/input/prefixItems/0/properties/expected_destination/oneOf/0/properties/internet_computer",
     "wallet_transfer_v2/input/prefixItems/0/properties/transfer/properties/expected_destination/oneOf/0/properties/internet_computer",
     "wallet_transfer_prepare_v2/input/prefixItems/0/properties/transfer/properties/expected_destination/oneOf/0/properties/internet_computer",
@@ -362,10 +374,6 @@ test("Wallet setup replaces one v1 ledger selection through one permission batch
   expect(frontend).toContain('requested === "activity"');
   expect(frontend).toContain('requested === "approvals"');
   expect(frontend).toContain("/^(receive|deposit|send)");
-  expect(frontend).toContain("Wallet alpha warning");
-  expect(frontend).toContain(
-    "Alpha - not battle tested, don't put more tokens than you can",
-  );
 });
 
 test("Wallet rechecks current ledger authority before funding persistence and dispatch", async () => {
@@ -502,7 +510,7 @@ test("Wallet tile and tray mount the same app and gate only focused capabilities
   expect(service).toContain("WALLET_PROJECTION_TOOLS.overview");
   expect(service).toContain("WALLET_PROJECTION_TOOLS.refresh");
   expect(service).toContain("WALLET_TOKEN_INFO_TOOL");
-  expect(service).toContain("WALLET_TOKEN_INFO_METHOD");
+  expect(service).toContain("handleWalletTokenInfo");
   expect(service).toContain('updateSelf("wallet_refresh_balances"');
   expect(service).toContain("setTrayState({ badge: null })");
   expect(service).toContain("publishAppStateChange(WALLET_PROJECTION_TOPIC");

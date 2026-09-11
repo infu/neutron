@@ -122,6 +122,7 @@ import {
   requestBackendReservationForEndpoint,
   type NormalizedBackendAccessRequest,
 } from "./backend_calls/service.ts";
+import { oneTimeCycleCallForEndpoint } from "./backend_calls/one_time_cycles.ts";
 import {
   beginEthereumProviderForEndpoint,
   endEthereumProviderForEndpoint,
@@ -235,7 +236,10 @@ import type {
   AttestedInstallOfferRequester,
   NormalizedInstallOffer,
 } from "./install_offers/types.ts";
-import { startRepositorySetupFromOffer } from "./repository/service.ts";
+import { startRepositorySetupFromOffer, startPreparedRepositorySetup } from "./repository/service.ts";
+import { REPOSITORY_LIMITS } from "neutron-tools/repository";
+import { isRepositoryResourcePath } from "neutron-tools/src/repository_access.js";
+import type { RepositoryPreparedAccess } from "./repository_access/client.ts";
 import { useRepositorySetupStore } from "./repository/store.ts";
 import {
   SOURCE_FILES_TOOL_OPTIONS,
@@ -1006,6 +1010,7 @@ function agentStatus(appId: string): JsonObject {
 
 function kernelToolSupportsRequestCancellation(name: string): boolean {
   return (
+    name.startsWith("backend_calls.cycles_") ||
     name === "canister.schema_v2" ||
     name === "canister.call_dialog_v2" ||
     name === "permissions.request" ||
@@ -1347,6 +1352,27 @@ defineKernelTool(
   (args, caller) => listBackendReservationsForEndpoint(args, caller),
 );
 
+const oneTimeCycleCallSchema: JsonObject = {
+  type: "object", additionalProperties: false,
+  required: ["requestId", "canister", "method", "argsHex", "cyclesAtoms"],
+  properties: {
+    requestId: { type: "string", pattern: "^[a-f0-9]{32}$" },
+    canister: { type: "string" },
+    method: { type: "string", minLength: 1, maxLength: CANISTER_METHOD_MAX_LENGTH, pattern: "^[a-zA-Z0-9_]+$" },
+    argsHex: { type: "string", pattern: "^4449444c[a-f0-9]*$", description: "Complete Candid argument bytes in lowercase hexadecimal; whole bytes are validated before review." },
+    cyclesAtoms: { type: "string", pattern: "^0$|^[1-9][0-9]*$" },
+    allowPartial: { type: "boolean", description: "Allow less than the exact cap to retain the Neutron reserve. Defaults to false." },
+  },
+};
+for (const action of ["quote", "request", "status", "list"] as const) {
+  defineKernelTool(`backend_calls.cycles_${action}`, {
+    title: { quote: "Quote one-time cycle spend", request: "Request one-time cycle spend", status: "Read saved cycle call", list: "List saved cycle calls" }[action],
+    description: action === "request" ? "Always ask the Neutron owner to approve one exact call beyond the app's recurring cycle budget. Root agents cannot approve it. Retain requestId and use status after interruption; never replace an unknown call." : "Read the requesting app's one-time cycle call quote or saved receipt without spending cycles.",
+    inputSchema: action === "quote" || action === "request" ? oneTimeCycleCallSchema : action === "status" ? { type: "object", required: ["requestId"], properties: { requestId: { type: "string", pattern: "^[a-f0-9]{32}$" } }, additionalProperties: false } : { type: "object", properties: { before: { type: "string", pattern: "^0$|^[1-9][0-9]*$" }, limit: { type: "integer", minimum: 1 } }, additionalProperties: false },
+    annotations: { "neutron:effects": action === "request" ? ["network", "user_visible_ui", "write"] : ["read"] },
+  }, (args, caller, _invocation, _context, signal) => oneTimeCycleCallForEndpoint(action, args, caller, signal));
+}
+
 defineKernelTool(
   "apps.list",
   {
@@ -1437,6 +1463,78 @@ for (const [name, options, operation] of [
     },
   );
 }
+
+defineKernelTool(
+  "apps.install_prepared",
+  {
+    title: "Review Prepared App Installation",
+    description: "Load and compile an app-prepared certified repository selection, then show one final package and permission review. Requires install-declared access to this exact Kernel tool. Supplied download access is used without another source charge; approval is still required to install.",
+    inputSchema: {
+      type: "object",
+      required: ["url", "appIds"],
+      properties: {
+        url: { type: "string", minLength: 1, maxLength: 2_048 },
+        appIds: { type: "array", minItems: 1, maxItems: REPOSITORY_LIMITS.packagesPerManifest, uniqueItems: true, items: { type: "string", minLength: 1 } },
+        access: {
+          type: "object", required: ["source", "token", "paths"], additionalProperties: false,
+          properties: {
+            source: { type: "string", minLength: 1 },
+            token: { type: "string", pattern: "^[0-9a-f]{64}$" },
+            paths: { type: "array", minItems: 1, uniqueItems: true, items: { type: "string", minLength: 1 } },
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: "object", required: ["presented", "requestId"], additionalProperties: false,
+      properties: { presented: { const: true }, requestId: { type: "string" } },
+    },
+    annotations: { "neutron:effects": ["user_visible_ui", "network", "write"], "neutron:audit": "metadata_only" },
+  },
+  async (args, caller, invocation) => {
+    const auth = useAuthStore.getState();
+    if (auth.loading || !auth.logged || !auth.authorized) {
+      throw new KernelPolicyError("OWNER_REQUIRED", "An authorized owner session is required to prepare an installation");
+    }
+    assertCurrentEndpointVersion(caller);
+    const app = useAppsStore.getState().list[caller.context.appId];
+    if (!app) throw new Error("The requesting app is no longer installed");
+    const declared = declaredCapability(app, "frontend_tools");
+    if (!declared?.targets.some((target) => target.app === "kernel" && target.tools.includes("apps.install_prepared"))) {
+      throw new KernelPolicyError("INVALID_REQUEST", "Declare access to kernel/apps.install_prepared in frontend_tools before preparing installations");
+    }
+    assertInstallOfferFlowsIdle();
+    const offer = normalizeInstallOffer("repository_setup_url", String(args.url));
+    if (offer.kind !== "repository_setup_url") throw new Error("A prepared installation requires a repository setup URL");
+    const roots = args.appIds as string[];
+    if (roots.some((id) => !isValidAppId(id) || id === "kernel")) {
+      throw new Error("Select application IDs; upgrade the Kernel through Settings");
+    }
+    const access = args.access as RepositoryPreparedAccess | undefined;
+    if (access && (access.source !== offer.reference.repo || access.paths.some((path) => !isRepositoryResourcePath(path)))) {
+      throw new Error("Prepared download access must cover canonical paths at the selected repository");
+    }
+    let requester: AttestedInstallOfferRequester = {
+      kind: "app", appId: caller.context.appId, appName: safeDiscoveryText(app.name, 120), surface: caller.context.role,
+    };
+    if (invocation) {
+      const root = useAgentModeStore.getState().activeRoot;
+      const rootApp = root ? useAppsStore.getState().list[root.appId] : null;
+      if (!root || root.id !== invocation.rootId || !rootApp) throw new KernelPolicyError("INVOCATION_INVALID", "The agent root is no longer active");
+      requester = {
+        kind: "agent", appId: caller.context.appId, appName: safeDiscoveryText(app.name, 120),
+        rootAppId: root.appId, rootAppName: safeDiscoveryText(rootApp.name, 120), entrypoint: root.entrypoint,
+        tool: invocation.tool, rootId: root.id,
+      };
+    }
+    // Manifest-declared preparation survives asynchronous app work. It grants
+    // no deployment authority: the exact compiled permissions are approved in
+    // RepositorySetupDialog, after certified downloads have been validated.
+    startPreparedRepositorySetup(offer.reference, requester, roots, access);
+    return { presented: true, requestId: crypto.randomUUID() };
+  },
+);
 
 defineKernelTool(
   "apps.install_offer",
@@ -1599,15 +1697,23 @@ defineKernelTool(
       offer,
       requester,
       assertCurrent,
-      onApprove() {
+      onApprove(approval) {
         if (offer.kind === "package_url") {
           void install_app(
-            { kind: "url", url: offer.url },
+            {
+              kind: "url",
+              url: offer.url,
+              ...(approval.approvedAccess ? { approvedAccess: approval.approvedAccess } : {}),
+            },
             { installOnly: true, offer: review },
           ).catch(() => undefined);
           return;
         }
-        startRepositorySetupFromOffer(offer.reference, requester);
+        startRepositorySetupFromOffer(
+          offer.reference,
+          requester,
+          approval.approvedAccess,
+        );
       },
     });
     await handle.completion;

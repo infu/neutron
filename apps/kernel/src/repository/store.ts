@@ -21,6 +21,7 @@ export type RepositorySetupPhase =
   | "review"
   | "installing"
   | "success"
+  | "nothing"
   | "error";
 
 export type RepositorySetupProgress = {
@@ -51,6 +52,7 @@ type RepositorySetupState = {
   phase: RepositorySetupPhase;
   reference: RepositorySetupReference | null;
   offeredBy: Readonly<AttestedInstallOfferRequester> | null;
+  prepared: boolean;
   loaded: LoadedRepositorySetup | null;
   rootIds: readonly string[];
   selection: RepositorySelection | null;
@@ -64,6 +66,7 @@ const initialState: RepositorySetupState = {
   phase: "idle",
   reference: null,
   offeredBy: null,
+  prepared: false,
   loaded: null,
   rootIds: [],
   selection: null,
@@ -81,12 +84,14 @@ export const repositorySetupState = {
   pending(
     reference: RepositorySetupReference,
     offeredBy: AttestedInstallOfferRequester | null = null,
+    prepared = false,
   ): void {
     useRepositorySetupStore.setState({
       ...initialState,
       phase: "pending",
       reference: Object.freeze({ ...reference }),
       offeredBy: offeredBy ? Object.freeze({ ...offeredBy }) : null,
+      prepared,
     });
   },
   loading(progress: RepositorySetupProgress): void {
@@ -163,6 +168,15 @@ export const repositorySetupState = {
   success(): void {
     useRepositorySetupStore.setState({
       phase: "success",
+      progress: null,
+      error: null,
+      errorStage: null,
+      deploymentReview: null,
+    });
+  },
+  nothingToInstall(): void {
+    useRepositorySetupStore.setState({
+      phase: "nothing",
       progress: null,
       error: null,
       errorStage: null,

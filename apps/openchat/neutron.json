@@ -2,8 +2,8 @@
   "format": 3,
   "name": "OpenChat",
   "id": "openchat",
-  "version": 123,
-  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "version": 124,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "A sovereign client for the OpenChat network",
   "src": "main.mo",
   "background": {

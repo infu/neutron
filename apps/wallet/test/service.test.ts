@@ -5,7 +5,7 @@ type ToolHandler = (args: unknown, context: unknown) => Promise<unknown>;
 
 const handlers = new Map<string, ToolHandler>();
 const publications: Array<{ topic: string; revision: number }> = [];
-let querySelfResponse: ((method: string) => unknown) | null = null;
+let querySelfResponse: ((method: string, args: Array<Record<string, unknown>>) => unknown) | null = null;
 let updateSelfResponse: ((method: string) => unknown) | null = null;
 const postDispatchError = new Error("post-dispatch cancellation");
 const fundingRequest = {
@@ -42,8 +42,8 @@ mock.module("neutron-tools/app", () => ({
     publications.push({ topic, revision });
     throw new Error("projection notification unavailable");
   },
-  querySelf: async (method: string): Promise<unknown> => {
-    if (querySelfResponse) return querySelfResponse(method);
+  querySelf: async (method: string, args: Array<Record<string, unknown>>): Promise<unknown> => {
+    if (querySelfResponse) return querySelfResponse(method, args);
     throw new Error("Unexpected Wallet query");
   },
   setTrayState: async (): Promise<void> => undefined,
@@ -75,9 +75,9 @@ test("overview and refresh expose compact balances by default and preserve expli
     }],
   };
   const calls: string[] = [];
-  querySelfResponse = (method) => {
-    if (method === "wallet_snapshot") return snapshot;
-    if (method === "wallet_catalog") return [];
+  querySelfResponse = (method, args) => {
+    if (method === "wallet_read_v1" && "snapshot" in args[0]!) return { snapshot };
+    if (method === "wallet_read_v1" && "catalog" in args[0]!) return { catalog: [] };
     if (method === "wallet_history_page") return {
       records: [], next: null, inspected: "0", has_more: false, warning: null,
     };
@@ -125,10 +125,10 @@ const indexedStatus = {
 
 test("overview exposes cached index checkpoints without claiming fresh history or performing updates", async () => {
   const calls: string[] = [];
-  querySelfResponse = (method) => {
+  querySelfResponse = (method, args) => {
     calls.push(method);
-    if (method === "wallet_snapshot") return emptySnapshot;
-    if (method === "wallet_catalog") return [];
+    if (method === "wallet_read_v1" && "snapshot" in args[0]!) return { snapshot: emptySnapshot };
+    if (method === "wallet_read_v1" && "catalog" in args[0]!) return { catalog: [] };
     if (method === "wallet_history_page") return { records: [], has_more: false };
     if (method === "wallet_history_status") return indexedStatus;
     throw new Error(`Unexpected query ${method}`);
@@ -144,7 +144,7 @@ test("overview exposes cached index checkpoints without claiming fresh history o
         lastAttemptAt: "1800000000000000001",
       }] },
     });
-    expect(calls).toEqual(["wallet_snapshot", "wallet_catalog", "wallet_history_page", "wallet_history_status"]);
+    expect(calls).toEqual(["wallet_read_v1", "wallet_read_v1", "wallet_history_page", "wallet_history_status"]);
   } finally {
     querySelfResponse = null;
     updateSelfResponse = null;
@@ -163,10 +163,10 @@ test("refresh synchronizes before reading history and retains partial index resu
     if (method === "wallet_history_sync") return sync;
     throw new Error(`Unexpected update ${method}`);
   };
-  querySelfResponse = (method) => {
+  querySelfResponse = (method, args) => {
     calls.push(method);
     expect(calls.indexOf("wallet_history_sync")).toBeGreaterThan(0);
-    if (method === "wallet_catalog") return [];
+    if (method === "wallet_read_v1" && "catalog" in args[0]!) return { catalog: [] };
     if (method === "wallet_history_page") return { records: [], has_more: false };
     if (method === "wallet_history_status") return indexedStatus;
     throw new Error(`Unexpected query ${method}`);
@@ -179,7 +179,7 @@ test("refresh synchronizes before reading history and retains partial index resu
       } },
       historyStatus: { ledgers: [{ state: "waiting_for_index" }] },
     });
-    expect(calls).toEqual(["wallet_refresh_balances", "wallet_history_sync", "wallet_catalog", "wallet_history_page", "wallet_history_status"]);
+    expect(calls).toEqual(["wallet_refresh_balances", "wallet_history_sync", "wallet_read_v1", "wallet_history_page", "wallet_history_status"]);
   } finally {
     querySelfResponse = null;
     updateSelfResponse = null;
@@ -192,8 +192,8 @@ test("history sync and status failures preserve refreshed balances and identify 
     if (method === "wallet_history_sync") throw new Error("Index permission required");
     throw new Error(`Unexpected update ${method}`);
   };
-  querySelfResponse = (method) => {
-    if (method === "wallet_catalog") return [];
+  querySelfResponse = (method, args) => {
+    if (method === "wallet_read_v1" && "catalog" in args[0]!) return { catalog: [] };
     if (method === "wallet_history_page") return { records: [], has_more: false };
     if (method === "wallet_history_status") throw new Error("History status unavailable");
     throw new Error(`Unexpected query ${method}`);
@@ -218,8 +218,8 @@ test("overlapping refreshes share one sync and preserve skipped-overlap evidence
     if (method === "wallet_history_sync") return { skipped_overlap: true, ledgers: [] };
     throw new Error(`Unexpected update ${method}`);
   };
-  querySelfResponse = (method) => {
-    if (method === "wallet_catalog") return [];
+  querySelfResponse = (method, args) => {
+    if (method === "wallet_read_v1" && "catalog" in args[0]!) return { catalog: [] };
     if (method === "wallet_history_page") throw new Error("History page unavailable");
     if (method === "wallet_history_status") return { ...indexedStatus, running: true };
     throw new Error(`Unexpected query ${method}`);
@@ -236,50 +236,6 @@ test("overlapping refreshes share one sync and preserve skipped-overlap evidence
     querySelfResponse = null;
     updateSelfResponse = null;
   }
-});
-
-test("token information uses one exact Wallet self-call", async () => {
-  const handler = handlers.get("wallet_token_info_v1");
-  if (!handler) throw new Error("Wallet token information tool was not exposed");
-  const calls: unknown[][] = [];
-
-  await expect(
-    handler(
-      { ledger: fundingRequest.ledger },
-      {
-        kernel: {
-          updateSelf: async (...args: unknown[]): Promise<unknown> => {
-            calls.push(args);
-            return {
-              ledger: fundingRequest.ledger,
-              account: {
-                owner: "togwv-zqaaa-aaaal-qr7aa-cai",
-                subaccount: null,
-              },
-              token_name: "Internet Computer",
-              token_symbol: "ICP",
-              decimals: "8",
-              fee_atoms: "10000",
-              balance_atoms: "123456789",
-              observed_at_ns: "1800000000000000000",
-            };
-          },
-        },
-      },
-    ),
-  ).resolves.toEqual({
-    ledger: fundingRequest.ledger,
-    account: "togwv-zqaaa-aaaal-qr7aa-cai",
-    name: "Internet Computer",
-    symbol: "ICP",
-    decimals: 8,
-    feeAtoms: "10000",
-    balanceAtoms: "123456789",
-    observedAtNs: "1800000000000000000",
-  });
-  expect(calls).toEqual([
-    ["wallet_token_info_v1", [{ ledger: fundingRequest.ledger }], 60],
-  ]);
 });
 
 test("root funding invalidates the Wallet projection after a failed attempt", async () => {

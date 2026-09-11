@@ -1,3 +1,8 @@
+import {
+  RepositoryAccessCost,
+  useRepositoryAccessApprovals,
+} from "../repository_access/RepositoryAccessCost.tsx";
+import { resolveRepositoryAccessSource } from "../repository_access/client.ts";
 import { useEffect, useRef } from "react";
 import {
   approveInstallOffer,
@@ -31,6 +36,10 @@ export function InstallOfferDialogView({
   const uiMode = useConsentUiMode(uiModeOverride);
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const source = pending?.offer.kind === "repository_setup_url"
+    ? pending.offer.reference.repo
+    : pending ? resolveRepositoryAccessSource(pending.offer.url)?.canisterId : null;
+  const access = useRepositoryAccessApprovals(source ? [source] : [], pending?.requestId);
 
   useEffect(() => {
     if (!pending) return;
@@ -92,9 +101,9 @@ export function InstallOfferDialogView({
                 </span>
               </ConsentNotice>
               <ConsentNotice tone="neutral">
-                {pending.offer.kind === "package_url"
-                  ? "The download sends no browser credentials or referrer. The source and network can still observe request metadata."
-                  : "Neutron anonymously queries the repository and verifies certified data. Gateways and the repository can still observe request metadata."}
+                {source
+                  ? "Public metadata is queried without an identity. Private downloads identify this Neutron and use the source access cost shown below."
+                  : "The download sends no browser credentials or referrer. The source and network can still observe request metadata."}
               </ConsentNotice>
               <div className="repository-third-party">
                 Third-party software — Neutron has not reviewed, hosted, sold, or
@@ -151,21 +160,27 @@ export function InstallOfferDialogView({
             ) : null}
           </div>
           <div className="dialog-section">
-            Neutron has not contacted this source yet. Review will contact it
-            without installing anything. You will still see the normal package
-            or application-group review before installation.
+            {source
+              ? "Neutron checks the source’s certified access cost before you choose Review. This query does not grant access or spend cycles."
+              : "Neutron has not contacted this source yet. Review will contact it without installing anything."}
+            {" "}You will still see the normal package or application-group
+            review before installation.
           </div>
           <div className="repository-notice">
             {pending.offer.kind === "package_url"
-              ? "Review downloads the exact URL without browser credentials or a referrer. The host and network can still observe request metadata, including any query values, which are intentionally hidden from this dialog and audit."
-              : "Review does not fetch the outer page. It anonymously queries the named repository canister and verifies certified data. Gateways and the provider can still observe request metadata and correlate a unique manifest or digest."}
+              ? "Review downloads the exact URL without ambient browser credentials or a referrer. Private repository downloads use an access grant for this Neutron. The host and network can still observe request metadata, including query values hidden from this dialog and audit."
+              : "Review does not fetch the outer page. It verifies certified repository metadata and downloads the selected bundle. Gateways and the provider can observe request metadata and correlate a unique manifest or digest."}
           </div>
           </ConsentTechnicalDetails>
+          <RepositoryAccessCost {...access} onRetry={access.refresh} />
           <div className="btn-actions">
             <button
               className={uiMode === "developer" ? "btn btn-warning" : "btn"}
               data-tid="install-offer-approve"
-              onClick={() => approveInstallOffer(pending.requestId)}
+              disabled={access.loading}
+              onClick={() => {
+                if (!access.loading) approveInstallOffer(pending.requestId, access.approvals);
+              }}
               type="button"
             >
               Review source

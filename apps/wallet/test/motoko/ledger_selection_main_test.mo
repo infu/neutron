@@ -1,3 +1,4 @@
+import RefillMemory "../../backend/memory/wallet_refills/v1";
 import Array "mo:core/Array";
 import Error "mo:core/Error";
 import Map "mo:core/Map";
@@ -90,7 +91,7 @@ persistent actor Self {
         };
     };
     transient let env : Main.AppBackendEnvironment = {
-        stable_memory = {
+        stable_memory = { wallet_refills = RefillMemory.init();
             wallet = memory; wallet_commands = CommandMemory.init();
             wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init();
             wallet_bridge_replacements = ReplacementMemory.init();
@@ -124,7 +125,7 @@ persistent actor Self {
     public func run() : async () {
         let app = Main.Init(env);
         let defaults = app.wallet_snapshot(());
-        assert defaults.configured and defaults.ledgers.size() == 3;
+        assert defaults.configured and defaults.ledgers.size() == 4;
         assert dispatched.size() == 0;
         let initial = await* app.wallet_set_ledgers([first]);
         assert initial.configured and initial.ledgers.size() == 1;

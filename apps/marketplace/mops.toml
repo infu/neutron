@@ -1,0 +1,4 @@
+[dependencies]
+core = "https://github.com/dfinity/motoko-core#v2.6.0"
+neutron-capabilities = "../../packages/neutron-motoko-capabilities"
+sha2 = "0.0.2"

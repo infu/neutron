@@ -1,3 +1,4 @@
+import { queryWalletReview } from "./wallet_read.ts";
 import {
   isJsonObject,
   type JsonObject,
@@ -18,6 +19,7 @@ import {
 export const WALLET_FUNDING_TOOL = "wallet_fund_v1";
 export const WALLET_FUNDING_ROOT_TOOL = "wallet_fund_root_v1";
 export const WALLET_FUNDING_PRESENT_TOOL = "wallet_funding_present_v1";
+export const WALLET_FUNDING_PREVIEW_METHOD = "wallet_read_v1";
 export const WALLET_FUNDING_PREPARE_METHOD = "wallet_funding_prepare_v1";
 export const WALLET_FUNDING_EXECUTE_METHOD = "wallet_funding_execute_v1";
 export const WALLET_FUNDING_REJECT_METHOD = "wallet_funding_reject_v1";
@@ -177,6 +179,8 @@ export type PreparedWalletFundingOperation = {
   request: WalletFundingRequest;
   caller: WalletFundingCaller;
   preparation: WalletFundingPrepareResult;
+  /** False only for a browser query preview; no command or effect exists yet. */
+  durable?: boolean;
 };
 
 export async function handleWalletFunding(
@@ -249,11 +253,58 @@ export async function prepareWalletFundingOperation(
   return { request, caller, preparation };
 }
 
+export async function previewWalletFundingOperation(
+  rawRequest: JsonObject,
+  context: MsgBusToolContext,
+  readFacts = async (request: WalletFundingRequest, signal?: AbortSignal) =>
+    (await import("./funding_reads.ts")).readFundingFacts(request, signal),
+): Promise<PreparedWalletFundingOperation> {
+  throwIfAborted(context.signal);
+  const caller = requireFundingCaller(context.caller);
+  const request = parseWalletFundingRequest(rawRequest);
+  let facts: Awaited<ReturnType<typeof readFacts>> | null = null;
+  let readError: unknown;
+  try { facts = await readFacts(request, context.signal); } catch (error) { readError = error; }
+  throwIfAborted(context.signal);
+  // Saved pending/terminal commands remain recoverable even when the public
+  // ledger is unavailable. Missing facts never create a fresh preview.
+  const raw = await queryWalletReview(context.kernel.querySelf, "funding_preview", {
+    request: fundingPrepareArgs(request, caller, false), facts, lookup_only: false,
+  });
+  // Empty Candid options are omitted from self-call record replies.
+  const result = exactObject(raw, ["durable"], "Wallet funding preview", ["preparation"]);
+  if (typeof result.durable !== "boolean") throw new Error("Invalid Wallet funding preview durability");
+  if (result.preparation == null) throw readError ?? new Error("Fresh ledger observations are unavailable for this Wallet review");
+  const preparation = parseFundingPrepareResult(result.preparation);
+  assertPreparedFundingMatchesRequest(preparation.value.review, fundingPreparationCommand(preparation), request, caller);
+  if (!result.durable && preparation.kind !== "prepared") throw new Error("Unsaved Wallet preview has an execution result");
+  throwIfAborted(context.signal);
+  return { request, caller, preparation, durable: result.durable };
+}
+
+/** Called only after owner acceptance. Ledger facts and authority are rechecked
+ * by the existing durable prepare; changed terms must be reviewed again. */
+export async function persistWalletFundingPreview(
+  operation: PreparedWalletFundingOperation,
+  update: (method: string, args: SelfCallObject[], timeout: number) => Promise<unknown>,
+): Promise<{ operation: PreparedWalletFundingOperation; reviewChanged: boolean }> {
+  if (operation.durable !== false) return { operation, reviewChanged: false };
+  const preparation = parseFundingPrepareResult(await update(WALLET_FUNDING_PREPARE_METHOD, [
+    fundingPrepareArgs(operation.request, operation.caller, false),
+  ], 60));
+  assertPreparedFundingMatchesRequest(preparation.value.review, fundingPreparationCommand(preparation), operation.request, operation.caller);
+  return {
+    operation: { ...operation, preparation, durable: true },
+    reviewChanged: preparation.kind === "prepared" && JSON.stringify(preparation.value.review) !== JSON.stringify(operation.preparation.value.review),
+  };
+}
+
 export async function executeWalletFundingOperation(
   operation: PreparedWalletFundingOperation,
   execute: (args: SelfCallObject) => Promise<unknown>,
   signal?: AbortSignal,
 ): Promise<JsonObject> {
+  if (operation.durable === false) throw new Error("Wallet preview must be prepared after owner approval before execution");
   const result = await resolveWalletFundingPreparation(
     operation.preparation,
     execute,
@@ -265,8 +316,30 @@ export async function executeWalletFundingOperation(
 export async function rejectWalletFundingOperation(
   operation: PreparedWalletFundingOperation,
   reject: (args: SelfCallObject) => Promise<unknown>,
+  query?: MsgBusToolContext["kernel"]["querySelf"],
 ): Promise<JsonObject> {
-  const command = fundingPreparationCommand(operation.preparation);
+  let command = fundingPreparationCommand(operation.preparation);
+  if (operation.durable === false) {
+    if (!query) throw new Error("Wallet preview cancellation requires an original-command check");
+    const raw = await queryWalletReview(query, "funding_preview", {
+      request: fundingPrepareArgs(operation.request, operation.caller, false), facts: null, lookup_only: true,
+    });
+    const saved = exactObject(raw, ["durable"], "Wallet funding cancellation status", ["preparation"]);
+    if (saved.preparation != null) {
+      const preparation = parseFundingPrepareResult(saved.preparation);
+      assertPreparedFundingMatchesRequest(preparation.value.review, fundingPreparationCommand(preparation), operation.request, operation.caller);
+      if (saved.durable !== true) throw new Error("Wallet cancellation status is not durable");
+      // Another presentation may have accepted this same ID, or a prepare reply
+      // may have been lost. Let the durable journal determine its real outcome.
+      return rejectWalletFundingOperation({ ...operation, preparation, durable: true }, reject);
+    }
+    if (saved.durable !== false) throw new Error("Invalid Wallet funding cancellation status");
+    return externalFundingJson(operation.request, {
+      commandId: fundingCommandIdText(command), status: "rejected",
+      blockIndex: null, duplicate: null,
+      message: "The Wallet approval was declined before submission.",
+    });
+  }
   const result = parseFundingExecutionResult(
     await reject(walletFundingExecuteArgs(command)),
   );

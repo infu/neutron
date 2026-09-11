@@ -4,6 +4,8 @@ node_modules
 dist
 build
 .neutron
+# Private database schema configuration
+ashroot.json
 **/.icp/cache/
 *.ndeploy.session.json
 *.ndeploy.session.json.lock

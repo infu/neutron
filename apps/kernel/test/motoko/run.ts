@@ -24,6 +24,7 @@ const compiledTests = [
 const interpretedTests = [
   "authenticated_forest_lifecycle_test.mo",
   "backend_calls_test.mo",
+  "owner_cycle_calls_test.mo",
   "chain_key_signing_service_test.mo",
   "wallet_custody_signing_service_test.mo",
   "certified_assets_codec_test.mo",

@@ -2,6 +2,8 @@ import { create } from "zustand";
 import {
   KernelPolicyError,
   type JsonValue,
+  type OneTimeCycleCallRequest,
+  type OneTimeCycleCallQuote,
 } from "neutron-tools/protocol";
 import type { NeutronBackendCallReservation } from "neutron-tools/src/capabilities/catalog.js";
 import {
@@ -50,6 +52,7 @@ export type BackendCallConsentSnapshot = {
   source: BackendCallRequestSource;
   actions: BackendCallReservationAction[];
   limits?: BackendCallConsentLimits;
+  oneTimeCycleCall?: Readonly<OneTimeCycleCallRequest & OneTimeCycleCallQuote>;
   call?: {
     method: string;
     args: JsonValue[];
@@ -210,6 +213,7 @@ export function immutableBackendCallSnapshot<
     source,
     actions,
     ...(limits ? { limits } : {}),
+    ...(request.oneTimeCycleCall ? { oneTimeCycleCall: Object.freeze({ ...request.oneTimeCycleCall }) } : {}),
     ...(call ? { call } : {}),
   }) as T;
 }
@@ -246,7 +250,9 @@ export function approveBackendCallRequest(id: number): void {
 }
 
 export function rejectBackendCallRequest(id: number): void {
-  rejectRequest(id, new Error("User rejected backend access"));
+  rejectRequest(id, useBackendCallConsentStore.getState().requests[id]?.oneTimeCycleCall
+    ? new KernelPolicyError("REQUEST_CANCELLED", "User canceled the one-time cycle transfer")
+    : new Error("User rejected backend access"));
 }
 
 export function removeBackendCallRequestsForApp(appId: string): void {

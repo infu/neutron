@@ -72,3 +72,5 @@ export async function connectEvmBridgeReads() { throw new Error('Unexpected EVM 
 export async function attachExternalBridgeTransaction() { throw new Error('Unexpected hash attachment'); }
 export async function querySelf() { throw new Error('Unexpected real backend query'); }
 export async function updateSelf() { throw new Error('Unexpected real backend update'); }
+
+export async function loadNeutronCanisterId() { return "aaaaa-aa"; }

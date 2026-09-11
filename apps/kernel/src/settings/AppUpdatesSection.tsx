@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   type KeyboardEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { IoCopyOutline } from "react-icons/io5";
@@ -36,6 +37,10 @@ import {
 import { CapabilityChangeSummary } from "../consent/CapabilityChangeSummary.tsx";
 import type { KernelUiMode } from "../ui_mode.ts";
 import { DeploymentBuildReview } from "../install_review/DeploymentBuildReview.tsx";
+import {
+  RepositoryAccessCost,
+  useRepositoryAccessApprovals,
+} from "../repository_access/RepositoryAccessCost.tsx";
 
 export function AppUpdatesCoordinator({
   fallbackFocusRef,
@@ -164,6 +169,15 @@ export function AppUpdatesBulkAction({
   const preparing = state.phase === "preparing";
   const reviewing = state.phase === "review";
   const applying = state.phase === "applying";
+  const access = useRepositoryAccessApprovals(
+    state.results.flatMap((result) =>
+      result.kind === "available" &&
+      (actionAppIds.length === 0 || actionAppIds.includes(result.appId))
+        ? [result.source]
+        : [],
+    ),
+    `${state.checkedAt ?? ""}:${state.error ?? ""}`,
+  );
 
   if (preparing) {
     return (
@@ -215,17 +229,23 @@ export function AppUpdatesBulkAction({
           className="btn"
           data-tid="settings-update-selected"
           disabled={
-            disabled || !resultsUsable || selectedAvailableCount === 0
+            disabled ||
+            !resultsUsable ||
+            selectedAvailableCount === 0 ||
+            access.loading
           }
           onClick={(event) => {
             returnFocusRef.current = event.currentTarget;
-            void prepareAppUpdates(actionAppIds);
+            void prepareAppUpdates(actionAppIds, {
+              approvedAccess: access.approvals,
+            });
           }}
           ref={returnFocusRef}
           type="button"
         >
           Update selected ({selectedAvailableCount})
         </button>
+        <RepositoryAccessCost {...access} onRetry={access.refresh} collapsible />
       </div>
     );
   }
@@ -238,27 +258,30 @@ export function AppUpdatesBulkAction({
         aria-label={`Upgrade all ${availableCount} available apps`}
         className="btn"
         data-tid="settings-upgrade-all"
-        disabled={disabled}
+        disabled={disabled || access.loading}
         onClick={(event) => {
           returnFocusRef.current = event.currentTarget;
-          void prepareAllAvailableUpdates();
+          void prepareAllAvailableUpdates({ approvedAccess: access.approvals });
         }}
         ref={returnFocusRef}
         type="button"
       >
         Upgrade all ({availableCount})
       </button>
+      <RepositoryAccessCost {...access} onRetry={access.refresh} collapsible />
     </div>
   );
 }
 
 export function AppUpdateCell({
+  access,
   appId,
   appName,
   disabled,
   returnFocusRef,
   updateSource,
 }: {
+  access: ReturnType<typeof useRepositoryAccessApprovals>;
   appId: string;
   appName: string;
   disabled: boolean;
@@ -268,7 +291,6 @@ export function AppUpdateCell({
   const state = useUpdateCheckStore();
   const result = state.results.find((candidate) => candidate.appId === appId);
   const selected = state.selectedAppIds.includes(appId);
-
   if (selected && state.phase === "preparing") {
     return <UpdateBusy label="Preparing" />;
   }
@@ -313,11 +335,12 @@ export function AppUpdateCell({
             state.phase === "preparing" ||
             state.phase === "review" ||
             state.phase === "applying" ||
-            state.errorStage === "apply"
+            state.errorStage === "apply" ||
+            access.loading
           }
           onClick={(event) => {
             returnFocusRef.current = event.currentTarget;
-            void prepareAppUpdate(appId);
+            void prepareAppUpdate(appId, { approvedAccess: access.approvals });
           }}
           ref={
             selected && state.selectedAppIds.length === 1
@@ -351,6 +374,34 @@ export function AppUpdateCell({
     case "cancelled":
       return <span>Not checked</span>;
   }
+}
+
+/** The action and its expanded details share the same cost and retry state. */
+export function AppUpdateAccess({ appId, children }: {
+  appId: string;
+  children: (access: ReturnType<typeof useRepositoryAccessApprovals>) => ReactNode;
+}) {
+  const state = useUpdateCheckStore();
+  const result = state.results.find((candidate) => candidate.appId === appId);
+  const access = useRepositoryAccessApprovals(
+    result?.kind === "available" ? [result.source] : [],
+    `${state.checkedAt ?? ""}:${state.error ?? ""}`,
+  );
+  return children(access);
+}
+
+/** Available before preparation, which can authorize a private download. */
+export function AppUpdateAccessDetails({ appId, access }: {
+  appId: string;
+  access: ReturnType<typeof useRepositoryAccessApprovals>;
+}) {
+  if (!access.loading && !access.error && access.approvals.length === 0) return null;
+  return (
+    <section aria-label="Download access" data-tid={`settings-update-access-${appId}`}>
+      <h4>Download access</h4>
+      <RepositoryAccessCost {...access} onRetry={access.refresh} />
+    </section>
+  );
 }
 
 function UpdateBusy({ label }: { label: string }) {

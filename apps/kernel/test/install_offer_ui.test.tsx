@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
+import { loadIcRuntimeFixture } from "./runtime_fixture.ts";
+
+beforeAll(loadIcRuntimeFixture);
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   InstallOfferDialogView,
@@ -154,3 +157,18 @@ function consentDetailsTag(html: string): string {
   if (!match) throw new Error("Missing consent technical details");
   return match[0];
 }
+
+
+test("canonical private package offers cannot be approved before the access cost is loaded", () => {
+  requestInstallOffer({
+    offer: { kind: "package_url", url: `https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/packages/${"a".repeat(64)}.neutron` },
+    requester: { kind: "app", appId: "catalog", appName: "Catalog", surface: "tile" },
+    assertCurrent: () => true,
+    onApprove: () => { throw new Error("Rendering must not authorize access"); },
+  });
+  const html = renderToStaticMarkup(<InstallOfferDialogView pending={useInstallOfferStore.getState().pending} />);
+  expect(html).toContain("Checking source access cost");
+  expect(html.match(/<button[^>]*data-tid="install-offer-approve"[^>]*>/u)?.[0]).toContain("disabled");
+  expect(html.match(/<button[^>]*data-tid="install-offer-reject"[^>]*>/u)?.[0]).not.toContain("disabled");
+  expect(html).toContain("This query does not grant access or spend cycles");
+});

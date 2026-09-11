@@ -1,9 +1,10 @@
+import type { RepositoryAccessApproval } from "../repository_access/client.ts";
 import type { RepositorySetupReference } from "neutron-tools/repository";
 
 /**
  * An install source that has already passed the Kernel's URL and protocol
- * admission checks. Keeping normalization outside this module makes the
- * consent layer incapable of contacting the offered source.
+ * admission checks. The consent UI may query certified access pricing;
+ * package acquisition starts only after the owner chooses Review source.
  */
 export type NormalizedInstallOffer =
   | {
@@ -53,6 +54,7 @@ export type PendingInstallOffer = {
 };
 
 export type InstallOfferApproval = {
+  approvedAccess?: readonly RepositoryAccessApproval[];
   requestId: string;
   offer: Readonly<NormalizedInstallOffer>;
   requester: Readonly<AttestedInstallOfferRequester>;

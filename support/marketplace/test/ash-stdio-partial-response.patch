@@ -1,0 +1,11 @@
+diff --git a/src/pocketic.ts b/src/pocketic.ts
+--- a/src/pocketic.ts
++++ b/src/pocketic.ts
+@@ -403,7 +403,4 @@ class StdIoHttpClient {
+   private async waitForData(): Promise<void> {
+-    if (this.buffer.length > 0) {
+-      return;
+-    }
+     if (this.fatalError) {
+       throw this.fatalError;
+     }

@@ -1,3 +1,4 @@
+import { queryWalletRead } from "./wallet_read.ts";
 import {
   exposeTool,
   publishAppStateChange,
@@ -125,8 +126,8 @@ async function prepareAddition(args: JsonObject, context: MsgBusToolContext): Pr
   context.signal?.throwIfAborted();
   const ledger = requestedLedger(args);
   const [snapshotValue, catalogValue, accessValue] = await Promise.all([
-    context.kernel.querySelf("wallet_snapshot", [null]),
-    context.kernel.querySelf("wallet_catalog", [null]),
+    queryWalletRead(context.kernel.querySelf, "snapshot"),
+    queryWalletRead(context.kernel.querySelf, "catalog"),
     context.kernel.callTool({ target: "kernel", name: "backend_calls.list", arguments: {} }),
   ]);
   context.signal?.throwIfAborted();

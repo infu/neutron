@@ -11,8 +11,8 @@ function context() {
   return { calls, value: { kernel: {
     querySelf: async (method: string, args: unknown[]) => {
       calls.push([method, args]);
-      if (method === "wallet_snapshot") return { owner: OWNER, configured: true, ledgers: [] };
-      if (method === "wallet_catalog") return [{ principal: LEDGER, index: INDEX, history_kind: "icrc" }];
+      if (method === "wallet_read_v1" && "snapshot" in (args[0] as JsonObject)) return { snapshot: { owner: OWNER, configured: true, ledgers: [] } };
+      if (method === "wallet_read_v1" && "catalog" in (args[0] as JsonObject)) return { catalog: [{ principal: LEDGER, index: INDEX, history_kind: "icrc" }] };
       if (method === "wallet_history_page") return { records: [], next: null, has_more: false, warning: null };
       if (method === "wallet_history_status") return { running: false, ledgers: [] };
       throw new Error(`Unexpected read ${method}`);
@@ -54,7 +54,10 @@ test("the Wallet account and index come from the invocation-scoped backend, not 
   expect(argsSeen[0]?.slice(1, 3)).toEqual([BigInt(ID), 7n]);
   await handlers.transaction({ ledger: LEDGER, blockIndex: ID, source: "ledger" }, ctx.value);
   expect(argsSeen[1]?.slice(1, 3)).toEqual([BigInt(ID), "ledger"]);
-  expect(ctx.calls.map((call) => call[0])).toEqual(["wallet_snapshot", "wallet_catalog", "wallet_snapshot", "wallet_catalog"]);
+  expect(ctx.calls).toEqual([
+    ["wallet_read_v1", [{ snapshot: null }]], ["wallet_read_v1", [{ catalog: null }]],
+    ["wallet_read_v1", [{ snapshot: null }]], ["wallet_read_v1", [{ catalog: null }]],
+  ]);
 });
 
 test("custom ledgers can receive public exact reads without inventing a canonical index", async () => {
@@ -83,13 +86,13 @@ test("adaptive agent history reads keep invocation context, sync once, and retur
   const ctx = context(), handlers = createHistoryToolHandlers();
   const original = ctx.value.kernel.querySelf;
   const cursor = { ledger: LEDGER, timestamp_ns: "1788900000000000000", kind_order: "0", id: ID };
-  ctx.value.kernel.querySelf = async (method, args) => {
+  ctx.value.kernel.querySelf = (async (method, args = []) => {
     if (method !== "wallet_history_page") return original(method, args);
     ctx.calls.push([method, args]);
     const request = args[0] as JsonObject;
     if (Number(request.limit) > 12) throw new Error("Self-call result exceeds the metadata byte limit");
     return { records: [], next: { ...cursor, kind_order: 0, id: "100" }, has_more: true, inspected: "1000" };
-  };
+  }) as typeof original;
   const result = await handlers.history({ refresh: true, ledger: LEDGER, cursor }, ctx.value);
   expect(result.error).toBeNull();
   expect(result.hasMore).toBe(true);

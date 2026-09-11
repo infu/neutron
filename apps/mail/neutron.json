@@ -2,8 +2,8 @@
   "format": 3,
   "name": "Mail",
   "id": "mail",
-  "version": 305,
-  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "version": 306,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Private encrypted messages between Neutron canisters",
   "src": "main.mo",
   "backend": {

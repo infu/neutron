@@ -180,13 +180,17 @@ export async function runInstalledBlastQualification(): Promise<QualificationRep
   let browser: Browser | undefined;
   try {
     runtime = await installFreshRuntime(temporaryRoot);
+    console.log("[qualification stage] installed runtime", runtime.versions);
     await runtime.environment.normalizeToWallAndStartAutoProgress();
     browser = await launchQualificationChromium();
 
     const first = await openDriver(browser, runtime);
     try {
+      console.log("[qualification stage] predecessor upgrade");
       await qualifyV100Upgrade(first, runtime);
+      console.log("[qualification stage] first browser profile");
       const report = await qualifyFirstProfile(first, runtime);
+      console.log("[qualification stage] second browser profile");
       const second = await openDriver(browser, runtime);
       let secondPrincipal: string;
       try {
@@ -232,6 +236,7 @@ export async function runInstalledBlastQualification(): Promise<QualificationRep
       } finally {
         await second.close();
       }
+      console.log("[qualification stage] uninstall and reinstall");
       const uninstallReinstall = await qualifyUninstallReinstall(
         first,
         runtime,
@@ -701,6 +706,7 @@ function observeQualificationPage(
   network: NetworkGuard,
   workerRequests: Set<string>,
 ): void {
+  const observedHttpErrors = new Set<string>();
   page.on("console", (message) => {
     if (message.type() === "error") {
       console.error(`[qualification browser] ${message.text()}`);
@@ -711,9 +717,17 @@ function observeQualificationPage(
   });
   page.on("response", (response) => {
     if (response.status() >= 400) {
-      console.error(
-        `[qualification browser] HTTP ${response.status()} ${response.url()}`,
-      );
+      const key = `${response.status()} ${response.url()}`;
+      if (!observedHttpErrors.has(key)) {
+        observedHttpErrors.add(key);
+        void Promise.all([response.text(), response.serverAddr()]).then(
+          ([body, socket]) => console.error(
+            "[qualification browser] HTTP error",
+            JSON.stringify({ status: response.status(), url: response.url(), socket, body: body.slice(0, 1024) }),
+          ),
+          (error) => console.error(`[qualification browser] HTTP ${key}`, String(error)),
+        );
+      }
     }
   });
   observeNetworkResponses(page, network);
@@ -944,13 +958,43 @@ async function enableQualificationAgentMode(
   page: Page,
   tile: Frame,
 ): Promise<void> {
-  await tile.locator("[data-action=enable]").click();
-  await page.locator('[data-tid="agent-grant-dialog"]').waitFor({
-    state: "visible",
-  });
-  await page.locator('[data-tid="agent-grant-approve"]').click();
-  await page.locator('[data-tid="agent-mode-indicator"]').waitFor({
-    state: "visible",
+  console.log("[qualification stage] enable owner agent mode", await agentModeBrowserState(page));
+  // Another same-profile page may have become the active tab. A real owner
+  // gesture must originate in the visible page, just as the Kernel requires.
+  await page.bringToFront();
+  try {
+    await tile.locator("[data-action=enable]").click();
+    await page.locator('[data-tid="agent-grant-dialog"]').waitFor({
+      state: "visible",
+    });
+    await page.locator('[data-tid="agent-grant-approve"]').click();
+    await page.locator('[data-tid="agent-mode-indicator"]').waitFor({
+      state: "visible",
+    });
+  } catch (error) {
+    const screenshot = path.join(tmpdir(), `blast-agent-mode-${Date.now()}.png`);
+    await page.screenshot({ path: screenshot, fullPage: true }).catch(() => undefined);
+    console.error("[qualification agent mode failure]", JSON.stringify({
+      state: await agentModeBrowserState(page),
+      fixture: await inspectQualificationTurn(tile),
+      screenshot,
+    }));
+    throw error;
+  }
+}
+
+async function agentModeBrowserState(page: Page): Promise<unknown> {
+  return await page.evaluate(() => {
+    const active = document.activeElement;
+    return {
+      visibility: document.visibilityState,
+      focused: document.hasFocus(),
+      userActivation: navigator.userActivation?.isActive,
+      activeTag: active?.tagName,
+      activeApp: active?.getAttribute("data-app-id"),
+      activeRole: active?.getAttribute("data-role"),
+      indicator: document.querySelector('[data-tid="agent-mode-indicator"]')?.textContent ?? null,
+    };
   });
 }
 

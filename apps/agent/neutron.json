@@ -2,8 +2,8 @@
   "format": 3,
   "name": "Agent",
   "id": "agent",
-  "version": 320,
-  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "version": 321,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Chat agent with OpenRouter or ChatGPT subscription models and kernel-regulated Neutron tools",
   "src": "main.mo",
   "background": {

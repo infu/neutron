@@ -25,7 +25,7 @@ const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const jsUrl = new URL("../dist/web/main.js", import.meta.url);
 const serviceHtmlUrl = new URL("../dist/web/service.html", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
-const packageUrl = new URL("../files.v0.4.10.neutron", import.meta.url);
+const packageUrl = new URL("../files.v0.4.11.neutron", import.meta.url);
 
 const VAULT_METHODS = [
   "files_bootstrap_v2",
@@ -69,8 +69,8 @@ test("Files package manifest binds Shared, Vault, and Workspace storage", async 
   expect(manifest).toMatchObject({
     id: "files",
     name: "Files",
-    version: 410,
-    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+    version: 411,
+    update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: { path: "service.html" },
     backend: { capabilities: { certified_assets: { api: 2 } } },
     capabilities: {
@@ -255,7 +255,7 @@ test("Files package contains the backend, memory, schema, and web install paths"
   );
 
   const prepared = preparePackageInstall(unpacked);
-  expect(prepared.manifest.version).toBe(410);
+  expect(prepared.manifest.version).toBe(411);
   expect(prepared.packageRecord?.license.id).toBe(
     "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   );
@@ -267,7 +267,7 @@ test("Files package contains the backend, memory, schema, and web install paths"
   }
   expect(source.revision).toBe(`source-sha256:${source.sha256}`);
   expect(source.url).toBe(
-    `https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/` +
+    `https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/` +
       neutronAppSourceArchiveFilename(source.sha256),
   );
   const sourceArtifact = new Uint8Array(

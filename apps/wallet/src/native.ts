@@ -150,7 +150,11 @@ export async function queryAgent(href: string): Promise<HttpAgent> {
   const transport = queryTransport(href);
   let pending = agents.get(transport.host);
   if (!pending) {
-    pending = createAgent(transport);
+    pending = createAgent(transport).catch((error) => {
+      // A transient initialization failure must not poison all later refreshes.
+      if (agents.get(transport.host) === pending) agents.delete(transport.host);
+      throw error;
+    });
     agents.set(transport.host, pending);
   }
   return pending;

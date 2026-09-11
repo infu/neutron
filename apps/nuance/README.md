@@ -119,6 +119,10 @@ src/
 
 ## Commands
 
+Release 0.1.11 moves package updates to the Marketplace repository at
+`sj2r4-haaaa-aaaay-aadgq-cai`, preserving drafts, bookmarks, and the complete
+existing memory migration path.
+
 Release 0.1.10 adds the production update source. Install this package once over
 an older copy marked **Manual** to enable future Settings updates, using the
 state-preserving [package update workflow](../../doc/package-updates.md).

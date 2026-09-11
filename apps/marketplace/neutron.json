@@ -1,0 +1,291 @@
+{
+  "format": 3,
+  "id": "marketplace",
+  "name": "Marketplace",
+  "version": 118,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "description": "Discover, acquire, install and publish Neutron applications.",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      },
+      "wallet_custody_signing": {
+        "api": 1
+      }
+    }
+  },
+  "tiles": [
+    {
+      "id": "main",
+      "title": "Marketplace",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Discover apps for your Neutron"
+    }
+  ],
+  "background": {
+    "path": "service.html",
+    "description": "Marketplace queries, purchases, publishing and install tools"
+  },
+  "capabilities": {
+    "background_ui_requests": {
+      "api": 1,
+      "categories": [
+        "backend_access"
+      ]
+    },
+    "persistent_browser_storage": {
+      "api": 1,
+      "surface": "background"
+    },
+    "frontend_tools": {
+      "api": 1,
+      "targets": [
+        {
+          "app": "wallet",
+          "tools": [
+            "wallet_token_info_v1",
+            "wallet_fund_v1",
+            "wallet_add_ledger_v1"
+          ]
+        },
+        {
+          "app": "evm_wallet",
+          "tools": [
+            "evm_accounts_v1",
+            "evm_balances_v1",
+            "evm_call_contract_v1",
+            "evm_read_contract_v1",
+            "evm_estimate_transaction_v1",
+            "evm_transaction_v1",
+            "evm_operation_status_v1",
+            "evm_send_transaction_v1"
+          ]
+        },
+        {
+          "app": "kernel",
+          "tools": [
+            "apps.install_prepared"
+          ]
+        }
+      ]
+    },
+    "backend_calls": {
+      "api": 1,
+      "description": "Attach the marketplace's fixed cycle charge to protocol updates as this Neutron. Reads and downloads go directly from the browser.",
+      "reservation_scopes": [
+        "exact"
+      ],
+      "max_concurrency": 1,
+      "max_cycles_per_call": 1000000000000,
+      "max_cycles_per_day": 10000000000000,
+      "install_reservations": [
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "read_delegate_set"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "purchase"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "withdraw"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "referral_get_or_create"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "rating_set"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "listing_save"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "upload_begin"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "upload_chunk"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "upload_finish"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "candidate_submit"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "install_prepare"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_prepare"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_verify"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_settle"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_cancel"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "repo_access_v1"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "publisher_profile_register"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "publisher_profile_update"
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "marketplace_state",
+        "marketplace_initialize",
+        "marketplace_configure",
+        "marketplace_call",
+        "marketplace_draft",
+        "marketplace_drafts",
+        "marketplace_save_draft",
+        "marketplace_revise_draft",
+        "marketplace_read_key",
+        "marketplace_read_identity",
+        "marketplace_discount_code",
+        "marketplace_set_discount_code"
+      ]
+    },
+    "ethereum_provider": {
+      "api": 1,
+      "chains": [
+        1
+      ],
+      "methods": [
+        "eth_requestAccounts",
+        "eth_accounts",
+        "eth_chainId",
+        "wallet_switchEthereumChain",
+        "eth_call",
+        "eth_getCode",
+        "eth_sendTransaction",
+        "eth_getTransactionReceipt"
+      ]
+    },
+    "wallet_custody_signing": {
+      "api": 1,
+      "slots": [
+        {
+          "id": "read_access",
+          "algorithm": "ecdsa_secp256k1",
+          "purpose": "Permanent Marketplace read identity for this Neutron; authorize browser reads without wallet spending or another login after reinstall."
+        }
+      ]
+    }
+  },
+  "func": {
+    "marketplace_state": {
+      "type": "query",
+      "async": false
+    },
+    "marketplace_discount_code": {
+      "type": "query",
+      "async": false
+    },
+    "marketplace_set_discount_code": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_initialize": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_read_key": {
+      "type": "update",
+      "async": "async*"
+    },
+    "marketplace_read_identity": {
+      "type": "update",
+      "async": "async*"
+    },
+    "marketplace_configure": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_draft": {
+      "type": "query",
+      "async": false
+    },
+    "marketplace_drafts": {
+      "type": "query",
+      "async": false
+    },
+    "marketplace_save_draft": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_revise_draft": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_call": {
+      "type": "update",
+      "async": "async*"
+    }
+  },
+  "memory": {
+    "state": {
+      "version": 2,
+      "schemas": {
+        "1": {
+          "src": "memory/state/v1.mo"
+        },
+        "2": {
+          "src": "memory/state/v2.mo"
+        }
+      },
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "src": "memory/state/v1_to_v2.mo"
+        }
+      ]
+    }
+  }
+}

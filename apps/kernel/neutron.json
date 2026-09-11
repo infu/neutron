@@ -2,12 +2,13 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 350,
-  "update_source": "233tv-xiaaa-aaaay-aacta-cai",
+  "version": 360,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "src": "main.mo",
   "init_arg": [
     "memory_kernel",
     "memory_kernel_activation",
+    "memory_kernel_cycle_calls",
     "deployment_id",
     "active_app_instance_inventory",
     "canister_principal"
@@ -105,6 +106,13 @@
       "type": "query",
       "async": false
     },
+    "kernel_repository_access_v1": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller"
+      ]
+    },
     "kernel_certified_assets_scope_info": {
       "type": "query",
       "async": false
@@ -155,6 +163,25 @@
       "arg": [
         "this"
       ]
+    },
+    "kernel_owner_cycle_call_quote_v1": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_owner_cycle_call_execute_v1": {
+      "type": "update",
+      "async": "async*",
+      "arg": [
+        "caller"
+      ]
+    },
+    "kernel_owner_cycle_call_status_v1": {
+      "type": "query",
+      "async": false
+    },
+    "kernel_owner_cycle_call_list_v1": {
+      "type": "query",
+      "async": false
     },
     "kernel_backend_reservations_snapshot": {
       "type": "query",
@@ -403,6 +430,15 @@
       "schemas": {
         "1": {
           "src": "memory/activation/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "kernel_cycle_calls": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/kernel_cycle_calls/v1.mo"
         }
       },
       "migrations": []

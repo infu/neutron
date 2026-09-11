@@ -1,0 +1,14 @@
+canisters:
+  - name: marketplace
+    build:
+      steps:
+        - type: script
+          commands:
+            - bun scripts/build.ts --output "$ICP_WASM_OUTPUT_PATH"
+environments:
+  - name: local
+    network: local
+    canisters: [marketplace]
+  - name: ic
+    network: ic
+    canisters: [marketplace]

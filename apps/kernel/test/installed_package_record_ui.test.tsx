@@ -1,4 +1,7 @@
-import { expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
+import { loadIcRuntimeFixture } from "./runtime_fixture.ts";
+
+beforeAll(loadIcRuntimeFixture);
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   NEUTRON_APP_SOURCE_SNAPSHOT_PATH,
@@ -316,4 +319,14 @@ test("download verification errors are visible text and never rendered as markup
   expect(html).toContain("Download failed. digest mismatch");
   expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
   expect(html).not.toContain("<script>");
+});
+
+
+test("private source download waits for its source cost before enabling Download", () => {
+  const inspection = structuredClone(declaredInspection);
+  if (inspection.status !== "declared" || inspection.record.source.kind !== "https") throw new Error("Invalid test fixture");
+  inspection.record.source.url = `https://233tv-xiaaa-aaaay-aacta-cai.icp0.io/repo/v1/sources/${SOURCE_SHA256}.source.v1.msgpack.gz`;
+  const html = renderToStaticMarkup(<InstalledPackageLegalDetails appId="hello" inspection={inspection} uiMode="normal" />);
+  expect(html).toContain("Checking source access cost");
+  expect(html.match(/<button[^>]*aria-label="Download and verify source code"[^>]*>/u)?.[0]).toContain("disabled");
 });

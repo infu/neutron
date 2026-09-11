@@ -50,7 +50,13 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
       handlers.set(name, { descriptor: normalizeToolDescriptor({ name, ...options }), handler });
     },
     publishAppStateChange: async () => undefined,
+    querySelf() { throw new Error("Resident tools must use their invocation-scoped Kernel client"); },
+    updateSelf() { throw new Error("Resident tools must use their invocation-scoped Kernel client"); },
+    onAppStateChange() { throw new Error("Resident tools must not subscribe through the tile singleton"); },
   }));
+  // Any unconfigured transport is a fixture error; this suite never uses a public RPC.
+  globalThis.fetch = async () => { throw new Error("Unexpected unmocked network request"); };
+  const { browserEvmRpc, createBrowserEvmRpc } = await import("../../evm_wallet/src/browser_rpc.ts");
   await import(new URL("../../evm_wallet/src/service.ts", import.meta.url).href);
 
   const ADDRESS = "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf";
@@ -59,7 +65,7 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
   const TOKEN = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
   const UNAVAILABLE_TOKEN = "0x1111111111111111111111111111111111111111";
   const BLOCK_NUMBER = "0x1406f40";
-  const OBSERVED_AT = "1800000000000000000";
+  const OBSERVED_AT = expect.stringMatching(/^[0-9]+$/);
   const account = {
     id: "main", slot: "main", address: ADDRESS,
     public_key: Uint8Array.from(Buffer.from(PUBLIC_KEY, "hex")),
@@ -88,6 +94,30 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
     const backendCalls: BackendCall[] = [];
     const presentations: unknown[] = [];
     const signal = new AbortController().signal;
+    const rpcCalls: { chainId: string; method: string; params: unknown[] }[] = [];
+    browserEvmRpc.request = createBrowserEvmRpc({
+      fetch: (async (url, init) => {
+        const chainId = String(url).includes("arbitrum") ? "42161" : "1";
+        const request = JSON.parse(String(init?.body)) as { id: string; method: string; params: unknown[] };
+        rpcCalls.push({ chainId, method: request.method, params: structuredClone(request.params) });
+        const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: request.id, result });
+        const failure = (message: string) => Response.json({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message } });
+        if (request.method === "eth_chainId") return reply(options.wrongChain ? "0x1" : `0x${BigInt(chainId).toString(16)}`);
+        if (options.rpcError) return failure("RPC providers disagree on the requested block");
+        if (request.method === "eth_blockNumber") return reply(BLOCK_NUMBER);
+        if (request.method === "eth_getBalance") return reply(`0x${123456789012345678901234567890n.toString(16)}`);
+        if (request.method === "eth_getCode") return reply("0x60006000");
+        if (request.method === "eth_call") {
+          const call = request.params[0] as { to: string; data: string };
+          if (call.to === UNAVAILABLE_TOKEN) return failure("ERC20 read reverted for this token");
+          if (call.to !== TOKEN) throw new Error(`Unexpected RPC target ${call.to}`);
+          if (call.data.startsWith("0x70a08231")) return reply(`0x${1250000n.toString(16).padStart(64, "0")}`);
+          if (call.data === "0x313ce567") return reply(`0x${"0".repeat(63)}6`);
+          if (call.data === "0x95d89b41") return reply(`0x${Buffer.from("USDC").toString("hex").padEnd(64, "0")}`);
+        }
+        throw new Error(`Unexpected RPC request ${request.method}`);
+      }) as typeof fetch,
+    }).request;
     const note = (kind: BackendCall["kind"], method: string, args: JsonValue[], timeout?: number) => {
       const validation = validateAppMethodArgs(methodSchemas, method, args);
       expect(validation.errors).toEqual([]);
@@ -102,34 +132,6 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
       },
       async updateSelf(method: string, args: JsonValue[] = [], timeout?: number) {
         note("update", method, args, timeout);
-        if (method === METHODS.accounts) return structuredClone({ ok: [account] });
-        const request = args[0] as JsonObject;
-        if (method === METHODS.balances) {
-          if (options.rpcError) return { err: "RPC providers disagree on the requested block" };
-          return {
-            ok: {
-              account_id: request.account_id, chain_id: options.wrongChain ? "1" : request.chain_id,
-              address: ADDRESS, native_balance: "123456789012345678901234567890",
-              tokens: (request.tokens as string[]).map((address) => address === TOKEN ? {
-                address, balance: "1250000", decimals: "6", symbol: "USDC", error: null,
-              } : {
-                address, balance: null, decimals: null, symbol: null,
-                error: "ERC20 balanceOf reverted for this token",
-              }),
-              block_number: BLOCK_NUMBER, observed_at: OBSERVED_AT, completeness: "requested_only",
-            },
-          };
-        }
-        if (method === METHODS.readContract) {
-          if (options.rpcError) return { err: "RPC providers disagree on the requested block" };
-          return {
-            ok: {
-              chain_id: options.wrongChain ? "1" : request.chain_id,
-              to: request.to, data: request.data, result: `0x${"0".repeat(63)}6`,
-              code: "0x60006000", block_number: BLOCK_NUMBER, observed_at: OBSERVED_AT,
-            },
-          };
-        }
         throw new Error(`Unexpected backend mutation ${method}`);
       },
       async callTool() { throw new Error("Resident must not forward a wallet read to another app"); },
@@ -163,7 +165,7 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
         return structuredClone(result);
       },
     } as Pick<MsgBusClient, "callTool">;
-    return { client: createEvmWalletClient(transport), toolCalls, backendCalls, presentations, signal };
+    return { client: createEvmWalletClient(transport), toolCalls, backendCalls, rpcCalls, presentations, signal };
   }
 
   describe("resident wallet integration", () => {
@@ -178,7 +180,7 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
         .toEqual([{ chainId: "1", finalityKind: "ethereum" }, { chainId: "42161", finalityKind: "arbitrum" }]);
       expect(app.toolCalls.map((call) => call.name)).toEqual([EVM_WALLET_TOOLS.accounts, EVM_WALLET_TOOLS.networks]);
       expect(app.backendCalls).toEqual([
-        { kind: "update", method: METHODS.accounts, args: [null], timeout: 120 },
+        { kind: "query", method: METHODS.snapshot, args: [null], timeout: undefined },
         { kind: "query", method: METHODS.snapshot, args: [null], timeout: undefined },
       ]);
       expect(app.presentations).toEqual([]);
@@ -200,13 +202,11 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
       });
       expect(result.tokens).toEqual([
         { address: TOKEN, balanceAtoms: "1250000", decimals: "6", symbol: "USDC", error: null },
-        { address: UNAVAILABLE_TOKEN, balanceAtoms: null, decimals: null, symbol: null, error: "ERC20 balanceOf reverted for this token" },
+        { address: UNAVAILABLE_TOKEN, balanceAtoms: null, decimals: null, symbol: null, error: expect.stringContaining("ERC20 read reverted for this token") },
       ]);
-      expect(app.backendCalls.map((call) => call.args)).toEqual([
-        [{ account_id: "main", chain_id: "1", tokens: [] }],
-        [{ account_id: "main", chain_id: "42161", tokens: [TOKEN, UNAVAILABLE_TOKEN] }],
-      ]);
-      expect(app.backendCalls.every((call) => call.method === METHODS.balances)).toBe(true);
+      expect(app.backendCalls.map((call) => call.args)).toEqual([[null], [null]]);
+      expect(app.backendCalls.every((call) => call.kind === "query" && call.method === METHODS.snapshot)).toBe(true);
+      expect(app.rpcCalls.filter((call) => call.method === "eth_getBalance").map((call) => call.chainId)).toEqual(["1", "42161"]);
       expect(app.presentations).toEqual([]);
     });
 
@@ -221,9 +221,11 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
       });
       expect(request.data).toBe("0x313CE567");
       expect(app.backendCalls).toEqual([
-        { kind: "update", method: METHODS.accounts, args: [null], timeout: 120 },
-        { kind: "update", method: METHODS.readContract, args: [{ chain_id: "42161", to: TOKEN, data: "0x313ce567", block: "latest" }], timeout: 120 },
+        { kind: "query", method: METHODS.snapshot, args: [null], timeout: undefined },
       ]);
+      expect(app.rpcCalls.find((call) => call.method === "eth_call")).toEqual({
+        chainId: "42161", method: "eth_call", params: [{ from: "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf", to: TOKEN, data: "0x313ce567" }, BLOCK_NUMBER],
+      });
       expect(app.presentations).toEqual([]);
     });
 
@@ -241,16 +243,16 @@ if (process.env.NEUTRON_KITCHEN_EVM_RESIDENT_TEST_CHILD !== "1") {
         .rejects.toThrow("RPC providers disagree");
       await expect(app.client.readContract({ accountId: "main", chainId: "42161", to: TOKEN, data: "0x313ce567" }))
         .rejects.toThrow("RPC providers disagree");
-      expect(app.backendCalls.map((call) => call.method)).toEqual([METHODS.balances, METHODS.accounts, METHODS.readContract]);
+      expect(app.backendCalls.map((call) => call.method)).toEqual([METHODS.snapshot, METHODS.snapshot]);
       expect(app.presentations).toEqual([]);
     });
 
-    test("backend results from another chain cannot satisfy the consumer request", async () => {
+    test("a browser RPC provider on another chain cannot satisfy the consumer request", async () => {
       const app = fixture({ wrongChain: true });
       await expect(app.client.balances({ accountId: "main", chainId: "42161", tokens: [] }))
-        .rejects.toThrow("scope mismatch");
+        .rejects.toThrow("does not match requested chain");
       await expect(app.client.readContract({ accountId: "main", chainId: "42161", to: TOKEN, data: "0x313ce567" }))
-        .rejects.toThrow("network does not match the request");
+        .rejects.toThrow("does not match requested chain");
       expect(app.presentations).toEqual([]);
     });
 

@@ -33,8 +33,8 @@ test("Mail declares ciphertext memory, Contacts V2, owner APIs, and only two pub
   expect(manifest).toMatchObject({
     format: 3,
     id: "mail",
-    version: 305,
-    update_source: "233tv-xiaaa-aaaay-aacta-cai",
+    version: 306,
+    update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: { path: "service.html" },
     tray: { path: "tray.html", icon: "static/icon.svg" },
     tiles: [{ id: "mail", path: "index.html", icon: "static/icon.svg" }],
@@ -302,7 +302,7 @@ test("Mail's checked-in install artifact carries the complete generated method s
       readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
       readFile(new URL("../dist/schema.json", import.meta.url), "utf8"),
       readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
-      readFile(new URL("../mail.v0.3.5.neutron", import.meta.url)),
+      readFile(new URL("../mail.v0.3.6.neutron", import.meta.url)),
     ]);
   const sourceManifest = JSON.parse(sourceManifestText) as NeutronManifest;
   const distManifest = JSON.parse(distManifestText) as NeutronManifest & {

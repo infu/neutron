@@ -1,3 +1,7 @@
+import {
+  RepositoryAccessCost,
+  useRepositoryAccessApprovals,
+} from "../repository_access/RepositoryAccessCost.tsx";
 import { useEffect, useRef, useState } from "react";
 import { PermissionDisclosure } from "../AppDialogs.tsx";
 import { useAppsStore } from "../reducer/apps.ts";
@@ -147,6 +151,12 @@ export function RepositorySetupDialog() {
         ) : null}
         {state.phase === "error" ? <RepositoryError uiMode={uiMode} /> : null}
         {state.phase === "success" ? <RepositorySuccess /> : null}
+        {state.phase === "nothing" ? (
+          <div className="call">
+            <p>The selected applications are already installed. Nothing was changed.</p>
+            <div className="btn-actions"><button className="btn" data-repository-initial-focus data-tid="repository-done" onClick={() => void finishRepositorySetup()} type="button">Done</button></div>
+          </div>
+        ) : null}
       </div>
     </>
   );
@@ -154,15 +164,15 @@ export function RepositorySetupDialog() {
 
 function PendingContact({ uiMode }: { uiMode: KernelUiMode }) {
   const reference = useRepositorySetupStore((state) => state.reference)!;
+  const access = useRepositoryAccessApprovals([reference.repo]);
   return (
     <div className="call repository-setup-content">
       {uiMode === "developer" ? (
         <>
           <ConsentNotice tone="warning">
             <strong>Loading does not install anything.</strong> Neutron will
-            anonymously contact a third-party repository, verify its certified
-            response, and then let you choose applications for a separate final
-            review.
+            load packages from this repository, verify its certified response,
+            and then let you choose applications for a separate final review.
           </ConsentNotice>
           <ConsentNotice tone="neutral">
             Gateways and the repository can observe request metadata. Neutron has
@@ -185,8 +195,9 @@ function PendingContact({ uiMode }: { uiMode: KernelUiMode }) {
         <Fact label="Pinned digest" value={reference.digest} mono />
       </dl>
       <div className="repository-notice">
-        If you continue, this browser will query that canister as an anonymous
-          caller and verify IC-certified data. Gateways and network
+        This browser queries public repository metadata and verifies
+          IC-certified data. Private downloads identify this Neutron using the
+          access cost shown below. Gateways and network
           infrastructure can still observe request metadata. A provider can
           issue a unique manifest ID or digest and correlate it with the
           request. Neutron cannot infer whether an identifier was made for
@@ -199,11 +210,15 @@ function PendingContact({ uiMode }: { uiMode: KernelUiMode }) {
           Neutron.
         </div>
       ) : null}
+      <RepositoryAccessCost {...access} onRetry={access.refresh} />
       <div className="btn-actions">
         <button
           className="btn"
           data-tid="repository-load"
-          onClick={() => void loadRepositorySetup()}
+          disabled={access.loading}
+          onClick={() => {
+            if (!access.loading) void loadRepositorySetup({ approvedAccess: access.approvals });
+          }}
           type="button"
         >
           Load setup
@@ -400,11 +415,11 @@ function RepositoryReview({
             <button
               className="btn btn-sec"
               data-repository-initial-focus
-              data-tid="repository-back"
-              onClick={backToRepositorySelection}
+              data-tid={state.prepared ? "repository-dismiss" : "repository-back"}
+              onClick={state.prepared ? () => void dismissRepositorySetup() : backToRepositorySelection}
               type="button"
             >
-              Back
+              {state.prepared ? "Cancel" : "Back"}
             </button>
           </>
         ) : (
@@ -731,7 +746,11 @@ function repositoryCapabilityAuthorityConfig(
 }
 
 function RepositoryError({ uiMode }: { uiMode: KernelUiMode }) {
-  const { error, errorStage } = useRepositorySetupStore();
+  const { error, errorStage, reference, prepared } = useRepositorySetupStore();
+  const access = useRepositoryAccessApprovals(
+    !prepared && errorStage !== "compile" && reference ? [reference.repo] : [],
+    error ?? "",
+  );
   return (
     <div className="call">
       <div
@@ -742,15 +761,21 @@ function RepositoryError({ uiMode }: { uiMode: KernelUiMode }) {
         {error ?? "Repository setup failed"}
       </div>
       <p>
-        {uiMode === "developer"
-          ? "No further repository request will be made unless you reload this setup. Neutron will reconcile any interrupted install journal before the next attempt."
+        {prepared
+          ? "Retry uses the same prepared download access without another source charge. You can also return to the app to reopen its saved installation."
+          : uiMode === "developer"
+          ? "Neutron checks the current source access cost before another download and reconciles any interrupted install journal before the next attempt."
           : "You can try again. Neutron will check any interrupted installation first."}
       </p>
+      {!prepared && <RepositoryAccessCost {...access} onRetry={access.refresh} />}
       <div className="btn-actions">
         <button
           className="btn"
           data-tid="repository-retry"
-          onClick={() => void retryRepositorySetup(errorStage)}
+          disabled={access.loading}
+          onClick={() => {
+            if (!access.loading) void retryRepositorySetup(errorStage, { approvedAccess: access.approvals });
+          }}
           type="button"
         >
           {errorStage === "compile" ? "Retry compilation" : "Reload setup"}
@@ -878,6 +903,7 @@ function dialogTitle(phase: string): string {
   if (phase === "compiling") return "Compiling applications";
   if (phase === "review") return "Approve application setup";
   if (phase === "success") return "Applications installed";
+  if (phase === "nothing") return "Already installed";
   if (phase === "error") return "Application setup failed";
   return "Choose applications";
 }

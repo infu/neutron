@@ -65,6 +65,8 @@ import {
 } from "./AppSettingsEntry.tsx";
 import {
   AppUpdateCell,
+  AppUpdateAccess,
+  AppUpdateAccessDetails,
   AppUpdatesBulkAction,
   AppUpdatesCoordinator,
   AppUpdatesFeedback,
@@ -981,76 +983,81 @@ export function KernelSettingsPage({ onBack }: { onBack: () => void }) {
                             }
                           : { kind: "ready", usage: null };
                 return (
-                  <AppSettingsEntry
-                    backendReservations={(
-                      backendReservations.data ?? []
-                    ).filter(
-                      (reservation) =>
-                        reservation.appId === id &&
-                        reservation.installationUid.toString() ===
-                          appInstances[id]?.scope.installationUid,
-                    )}
-                    dependencies={dependencies}
-                    dependents={impact.direct}
-                    entry={entry}
-                    id={id}
-                    legalInspection={legalInspection}
-                    uiMode={uiMode}
-                    key={id}
-                    memories={memories}
-                    capabilityActionsDisabled={
-                      refreshing ||
-                      appMutationBlocked ||
-                      capabilities.loading ||
-                      capabilityOperation !== null ||
-                      capabilityReconciliation.data === null
-                    }
-                    capabilityOperation={capabilityOperation}
-                    capabilitySummaries={
-                      capabilityReconciliation.data?.byApp[id] ?? []
-                    }
-                    {...(appProvenance ? { provenance: appProvenance } : {})}
-                    onToggleSelected={() => toggleAppSelection(id)}
-                    onRevokeReservation={(reservation) =>
-                      void revokeReservation(reservation)
-                    }
-                    onSetCapabilityEnabled={(capability, enabled) =>
-                      void setCapabilityEnabled(capability, enabled)
-                    }
-                    reservationActionsDisabled={
-                      refreshing ||
-                      appMutationBlocked ||
-                      backendReservations.loading ||
-                      capabilityOperation !== null
-                    }
-                    scheduledTasks={(scheduledTasks.data ?? []).filter(
-                      (task) => task.app_id === id,
-                    )}
-                    registry={apps}
-                    runtimeVersion={runtimeVersion}
-                    transitiveDependentIds={impact.transitiveConsumers}
-                    selected={actionAppIdSet.has(id)}
-                    selectionDisabled={appActionsDisabled}
-                    selectionTitle={
-                      appActionsDisabled
-                        ? selectionDisabledTitle
-                        : actionAppIdSet.has(id)
-                          ? `Deselect ${entry.name}`
-                          : `Select ${entry.name} for app actions`
-                    }
-                    update={
-                      <AppUpdateCell
-                        appId={id}
-                        appName={entry.name}
-                        disabled={appActionsDisabled}
-                        returnFocusRef={updateReturnFocusRef}
-                        {...(entry.update_source
-                          ? { updateSource: entry.update_source }
-                          : {})}
+                  <AppUpdateAccess appId={id} key={id}>
+                    {(access) => (
+                      <AppSettingsEntry
+                        backendReservations={(
+                          backendReservations.data ?? []
+                        ).filter(
+                          (reservation) =>
+                            reservation.appId === id &&
+                            reservation.installationUid.toString() ===
+                              appInstances[id]?.scope.installationUid,
+                        )}
+                        dependencies={dependencies}
+                        dependents={impact.direct}
+                        entry={entry}
+                        id={id}
+                        legalInspection={legalInspection}
+                        uiMode={uiMode}
+                        memories={memories}
+                        capabilityActionsDisabled={
+                          refreshing ||
+                          appMutationBlocked ||
+                          capabilities.loading ||
+                          capabilityOperation !== null ||
+                          capabilityReconciliation.data === null
+                        }
+                        capabilityOperation={capabilityOperation}
+                        capabilitySummaries={
+                          capabilityReconciliation.data?.byApp[id] ?? []
+                        }
+                        {...(appProvenance ? { provenance: appProvenance } : {})}
+                        onToggleSelected={() => toggleAppSelection(id)}
+                        onRevokeReservation={(reservation) =>
+                          void revokeReservation(reservation)
+                        }
+                        onSetCapabilityEnabled={(capability, enabled) =>
+                          void setCapabilityEnabled(capability, enabled)
+                        }
+                        reservationActionsDisabled={
+                          refreshing ||
+                          appMutationBlocked ||
+                          backendReservations.loading ||
+                          capabilityOperation !== null
+                        }
+                        scheduledTasks={(scheduledTasks.data ?? []).filter(
+                          (task) => task.app_id === id,
+                        )}
+                        registry={apps}
+                        runtimeVersion={runtimeVersion}
+                        transitiveDependentIds={impact.transitiveConsumers}
+                        selected={actionAppIdSet.has(id)}
+                        selectionDisabled={appActionsDisabled}
+                        selectionTitle={
+                          appActionsDisabled
+                            ? selectionDisabledTitle
+                            : actionAppIdSet.has(id)
+                              ? `Deselect ${entry.name}`
+                              : `Select ${entry.name} for app actions`
+                        }
+                        update={
+                          <AppUpdateCell
+                            access={access}
+                            appId={id}
+                            appName={entry.name}
+                            disabled={appActionsDisabled}
+                            returnFocusRef={updateReturnFocusRef}
+                            {...(entry.update_source
+                              ? { updateSource: entry.update_source }
+                              : {})}
+                          />
+                        }
+                        usage={usage}
+                        updateDetails={<AppUpdateAccessDetails appId={id} access={access} />}
                       />
-                    }
-                    usage={usage}
-                  />
+                    )}
+                  </AppUpdateAccess>
                 );
               })}
             </table>

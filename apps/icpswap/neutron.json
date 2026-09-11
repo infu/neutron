@@ -2,7 +2,7 @@
   "format": 3,
   "name": "via ICPSwap",
   "id": "icpswap",
-  "version": 209,
+  "version": 210,
   "description": "Independent ICPSwap integration for swaps, concentrated liquidity, positions, market research and agent tools.",
   "src": "main.mo",
   "backend": {
@@ -347,5 +347,5 @@
       "migrations": []
     }
   },
-  "update_source": "233tv-xiaaa-aaaay-aacta-cai"
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai"
 }

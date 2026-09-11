@@ -1,3 +1,4 @@
+import RefillMemory "../../backend/memory/wallet_refills/v1";
 import BridgeActivityMemory "../../backend/memory/wallet_bridge_activity/v1";
 import BridgeProviderMemory "../../backend/memory/wallet_bridge_provider/v1";
 import Array "mo:core/Array";
@@ -44,9 +45,11 @@ persistent actor Test {
         var transferArgs : [IcrcTypes.TransferArg] = [];
         var dispatchedAt : [Int] = [];
         var nextBlock = 81;
+        var ledgerReads = 0;
 
         func call(request : Capabilities.CallRequest) : async* Capabilities.CallResult {
             assert (request.canister == ledger and request.cycles == 0);
+            ledgerReads += 1;
             switch (request.method) {
                 case ("icrc1_metadata") {
                     let metadata : IcrcTypes.Metadata = [
@@ -100,7 +103,7 @@ persistent actor Test {
             };
         };
         let env : Main.AppBackendEnvironment = {
-            stable_memory = { wallet_bridge_activity = BridgeActivityMemory.init();
+            stable_memory = { wallet_refills = RefillMemory.init(); wallet_bridge_activity = BridgeActivityMemory.init();
                 wallet = memory; wallet_commands = CommandMemory.init();
                 wallet_transfers = TransferMemory.init(); wallet_bridge = BridgeMemory.init(); wallet_bridge_provider = BridgeProviderMemory.init(); wallet_bridge_replacements = BridgeReplacementMemory.init();
             };
@@ -134,12 +137,40 @@ persistent actor Test {
             let firstRequest = request(if (pair == 0) 11 else 13, memo);
             let secondRequest = request(if (pair == 0) 12 else 14, memo);
             let app = Main.Init(env);
+            func previewRead(request : Main.WalletFundingPreviewRequestV1) : Main.WalletFundingPreviewResultV1 {
+                switch (app.wallet_read_v1(#funding_preview(request))) { case (#funding_preview(result)) result; case (_) Runtime.trap("Wrong read variant") };
+            };
+            let facts : Main.WalletFundingPreviewFactsV1 = {
+                owner = wallet; metadata = [("icrc1:name", #Text("Chain-key USDC")), ("icrc1:symbol", #Text("ckUSDC")), ("icrc1:decimals", #Nat(6))]; fee = 10; allowance = null;
+            };
+            let readCount = ledgerReads;
+            let commandCount = Map.size(env.stable_memory.wallet_commands.commands);
+            let preview = switch (previewRead({ request = firstRequest; facts = ?facts; lookup_only = false })) {
+                case (#ok({ durable = false; preparation = ?#prepared(value) })) value;
+                case (other) Runtime.trap("Expected unsaved preview: " # debug_show(other));
+            };
+            assert ledgerReads == readCount;
+            assert Map.size(env.stable_memory.wallet_commands.commands) == commandCount;
+            assert previewRead({ request = { firstRequest with valid_until_ns = 1 }; facts = null; lookup_only = true }) == #ok({ preparation = null; durable = false });
+            switch (previewRead({ request = firstRequest; facts = ?{ facts with owner = recipient }; lookup_only = false })) {
+                case (#err(_)) {}; case (_) Runtime.trap("Wrong preview owner accepted");
+            };
             let first = prepared(await* app.wallet_funding_prepare_v1(firstRequest));
+            assert preview == first;
+            let existing = previewRead({ request = firstRequest; facts = null; lookup_only = false });
+            assert existing == #ok({ durable = true; preparation = ?#prepared(first) });
+            assert Map.size(env.stable_memory.wallet_commands.commands) == commandCount + 1;
             let second = prepared(await* app.wallet_funding_prepare_v1(secondRequest));
             assert first.command_id != second.command_id;
             assert first.review.memo == memo and second.review.memo == memo;
             let start = transferBytes.size();
             pending(await* app.wallet_funding_execute_v1({ command_id = first.command_id }));
+            let readsAfterDispatch = ledgerReads;
+            switch (previewRead({ request = firstRequest; facts = null; lookup_only = true })) {
+                case (#ok({ durable = true; preparation = ?#completed({ result = #pending(_) }) })) {};
+                case (other) Runtime.trap("Lookup lost pending command: " # debug_show(other));
+            };
+            assert ledgerReads == readsAfterDispatch;
             // Rebuild the runtime over the same managed roots. Fresh identities
             // must remain unique after a reload, not only within one Init object.
             let restored = Main.Init(env);

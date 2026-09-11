@@ -1,0 +1,15 @@
+All rights reserved.
+
+The original marketplace protocol material in this directory, including its
+source code, tests, specifications and deployment tooling, is proprietary. No
+permission to use, copy, modify, distribute, sublicense or operate that material
+is granted except by separate written permission from the copyright holder or
+as required by applicable law.
+
+Third-party material retains its own notices and licenses. In particular, the
+reference files under spec/references/icrc/ are governed by their accompanying
+Apache License, Version 2.0, and are excluded from this notice.
+
+The separate Neutron marketplace application is governed by its own application
+license. This notice does not replace that license or the licenses of independent
+dependencies.

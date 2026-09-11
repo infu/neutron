@@ -242,6 +242,24 @@ counter. Awaiting broker operations capture an actor-local
 registry epoch lease; disable followed by re-enable cannot revive an operation
 that was already suspended under the old epoch.
 
+`backend/owner_cycle_calls/` adds an owner-confirmed single-call route using
+the same broker. Its independent `kernel_cycle_calls` v1 managed-memory root
+retains the canonical request, dispatch state, actual attached cycles, charged
+cycles and raw response. The key includes the app installation and request ID.
+The broker saves the response before post-dispatch delivery checks, so closing
+a tile or revoking access cannot erase the underlying financial evidence.
+Ordinary app backends receive no handle to this route. The authenticated
+Kernel frontend dispatches it only after its explicit owner confirmation.
+
+These transfers bypass the declaring app's recurring cycle ceilings for that
+one call and retain five trillion operating cycles at dispatch, accounting for
+the IC call cost. They still contribute to app usage, but do not consume or
+increase the ordinary daily backend-call allowance. An optional upper-amount
+request can be reduced using the current balance immediately before dispatch.
+Pending and settled receipts survive upgrades; neither status reads nor repeat
+requests reattach cycles. Existing Kernel roots and normal broker reserves
+remain unchanged.
+
 The registry also owns an actor-local `Nat64` capability-authority revision.
 Each successful owner toggle advances it only after capability-specific
 reconciliation succeeds. The generated runtime query returns it alongside the

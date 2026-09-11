@@ -307,7 +307,8 @@ npm run publish -- \
   ../../apps/mail/mail.v0.3.5.neutron
 ```
 
-One command may change up to 20 packages in one atomic transaction. It may
+One command publishes all selected changed packages in one atomic transaction,
+subject to the aggregate byte and individual artifact limits. It may
 inspect a larger inventory containing unchanged releases:
 
 ```sh
@@ -382,6 +383,105 @@ never requests that metadata or a source-wide catalog: it asks only for its
 exact app IDs in waves
 of at most 20. A source can therefore hold hundreds or thousands of packages
 without disclosing that inventory to a checking Neutron.
+
+## Moving existing apps to the marketplace source
+
+An existing Neutron learns a new source by installing a higher app release
+whose packed `update_source` names the marketplace. The old source can publish
+that one transition release using an explicitly reviewed sidecar. The sidecar
+does not change the catalog's source, assign publisher ownership, or authorize
+later versions to bypass ordinary source checks.
+
+First prepare the inventory and migration plan with
+[`migration-inventory.ts`](../marketplace/scripts/migration-inventory.ts).
+Supply the deployed marketplace principal, an explicit publisher for
+every existing app ID, live or retained published-release evidence, and the
+exact transition archives. Local packed files are not evidence of what was
+published. Put the plan's complete, reviewed `initReservations` array into the
+initial canister configuration's `reservations` field. Installation reserves
+those app IDs atomically, before public submissions can race them. Later
+`admin_reserve_app` calls are for controlled additions, not the initial
+migration. First-party entries belong to the configured Blast identity 0 and use
+the marketplace's cycle-free atomic publication workflow. Ordinary publishers
+upload through their Neutrons with the quoted cycles and obtain auditor approval.
+These steps are separate from old-source publication.
+
+The sidecar has exactly these fields:
+
+```text
+{
+  format: 1,
+  from_source: the existing source principal,
+  to_source: the deployed marketplace principal,
+  packages: [{ id: app ID, version: packed release version, sha256: package SHA-256 }]
+}
+```
+
+Use the actual principals, versions, and lowercase SHA-256 digests from the
+reviewed migration plan, rather than copying example identifiers. For example,
+the following read-only preparation extracts those values into a JSON sidecar
+from the tool's saved plan:
+
+```sh
+jq '{
+  format: 1,
+  from_source: .oldSource,
+  to_source: .marketplace,
+  packages: [.packages[] | {
+    id: .appId,
+    version: .transition.release.version,
+    sha256: .transition.release.sha256
+  }]
+}' /path/reviewed-migration-plan.json > /path/reviewed-source-transition.json
+```
+
+Before any publication update, the publisher verifies that the new source
+advertises the exact approved transition release and anonymously serves its
+package and offered-source bytes through certified HTTP. A paid or otherwise
+private candidate is not suitable for this path: transition releases must be
+free and publicly downloadable. Their source offers must use the new source's
+canonical certified origin. No buyer authorization is obtained to copy private
+bytes into the old public source.
+
+All ordinary release requirements still apply, including preserving managed
+memory, checking supported migrations, using a strictly higher app release
+version, complete packaging and release tests, and reviewing exact archives
+with their offered-source artifacts. The sidecar pins each exception to one
+app ID, version, and digest; changed bytes or a different version require a new
+reviewed release plan. It is not a lasting alternate-source fallback.
+
+After publication is authorized, run from the repository root:
+
+```sh
+npm --workspace neutron-update-source run production:publish -- --transition /path/reviewed-source-transition.json
+```
+
+The root `npm run updates:publish` command now targets the marketplace; it does
+not accept the old-source transition sidecar. Use the explicit legacy workspace
+command above only for this reviewed transition.
+
+This command publishes immediately after its checks; it has no interactive
+confirmation. Only one production publisher may run at a time. Retain the
+receipt and repeat the same command with the exact same archives, source
+artifacts, and sidecar. The second receipt must be receipt-v2 with
+`batch_id: null`, all selected packages and offered sources `unchanged`, and
+their version, URL, path, size, and digest matching as applicable. If a response
+is lost, reconcile with those same bytes first; do not rebuild, bump, or edit
+the sidecar while the result is uncertain.
+
+The new-source preflight applies when an old-source mutation is needed. An
+already-committed no-op verifies the retained old-source release, package, and
+source bytes even if the marketplace later changes, revokes that release, or
+becomes unavailable. This allows reconciliation after a lost commit reply;
+the no-op receipt does not certify the marketplace's continuing availability
+or approval state.
+
+Installing the transition changes the app's source for subsequent update
+checks. Publish subsequent releases through the marketplace's publisher and
+audit workflow. Do not broaden the old-source sidecar into a permanent
+exception. Previously public packages and source artifacts remain available at
+their original digest-addressed paths; migration does not remove those bytes
+or make them private.
 
 ## HTTP metadata
 
@@ -473,12 +573,12 @@ release lane and rerun the exact same inputs to reconcile it; do not substitute
 different bytes at the same version.
 
 Record `icp canister status <canister-id> --json` under the administrative
-identity and alert on low cycle runway or abnormal memory growth. The limits of
-20 changed packages and 128 MiB apply to one publication, not to the source's
+identity and alert on low cycle runway or abnormal memory growth. The 128 MiB
+aggregate byte limit applies to one publication, not to the source's
 lifetime. The byte bound still covers every inspected package and unique source,
 including unchanged releases. Every selected catalog entry is checked before
 mutation and verified again before its receipt is returned; unchanged entries
-do not consume mutation slots. The catalog itself retains its 256 KiB byte bound.
+do not add batch mutations. The catalog itself retains its 256 KiB byte bound.
 Each new digest-addressed package and source is retained, so estimate logical
 retained bytes by summing each unique `sha256` and `size` once across archived
 receipts, then compare that trend with canister memory and cycles. Set

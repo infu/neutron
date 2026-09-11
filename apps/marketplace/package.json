@@ -1,0 +1,46 @@
+{
+  "name": "neutron-marketplace",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "description": "Discover, acquire, install and publish Neutron apps",
+  "license": "LicenseRef-Neutron-Sovereign-Application-License-1.1",
+  "scripts": {
+    "build": "bun build.ts && npm run mogen",
+    "mogen": "bun ../../packages/neutron-scripts/src/mogen.ts",
+    "mopack": "bun ../../packages/neutron-scripts/src/mopack.ts",
+    "schema": "bun ../../packages/neutron-scripts/src/method_schema.ts",
+    "package:metadata": "bun ../../packages/neutron-scripts/src/package_metadata.ts",
+    "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
+    "package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts",
+    "test": "bun test && npm run test:motoko",
+    "test:motoko": "bun ../../packages/neutron-scripts/src/run_motoko_program.ts test/backend.test.mo",
+    "test:browser": "node test/browser/app.mjs && node test/browser/publisher.mjs && node test/browser/ethereum.mjs && node test/browser/install.mjs && node test/browser/install_recovery.mjs && node test/browser/publisher_profile.mjs",
+    "test:protocol": "bun test/protocol.integration.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "watch": "bun build.ts watch"
+  },
+  "dependencies": {
+    "@dfinity/agent": "^3.4.3",
+    "@dfinity/candid": "^3.4.3",
+    "@dfinity/identity": "^3.4.3",
+    "@dfinity/principal": "^3.4.3",
+    "neutron-design-system": "^1.1.0",
+    "neutron-compiler": "^1.1.0",
+    "neutron-tools": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-icons": "^5.7.0",
+    "viem": "2.55.1",
+    "@noble/curves": "1.9.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "^3.7.0",
+    "neutron-scripts": "^1.1.0"
+  }
+}

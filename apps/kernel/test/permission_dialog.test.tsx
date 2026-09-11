@@ -278,7 +278,7 @@ test("a pending install disables launcher mutations without hiding the launcher"
   expect(source).toContain(
     "const appMutationBlocked = operationBusy || authorityPending",
   );
-  expect(source.match(/disabled=\{installSource !== null \|\| appMutationBlocked\}/g))
+  expect(source.match(/disabled=\{installSource !== null \|\| appMutationBlocked(?: \|\| access\.loading)?\}/g))
     .toHaveLength(4);
 });
 

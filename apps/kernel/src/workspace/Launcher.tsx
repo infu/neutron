@@ -1,4 +1,12 @@
 import {
+  RepositoryAccessCost,
+  useRepositoryAccessApprovals,
+} from "../repository_access/RepositoryAccessCost.tsx";
+import {
+  RepositoryAccessError,
+  resolveRepositoryAccessSource,
+} from "../repository_access/client.ts";
+import {
   useEffect,
   useMemo,
   useRef,
@@ -56,6 +64,9 @@ export function Launcher(props: LauncherProps) {
   const [installUrl, setInstallUrl] = useState("");
   const [installError, setInstallError] = useState<string | null>(null);
   const [urlInstallOpen, setUrlInstallOpen] = useState(false);
+  const accessSource = open && urlInstallOpen
+    ? resolveRepositoryAccessSource(installUrl)?.canisterId : null;
+  const access = useRepositoryAccessApprovals(accessSource ? [accessSource] : []);
   const inputRef = useRef<HTMLInputElement>(null);
   const installUrlInputRef = useRef<HTMLInputElement>(null);
   const installUrlButtonRef = useRef<HTMLButtonElement>(null);
@@ -162,6 +173,9 @@ export function Launcher(props: LauncherProps) {
       }
       close(true);
     } catch (error) {
+      if (error instanceof RepositoryAccessError && error.code === "access_review_required") {
+        access.refresh();
+      }
       if (!quietInstallCancellation(error)) {
         const message = installErrorMessage(error);
         setInstallError(message);
@@ -175,6 +189,7 @@ export function Launcher(props: LauncherProps) {
   };
 
   const installPackageFromUrl = () => {
+    if (access.loading) return;
     const abort = new AbortController();
     urlDownloadAbortRef.current?.abort();
     urlDownloadAbortRef.current = abort;
@@ -182,6 +197,7 @@ export function Launcher(props: LauncherProps) {
       kind: "url",
       signal: abort.signal,
       url: installUrl,
+      approvedAccess: access.approvals,
     });
   };
 
@@ -310,7 +326,7 @@ export function Launcher(props: LauncherProps) {
               <button
                 className="btn launcher-url-submit"
                 data-tid={testId("launcher-install-url-submit")}
-                disabled={installSource !== null || appMutationBlocked}
+                disabled={installSource !== null || appMutationBlocked || access.loading}
                 type="submit"
               >
                 {installSource === "url" ? "Preparing..." : "Install"}
@@ -324,6 +340,7 @@ export function Launcher(props: LauncherProps) {
                 Cancel
               </button>
             </div>
+            <RepositoryAccessCost {...access} onRetry={access.refresh} />
             {installError ? (
               <div
                 className="launcher-install-error"

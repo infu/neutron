@@ -15,6 +15,11 @@ import {
   type NeutronPackageHttpsSourceOfferV1,
   type NeutronPackageRecordV1,
 } from "neutron-tools/package_record.js";
+import {
+  fetchWithRepositoryAccess,
+  RepositoryAccessError,
+  type RepositoryAccessApproval,
+} from "../repository_access/client.ts";
 
 const MIB = 1024 * 1024;
 
@@ -80,6 +85,7 @@ export type HttpsSourceOfferFetcher = (
 ) => Promise<Response>;
 
 export type HttpsSourceOfferFetchOptions = Readonly<{
+  approvedAccess?: readonly RepositoryAccessApproval[];
   fetch?: HttpsSourceOfferFetcher;
   maxBytes?: number;
   signal?: AbortSignal;
@@ -283,8 +289,9 @@ export async function downloadAndVerifyInstalledPackageFile({
 }
 
 /**
- * User-initiated only. Fetch an HTTPS source offer without credentials,
- * redirects, or referrer leakage, then verify its exact length and digest.
+ * User-initiated only. Fetch an HTTPS source offer without ambient browser
+ * credentials, redirects, or referrer leakage, then verify its exact length
+ * and digest. Canonical private repositories can request scoped read access.
  */
 export async function fetchAndVerifyHttpsSourceOffer(
   source: NeutronPackageHttpsSourceOfferV1,
@@ -312,23 +319,26 @@ export async function fetchAndVerifyHttpsSourceOffer(
     );
   }
 
-  const fetchSource = options.fetch ?? globalThis.fetch;
   let response: Response;
   try {
-    response = await fetchSource(sourceUrl.href, {
-      cache: "no-store",
-      credentials: "omit",
-      headers: {
-        accept: `${NEUTRON_APP_SOURCE_MEDIA_TYPE}, application/octet-stream;q=0.9, */*;q=0.1`,
+    response = await fetchWithRepositoryAccess(
+      sourceUrl.href,
+      {
+        cache: "no-store",
+        credentials: "omit",
+        headers: {
+          accept: `${NEUTRON_APP_SOURCE_MEDIA_TYPE}, application/octet-stream;q=0.9, */*;q=0.1`,
+        },
+        method: "GET",
+        mode: "cors",
+        redirect: "error",
+        referrerPolicy: "no-referrer",
+        ...(options.signal ? { signal: options.signal } : {}),
       },
-      method: "GET",
-      mode: "cors",
-      redirect: "error",
-      referrerPolicy: "no-referrer",
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
+      { fetch: options.fetch, signal: options.signal, approvedAccess: options.approvedAccess },
+    );
   } catch (error) {
-    if (isAbortError(error)) throw error;
+    if (isAbortError(error) || error instanceof RepositoryAccessError) throw error;
     throw new Error(
       "Could not download the source offer. Check its availability and CORS settings; redirects are not accepted.",
       { cause: error },
@@ -374,6 +384,7 @@ export async function fetchAndVerifyHttpsSourceOffer(
 
 /** Verify first, then expose the inert source bytes as a browser download. */
 export async function downloadAndVerifyHttpsSourceOffer({
+  approvedAccess,
   environment = browserDownloadEnvironment,
   fetch: fetchSource,
   maxBytes,
@@ -381,12 +392,14 @@ export async function downloadAndVerifyHttpsSourceOffer({
   source,
 }: Readonly<{
   environment?: InstalledPackageDownloadEnvironment;
+  approvedAccess?: readonly RepositoryAccessApproval[];
   fetch?: HttpsSourceOfferFetcher;
   maxBytes?: number;
   signal?: AbortSignal;
   source: NeutronPackageHttpsSourceOfferV1;
 }>): Promise<void> {
   const content = await fetchAndVerifyHttpsSourceOffer(source, {
+    ...(approvedAccess ? { approvedAccess } : {}),
     ...(fetchSource ? { fetch: fetchSource } : {}),
     ...(maxBytes === undefined ? {} : { maxBytes }),
     ...(signal ? { signal } : {}),

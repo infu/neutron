@@ -20,10 +20,16 @@ source. Other documents describe package internals or deployment architecture
 and link here instead of repeating these commands.
 
 Before starting a production publication, ensure the repository dependencies
-are installed and `.neutron/update-source-publisher.json` exists with mode
-`0600` and the source's Commit-only authority. If publisher configuration,
-rotation, recovery, or monitoring is needed, stop and use the
-[update-source operator reference](../support/update-source/README.md).
+are installed and the new marketplace catalog names the actual deployed source.
+The root command uses the existing Blast ID 0, which must match the protocol's
+configured first-party principal. See the
+[marketplace operator reference](../support/marketplace/OPERATIONS.md) for its
+private catalog, exact artifact checks and resumable journals. Missing
+configuration fails without falling back to the old source.
+
+The old source remains available for the explicitly reviewed migration
+transition. Its Commit-only credential and commands are documented in the
+[legacy update-source operator reference](../support/update-source/README.md).
 
 ### 1. Change The App And Bump Its Version
 
@@ -43,14 +49,19 @@ safe-integer representation, and the first supported release is `0.1.0`
 versions. There is no repository bump command: edit
 `apps/<directory>/neutron.json`, not the workspace `package.json`.
 
-For a production-discoverable update, the manifest must keep the production
-source:
+Packages still distributed through the existing SushiOS source retain its
+principal until a reviewed transition package changes it:
 
 ~~~json
 {
   "update_source": "233tv-xiaaa-aaaay-aacta-cai"
 }
 ~~~
+
+Marketplace releases name the actual deployed marketplace principal instead.
+The publisher requires every selected manifest and hosted-source URL to match
+its catalog's source. Do not replace the old principal with a placeholder or
+rewrite installed registry entries to migrate users.
 
 Also update app-local assertions or documentation that name the old packed
 version or archive. Never reuse a packed version for different bytes. The
@@ -144,10 +155,11 @@ input for the next starter, not proof of the currently committed live starter.
 Editing it does not change the live Dispenser; staging it is the optional final
 step below.
 
-`support/update-source/release-catalog.json` deliberately contains app IDs and
-directories, not copied versions or digests. The publisher derives those from
-each source manifest and archive, so a normal version bump does not edit the
-catalog.
+Release catalogs contain app IDs and directories, not copied versions or
+digests. The publisher derives those from each source manifest and archive, so
+a normal version bump does not edit the catalog. The tracked old-source catalog
+remains the transition inventory; the private marketplace catalog supplies its
+new source and selected entries.
 
 ### 4. Publish To The Production Source
 
@@ -157,21 +169,24 @@ The normal production command is:
 npm run updates:publish
 ~~~
 
-It reads the production catalog, validates every current manifest/archive pair,
+It reads the marketplace production catalog, validates every current manifest/archive pair,
 and resolves every HTTPS source offer to the exact app-local source artifact.
 For each offered source it verifies the compressed length and digest, bounded
 gunzip and closed source snapshot, package identity, and declared build inputs.
 It does not require recompression by another zlib runtime to reproduce the
-artifact byte for byte. It then atomically publishes missing digest-addressed
-source objects, missing digest-addressed packages, and changed release pointers.
-Packages and source objects already present with the same identities are
+artifact byte for byte. It stages the changed packages and source artifacts
+under their retained upload/candidate identities, then automatically approves
+and publishes the exact release set in one atomic protocol update. Only the
+configured first-party principal can use this cycle-free approval path. The
+audit analysis records the checks performed; it does not claim a manual malware
+review. Packages and source objects already present with the same identities are
 verified no-ops, so this command is safe when only a subset changed. It also
 requires every catalog manifest and archive to name the catalog's production
 source and every hosted-source URL to name that source's canonical certified
-origin. Use this wrapper for routine SushiOS production releases.
-The lower-level generic publisher is reserved for deliberately operated
-non-catalog sources; it does not prove that an archive's manifest
-`update_source` equals its `--canister-id`.
+origin. Use this wrapper for releases to the new marketplace. Its current
+approved package remains available during staging. After approval, unreferenced
+superseded package/source bytes are retired; ownership and audit records remain.
+Old local release archives and the legacy public source are retained separately.
 
 The command prints a `neutron-update-source-publish-v2` JSON receipt. A changed
 release has a non-null `batch_id` and `status: "published"`. Each package row
@@ -180,10 +195,11 @@ status, or `source: null` when that package makes no HTTPS offer. Keep that
 receipt with the exact package and source artifacts.
 Publication changes the source used by Settings upgrades; it does not install
 the package into existing Neutrons or alter the Dispenser starter.
-The publisher does not build apps or run their tests, has no dry-run or
-interactive confirmation, and does not serialize multiple operators. Review
-the catalog and prepared archives before invoking it, and run only one
-production publisher at a time.
+The publisher does not build apps or run their release tests. Use its separate
+`production:review` command for a no-write review. Publication has no interactive
+confirmation; review the prepared archives first and run only one production
+publisher at a time. Its local journal lock prevents overlapping use of the same
+recovery journal; it is not a global operator lock.
 
 ### 5. Verify The Source
 
@@ -196,9 +212,11 @@ postflight result is:
 - every reported source has `status: "unchanged"` and matching URL, path, size,
   and SHA-256.
 
-The publisher performs certified HTTP verification of every public release,
-package, and offered source during both the publish and no-op runs. A second ad
-hoc upload or a controller call is not a verification step.
+The publisher verifies request-bound certified HTTP responses for every release,
+package and offered source during both runs. Private artifacts use the same
+first-party owner's free source-access grants; obtaining a grant can write
+authorization metadata without publishing another package or audit. A second ad
+hoc upload or controller call is not a verification step.
 
 If the first command loses its response after a possible commit, do not rebuild,
 regenerate source, or bump again. Rerun the same command against the exact same
@@ -547,9 +565,19 @@ reuses one provision-owned asset canister, synchronizes
 and exact seeded bytes, and records its ID in the config-derived session as
 `runtime.fixtures.update_source`. It does not use a second manifest or network.
 
-### SushiOS Production Source
+### Legacy SushiOS Production Source
 
-The production target is deliberately stable:
+The existing public source remains at its original address for installed clients
+and the reviewed migration transition. The root publication command now targets
+the separately configured marketplace; it does not implicitly publish here.
+Use the explicit legacy workspace publisher only for a reviewed old-source
+release or transition:
+
+~~~sh
+npm --workspace neutron-update-source run production:publish
+~~~
+
+The legacy target is deliberately stable:
 
 | Property | Value |
 | --- | --- |

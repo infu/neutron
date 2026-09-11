@@ -1,3 +1,4 @@
+import RefillMemory "../../backend/memory/wallet_refills/v1";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 import Map "mo:core/Map";
@@ -63,7 +64,7 @@ persistent actor {
             call_batch = func(_ : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] { Runtime.trap("Activity cannot send a call batch") };
         };
         let env : Main.AppBackendEnvironment = {
-            stable_memory = {
+            stable_memory = { wallet_refills = RefillMemory.init();
                 wallet = WalletMemory.init(); wallet_commands = CommandMemory.init();
                 wallet_transfers = TransferMemory.init(); wallet_bridge = bridge;
                 wallet_bridge_replacements = ReplacementMemory.init();

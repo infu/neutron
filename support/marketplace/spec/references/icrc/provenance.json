@@ -1,0 +1,57 @@
+{
+  "repository": "https://github.com/dfinity/ICRC-1",
+  "commit": "5d670e54d9a58fbf472bf0a25f33743d60cfd0e6",
+  "commitDate": "2026-05-11",
+  "retrievedAtDate": "2026-09-10",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11349,
+      "sha256": "a631589fe4da41cd2a15d2fdc19ab82f815625aa5e37fca75d4c1d65cb407405",
+      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/LICENSE"
+    },
+    {
+      "path": "standards/ICRC-1/README.md",
+      "bytes": 9935,
+      "sha256": "87d22d98c726be2fc1e65bfe151169dc15edb4a83e76c3484e7041cdff138f87",
+      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-1/README.md"
+    },
+    {
+      "path": "standards/ICRC-1/ICRC-1.did",
+      "bytes": 1480,
+      "sha256": "bcefc2af41745128fb295a895cc63aa0f1931918472afca4007d5adce65734f4",
+      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-1/ICRC-1.did"
+    },
+    {
+      "path": "standards/ICRC-2/README.md",
+      "bytes": 10554,
+      "sha256": "0e4f630e4d84f4214fb6b95cf6ee25cdc9cea3fbf4e9df1dcc33cfefe22599b4",
+      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-2/README.md"
+    },
+    {
+      "path": "standards/ICRC-2/ICRC-2.did",
+      "bytes": 1857,
+      "sha256": "f436b04176b81f7c86948a200a4474b5d8be45e0bed05005434a6085db4fa6a5",
+      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-2/ICRC-2.did"
+    },
+    {
+      "path": "standards/ICRC-1/ADVISORY.md",
+      "bytes": 1989,
+      "sha256": "7da9f48a2baaf27a8a8dca4970817930b64e585270c6e2692595ae1910edb075",
+      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-1/ADVISORY.md"
+    },
+    {
+      "path": "standards/ICRC-1/TextualEncoding.md",
+      "bytes": 4642,
+      "sha256": "64757f37bf51fd9d65c0dffa400c14c1e26e7ef5579bc8ffd192cf540b0a0820",
+      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-1/TextualEncoding.md"
+    },
+    {
+      "path": "standards/ICRC-2/ADVISORY.md",
+      "bytes": 6070,
+      "sha256": "d7812fe532da92da9c95a7dd516d5cc5fb409b3df26b24aab94dd7404cb7666a",
+      "url": "https://raw.githubusercontent.com/dfinity/ICRC-1/5d670e54d9a58fbf472bf0a25f33743d60cfd0e6/standards/ICRC-2/ADVISORY.md"
+    }
+  ]
+}

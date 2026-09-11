@@ -17,6 +17,7 @@
     "src/ethereum.ts",
     "src/format.ts",
     "src/funding.ts",
+    "src/funding_reads.ts",
     "src/history.ts",
     "src/history_icp.ts",
     "src/history_icrc.ts",
@@ -56,6 +57,14 @@
     "src/deposit_tools.ts",
     "src/ethereum_withdrawal.tsx",
     "src/ethereum_withdrawal_controller.ts",
-    "src/ledger_tools.ts"
+    "src/ledger_tools.ts",
+    "src/wallet_read.ts",
+    "src/refill.ts",
+    "src/refill_page.tsx",
+    "src/refill_tools.ts",
+    "src/cycles_deposit.ts",
+    "src/cycles_conversion.ts",
+    "src/cycles_conversion_tools.ts",
+    "src/operating_cycles_history.tsx"
   ]
 }

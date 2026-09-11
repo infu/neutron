@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { IDL } from "@dfinity/candid";
+import { encodeSelfCallResult, normalizeSelfCallResult } from "../../kernel/src/self_calls.ts";
 import {
   encodeSelfCallValues,
   normalizeToolDescriptor,
@@ -16,6 +18,7 @@ import {
 import {
   WALLET_FUNDING_EXECUTE_METHOD,
   WALLET_FUNDING_PREPARE_METHOD,
+  WALLET_FUNDING_PREVIEW_METHOD,
   WALLET_FUNDING_PRESENT_TOOL,
   WALLET_FUNDING_TOOL,
   assertRevokePreparedMatchesDisplay,
@@ -28,6 +31,8 @@ import {
   parseWalletAllowancesPage,
   parseWalletFundingRequest,
   prepareWalletFundingOperation,
+  previewWalletFundingOperation,
+  persistWalletFundingPreview,
   rejectWalletFundingOperation,
   resolveWalletFundingPreparation,
   walletAllowancesPageArgs,
@@ -391,7 +396,7 @@ test("accepting a prepared foreground request executes and refreshes exactly onc
   );
   const context = fundingContext(async (method) => {
     methods.push(method);
-    if (method === WALLET_FUNDING_PREPARE_METHOD) return preparedDirect();
+    if (method === WALLET_FUNDING_PREVIEW_METHOD) return preparedDirect();
     if (method === WALLET_FUNDING_EXECUTE_METHOD) {
       return {
         transferred: {
@@ -412,7 +417,7 @@ test("accepting a prepared foreground request executes and refreshes exactly onc
   });
   context.audience = "foreground_tile";
 
-  const presentation = handleWalletFundingPresentation(directRequest, context);
+  const presentation = handleWalletFundingPresentation(directRequest, context, fixtureFundingFacts);
   try {
     for (
       let attempt = 0;
@@ -432,7 +437,7 @@ test("accepting a prepared foreground request executes and refreshes exactly onc
     unsubscribe();
   }
   expect(methods).toEqual([
-    WALLET_FUNDING_PREPARE_METHOD,
+    WALLET_FUNDING_PREVIEW_METHOD,
     WALLET_FUNDING_EXECUTE_METHOD,
     "wallet_refresh_balances",
   ]);
@@ -451,7 +456,7 @@ test("foreground funding reconciliation refreshes and updates its tile exactly o
   );
   const context = fundingContext(async (method) => {
     methods.push(method);
-    if (method === WALLET_FUNDING_PREPARE_METHOD) {
+    if (method === WALLET_FUNDING_PREVIEW_METHOD) {
       return {
         completed: {
           review: directReview(),
@@ -485,7 +490,7 @@ test("foreground funding reconciliation refreshes and updates its tile exactly o
   context.audience = "foreground_tile";
 
   try {
-    await expect(handleWalletFundingPresentation(directRequest, context)).resolves
+    await expect(handleWalletFundingPresentation(directRequest, context, fixtureFundingFacts)).resolves
       .toMatchObject({
         status: "transferred",
         blockIndex: "93",
@@ -495,7 +500,7 @@ test("foreground funding reconciliation refreshes and updates its tile exactly o
     unsubscribe();
   }
   expect(methods).toEqual([
-    WALLET_FUNDING_PREPARE_METHOD,
+    WALLET_FUNDING_PREVIEW_METHOD,
     WALLET_FUNDING_EXECUTE_METHOD,
     "wallet_refresh_balances",
   ]);
@@ -522,7 +527,7 @@ test("foreground funding preserves the terminal receipt when its one refresh fai
   );
   const context = fundingContext(async (method) => {
     methods.push(method);
-    if (method === WALLET_FUNDING_PREPARE_METHOD) {
+    if (method === WALLET_FUNDING_PREVIEW_METHOD) {
       return {
         completed: {
           review: directReview(),
@@ -552,7 +557,7 @@ test("foreground funding preserves the terminal receipt when its one refresh fai
   context.audience = "foreground_tile";
 
   try {
-    await expect(handleWalletFundingPresentation(directRequest, context)).resolves
+    await expect(handleWalletFundingPresentation(directRequest, context, fixtureFundingFacts)).resolves
       .toMatchObject({
         status: "transferred",
         blockIndex: "93",
@@ -562,7 +567,7 @@ test("foreground funding preserves the terminal receipt when its one refresh fai
     unsubscribe();
   }
   expect(methods).toEqual([
-    WALLET_FUNDING_PREPARE_METHOD,
+    WALLET_FUNDING_PREVIEW_METHOD,
     WALLET_FUNDING_EXECUTE_METHOD,
     "wallet_refresh_balances",
   ]);
@@ -580,20 +585,20 @@ test("cancelling a foreground review does not start a self-call on an aborted co
   const methods: string[] = [];
   const context = fundingContext(async (method) => {
     methods.push(method);
-    if (method === WALLET_FUNDING_PREPARE_METHOD) return preparedDirect();
+    if (method === WALLET_FUNDING_PREVIEW_METHOD) return preparedDirect();
     throw new Error(`Unexpected method ${method}`);
   });
   context.audience = "foreground_tile";
   context.signal = controller.signal;
 
-  const presentation = handleWalletFundingPresentation(directRequest, context);
+  const presentation = handleWalletFundingPresentation(directRequest, context, fixtureFundingFacts);
   await waitFor(() => methods.length === 1);
   await Promise.resolve();
   controller.abort(new Error("cancelled"));
 
   await expect(presentation).rejects.toThrow("cancelled");
   await Promise.resolve();
-  expect(methods).toEqual([WALLET_FUNDING_PREPARE_METHOD]);
+  expect(methods).toEqual([WALLET_FUNDING_PREVIEW_METHOD]);
 });
 
 test("tile preparation returns authoritative allowance facts and shared execution", async () => {
@@ -1240,6 +1245,7 @@ function fundingContext(
     presentUserInterface,
     kernel: {
       updateSelf,
+      querySelf: async (method: string, args: unknown[]) => previewReply({ preparation: await updateSelf(method, args), durable: true }),
     },
   } as unknown as MsgBusToolContext;
 }
@@ -1317,3 +1323,137 @@ function allowanceReview() {
     expires_at_ns: "1800000300000000000",
   };
 }
+
+async function fixtureFundingFacts() {
+  return { owner: principalOnlyAccount, metadata: [], fee: "10", allowance: null };
+}
+
+test("fresh funding preview uses one query, never prepares a command until acceptance", async () => {
+  const calls: string[] = [];
+  const context = fundingContext(async (method) => { calls.push(`update:${method}`); return preparedDirect(); });
+  context.kernel.querySelf = (async (method: string) => { calls.push(`query:${method}`); return previewReply({ preparation: preparedDirect(), durable: false }); }) as MsgBusToolContext["kernel"]["querySelf"];
+  const operation = await previewWalletFundingOperation(directRequest, context, fixtureFundingFacts);
+  expect(calls).toEqual([`query:${WALLET_FUNDING_PREVIEW_METHOD}`]);
+  expect(operation.durable).toBe(false);
+  await expect(executeWalletFundingOperation(operation, async () => { throw new Error("must not dispatch"); })).rejects.toThrow("must be prepared");
+  const rejected = await rejectWalletFundingOperation(operation, async () => { throw new Error("must not persist a declined preview"); },
+    (async () => previewReply({ preparation: null, durable: false })) as MsgBusToolContext["kernel"]["querySelf"]);
+  expect(rejected).toMatchObject({ status: "rejected", blockIndex: null, commandId: `${callerApp}:${requestId}` });
+  const persisted = await persistWalletFundingPreview(operation, context.kernel.updateSelf);
+  expect(persisted.reviewChanged).toBe(false);
+  expect(persisted.operation.durable).toBe(true);
+  expect(calls).toEqual([`query:${WALLET_FUNDING_PREVIEW_METHOD}`, `update:${WALLET_FUNDING_PREPARE_METHOD}`]);
+});
+
+test("changed ledger fee is returned for another owner review without execution", async () => {
+  const calls: string[] = [];
+  const controller = new AbortController();
+  const context = fundingContext(async (method) => {
+    calls.push(`update:${method}`);
+    if (method === WALLET_FUNDING_PREPARE_METHOD) {
+      const result = preparedDirect();
+      result.prepared.review.transfer_fee_atoms = "11";
+      result.prepared.review.total_debit_atoms = "123456800";
+      return result;
+    }
+    throw new Error("No ledger execution is allowed before reviewing changed terms");
+  });
+  context.audience = "foreground_tile"; context.signal = controller.signal;
+  context.kernel.querySelf = (async (method: string) => { calls.push(`query:${method}`); return previewReply({ preparation: preparedDirect(), durable: false }); }) as MsgBusToolContext["kernel"]["querySelf"];
+  const presentation = handleWalletFundingPresentation(directRequest, context, fixtureFundingFacts);
+  await waitFor(() => calls.length === 1);
+  for (let i = 0; i < 10 && calls.length === 1; i += 1) {
+    await acceptWalletFundingPrompt(`${callerApp}:${requestId}`); await Promise.resolve();
+  }
+  expect(calls).toEqual([`query:${WALLET_FUNDING_PREVIEW_METHOD}`, `update:${WALLET_FUNDING_PREPARE_METHOD}`]);
+  controller.abort(new Error("changed review canceled"));
+  await expect(presentation).rejects.toThrow("changed review canceled");
+});
+
+test("an original pending funding command remains recoverable when public ledger queries fail", async () => {
+  const calls: string[] = [];
+  const context = fundingContext(async () => { throw new Error("No prepare update needed for original command"); });
+  context.kernel.querySelf = (async (method: string, args: unknown[]) => {
+    calls.push(method);
+    expect((args[0] as { funding_preview: { facts: unknown } }).funding_preview.facts).toBeNull();
+    return previewReply({ durable: true, preparation: { completed: { review: directReview(), result: {
+      pending: { command_id: commandId, message: "Original transfer is pending" },
+    } } } });
+  }) as MsgBusToolContext["kernel"]["querySelf"];
+  const saved = await previewWalletFundingOperation(directRequest, context, async () => { throw new Error("ledger unavailable"); });
+  expect(saved.preparation.kind).toBe("completed"); expect(saved.durable).toBe(true);
+  expect(calls).toEqual([WALLET_FUNDING_PREVIEW_METHOD]);
+  const persisted = await persistWalletFundingPreview(saved, context.kernel.updateSelf);
+  expect(persisted.operation).toBe(saved);
+});
+
+
+test("declining an unsaved preview preserves a concurrent original pending result", async () => {
+  const context = fundingContext(async () => preparedDirect());
+  const operation = { ...(await prepareWalletFundingOperation(directRequest, context, false)), durable: false };
+  const calls: string[] = [];
+  const query = (async (_method: string, args: unknown[]) => {
+    calls.push("lookup");
+    expect(args[0]).toMatchObject({ funding_preview: { lookup_only: true, facts: null } });
+    return previewReply({ durable: true, preparation: { completed: { review: directReview(), result: {
+      pending: { command_id: commandId, message: "Already accepted in another presentation" },
+    } } } });
+  }) as MsgBusToolContext["kernel"]["querySelf"];
+  const result = await rejectWalletFundingOperation(operation, async () => {
+    calls.push("durable-status");
+    return { pending: { command_id: commandId, message: "Original transfer dispatched" } };
+  }, query);
+  expect(result).toMatchObject({ status: "pending", commandId: `${callerApp}:${requestId}` });
+  expect(calls).toEqual(["lookup", "durable-status"]);
+});
+
+test("failed original-command lookup cannot fabricate a no-submit cancellation", async () => {
+  const context = fundingContext(async () => preparedDirect());
+  const operation = { ...(await prepareWalletFundingOperation(directRequest, context, false)), durable: false };
+  await expect(rejectWalletFundingOperation(operation,
+    async () => { throw new Error("must not reject without lookup"); },
+    (async () => { throw new Error("status unavailable"); }) as MsgBusToolContext["kernel"]["querySelf"],
+  )).rejects.toThrow("status unavailable");
+});
+
+test("cancellation accepts the actual Candid reply with an omitted empty preparation", async () => {
+  const reply = emptyFundingPreviewWireReply();
+  expect(reply).toEqual({ funding_preview: { ok: { durable: false } } });
+  const context = fundingContext(async () => preparedDirect());
+  const operation = { ...(await prepareWalletFundingOperation(directRequest, context, false)), durable: false };
+  let updates = 0;
+  const result = await rejectWalletFundingOperation(operation, async () => {
+    updates++;
+    throw new Error("An unsigned cancellation must not persist or execute a command");
+  }, (async () => reply) as MsgBusToolContext["kernel"]["querySelf"]);
+  expect(result).toMatchObject({ status: "rejected", blockIndex: null, commandId: `${callerApp}:${requestId}` });
+  expect(updates).toBe(0);
+});
+
+test("empty Candid preview preserves the public-ledger failure instead of a shape error", async () => {
+  const context = fundingContext(async () => { throw new Error("Must not prepare"); });
+  context.kernel.querySelf = (async () => emptyFundingPreviewWireReply()) as MsgBusToolContext["kernel"]["querySelf"];
+  const ledgerError = new Error("Public ledger temporarily unavailable");
+  await expect(previewWalletFundingOperation(directRequest, context, async () => { throw ledgerError; })).rejects.toBe(ledgerError);
+});
+
+test("missing preparation cannot turn a claimed durable command into an unsigned cancellation", async () => {
+  const context = fundingContext(async () => preparedDirect());
+  const operation = { ...(await prepareWalletFundingOperation(directRequest, context, false)), durable: false };
+  await expect(rejectWalletFundingOperation(operation,
+    async () => { throw new Error("Malformed status must not update a command"); },
+    (async () => emptyFundingPreviewWireReply(true)) as MsgBusToolContext["kernel"]["querySelf"],
+  )).rejects.toThrow("Invalid Wallet funding cancellation status");
+});
+
+function emptyFundingPreviewWireReply(durable = false) {
+  // An empty option has no payload. Encode/decode it and use the production
+  // Kernel projector so this fixture cannot confuse omission with explicit null.
+  const type = IDL.Variant({ funding_preview: IDL.Variant({
+    ok: IDL.Record({ durable: IDL.Bool, preparation: IDL.Opt(IDL.Null) }), err: IDL.Text,
+  }) });
+  const [decoded] = IDL.decode([type], IDL.encode([type], [{ funding_preview: { ok: { durable, preparation: [] } } }]));
+  return encodeSelfCallResult(normalizeSelfCallResult(decoded, type)).value;
+}
+
+function previewReply(payload: unknown) { return { funding_preview: { ok: payload } }; }
