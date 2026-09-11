@@ -35,13 +35,14 @@ function option(name: string): string | undefined {
   assert.ok(value && !value.startsWith("--"), `${name} needs a value`);
   return value;
 }
-const expectedVersion = negativeControl ? 107 : Number(option("--version") ?? 112);
+const expectedVersion = negativeControl ? 107 : Number(option("--version") ?? 113);
 assert.ok(Number.isSafeInteger(expectedVersion) && expectedVersion >= 107);
 const expectedArchiveHash = option("--sha256") ?? (!negativeControl ? ({
   109: "8bdeb24571521f33ef4a91a684dcea89e7085a569f8ef7726f03769c1a0c6db2",
   110: "67ff1d6b3cf7a40ad621e3ea2c89be2837dd55e192a5136980205ba0b8b460f6",
   111: "e2f861cc3147ed0933216730999d5f74272a988a1e63fb3470faf64d687931be",
   112: "6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21",
+  113: "a0ecb6c8839c7bfd765518a5dbb488215d83bc4dade8476022d79d68a50fa689",
 } as Record<number, string>)[expectedVersion] : undefined);
 assert.ok(negativeControl || expectedArchiveHash, "An unpinned Marketplace release needs --sha256");
 if (expectedArchiveHash) assert.match(expectedArchiveHash, /^[a-f0-9]{64}$/);
@@ -58,7 +59,7 @@ assert.match(kernelHash, /^[a-f0-9]{64}$/);
 const manifestReservations = !negativeControl && expectedVersion >= 110;
 const expectRuntimeGrant = !manifestReservations || customTarget;
 const predecessorHash = "03ef7d67e3c7314474049da7ee9ede6678b5a8e291b3ed85e55fc5feddb7f785";
-const protocolHash = "26feaa471ee6fbd2c86afffd6de80448f3e0c60ba8dc6dd11068b07540699c00";
+const protocolHash = "7ec8262e5067d5e8c20c990767eeb5c214c7741bb1fb3cb1da4477efe29af0a5";
 const timeout = 90_000;
 const loginSeed = 0xc7;
 const blob = IDL.Vec(IDL.Nat8);

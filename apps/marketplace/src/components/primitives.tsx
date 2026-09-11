@@ -51,13 +51,14 @@ export function useRead<T>(key: string | null, read: () => Promise<T>, refresh =
   return key !== null && state.key === key ? state : { key, data: null, error: "", loading: key !== null };
 }
 
-type IconName = "store" | "search" | "apps" | "publish" | "earnings" | "close" | "back" | "refresh" | "check" | "arrow" | "shield" | "download" | "plus" | "copy";
+type IconName = "store" | "search" | "apps" | "publish" | "earnings" | "close" | "back" | "refresh" | "check" | "arrow" | "shield" | "download" | "plus" | "copy" | "discount";
 const paths: Record<IconName, ReactNode> = {
   store: <><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10c0 3 4 3 4 0 0 3 5 3 5 0 0 3 5 3 5 0 0 3 4 3 4 0" /><path d="M9 20v-6h6v6" /></>,
   search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
   apps: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
   publish: <><path d="m7 8 5-5 5 5M12 3v12M4 14v6h16v-6" /></>,
   earnings: <><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M16 11h5v5h-5a2.5 2.5 0 0 1 0-5M3 9h18" /></>,
+  discount: <><path d="M3 4v7l9 9a2 2 0 0 0 3 0l5-5a2 2 0 0 0 0-3l-9-9H4a1 1 0 0 0-1 1Z" /><circle cx="7.5" cy="7.5" r="1" /><path d="m11 15 5-5" /></>,
   close: <path d="m6 6 12 12M18 6 6 18" />, back: <path d="m14 5-7 7 7 7" />,
   refresh: <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1" /></>,
   check: <path d="m5 12 4 4L19 6" />, arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,

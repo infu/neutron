@@ -1,16 +1,19 @@
 import Blob "mo:core/Blob";
+import Char "mo:core/Char";
 import List "mo:core/List";
 import Map "mo:core/Map";
 import Nat64 "mo:core/Nat64";
 import Text "mo:core/Text";
 import Principal "mo:core/Principal";
 import Capabilities "mo:neutron-capabilities";
-import Memory "./memory/state/v1";
+import Memory "./memory/state/v2";
 import ReadIdentity "./read_identity";
 
 module {
     public type State = { seed : ?Blob; canister : ?Principal; host : Text; owner : Principal; revision : Nat };
     public type Configure = { canister : Principal; host : Text };
+    public type DiscountCodeRequest = { code : ?Text };
+    public type DiscountCodeResult = { #ok : ?Text; #err : Text };
     public type Draft = { id : Text; value : Blob };
     public type DraftRevision = { id : Text; expected : Blob; value : Blob; revision : Text };
     public type DraftPageRequest = { cursor : ?Text; limit : Nat };
@@ -56,6 +59,20 @@ module {
         };
         func snapshot() : State { { seed = mem.seed; canister = mem.canister; host = mem.host; owner = calls.canister_principal; revision = mem.revision } };
         public func /*query*/ marketplace_state(()) : State { snapshot() };
+        public func /*query*/ marketplace_discount_code(()) : ?Text { mem.discountCode };
+        // The browser validates a referral with the protocol before saving it.
+        // This preference only selects future checkouts; existing intents and
+        // the read-identity configuration revision remain unchanged.
+        public func /*update*/ marketplace_set_discount_code(request : DiscountCodeRequest) : DiscountCodeResult {
+            mem.discountCode := switch (request.code) {
+                case null null;
+                case (?value) {
+                    let code = Text.toUpper(Text.trim(value, #predicate(Char.isWhitespace)));
+                    if (code == "") null else ?code;
+                };
+            };
+            #ok(mem.discountCode);
+        };
         public func /*update*/ marketplace_initialize(seed : Blob) : StateResult {
             if (Blob.size(seed) != 32) return #err("The browser read key must contain 32 bytes.");
             if (mem.seed == null) { mem.seed := ?seed; mem.revision += 1 };
@@ -146,6 +163,12 @@ module {
 
 public type marketplace_state_Input = (());
 public type marketplace_state_Output = State;
+
+public type marketplace_discount_code_Input = (());
+public type marketplace_discount_code_Output = ?Text;
+
+public type marketplace_set_discount_code_Input = (request : DiscountCodeRequest);
+public type marketplace_set_discount_code_Output = DiscountCodeResult;
 
 public type marketplace_initialize_Input = (seed : Blob);
 public type marketplace_initialize_Output = StateResult;

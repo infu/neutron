@@ -109,6 +109,7 @@ async function openInstallation(quote: InstallationQuote): Promise<OperationResu
 export function createMarketplaceClient(): MarketplaceClient {
   return {
     initialize: () => invoke(true, "initialize"), connect: () => invoke(true, "connect"),
+    discount: () => invoke(false, "discount"), setDiscountCode: code => invoke(true, "setDiscountCode", { code }),
     catalog: args => invoke(false, "catalog", args), detail: appId => invoke(false, "detail", { appId }),
     library: cursor => invoke(false, "library", cursor ? { cursor } : {}), publisherApps: cursor => invoke(false, "publisherApps", cursor ? { cursor } : {}),
     earnings: () => invoke(false, "earnings"), createReferralCode: () => invoke(true, "createReferralCode"),

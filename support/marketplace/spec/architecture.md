@@ -152,7 +152,13 @@ Acquisitions include future approved updates despite price changes; revocation
 blocks ordinary downloads but preserves the entitlement for approved replacements.
 There are no automatic refunds initially. Free and paid owners can leave one
 editable rating per Neutron/app. Each Neutron has one universal referral code,
-entered per checkout with global terms; self-referrals are rejected.
+with global terms; self-referrals are rejected. The app remembers an activated
+code for future checkouts and lets the user change or clear it. The protocol
+retains attribution per purchase, so a later preference change does not alter an
+existing payment. `referral_quote(code)` is a signed read-only query that returns
+the canonical code, affiliate principal, discount basis points and terms version
+for the authenticated Neutron. It rejects empty, unregistered and self-referral
+codes without creating a referral, purchase or ledger request.
 
 Any Neutron can submit a package. One assigned auditor approval suffices, with
 required rejection reasons as described in [audits](audits.md). Failed daily

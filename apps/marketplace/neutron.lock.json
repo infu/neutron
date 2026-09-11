@@ -7,9 +7,15 @@
         "1": {
           "hash": "a836b686252699bac742db06b99144d6bd5d4ddea08f6653aa142e9de10a5b9c",
           "entry": "13eed1d37736f93cd6931637052266d6c7c132eb024f9f76a394c13dd1a41863"
+        },
+        "2": {
+          "hash": "ed2102ace90eae7bf6a36369ec942cfca186c18fe780df2882221611e012ae00",
+          "entry": "2e78c1b78630e2113288d5e63bdeb9217afb8807e567c39d855f82b3582e5a81"
         }
       },
-      "migrations": {}
+      "migrations": {
+        "1->2": "f8a0944817ddd2b304ed962c212474367c4ca0d22597de918fe2344a4835a767"
+      }
     }
   }
 }

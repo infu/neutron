@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 112,
+  "version": 113,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
@@ -176,7 +176,9 @@
         "marketplace_save_draft",
         "marketplace_revise_draft",
         "marketplace_read_key",
-        "marketplace_read_identity"
+        "marketplace_read_identity",
+        "marketplace_discount_code",
+        "marketplace_set_discount_code"
       ]
     },
     "ethereum_provider": {
@@ -209,6 +211,14 @@
   "func": {
     "marketplace_state": {
       "type": "query",
+      "async": false
+    },
+    "marketplace_discount_code": {
+      "type": "query",
+      "async": false
+    },
+    "marketplace_set_discount_code": {
+      "type": "update",
       "async": false
     },
     "marketplace_initialize": {
@@ -250,13 +260,22 @@
   },
   "memory": {
     "state": {
-      "version": 1,
+      "version": 2,
       "schemas": {
         "1": {
           "src": "memory/state/v1.mo"
+        },
+        "2": {
+          "src": "memory/state/v2.mo"
         }
       },
-      "migrations": []
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "src": "memory/state/v1_to_v2.mo"
+        }
+      ]
     }
   }
 }

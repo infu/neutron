@@ -79,6 +79,7 @@ export const CONTRACT: Contract = {
   read_delegate_set: update([rec({ browser: principal, active: bool, feeVersion: nat })], IDL.Null),
   purchase: update([rec({ quote: checkoutType, feeVersion: nat })], purchaseResult),
   withdraw: update([rec({ quote: withdrawalType, feeVersion: nat })], withdrawalResult),
+  referral_quote: read([text], result(rec({ code: text, affiliate: principal, discountBps: nat, termsVersion: nat }))),
   referral_get_or_create: update([feeVersion], rec({ code: text })),
   rating_set: update([rec({ appId: text, stars: nat, review: text, feeVersion: nat })], rating),
   listing_save: update([rec({ appId: text, title: text, summary: text, description: text, priceUsdMicros: nat, iconArtifact: opt(nat64), screenshots: vec(nat64), expectedRevision: opt(nat64), feeVersion: nat })], app),

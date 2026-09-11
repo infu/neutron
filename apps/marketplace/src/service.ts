@@ -1,7 +1,8 @@
 import { exposeTool, publishAppStateChange, type JsonObject, type JsonValue, type MsgBusToolContext } from "neutron-tools/app";
-import { initialize, configured, connect, protocolClient, randomId } from "./client.ts";
+import { initialize, configured, connect, discount, setDiscountCode, protocolClient, randomId } from "./client.ts";
 import { runPurchase, runWithdrawal, operationStatus, operationHistory, recentOperations, resumeOperation, type SavedIntent } from "./actions.ts";
 import { quoteInstallation, installApplications, installationStatus, recentInstallations, markInstallationOpened, resumeInstallation, prepareInstallationForTile } from "./install.ts";
+import { matchesSavedDiscount } from "./discount.ts";
 import { loadIntent } from "./store.ts";
 import {
   quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, ethereumSavedStatus, recentEthereumPurchases,
@@ -56,6 +57,7 @@ async function history(context: MsgBusToolContext, args: JsonObject) {
   return { ...ic, ethereumPurchases: ethereum.items, nextEthereumCursor: ethereum.nextCursor ?? "done", installations };
 }
 async function uiRead(context: MsgBusToolContext, method: string, args: JsonObject): Promise<unknown> {
+  if (method === "discount") return discount(context);
   const client = await protocolClient(context);
   switch (method) {
     case "catalog": return client.catalog(args as unknown as { tier: AppTier; window: RankingWindow; search: string; cursor?: string });
@@ -65,11 +67,11 @@ async function uiRead(context: MsgBusToolContext, method: string, args: JsonObje
     case "earnings": return client.earnings();
     case "quotePurchase": {
       if (args.ethereum) {
-        const input = args as unknown as { appIds: string[]; affiliateCode: string; ethereum: EthereumPurchaseSelection };
+        const input = args as unknown as { appIds: string[]; affiliateCode?: string | undefined; ethereum: EthereumPurchaseSelection };
         if (input.ethereum.wallet === "browser") requireMarketplaceTile(context);
         return quoteEthereumPurchase(context, input);
       }
-      return client.quotePurchase(args as unknown as { appIds: string[]; token: PaymentToken; affiliateCode: string });
+      return client.quotePurchase(args as unknown as { appIds: string[]; token: PaymentToken; affiliateCode?: string });
     }
     case "quoteInstallation": return quoteInstallation(context, args.appIds as string[], typeof args.operationId === "string" ? args.operationId : undefined);
     case "quoteWithdrawal": return client.quoteWithdrawal(args as unknown as { token: PaymentToken; amountAtoms: string; destination: string });
@@ -88,6 +90,7 @@ async function uiWrite(context: MsgBusToolContext, method: string, args: JsonObj
   if (method === "initialize") return initialize(context);
   if (method === "configure") return configured(context, { canisterId: String(args.canisterId), host: String(args.host) });
   if (method === "connect") return connect(context);
+  if (method === "setDiscountCode") return setDiscountCode(context, String(args.code));
   const client = await protocolClient(context);
   switch (method) {
     case "purchase": {
@@ -141,13 +144,14 @@ register("marketplace_app_v1", "Inspect a marketplace app", "Read listing, curre
 register("marketplace_library_v1", "Read acquired apps", "List this Neutron's free and purchased app entitlements. Revoked packages cannot be downloaded; ownership remains for a later approved replacement.", { cursor: string }, [], reads, async (args, context) => (await protocolClient(context)).library(typeof args.cursor === "string" ? args.cursor : undefined));
 register("marketplace_earnings_v1", "Read marketplace earnings", "Read available and reserved earnings plus this Neutron's referral code. Balances are exact atomic amounts; no withdrawal occurs.", {}, [], reads, async (_args, context) => (await protocolClient(context)).earnings());
 register("marketplace_connect_v1", "Restore marketplace access", "Reuse this Neutron's saved browser read delegate, or register it once through Neutron with the protocol's fixed attached cycle fee if missing. The app sets up access automatically on opening. This explicit recovery tool can restore revoked access; transient read failures never trigger registration. Purchases still belong to this Neutron, and no browser update authority is granted.", {}, [], writes, async (_args, context) => connect(context));
-const purchaseProperties = { operationId: id, appIds: { type: "array", items: string }, token, affiliateCode: string, fundingResult: { type: "object", additionalProperties: true } };
-register("marketplace_quote_v1", "Review app purchase costs", "Preview exact app prices, referral discount, actual-payment developer/affiliate/burn allocations, ledger fees and attached cycle estimate. This is a read and grants no purchase authority.", purchaseProperties, ["operationId", "appIds", "token"], reads, async (args, context) => (await protocolClient(context)).quotePurchase({ operationId: text(args.operationId), appIds: args.appIds as string[], token: args.token as PaymentToken, affiliateCode: text(args.affiliateCode) }));
+register("marketplace_discount_v1", "Read the saved marketplace discount", "Read this Neutron's remembered discount/affiliate code and validate its current terms directly with the marketplace. An inactive code is preserved with its validation error. New purchases inherit an active saved code when affiliateCode is omitted; existing purchase recovery retains its original code.", {}, [], reads, async (_args, context) => discount(context));
+const purchaseProperties = { operationId: id, appIds: { type: "array", items: string }, token, affiliateCode: { ...string, description: "Omit to use the saved discount for a new purchase or retain an existing purchase’s original code. An explicit empty string disables the discount for this new purchase only." }, fundingResult: { type: "object", additionalProperties: true } };
+register("marketplace_quote_v1", "Review app purchase costs", "Preview exact app prices, referral discount, actual-payment developer/affiliate/burn allocations, ledger fees and attached cycle estimate. This is a read and grants no purchase authority.", purchaseProperties, ["operationId", "appIds", "token"], reads, async (args, context) => (await protocolClient(context)).quotePurchase({ operationId: text(args.operationId), appIds: args.appIds as string[], token: args.token as PaymentToken, affiliateCode: typeof args.affiliateCode === "string" ? args.affiliateCode : undefined }));
 register("marketplace_purchase_v1", "Acquire marketplace apps", "Acquire free or paid apps for this Neutron. Normal agents open exact owner review; root agents use the existing permission judge. Paid root requests return the original Wallet fundingInstructions: call them at root depth and supply raw fundingResult to this SAME method and operationId. Preserve original inputs after interruption. Approval is not purchase completion. One entitlement includes future approved updates.", purchaseProperties, ["operationId", "appIds", "token"], reviewed, async (args, context) => {
   await requireIcOperation(context, text(args.operationId));
   const saved = await loadIntent<SavedIntent>(context.kernel, `operation:${text(args.operationId)}`);
   if (saved) {
-    if (saved.kind !== "purchase" || JSON.stringify(saved.quote.appIds) !== JSON.stringify(args.appIds) || saved.quote.token !== args.token || saved.quote.affiliateCode !== text(args.affiliateCode)) throw new Error("This operation has different saved purchase inputs.");
+    if (saved.kind !== "purchase" || JSON.stringify(saved.quote.appIds) !== JSON.stringify(args.appIds) || saved.quote.token !== args.token || !matchesSavedDiscount(saved.quote.affiliateCode, typeof args.affiliateCode === "string" ? args.affiliateCode : undefined)) throw new Error("This operation has different saved purchase inputs.");
     return resumeOperation(context, text(args.operationId), args.fundingResult);
   }
   const client = await protocolClient(context);
@@ -156,28 +160,28 @@ register("marketplace_purchase_v1", "Acquire marketplace apps", "Acquire free or
     const wire = first(original.quote ?? []);
     if (!wire || !("buyer" in wire)) throw new Error("The original purchase quote is unavailable. Do not recreate its payment.");
     const quote = await client.purchaseView(wire);
-    if (JSON.stringify(quote.appIds) !== JSON.stringify(args.appIds) || quote.token !== args.token || quote.affiliateCode !== text(args.affiliateCode)) throw new Error("These inputs differ from the original protocol purchase.");
+    if (JSON.stringify(quote.appIds) !== JSON.stringify(args.appIds) || quote.token !== args.token || !matchesSavedDiscount(quote.affiliateCode, typeof args.affiliateCode === "string" ? args.affiliateCode : undefined)) throw new Error("These inputs differ from the original protocol purchase.");
     return resumeOperation(context, text(args.operationId), args.fundingResult);
   }
-  const quote = await client.quotePurchase({ operationId: text(args.operationId), appIds: args.appIds as string[], token: args.token as PaymentToken, affiliateCode: text(args.affiliateCode) });
+  const quote = await client.quotePurchase({ operationId: text(args.operationId), appIds: args.appIds as string[], token: args.token as PaymentToken, affiliateCode: typeof args.affiliateCode === "string" ? args.affiliateCode : undefined });
   return runPurchase(context, quote, args.fundingResult);
 });
-const ethereumPurchaseProperties = { operationId: id, appIds: { type: "array", items: string }, affiliateCode: string };
-register("marketplace_ethereum_quote_v1", "Review Ethereum USDC app purchase", "Preview app prices and allocations paid in canonical USDC on Ethereum Mainnet from EVM Wallet's main account. Includes the ckUSDC collection fee and fixed Neutron cycle costs for invoice preparation and independent receipt verification; Ethereum approval/deposit gas is additional. This read signs nothing. Browser-wallet checkout is available only through the marketplace tile.", ethereumPurchaseProperties, ["operationId", "appIds"], reads, async (args, context) => quoteEthereumPurchase(context, { operationId: text(args.operationId), appIds: args.appIds as string[], affiliateCode: text(args.affiliateCode), ethereum: { wallet: "evm_wallet" } }));
+const ethereumPurchaseProperties = { operationId: id, appIds: { type: "array", items: string }, affiliateCode: purchaseProperties.affiliateCode };
+register("marketplace_ethereum_quote_v1", "Review Ethereum USDC app purchase", "Preview app prices and allocations paid in canonical USDC on Ethereum Mainnet from EVM Wallet's main account. Includes the ckUSDC collection fee and fixed Neutron cycle costs for invoice preparation and independent receipt verification; Ethereum approval/deposit gas is additional. This read signs nothing. Browser-wallet checkout is available only through the marketplace tile.", ethereumPurchaseProperties, ["operationId", "appIds"], reads, async (args, context) => quoteEthereumPurchase(context, { operationId: text(args.operationId), appIds: args.appIds as string[], affiliateCode: typeof args.affiliateCode === "string" ? args.affiliateCode : undefined, ethereum: { wallet: "evm_wallet" } }));
 register("marketplace_ethereum_purchase_v1", "Acquire apps with Ethereum USDC", "Prepare and fund one retained Ethereum USDC invoice using EVM Wallet. Normal agents open owner review; root agents use invocation-bound permission review. Approval is not payment. Only protocol-verified Ethereum payment grants app access; ckUSDC wrapping and revenue settlement can continue afterward. Preserve operationId and original app/referral inputs after interruption; never recreate a payment to resolve pending status.", ethereumPurchaseProperties, ["operationId", "appIds"], reviewed, async (args, context) => {
   const operationId = text(args.operationId);
   if (await loadIntent<SavedIntent>(context.kernel, `operation:${operationId}`)) throw new Error("This operation ID belongs to an IC purchase or withdrawal. Continue its original route.");
   const saved = await loadIntent<{ quote: PurchaseQuote }>(context.kernel, `ethereum:operation:${operationId}`);
   if (saved) {
-    if (JSON.stringify(saved.quote.appIds) !== JSON.stringify(args.appIds) || saved.quote.affiliateCode !== text(args.affiliateCode) || saved.quote.ethereum?.wallet !== "evm_wallet") throw new Error("This operation has different saved Ethereum purchase inputs or wallet.");
+    if (JSON.stringify(saved.quote.appIds) !== JSON.stringify(args.appIds) || !matchesSavedDiscount(saved.quote.affiliateCode, typeof args.affiliateCode === "string" ? args.affiliateCode : undefined) || saved.quote.ethereum?.wallet !== "evm_wallet") throw new Error("This operation has different saved Ethereum purchase inputs or wallet.");
     return resumeEthereumPurchase(context, operationId);
   }
   const original = await ethereumInvoiceStatus(context, operationId);
   if (original) {
-    if (JSON.stringify(original.quote.request.appIds) !== JSON.stringify(args.appIds) || (first(original.quote.request.referralCode) ?? "") !== text(args.affiliateCode)) throw new Error("These inputs differ from the original Ethereum invoice.");
+    if (JSON.stringify(original.quote.request.appIds) !== JSON.stringify(args.appIds) || !matchesSavedDiscount(first(original.quote.request.referralCode) ?? "", typeof args.affiliateCode === "string" ? args.affiliateCode : undefined)) throw new Error("These inputs differ from the original Ethereum invoice.");
     return resumeEthereumPurchase(context, operationId);
   }
-  return runEthereumPurchase(context, await quoteEthereumPurchase(context, { operationId, appIds: args.appIds as string[], affiliateCode: text(args.affiliateCode), ethereum: { wallet: "evm_wallet" } }));
+  return runEthereumPurchase(context, await quoteEthereumPurchase(context, { operationId, appIds: args.appIds as string[], affiliateCode: typeof args.affiliateCode === "string" ? args.affiliateCode : undefined, ethereum: { wallet: "evm_wallet" } }));
 });
 register("marketplace_ethereum_continue_v1", "Continue original Ethereum app purchase", "Continue the retained EVM Wallet payment and independently verify its existing Ethereum receipt. Never creates a replacement payment ID. Browser-wallet invoices must be continued in their original marketplace tile. App access does not wait for later wrapping accounting.", { operationId: id }, ["operationId"], reviewed, async (args, context) => resumeEthereumPurchase(context, text(args.operationId)));
 register("marketplace_ethereum_verify_v1", "Verify an original Ethereum payment", "Recover an already sent payment by supplying its original Ethereum transaction hash and invoice ID. The protocol independently verifies its exact payer, USDC amount and invoice recipient before granting access. Does not send, approve or replace any Ethereum transaction. Exact review includes the fixed verification cycle charge; a rejected or unavailable proof never authorizes another payment.", { operationId: id, transactionHash: { type: "string", pattern: "^0x[0-9a-fA-F]{64}$" } }, ["operationId", "transactionHash"], reviewed, async (args, context) => verifyEthereumTransaction(context, text(args.operationId), text(args.transactionHash)));

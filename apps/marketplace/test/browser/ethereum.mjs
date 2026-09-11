@@ -53,6 +53,7 @@ const verified=()=>{
 };
 const checkpoint=async stage=>{state.stage=stage;state.events.push(stage);await new Promise(resolve=>state.release=resolve);state.release=null;};
 const client={
+ discount:async()=>({code:null,active:false,discountBps:0,affiliate:null,error:null}),setDiscountCode:async()=>{throw Error('Unexpected discount change')},
  initialize:async()=>session,configure:async x=>({...session,...x}),connect:async()=>session,
  catalog:async input=>({items:input.tier==='paid'?[{...app,owned:state.owned}]:[],nextCursor:null}),
  detail:async()=>({...app,owned:state.owned,description:'A local checkout test.',screenshots:[],audit:null}),
@@ -193,7 +194,10 @@ try {
     }
     await page.getByRole('button', { name: 'Install', exact: true }).waitFor();
     assert.equal((await snapshot()).owned, true);
+    assert.equal(await page.getByText('Wrapping is still processing. Your apps can already be installed.', { exact: true }).count(), 0);
+    await page.getByRole('button', { name: 'Activity', exact: true }).click();
     await page.getByText('Wrapping is still processing. Your apps can already be installed.', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'My Apps', exact: true }).click();
     await page.getByRole('button', { name: 'Install', exact: true }).click();
     assert.deepEqual((await snapshot()).installed, [['studio']]);
     if (wallet === 'browser') assert.deepEqual((await snapshot()).closed, [true, true]);
@@ -250,8 +254,10 @@ try {
   await checkout.getByText('Original Ethereum payment reply interrupted.', { exact: true }).waitFor();
   assert.equal(await checkout.getByLabel('Pay with', { exact: true }).isDisabled(), true);
   assert.equal(await checkout.getByLabel('Ethereum wallet', { exact: true }).isDisabled(), true);
-  assert.equal(await checkout.getByLabel(/Affiliate code/).isDisabled(), true);
+  assert.equal(await checkout.getByLabel(/Affiliate code/).count(), 0, 'discount is a saved preference, not a mutable field on an interrupted checkout');
   await checkout.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: 'Connect wallet & continue', exact: true }).count(), 0, 'recovery controls stay off the app content');
+  await page.getByRole('button', { name: 'Activity', exact: true }).click();
   await page.getByRole('button', { name: 'Connect wallet & continue', exact: true }).click();
   await page.waitForFunction(()=>window.ethereumFixture.resumes.length===1);
   const resumed = await snapshot();
@@ -269,8 +275,9 @@ try {
   await approveRoute();
   await interrupted.getByText('Original Ethereum payment reply interrupted.', { exact: true }).waitFor();
   await interrupted.getByRole('button', { name: 'Close dialog', exact: true }).click();
-  const pending = page.locator('.mp-operation');
-  await pending.getByText('Saved request', { exact: true }).click();
+  await page.getByRole('button', { name: 'Activity', exact: true }).click();
+  const pending = page.locator('.mp-activity-card');
+  await pending.locator('summary').filter({ hasText: 'Details' }).click();
   const originalHash = '0x'+'a'.repeat(64), originalId = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
   const recover = pending.getByRole('button', { name: 'Review & verify original payment', exact: true });
   await pending.getByLabel('Original Ethereum payment hash', { exact: true }).fill('0x1234');
@@ -296,9 +303,10 @@ try {
   await page.waitForFunction(()=>window.ethereumFixture.stage==='original-hash-verification');
   assert.equal((await snapshot()).owned, false, 'approval alone is not an independently verified receipt');
   await page.evaluate(()=>window.ethereumFixture.release());
-  await page.getByRole('button', { name: 'Install', exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'My Apps', exact: true }).getAttribute('aria-current'), 'page');
+  await page.getByText('Ethereum payment verified. Your apps are ready.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Activity', exact: true }).getAttribute('aria-current'), 'page');
   await page.getByText('Wrapping is still processing. Your apps can already be installed.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'My Apps', exact: true }).click();
   await page.getByRole('button', { name: 'Install', exact: true }).click();
   recovered = await snapshot();
   assert.deepEqual(recovered.verifications, [{operationId:originalId,transactionHash:originalHash}]);
@@ -307,7 +315,7 @@ try {
   assert.deepEqual(recovered.resumes, []);
   assert.deepEqual(recovered.closed, [], 'hash verification does not connect a browser wallet');
   assert.deepEqual(recovered.installed, [['studio']]);
-  checks.push('The actual pending Saved request validates and verifies the original Ethereum hash and invoice through an exact Normal review, without another purchase, resume or wallet connection; verified ownership opens My Apps and allows installation while conversion remains pending.');
+  checks.push('The actual pending Saved request validates and verifies the original Ethereum hash and invoice through an exact Normal review, without another purchase, resume or wallet connection; verified ownership remains visible in Activity and allows installation from My Apps while conversion remains pending.');
   assert.deepEqual(errors, []);
   await writeFile(join(output, 'results.json'), JSON.stringify({checks,errors},null,2));
   console.log('Ethereum marketplace browser checks passed. Artifacts: '+output);

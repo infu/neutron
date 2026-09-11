@@ -21,7 +21,7 @@ import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const principal='3rurp-vyaaa-aaaay-aacua-cai';
 const scenario=new URL(location.href).searchParams;
-const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[],installations:[]};
+const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[],installations:[],discountCode:localStorage.getItem('discountCode'),discountReads:0,discountSaves:[],operations:[],cancelPurchase:false,discountRelease:null};
 const entries=[
  ['notes','Quiet Notes','A little space for your biggest ideas.','0'],
  ['garden','Garden','A clearer view of your day.','0'],
@@ -39,18 +39,21 @@ const quote=(args)=>{
 };
 const session={configured:true,canisterId:'aaaaa-aa',host:'https://icp-api.io',account:principal,connected:true};
 const installResult=quote=>({operationId:quote.operationId,appIds:quote.appIds,state:'pending',nextAction:'resume',installation:quote,message:'The package review was opened. This is not an installation receipt. Reopen this saved selection if the review was closed; its prepared download access is retained.'});
+const discount=code=>({code,active:!!code,discountBps:code==='OTHER-CODE'?2000:code?1000:0,affiliate:code?'aaaaa-aa':null,error:null});
 const client={
+ discount:async()=>{state.discountReads++;if(scenario.get('discount')==='delayed')return new Promise(resolve=>state.discountRelease=()=>resolve(discount('QUIET-CODE')));return discount(state.discountCode);},
+ setDiscountCode:async input=>{const code=input.trim().toUpperCase();state.discountSaves.push(code);if(code&&code!=='QUIET-CODE'&&code!=='OTHER-CODE')throw Error(code==='SELF-CODE'?'You cannot use your own affiliate code.':'That discount code was not found.');state.discountCode=code||null;if(code)localStorage.setItem('discountCode',code);else localStorage.removeItem('discountCode');return discount(state.discountCode);},
  initialize:async()=>{state.initializations++;if(scenario.get('setup')==='fatal'&&state.initializations===1)throw Error('Neutron is temporarily unavailable.');if(scenario.get('setup')==='delegate')return {...session,connected:false,connectionError:'Read access could not be prepared.'};return session;},configure:async x=>({...session,...x}),connect:async()=>{state.connections++;return session;},
  catalog:async input=>{state.calls.push(['catalog',input]);if(scenario.get('catalog')==='paid-error'&&input.tier==='paid'&&!state.paidReadFailed){state.paidReadFailed=true;throw Error('Paid charts are temporarily unavailable.');}const matches=entries.filter(x=>(input.tier==='free'?x[3]==='0':x[3]!=='0')&&x[1].toLowerCase().includes(input.search.toLowerCase()));const paged=scenario.get('catalog')==='paged';return {items:(paged?(input.cursor?matches.slice(1):matches.slice(0,1)):matches).map(listing),nextCursor:paged&&!input.cursor&&matches.length>1?input.tier+'-next':null,asOf:'2026-09-10T00:00:00Z',warning:'Rankings are refreshing. These results share the displayed snapshot time.'}},
  detail:async id=>({...listing(entries.find(x=>x[0]===id)),description:'Your ideas deserve a place of their own. Work in a calm, focused space, with everything you need at your fingertips.',screenshots:[],audit:{auditor:principal,verdict:'approved',analysis:'The submitted package was checked for malware. No malicious behavior was found in this review.',date:'2026-09-10T00:00:00Z',packageHash:'a'.repeat(64)},ownRating:null}),
  library:async()=>({items:entries.filter(x=>state.owned.includes(x[0])).map(x=>({...listing(x),acquiredAt:'2026-09-10',installedVersion:state.installed.includes(x[0])?'1':null,available:true})),nextCursor:null}),
  publisherApps:async()=>({items:[],nextCursor:null}),
  quotePublication:async()=>{throw Error('Unexpected publication')},publish:async()=>{throw Error('Unexpected publication')},
- quotePurchase:async args=>{state.calls.push(['quotePurchase',args]);return quote(args)},
- purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
+ quotePurchase:async input=>{const args={...input,affiliateCode:input.affiliateCode===undefined?(state.discountCode||''):input.affiliateCode};state.calls.push(['quotePurchase',args]);return quote(args)},
+ purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);if(state.cancelPurchase)return {operationId:q.operationId,state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'};return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
  operation:async id=>{state.calls.push(['operation',id]);return {operationId:id,state:'pending',message:'Waiting for the original payment.',nextAction:'resume'}},
  resumeOperation:async id=>{state.calls.push(['resumeOperation',id]);return {operationId:id,state:'complete',message:'Your app is ready.',nextAction:'none'}},
- recentOperations:async()=>[...state.installations.map(installResult),...(state.restored?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[])],
+ recentOperations:async()=>[...state.operations,...state.installations.map(installResult),...(state.restored?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[])],
  quoteInstallation:async(ids,operationId)=>{const saved=state.installations.find(item=>operationId?item.operationId===operationId:JSON.stringify(item.appIds)===JSON.stringify(ids));const quote=saved??{operationId:operationId??(state.installationQuotes.length+1).toString(16).padStart(32,'0'),appIds:[...ids],canisterId:session.canisterId,owner:principal,cycles,fee:{feeVersion:'1',processingCycles:cycles.processing,storageCycles:'0',totalCycles:cycles.total,processingBytes:'1024',newStorageBytes:'0'}};state.installationQuotes.push(quote);return quote;},
  install:async(ids,quote)=>{if(!state.installationQuotes.includes(quote)||JSON.stringify(ids)!==JSON.stringify(quote.appIds))throw Error('Install must retain the exact reviewed quote and app selection.');state.calls.push(['install',ids,quote.operationId]);let saved=state.installations.find(item=>item.operationId===quote.operationId);if(!saved){saved={...quote,setupUrl:'https://example.invalid/#manifest='+quote.operationId,cycles:{...cycles,total:'0',processing:'0'},fee:{...quote.fee,totalCycles:'0',processingCycles:'0'}};state.installations.push(saved);}return installResult(saved)},
  rate:async (...args)=>{state.calls.push(['rate',...args])},
@@ -140,9 +143,54 @@ try {
   await freeDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.setViewportSize({ width: 380, height: 760 });
   checks.push("Paid and free details show their all-time acquisition counts on narrow tiles; Audited by AI retains the auditor principal and exact review analysis.");
-  await page.getByRole("button", { name: "$10.00", exact: true }).click();
+  const headerDiscount = page.locator('.mp-header').getByRole('button', { name: /^Discount code/ });
+  await headerDiscount.click();
+  const discountDialog = page.getByRole('dialog', { name: 'Discount code', exact: true });
+  await discountDialog.getByLabel('Discount code', { exact: true }).fill('INVALID');
+  await discountDialog.getByRole('button', { name: 'Activate discount', exact: true }).click();
+  await discountDialog.getByText('That discount code was not found.', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.discountCode), null);
+  await discountDialog.getByLabel('Discount code', { exact: true }).fill(' quiet-code ');
+  await discountDialog.getByRole('button', { name: 'Activate discount', exact: true }).click();
+  await discountDialog.getByText('10% discount activated!', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.discountCode), 'QUIET-CODE');
+  await page.screenshot({ path: join(output, 'discount-activated-380.png') });
+  await discountDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  assert.match(await headerDiscount.getAttribute('aria-label'), /10%/);
+  const atlasCard = page.locator('.mp-app-card').filter({ has: page.getByRole('button', { name: /Atlas Productivity/ }) });
+  assert.match(await atlasCard.locator('del').innerText(), /\$10\.00$/);
+  assert.match(await atlasCard.getByRole('button', { name: /\$9\.00/ }).innerText(), /\$9\.00/);
+  for (const width of [320, 380, 960]) {
+    await page.setViewportSize({ width, height: 760 });
+    assert.equal(await page.locator('.mp-navigation').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, `Activity tab must fit at ${width}px`);
+    assert.equal(await page.locator('.mp-header').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, `discount and refresh controls must fit at ${width}px`);
+    await page.screenshot({ path: join(output, `discounted-explore-${width}.png`) });
+  }
+  await page.setViewportSize({ width: 380, height: 760 });
+  await headerDiscount.click();
+  await discountDialog.getByLabel('Discount code', { exact: true }).fill('SELF-CODE');
+  await discountDialog.getByRole('button', { name: 'Update discount', exact: true }).click();
+  await discountDialog.getByText('You cannot use your own affiliate code.', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.discountCode), 'QUIET-CODE', 'invalid replacement preserves the existing activated code');
+  await discountDialog.getByLabel('Discount code', { exact: true }).fill('OTHER-CODE');
+  await discountDialog.getByRole('button', { name: 'Update discount', exact: true }).click();
+  await discountDialog.getByText('20% discount activated!', { exact: true }).waitFor();
+  await discountDialog.getByRole('button', { name: 'Remove code', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.discountCode), null);
+  await discountDialog.getByLabel('Discount code', { exact: true }).fill('QUIET-CODE');
+  await discountDialog.getByRole('button', { name: 'Activate discount', exact: true }).click();
+  await discountDialog.getByText('10% discount activated!', { exact: true }).waitFor();
+  await discountDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.reload();
+  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await atlasCard.locator('del').waitFor();
+  assert.match(await headerDiscount.getAttribute('aria-label'), /10%/);
+  checks.push('A saved discount activates once, renders crossed-out original and exact discounted prices, restores after reload, rejects invalid/self-code changes without dropping the old code, supports change/clear, and fits alongside the bell tab at 320px.');
+  await atlasCard.getByRole('button', { name: /\$9\.00/ }).click();
   const checkout = page.getByRole("dialog", { name: "Review purchase", exact: true });
-  await checkout.getByLabel(/Affiliate code/).fill("QUIET-CODE");
+  assert.equal(await checkout.getByLabel(/Affiliate code/).count(), 0);
+  assert.match(await checkout.innerText(), /QUIET-CODE/);
+  assert.match(await checkout.innerText(), /10%/);
   await checkout.getByRole("button", { name: "Review costs", exact: true }).click();
   await checkout.getByRole("heading", { name: "Where your payment goes" }).waitFor();
   assert.equal(await page.evaluate(() => window.marketplaceFixture.purchased.length), 0);
@@ -151,6 +199,9 @@ try {
   assert.match(await checkout.innerText(), /3rurp-vyaaa-aaaay-aacua-cai/);
   await page.screenshot({ path: join(output, "checkout-380.png") });
   await checkout.getByRole("button", { name: "Buy · 9 ckUSDC", exact: true }).click();
+  assert.equal(await page.locator('.mp-operation').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Check status', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Activity', exact: true }).click();
   await page.getByRole("button", { name: "Check status", exact: true }).waitFor();
   await page.getByRole("button", { name: "Check status", exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), ["0123456789abcdef0123456789abcdef"]);
@@ -169,15 +220,16 @@ try {
   const repeated = await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='install'));
   assert.deepEqual(repeated.map(call=>call[1]), [["notes", "garden"], ["notes", "garden"]]);
   assert.equal(repeated[0][2], repeated[1][2], "reopening a canceled batch must retain its original request");
-  assert.equal(await page.locator('.mp-operation').count(), 1, "the existing financial recovery panel must remain available");
-  assert.match(await page.locator('.mp-operation').innerText(), /Waiting for the original payment/);
+  assert.equal(await page.locator('.mp-operation').count(), 0, 'My Apps stays free of payment banners');
+  await page.getByRole('button', { name: 'Activity', exact: true }).click();
+  assert.match(await page.locator('.mp-activity-card').innerText(), /Waiting for the original payment/);
   await page.getByRole("button", { name: "Explore", exact: true }).click();
   await page.getByRole("button", { name: "My Apps", exact: true }).click();
   await page.getByLabel("Select available", { exact: true }).check();
   await page.getByRole("button", { name: "Install selected", exact: true }).click();
   assert.equal(await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='install').at(-1)[2]), repeated[0][2], "a remounted selection must recover the same saved request");
   assert.equal(await page.locator('.mp-operation').filter({ hasText: /package review was opened|Ready to install/ }).count(), 0);
-  checks.push("My Apps retains the selected batch for cancel/retry and reuses its saved request after remount, without install-progress cards or false installed status; financial recovery stays visible.");
+  checks.push("My Apps retains the selected batch for cancel/retry and reuses its saved request after remount, without install-progress cards or false installed status; financial recovery remains available on its Activity page.");
   await page.evaluate(() => { window.marketplaceFixture.installed=['garden']; window.marketplaceFixture.restored=true; });
   await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
   await page.waitForFunction(() => document.querySelector('input[aria-label="Select Garden"]')?.disabled === true);
@@ -186,8 +238,9 @@ try {
   await page.getByLabel("Select available", { exact: true }).check();
   await page.getByRole("button", { name: "Install selected", exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.calls.filter(x=>x[0]==='install').at(-1)[1]), ["notes"]);
-  await page.getByRole("button", { name: "View saved progress", exact: true }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole('button', { name: 'Activity', exact: true }).click();
+  const savedWithdrawal = page.locator('.mp-activity-card').filter({ hasText: 'Saved withdrawal awaits confirmation.' });
+  await savedWithdrawal.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByText("Your app is ready.", { exact: true }).waitFor();
   assert.ok(await page.evaluate(() => window.marketplaceFixture.calls.some(x=>x[0]==='resumeOperation'&&x[1]==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')));
   checks.push("Already installed apps are excluded from install selection, updates point to Settings, and restored requests resume their original identity.");
@@ -218,7 +271,9 @@ try {
   assert.match(await withdraw.innerText(), /4.49 ckUSDC/);
   assert.equal(await page.evaluate(() => window.marketplaceFixture.calls.filter(x=>x[0]==='withdraw').length), 0);
   await withdraw.getByRole("button", { name: "Confirm withdrawal", exact: true }).click();
-  await page.getByText("Withdrawal confirmed.", { exact: true }).waitFor();
+  assert.equal(await page.getByText('Withdrawal confirmed.', { exact: true }).count(), 0, 'completed payments do not pin a top-level notice');
+  await page.getByRole('button', { name: 'Activity', exact: true }).click();
+  await page.getByText('Withdrawal confirmed.', { exact: true }).waitFor();
   checks.push("Max withdrawal uses available credits, shows the deducted fee and requires explicit confirmation.");
   await page.evaluate(() => { window.agentReviewResult=null; void window.marketplaceTools.get('marketplace_review_v1').handler({reviewJson:JSON.stringify({kind:'purchase',quote:window.marketplaceFixture.review})},{agentMode:false,audience:'foreground_tile'}).then(x=>window.agentReviewResult=x); });
   const agent = page.getByRole("dialog", { name: "Agent purchase request", exact: true });
@@ -267,6 +322,9 @@ try {
   assert.equal(await page.getByRole("dialog").count(), 0);
   checks.push("Updated-cost owner review accepts only the authenticated marketplace background caller outside agent mode, displays revised exact fees, and performs no payment; forged callers and agent-mode use are rejected.");
 
+  await headerDiscount.click();
+  await discountDialog.getByRole('button', { name: 'Remove code', exact: true }).click();
+  await discountDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole("button", { name: "Explore", exact: true }).click();
   const studio = page.locator('.mp-app-card').filter({ has: page.getByRole("button", { name: /Canvas Studio/ }) });
   await studio.getByRole("button", { name: "Free", exact: true }).click();
@@ -291,6 +349,66 @@ try {
   assert.equal(dependencyPurchase.payment.atoms, '5000000');
   assert.equal(await page.evaluate(() => window.marketplaceFixture.purchased.length), beforeOwnerReview + 1);
   checks.push("A free Canvas Studio root with paid Folio dependency shows both quoted apps, labels the required app, changes to paid checkout, and waits for explicit 5 ckUSDC purchase confirmation.");
+  await page.goto(url);
+  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.evaluate(() => {
+    window.marketplaceFixture.operations = [
+      {operationId:'cccccccccccccccccccccccccccccccc',state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'},
+      {operationId:'dddddddddddddddddddddddddddddddd',state:'pending',nextAction:'resume',ethereumWallet:'browser',message:'The original browser payment outcome is unknown.'},
+      {operationId:'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',state:'failed',nextAction:'resume',ethereumWallet:'browser',message:'A retained payment needs attention.'},
+    ];
+  });
+  await page.getByRole('button', { name: 'Refresh marketplace', exact: true }).click();
+  assert.equal(await page.locator('.mp-operation').count(), 0);
+  assert.equal(await page.getByText('The browser wallet declined this transaction before submission.', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('The original browser payment outcome is unknown.', { exact: true }).count(), 0);
+  const activityTab = page.getByRole('button', { name: 'Activity', exact: true });
+  await activityTab.click();
+  await page.getByText('The original browser payment outcome is unknown.', { exact: true }).waitFor();
+  assert.equal(await page.getByText('The browser wallet declined this transaction before submission.', { exact: true }).count(), 0);
+  assert.equal(await page.locator('.mp-activity-card').count(), 2, 'known pre-submission cancellation is quiet, unknown and unclassified failures remain recoverable');
+  assert.equal(await activityTab.getAttribute('aria-current'), 'page');
+  assert.equal(await page.locator('.mp-activity-actions .mp-primary').first().evaluate(element => getComputedStyle(element).color), 'rgb(31, 24, 49)', 'Activity primary actions need dark text with readable contrast on the accent background');
+  for (const width of [320, 380, 960]) {
+    await page.setViewportSize({ width, height: 760 });
+    assert.equal(await page.locator('.mp-navigation').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
+    assert.equal(await page.locator('.mp-activity').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
+    await page.screenshot({ path: join(output, `activity-${width}.png`) });
+  }
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), [], 'opening activity cannot dispatch or replay a payment');
+  checks.push('The bell is a fifth Activity tab; confirmed pre-submission browser cancellation is absent, uncertain and unclassified failures remain recoverable, and no wallet status is pinned over browsing. Activity fits 320/380/960px without replay.');
+  await page.goto(url);
+  await page.getByRole('button', { name: '$10.00', exact: true }).click();
+  await page.evaluate(() => { window.marketplaceFixture.cancelPurchase = true; });
+  const canceledCheckout = page.getByRole('dialog', { name: 'Review purchase', exact: true });
+  await canceledCheckout.getByRole('button', { name: 'Review costs', exact: true }).click();
+  await canceledCheckout.getByRole('button', { name: 'Buy · 10 ckUSDC', exact: true }).click();
+  await page.getByRole('button', { name: 'Activity', exact: true }).click();
+  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
+  await page.evaluate(() => {
+    window.marketplaceFixture.operations = [{operationId:'0123456789abcdef0123456789abcdef',state:'complete',nextAction:'none',ethereumWallet:'browser',ethereumTransactionHash:'0x'+'a'.repeat(64),entitled:true,canceledBeforeSubmission:true,message:'A later verified receipt is available.'}];
+  });
+  await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+  await page.getByText('A later verified receipt is available.', { exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-activity-card').count(), 1, 'fresh saved receipt supersedes the earlier local cancellation and remains visible even if an obsolete cancellation flag remains');
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), ['0123456789abcdef0123456789abcdef']);
+  checks.push('A later durable receipt supersedes a locally canceled observation on refresh; visibility is based on the newest evidence, without a replacement purchase.');
+
+  await page.goto(`${url}/?discount=delayed`);
+  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await headerDiscount.click();
+  assert.equal(await discountDialog.getByLabel('Discount code', { exact: true }).inputValue(), '');
+  await page.evaluate(() => window.marketplaceFixture.discountRelease());
+  await discountDialog.getByText('10% discount activated!', { exact: true }).waitFor();
+  assert.equal(await discountDialog.getByLabel('Discount code', { exact: true }).inputValue(), 'QUIET-CODE', 'a pristine modal adopts the saved code once its initial read resolves');
+  await page.goto(`${url}/?discount=delayed`);
+  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await headerDiscount.click();
+  await discountDialog.getByLabel('Discount code', { exact: true }).fill('OTHER-CODE');
+  await page.evaluate(() => window.marketplaceFixture.discountRelease());
+  await page.waitForFunction(() => document.querySelector('.mp-header [aria-label*="activated"]'));
+  assert.equal(await discountDialog.getByLabel('Discount code', { exact: true }).inputValue(), 'OTHER-CODE', 'late saved-code reads must not replace edits already entered in the modal');
+  checks.push('Opening the discount dialog before saved preferences resolve fills a pristine input when ready while preserving any edits already typed.');
   await page.goto(`${url}/?catalog=paged`);
   await page.getByRole("button", { name: "Show more paid apps", exact: true }).click();
   await page.getByRole("button", { name: /Focus Productivity/ }).waitFor();

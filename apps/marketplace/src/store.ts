@@ -85,3 +85,15 @@ export async function listIntents<T>(kernel: Kernel): Promise<Array<{ id: string
   } while (cursor !== null);
   return result;
 }
+
+function discountCodeValue(value: unknown): string | null {
+  const code = optional(unwrap(value));
+  if (code !== null && typeof code !== "string") throw new Error("The saved discount code is invalid.");
+  return code as string | null;
+}
+export async function readDiscountCode(kernel: Kernel): Promise<string | null> {
+  return discountCodeValue(await kernel.querySelf("marketplace_discount_code", [null]));
+}
+export async function saveDiscountCode(kernel: Kernel, code: string | null): Promise<string | null> {
+  return discountCodeValue(await kernel.updateSelf("marketplace_set_discount_code", [{ code }]));
+}

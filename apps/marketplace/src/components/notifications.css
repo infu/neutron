@@ -1,0 +1,29 @@
+@layer app {
+  .mp-activity { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .mp-activity-list { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .mp-activity-empty { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 48px 12px; color: var(--mp-muted); text-align: center; }
+  .mp-activity-empty > span { width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid var(--mp-line); border-radius: 13px; color: var(--nt-accent); background: var(--mp-paper); margin-bottom: 4px; }
+  .mp-activity-empty p { font-size: 12px; }
+  .mp-activity-card { background: var(--mp-paper); border: 1px solid var(--mp-line); border-radius: var(--mp-radius); padding: 16px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  .mp-activity-card-heading { display: flex; gap: 10px; align-items: center; min-width: 0; }
+  .mp-activity-card-heading > div { min-width: 0; }
+  .mp-activity-state-icon { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: #29213c; color: var(--nt-accent); }
+  .mp-activity-card.is-complete .mp-activity-state-icon { background: #192d25; color: #ace0c4; }
+  .mp-activity-apps { color: var(--mp-muted); font-size: 11px; text-transform: capitalize; overflow-wrap: anywhere; }
+  .mp-activity-message { font-size: 12px; overflow-wrap: anywhere; color: var(--nt-text); }
+  .mp-activity-settlement { font-size: 11px; color: var(--mp-muted); overflow-wrap: anywhere; }
+  .mp-activity-settlement.is-failed { color: #f0bcb6; }
+  .mp-activity-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .mp-activity-actions > button { max-width: 100%; }
+  .mp-activity-card .mp-error { margin: 0; }
+  .mp-activity-details { color: var(--mp-muted); font-size: 11px; min-width: 0; }
+  .mp-activity-details summary { cursor: pointer; width: fit-content; }
+  .mp-activity-details dl { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 0; }
+  .mp-activity-details dd { margin: 2px 0 0; overflow-wrap: anywhere; color: var(--nt-text); }
+  .mp-activity-recovery { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; border-top: 1px solid var(--mp-line); padding-top: 12px; margin-top: 14px; min-width: 0; }
+  .mp-activity-recovery label { width: 100%; min-width: 0; }
+  .mp-activity-recovery input { width: 100%; min-width: 0; }
+  .mp-activity-recovery p { line-height: 1.6; }
+  .mp-notification-badge { display: inline-flex; justify-content: center; align-items: center; min-width: 16px; height: 16px; padding-inline: 4px; border-radius: 8px; background: var(--nt-accent); color: #1f1831; font-size: 9px; font-weight: 700; }
+  @container (max-width: 380px) { .mp-activity-card { padding: 12px; } .mp-activity-actions > button { flex: 1 1 auto; } }
+}

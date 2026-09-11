@@ -33,6 +33,7 @@ replication; it is not the free browser-query route.
 |---|---|
 | Catalog, rankings, listing details, images, public audit reports | Direct HTTP/query |
 | Library, order status, earnings, publisher review status | Direct signed query resolving the Neutron's read delegate |
+| Discount-code activation/validation (`referral_quote`) | Direct signed query resolving the Neutron's read delegate; no cycles attached |
 | Purchase/withdrawal preview from retained rates/fee observations | Direct query; mutation validates accepted terms |
 | Package and offered-source bytes | Direct authorized certified HTTP |
 | Purchase/free claim, withdrawal, listing change, rating, upload chunks | Neutron update with attached cycles |

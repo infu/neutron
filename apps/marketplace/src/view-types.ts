@@ -24,6 +24,7 @@ export type PublishedApp = AppListing & {
   rejectionReason?: string; coverageEndsAt?: string;
 };
 export type Session = { configured: boolean; canisterId: string; host: string; account: string | null; connected: boolean; connectionError?: string | null };
+export type DiscountPreference = { code: string | null; active: boolean; discountBps: number; affiliate: string | null; error: string | null };
 export type CycleEstimate = { total: string; processing: string; storage?: string; schedule: string };
 export type Allocation = { kind: "developer" | "affiliate" | "burn"; principal: string | null; amount: Money; label?: string };
 export type EthereumWalletSource = "evm_wallet" | "browser";
@@ -49,6 +50,8 @@ export type OperationResult = {
   ledgerBlock?: string;
   paymentRail?: "ethereum"; entitled?: boolean; ethereumTransactionHash?: string; ethereumWallet?: EthereumWalletSource;
   installation?: InstallationQuote;
+  /** The browser wallet explicitly rejected this payment step before submission; no transaction hash exists. The invoice remains retained. */
+  canceledBeforeSubmission?: boolean;
   settlement?: { state: "pending" | "complete" | "failed"; message: string };
 };
 export type Earnings = {
@@ -78,13 +81,15 @@ export type InstallationQuote = {
 export interface MarketplaceClient {
   initialize(): Promise<Session>;
   connect(): Promise<Session>;
+  discount(): Promise<DiscountPreference>;
+  setDiscountCode(code: string): Promise<DiscountPreference>;
   catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>>;
   detail(appId: string): Promise<AppDetail>;
   library(cursor?: string): Promise<Page<LibraryApp>>;
   publisherApps(cursor?: string): Promise<Page<PublishedApp>>;
   earnings(): Promise<Earnings>;
   createReferralCode(): Promise<string>;
-  quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode: string; ethereum?: EthereumPurchaseSelection }): Promise<PurchaseQuote>;
+  quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode?: string | undefined; ethereum?: EthereumPurchaseSelection }): Promise<PurchaseQuote>;
   purchase(quote: PurchaseQuote, browserConnection?: EthereumProviderConnection): Promise<OperationResult>;
   operation(operationId: string): Promise<OperationResult>;
   recentOperations(): Promise<OperationResult[]>;

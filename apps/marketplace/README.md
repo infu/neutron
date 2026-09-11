@@ -49,7 +49,11 @@ Uninstall still removes app-local journals and browser signing data.
   paid-purchase or free-acquisition counts; reinstalls and retries do not add to
   them. Listing icons and screenshots are served from the marketplace. Checkout
   shows the token price, ledger fees, referral discount, developer/affiliate
-  shares and allocation toward burning NTN before purchase.
+  shares and allocation toward burning NTN before purchase. **Discount code**
+  validates an affiliate code directly with the protocol and remembers it in
+  this Neutron for future purchases. The header control lets the owner change or
+  clear it. A code is shown as active only after validation; self-referrals are
+  rejected and an unavailable validation never silently clears the saved code.
 - **My Apps:** select one or several acquired apps and choose **Install**.
   The control shows selection preparation and private download access costs
   together. After preparing the saved selection, the app opens Neutron's single
@@ -85,6 +89,7 @@ before calling them; atomic amounts are decimal strings.
 |---|---|
 | `marketplace_catalog_v1`, `marketplace_app_v1` | Discover and inspect apps |
 | `marketplace_library_v1`, `marketplace_earnings_v1` | Read owned apps and earnings |
+| `marketplace_discount_v1` | Read and validate the remembered discount and current terms |
 | `marketplace_connect_v1` | Restore automatic browser read access through this Neutron |
 | `marketplace_quote_v1`, `marketplace_purchase_v1` | Review costs and acquire apps |
 | `marketplace_ethereum_quote_v1`, `marketplace_ethereum_purchase_v1` | Review and pay Ethereum USDC through EVM Wallet |
@@ -93,6 +98,16 @@ before calling them; atomic amounts are decimal strings.
 | `marketplace_withdraw_v1` | Review and withdraw earnings |
 | `marketplace_install_quote_v1`, `marketplace_install_v1` | Quote exact preparation cycles and offer installation with scoped owner/Root review |
 | `marketplace_rate_v1` | Rate acquired apps |
+
+For a new IC or Ethereum purchase, omitting `affiliateCode` uses this Neutron's
+remembered discount. An explicit empty string buys without a code for that
+purchase only; an explicit code overrides the preference without changing it.
+An invalid or temporarily unverifiable saved code blocks a defaulted quote until
+it is validated, changed or cleared. The owner changes the saved preference in
+the app; agents can read it and still supply an explicit per-purchase code.
+Existing-ID quotes and recovery retain the original purchase's code when omitted,
+even after the preference changes. Explicitly changing an existing purchase's code
+is rejected; never use a new payment ID to recover an uncertain payment.
 
 Installation history retains the original selection and prepared installer URL.
 Its private draft also retains the exact source-access request for interrupted

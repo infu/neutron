@@ -230,6 +230,11 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     #ok(Referrals.getOrCreate(db, owner, Time.now()));
   };
 
+  public shared query ({ caller }) func referral_quote(code : Text) : async API.Result<API.ReferralQuote> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    Referrals.quote(db, owner, code);
+  };
+
   public shared query ({ caller }) func purchase_quote(request : API.PurchaseRequest) : async API.Result<API.CheckoutQuote> {
     let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     operations.purchaseQuote(owner, request);

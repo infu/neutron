@@ -3,7 +3,8 @@ import type { Identity } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
 import { IDL } from "@dfinity/candid";
 import { isJsonObject, type MsgBusToolContext } from "neutron-tools/app";
-import { readIdentity, readState, configureState, type StoredState } from "./store.ts";
+import { readIdentity, readState, configureState, readDiscountCode, saveDiscountCode, loadIntent, type StoredState } from "./store.ts";
+import { createDiscountPreferences, type ReferralQuote } from "./discount.ts";
 import { makeAgent, makeTransport } from "./transport.ts";
 import { readAccess } from "./read_access.ts";
 import { CONTRACT, first, some, encodeOpaque, checkoutType, withdrawalType, type Info, type WireApp, type Fee, type Checkout, type WithdrawQuote, type WireResult, type Option, type Token } from "./protocol.ts";
@@ -43,6 +44,7 @@ let clientGeneration = 0;
 let connectionFlight: { generation: number; promise: Promise<Session> } | null = null;
 let agentCache: { key: string; agent: Awaited<ReturnType<typeof makeAgent>> } | null = null;
 let infoCache: { key: string; info: Promise<Info> } | null = null;
+let discountCache: { key: string; preference: ReturnType<typeof createDiscountPreferences> } | null = null;
 
 async function currentState(context: MsgBusToolContext): Promise<StoredState> {
   if (savedState) return savedState;
@@ -53,7 +55,7 @@ async function currentState(context: MsgBusToolContext): Promise<StoredState> {
   return stateFlight;
 }
 export function session(state: StoredState): Session { return { configured: state.canisterId !== null, canisterId: state.canisterId ?? "", host: state.host, account: state.owner, connected }; }
-export function clearClient(): void { clientGeneration++; savedState = null; stateFlight = null; connected = false; browserReadIdentity = null; connectionFlight = null; agentCache = null; infoCache = null; }
+export function clearClient(): void { clientGeneration++; savedState = null; stateFlight = null; connected = false; browserReadIdentity = null; connectionFlight = null; agentCache = null; infoCache = null; discountCache = null; }
 export async function configured(context: MsgBusToolContext, input: { canisterId: string; host: string }): Promise<Session> {
   const state = await configureState(context.kernel, input); clearClient(); savedState = state; return session(state);
 }
@@ -73,6 +75,19 @@ export async function protocolClient(context: MsgBusToolContext) {
     return value;
   };
   async function query<T>(name: string, args: unknown[] = []): Promise<T> { return response(await transport.query(name, args)); }
+  const discountKey = `${state.owner}:${state.host}:${state.canisterId}:${state.revision}:${generation}`;
+  if (!discountCache || discountCache.key !== discountKey) discountCache = { key: discountKey, preference: createDiscountPreferences() };
+  const preference = discountCache.preference;
+  const discountAccess = {
+    owner: state.owner,
+    read: () => readDiscountCode(context.kernel),
+    save: (code: string | null) => saveDiscountCode(context.kernel, code),
+    validate: (code: string) => query<ReferralQuote>("referral_quote", [code]),
+    checkCurrent: () => {
+      context.signal?.throwIfAborted();
+      if (generation !== clientGeneration) throw new Error("The marketplace account changed. Refresh before changing or using its discount.");
+    },
+  };
   async function fee(operation = "update", processingBytes = 0n, newStorageBytes = 0n): Promise<Fee> {
     const schedule = info.fees;
     const base = ["purchase", "withdraw", "grant"].includes(operation) ? schedule[operation] : schedule.updateBase;
@@ -163,7 +178,10 @@ export async function protocolClient(context: MsgBusToolContext) {
     if (!selected) throw new Error("The saved withdrawal names an unavailable payment token.");
     return { operationId: quote.request.requestId, token: selected.symbol as PaymentToken, destination: quote.request.to.owner.toText(), debit: money(selected, quote.request.totalDebit), fee: money(selected, quote.fee), receive: money(selected, quote.netAmount), cycles: cycleView(quote.cycles), warnings: [], opaque: encodeOpaque(withdrawalType, quote) };
   }
-  return { state, transport, info, token, query, fee, update, estimateUpdate, grantSourceAccess, listing, detailWire, detail, purchaseView, withdrawalView,
+  return { state, transport, info, token, query, fee, update,
+    discount: () => preference.discount(discountAccess),
+    setDiscountCode: (code: string) => preference.set(discountAccess, code),
+    purchaseCode: (explicit: string | undefined) => preference.purchaseCode(discountAccess, explicit), estimateUpdate, grantSourceAccess, listing, detailWire, detail, purchaseView, withdrawalView,
     async catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>> {
       const parsed = input.cursor ? JSON.parse(input.cursor) as { generation: string; offset: string } : null;
       const value = await query<{ apps: WireApp[]; nextCursor: Option<{ generation: bigint; offset: bigint }>; asOfNs: bigint; refreshing: boolean }>("catalog_query", [{ search: input.search, tier: { [input.tier]: null }, window: { [input.window]: null }, cursor: parsed ? [{ generation: BigInt(parsed.generation), offset: BigInt(parsed.offset) }] : [], limit: 24n }]);
@@ -205,9 +223,25 @@ export async function protocolClient(context: MsgBusToolContext) {
         return { token: t.symbol as PaymentToken, available: money(t, balance?.available ?? 0n), reserved: money(t, balance?.reserved ?? 0n), earned: null };
       }) };
     },
-    async quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode: string; operationId?: string }): Promise<PurchaseQuote> {
+    async quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode?: string | undefined; operationId?: string }): Promise<PurchaseQuote> {
       const selected = token(input.token);
-      const quote = await query<Checkout>("purchase_quote", [{ requestId: input.operationId ?? randomId(), appIds: input.appIds, ledger: selected.ledger, referralCode: some(input.affiliateCode.trim() || null) }]);
+      if (input.operationId && input.affiliateCode === undefined) {
+        // A caller can inspect an interrupted purchase without knowing its old
+        // referral. The remembered default applies only after proving this ID new.
+        const saved = await loadIntent<{ kind: string; scope: { owner: string; canister: string }; quote: PurchaseQuote }>(context.kernel, `operation:${input.operationId}`);
+        if (saved) {
+          if (saved.kind !== "purchase" || saved.scope.owner !== state.owner || saved.scope.canister !== state.canisterId || saved.quote.token !== input.token || JSON.stringify(saved.quote.appIds) !== JSON.stringify(input.appIds)) throw new Error("This operation has different saved purchase inputs.");
+          return saved.quote;
+        }
+        const original = first(await query<Option<WireResult>>("purchase_status", [{ requestId: input.operationId }]));
+        if (original) {
+          const retained = first(original.quote ?? []);
+          if (!retained || !("buyer" in retained) || retained.buyer.toText() !== state.owner || retained.request.ledger.toText() !== selected.ledger.toText() || JSON.stringify(retained.request.appIds) !== JSON.stringify(input.appIds)) throw new Error("The original purchase quote is unavailable or names different inputs. Recover the original request without changing its payment.");
+          return purchaseView(retained);
+        }
+      }
+      const affiliateCode = await preference.purchaseCode(discountAccess, input.affiliateCode);
+      const quote = await query<Checkout>("purchase_quote", [{ requestId: input.operationId ?? randomId(), appIds: input.appIds, ledger: selected.ledger, referralCode: some(affiliateCode || null) }]);
       return purchaseView(quote, true);
     },
     async quoteWithdrawal(input: { token: PaymentToken; amountAtoms: string; destination: string; operationId?: string }): Promise<WithdrawalQuote> {
@@ -218,6 +252,19 @@ export async function protocolClient(context: MsgBusToolContext) {
   };
 }
 export type Client = Awaited<ReturnType<typeof protocolClient>>;
+export async function discount(context: MsgBusToolContext) {
+  let client: Client;
+  try { client = await protocolClient(context); }
+  catch (error) {
+    context.signal?.throwIfAborted();
+    // The protocol may be offline before its info/read client is ready. Preserve
+    // the Neutron's code in the modal while clearly withholding activation.
+    const code = await readDiscountCode(context.kernel);
+    return { code, active: false, discountBps: 0, affiliate: null, error: error instanceof Error ? error.message : String(error) };
+  }
+  return client.discount();
+}
+export async function setDiscountCode(context: MsgBusToolContext, code: string) { return (await protocolClient(context)).setDiscountCode(code); }
 export async function initialize(context: MsgBusToolContext): Promise<Session> {
   const state = await currentState(context);
   if (!state.canisterId) return session(state);

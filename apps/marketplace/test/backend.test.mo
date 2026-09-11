@@ -2,7 +2,9 @@ import Blob "mo:core/Blob";
 import Map "mo:core/Map";
 import Principal "mo:core/Principal";
 import Text "mo:core/Text";
-import Memory "../backend/memory/state/v1";
+import MemoryV1 "../backend/memory/state/v1";
+import Memory "../backend/memory/state/v2";
+import MigrateV1 "../backend/memory/state/v1_to_v2";
 import App "../backend/main";
 import ReadIdentity "../backend/read_identity";
 import Capabilities "mo:neutron-capabilities";
@@ -31,12 +33,19 @@ let signer : Capabilities.WalletCustodySigningV1 = {
     };
 };
 let memory = Memory.init();
+assert memory.seed == null;
+assert memory.canister == null;
+assert memory.host == "https://icp-api.io";
+assert memory.revision == 0;
+assert Map.size(memory.drafts) == 0;
+assert memory.discountCode == null;
 let app = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker; wallet_custody_signing = signer } });
 let production = Principal.fromText("sj2r4-haaaa-aaaay-aadgq-cai");
 assert app.marketplace_state(()).canister == ?production;
 assert app.marketplace_state(()).host == "https://icp-api.io";
 assert app.marketplace_state(()).revision == 1;
 assert app.marketplace_state(()).seed == null;
+assert app.marketplace_discount_code(()) == null;
 switch (app.marketplace_initialize(Blob.fromArray([1, 2]))) { case (#err(_)) {}; case (_) assert false };
 let seed : Blob = "01234567890123456789012345678901";
 ignore app.marketplace_initialize(seed);
@@ -69,8 +78,8 @@ switch (restored.marketplace_revise_draft({ id = "purchase-1"; expected = "origi
 assert restored.marketplace_draft("purchase-1") == ?"changed";
 let restoredRevision = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker; wallet_custody_signing = signer } });
 assert restoredRevision.marketplace_draft("history:purchase-1:revision-1") == ?"original";
-// The existing v1 root stores opaque draft bytes. New optional installation
-// diagnostics preserve older drafts and their revision history on restoration.
+// Opaque draft bytes retain their exact installation diagnostics and revision
+// history on restoration.
 let originalInstall : Blob = "{\"version\":1,\"setupUrl\":null}";
 let unavailableInstall : Blob = "{\"version\":1,\"setupUrl\":null,\"unavailableReason\":\"Saved release retired\"}";
 ignore restoredRevision.marketplace_save_draft({ id = "installation-1"; value = originalInstall });
@@ -80,10 +89,13 @@ assert restoredInstall.marketplace_draft("installation-1") == ?unavailableInstal
 assert restoredInstall.marketplace_draft("history:installation-1:retirement") == ?originalInstall;
 // Restore the released v1 root before it had a deployed default. Adopt only
 // the missing configuration; retain the read identity and opaque journal.
-let unconfigured = Memory.init();
-unconfigured.seed := ?seed;
-unconfigured.revision := 8;
-Map.add(unconfigured.drafts, Text.compare, "legacy-request", "legacy-data");
+let unconfiguredV1 = MemoryV1.init();
+unconfiguredV1.seed := ?seed;
+unconfiguredV1.revision := 8;
+Map.add(unconfiguredV1.drafts, Text.compare, "legacy-request", "legacy-data");
+let unconfigured = MigrateV1.migrate(unconfiguredV1);
+assert unconfigured.canister == null;
+assert unconfigured.discountCode == null;
 let adopted = App.Init({ stable_memory = { state = unconfigured }; capabilities = { backend_calls = broker; wallet_custody_signing = signer } });
 assert adopted.marketplace_state(()).canister == ?production;
 assert adopted.marketplace_state(()).seed == ?seed;
@@ -100,6 +112,71 @@ assert custom.marketplace_state(()).host == "http://127.0.0.1:4943";
 assert custom.marketplace_state(()).revision == 10;
 assert custom.marketplace_state(()).seed == ?seed;
 assert custom.marketplace_draft("legacy-request") == ?"legacy-data";
+// Upgrade a released v1 root containing configured read identity, pending
+// purchase and install requests, and original journal revision history. None
+// of those bytes can change when a future-checkout preference is introduced.
+let releasedV1 = MemoryV1.init();
+releasedV1.seed := ?seed;
+releasedV1.canister := ?production;
+releasedV1.host := "https://icp0.io";
+releasedV1.revision := 47;
+let pendingPurchase = "{\"version\":1,\"kind\":\"purchase\",\"operationId\":\"retained-purchase\",\"referralCode\":\"ORIGINAL\",\"status\":\"submitted\"}";
+let pendingInstall = "{\"version\":1,\"kind\":\"installation\",\"operationId\":\"retained-install\",\"setupUrl\":\"https://example.test/retained-offer\",\"status\":\"review_required\"}";
+let previousPurchase = "{\"version\":1,\"kind\":\"purchase\",\"operationId\":\"retained-purchase\",\"referralCode\":\"ORIGINAL\",\"status\":\"prepared\"}";
+Map.add(releasedV1.drafts, Text.compare, "retained-purchase", pendingPurchase);
+Map.add(releasedV1.drafts, Text.compare, "retained-install", pendingInstall);
+Map.add(releasedV1.drafts, Text.compare, "history:retained-purchase:submitted", previousPurchase);
+let migrated = MigrateV1.migrate(releasedV1);
+assert migrated.seed == releasedV1.seed;
+assert migrated.canister == releasedV1.canister;
+assert migrated.host == releasedV1.host;
+assert migrated.revision == releasedV1.revision;
+assert migrated.discountCode == null;
+assert Map.size(migrated.drafts) == Map.size(releasedV1.drafts);
+for ((id, value) in Map.entries(releasedV1.drafts)) {
+    assert Map.get(migrated.drafts, Text.compare, id) == ?value;
+};
+let migratedApp = App.Init({ stable_memory = { state = migrated }; capabilities = { backend_calls = broker; wallet_custody_signing = signer } });
+assert migratedApp.marketplace_state(()).revision == 47;
+assert migratedApp.marketplace_discount_code(()) == null;
+switch (migratedApp.marketplace_set_discount_code({ code = ?" \t welcome10\r\n" })) {
+    case (#ok(code)) assert code == ?"WELCOME10";
+    case (#err(_)) assert false;
+};
+assert migratedApp.marketplace_state(()).revision == 47;
+let discountRestored = App.Init({ stable_memory = { state = migrated }; capabilities = { backend_calls = broker; wallet_custody_signing = signer } });
+assert discountRestored.marketplace_discount_code(()) == ?"WELCOME10";
+assert discountRestored.marketplace_state(()).seed == ?seed;
+assert discountRestored.marketplace_state(()).canister == ?production;
+assert discountRestored.marketplace_state(()).host == "https://icp0.io";
+assert discountRestored.marketplace_state(()).revision == 47;
+switch (discountRestored.marketplace_set_discount_code({ code = ?"nextcode" })) {
+    case (#ok(code)) assert code == ?"NEXTCODE";
+    case (#err(_)) assert false;
+};
+assert discountRestored.marketplace_discount_code(()) == ?"NEXTCODE";
+switch (discountRestored.marketplace_set_discount_code({ code = null })) {
+    case (#ok(code)) assert code == null;
+    case (#err(_)) assert false;
+};
+assert discountRestored.marketplace_discount_code(()) == null;
+ignore discountRestored.marketplace_set_discount_code({ code = ?"welcome10" });
+switch (discountRestored.marketplace_set_discount_code({ code = ?" \n\t\r " })) {
+    case (#ok(code)) assert code == null;
+    case (#err(_)) assert false;
+};
+assert discountRestored.marketplace_state(()).revision == 47;
+assert discountRestored.marketplace_draft("retained-purchase") == ?Text.encodeUtf8(pendingPurchase);
+assert discountRestored.marketplace_draft("retained-install") == ?Text.encodeUtf8(pendingInstall);
+assert discountRestored.marketplace_draft("history:retained-purchase:submitted") == ?Text.encodeUtf8(previousPurchase);
+// A fresh installation can save the same preference without initializing a
+// read signer or mutating its configuration revision.
+let freshDiscountMemory = Memory.init();
+let freshDiscountApp = App.Init({ stable_memory = { state = freshDiscountMemory }; capabilities = { backend_calls = broker; wallet_custody_signing = signer } });
+ignore freshDiscountApp.marketplace_set_discount_code({ code = ?"free10" });
+assert freshDiscountApp.marketplace_discount_code(()) == ?"FREE10";
+assert freshDiscountApp.marketplace_state(()).seed == null;
+assert freshDiscountApp.marketplace_state(()).revision == 1;
 assert App.allowed("purchase");
 assert App.allowed("repo_access_v1");
 assert App.allowed("ethereum_prepare");
@@ -136,6 +213,17 @@ await async {
     assert signedCount == 1;
     assert app.marketplace_state(()).seed == ?seed;
     assert app.marketplace_draft("purchase-1") == ?"changed";
+    switch (await* migratedApp.marketplace_read_identity({ publicKey = sessionKey })) {
+        case (#ok(value)) {
+            assert value.publicKey == rootKey;
+            assert value.sessionPublicKey == sessionKey;
+            assert value.target == production;
+            assert value.expiration == ReadIdentity.EXPIRATION;
+        };
+        case (#err(_)) assert false;
+    };
+    assert migratedApp.marketplace_state(()).seed == ?seed;
+    assert migratedApp.marketplace_state(()).revision == 47;
     signatureError := ?#disabled;
     switch (await* app.marketplace_read_identity({ publicKey = sessionKey })) { case (#err(_)) {}; case (_) assert false };
     signatureError := null;

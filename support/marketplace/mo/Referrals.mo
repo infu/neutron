@@ -2,6 +2,7 @@
 import Nat64 "mo:core/Nat64";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
+import API "API";
 import Store "Store";
 import Types "Types";
 
@@ -36,6 +37,19 @@ module {
     };
     if (referral.owner == buyer) return #err("You cannot use your own affiliate code.");
     #ok(?referral);
+  };
+
+  // Validate a saved browser preference without preparing a purchase, reading
+  // rates or allocating a code. Checkout still freezes and validates its own
+  // attribution and terms; activating a preference is not a payment quote.
+  public func quote(db : Store.DB, buyer : Principal, code : Text) : API.Result<API.ReferralQuote> {
+    let referral = switch (resolve(db, buyer, ?code)) {
+      case (#err(message)) return #err({ code = "invalid_referral"; message });
+      case (#ok(null)) return #err({ code = "invalid_referral"; message = "Enter a discount code." });
+      case (#ok(?value)) value;
+    };
+    let terms = Store.config(db).referralTerms;
+    #ok({ code = referral.code; affiliate = referral.owner; discountBps = terms.discountBps; termsVersion = terms.version });
   };
 
   // Referral codes identify public attribution; they are not authorization

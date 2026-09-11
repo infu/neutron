@@ -115,6 +115,7 @@ module {
   public type WithdrawalExecute = { quote : WithdrawalQuote; feeVersion : Nat };
   public type WithdrawalResult = { withdrawal : Types.Withdrawal; attempt : ?Types.Attempt; quote : ?WithdrawalQuote; active : Bool; nextAction : PaymentState.NextAction };
   public type Earnings = { credits : [Types.Credit]; referral : ?Types.Referral };
+  public type ReferralQuote = { code : Text; affiliate : Principal; discountBps : Nat; termsVersion : Nat };
   public type HistoryCursor = { #start; #after : Nat64; #done };
   public type OperationHistoryRequest = { purchaseCursor : HistoryCursor; withdrawalCursor : HistoryCursor; limit : Nat };
   public type OperationHistory = {

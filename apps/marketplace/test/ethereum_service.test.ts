@@ -23,7 +23,7 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
   const registered = new Map<string, { specification: Data; handler: (args: Data, context: Data) => Promise<Data> }>();
   const calls: Array<{ name: string; args: any[] }> = [];
   const stored = new Map<string, Data>();
-  let ethereum: Data | null, original: Data | null, ethereumCursor: string | null;
+  let ethereum: Data | null, original: Data | null, icOriginal: Data | null, ethereumCursor: string | null;
   let icRecent: Data[], ethereumRecent: Data[];
   const invoke = (name: string, value: unknown = null) => async (...args: any[]) => { calls.push({ name, args }); return value; };
   const quote = (wallet = "evm_wallet") => ({ operationId: OPERATION, appIds: ["editor"], token: "ckUSDC", affiliateCode: "", ethereum: { wallet, payerAddress: "0x1111111111111111111111111111111111111111" } });
@@ -34,7 +34,13 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
   }));
   mock.module("../src/client.ts", () => ({
     initialize: invoke("initialize"), configured: invoke("configured"), connect: invoke("connect"), randomId: () => OPERATION,
-    protocolClient: async () => ({ quotePurchase: invoke("icQuote", quote()), quoteWithdrawal: invoke("withdrawQuote"), query: invoke("icQuery", []), update: invoke("update") }),
+    discount: invoke("discount", { code: "SAVED", active: true, discountBps: 1000 }),
+    setDiscountCode: invoke("setDiscountCode", { code: "CHANGED", active: true, discountBps: 1000 }),
+    protocolClient: async () => ({
+      quotePurchase: invoke("icQuote", quote()), quoteWithdrawal: invoke("withdrawQuote"), update: invoke("update"),
+      query: async (...args: any[]) => { calls.push({ name: "icQuery", args }); return icOriginal ? [icOriginal] : []; },
+      purchaseView: async (wire: Data) => wire,
+    }),
   }));
   mock.module("../src/store.ts", () => ({ loadIntent: async (_kernel: unknown, key: string) => stored.get(key) ?? null }));
   mock.module("../src/actions.ts", () => ({
@@ -60,7 +66,7 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
   const normalAgent = { agentMode: false, caller: { appId: "agent", role: "background" }, kernel: {} };
   const tool = async (name: string, args: Data, context = root) => registered.get(name)!.handler(args, context);
   const ui = async (write: boolean, method: string, args: Data, context = tile) => JSON.parse((await tool(write ? "ui_update" : "ui_query", { method, paramsJson: JSON.stringify(args) }, context)).resultJson);
-  beforeEach(() => { calls.length = 0; stored.clear(); ethereum = null; original = null; ethereumCursor = null; icRecent = []; ethereumRecent = []; });
+  beforeEach(() => { calls.length = 0; stored.clear(); ethereum = null; original = null; icOriginal = null; ethereumCursor = null; icRecent = []; ethereumRecent = []; });
 
   test("agent Ethereum quote selects EVM Wallet only and carries the original request", async () => {
     await tool("marketplace_ethereum_quote_v1", { operationId: OPERATION, appIds: ["editor"], affiliateCode: "CODE" });
@@ -77,6 +83,76 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
       expect(calls.at(-1)).toMatchObject({ name: "ethPurchase", args: [context, quote()] });
     }
     expect(registered.get("marketplace_ethereum_purchase_v1")!.specification.annotations["neutron:consent"]).toBe("provider_once");
+  });
+  test("new IC and Ethereum quotes preserve omitted discount versus an explicit empty override", async () => {
+    for (const affiliateCode of [undefined, "", "CODE"]) {
+      for (const [name, callName] of [["marketplace_quote_v1", "icQuote"], ["marketplace_ethereum_quote_v1", "ethQuote"]]) {
+        calls.length = 0;
+        await tool(name!, { operationId: OPERATION, appIds: ["editor"], ...(callName === "icQuote" ? { token: "ckUSDC" } : {}), ...(affiliateCode !== undefined ? { affiliateCode } : {}) });
+        const call = calls.find(call => call.name === callName)!;
+        const args = call.args[callName === "icQuote" ? 0 : 1];
+        expect(args.affiliateCode).toBe(affiliateCode);
+      }
+    }
+  });
+  test("new IC and Ethereum purchases leave omitted discount resolution to the quote client", async () => {
+    for (const affiliateCode of [undefined, ""]) {
+      for (const [name, callName, sendName] of [["marketplace_purchase_v1", "icQuote", "icPurchase"], ["marketplace_ethereum_purchase_v1", "ethQuote", "ethPurchase"]]) {
+        calls.length = 0;
+        await tool(name!, { operationId: OPERATION, appIds: ["editor"], ...(callName === "icQuote" ? { token: "ckUSDC" } : {}), ...(affiliateCode !== undefined ? { affiliateCode } : {}) });
+        const call = calls.find(call => call.name === callName)!;
+        const args = call.args[callName === "icQuote" ? 0 : 1];
+        expect(args.affiliateCode).toBe(affiliateCode);
+        expect(calls.at(-1)?.name).toBe(sendName);
+      }
+    }
+  });
+  test("saved IC purchase keeps its original referral when the caller omits the current default", async () => {
+    stored.set(`operation:${OPERATION}`, { kind: "purchase", quote: { ...quote(), ethereum: undefined, affiliateCode: "ORIGINAL" } });
+    await tool("marketplace_purchase_v1", { operationId: OPERATION, appIds: ["editor"], token: "ckUSDC" });
+    expect(calls).toEqual([{ name: "icResume", args: [root, OPERATION, undefined] }]);
+    for (const affiliateCode of ["", "NEW"]) {
+      await expect(tool("marketplace_purchase_v1", { operationId: OPERATION, appIds: ["editor"], token: "ckUSDC", affiliateCode })).rejects.toThrow("different saved purchase");
+    }
+    await tool("marketplace_purchase_v1", { operationId: OPERATION, appIds: ["editor"], token: "ckUSDC", affiliateCode: "ORIGINAL" });
+    expect(calls.filter(call => call.name === "icResume")).toHaveLength(2);
+    expect(calls.some(call => ["icQuote", "icPurchase", "discount"].includes(call.name))).toBe(false);
+  });
+  test("protocol IC purchase keeps its original referral after local state loss", async () => {
+    icOriginal = { quote: [{ ...quote(), ethereum: undefined, affiliateCode: "ORIGINAL", buyer: "owner" }] };
+    await tool("marketplace_purchase_v1", { operationId: OPERATION, appIds: ["editor"], token: "ckUSDC" });
+    expect(calls.at(-1)).toEqual({ name: "icResume", args: [root, OPERATION, undefined] });
+    for (const affiliateCode of ["", "NEW"]) {
+      await expect(tool("marketplace_purchase_v1", { operationId: OPERATION, appIds: ["editor"], token: "ckUSDC", affiliateCode })).rejects.toThrow("original protocol purchase");
+    }
+    await tool("marketplace_purchase_v1", { operationId: OPERATION, appIds: ["editor"], token: "ckUSDC", affiliateCode: "ORIGINAL" });
+    expect(calls.filter(call => call.name === "icResume")).toHaveLength(2);
+    expect(calls.some(call => ["icQuote", "icPurchase", "discount"].includes(call.name))).toBe(false);
+  });
+  test("saved Ethereum purchase ignores a changed default but rejects explicit replacement codes", async () => {
+    stored.set(`ethereum:operation:${OPERATION}`, { quote: { ...quote(), affiliateCode: "ORIGINAL" } });
+    await tool("marketplace_ethereum_purchase_v1", { operationId: OPERATION, appIds: ["editor"] });
+    expect(calls).toEqual([{ name: "ethResume", args: [root, OPERATION] }]);
+    for (const affiliateCode of ["", "NEW"]) {
+      await expect(tool("marketplace_ethereum_purchase_v1", { operationId: OPERATION, appIds: ["editor"], affiliateCode })).rejects.toThrow("different saved Ethereum");
+    }
+    await tool("marketplace_ethereum_purchase_v1", { operationId: OPERATION, appIds: ["editor"], affiliateCode: "ORIGINAL" });
+    expect(calls.filter(call => call.name === "ethResume")).toHaveLength(2);
+    expect(calls.some(call => ["ethQuote", "ethPurchase", "discount"].includes(call.name))).toBe(false);
+  });
+  test("discount read exposes the saved preference and only the owner tile can change it", async () => {
+    const read = await tool("marketplace_discount_v1", {});
+    expect(read).toMatchObject({ version: 1, result: { code: "SAVED", active: true, discountBps: 1000 } });
+    expect(calls.at(-1)).toEqual({ name: "discount", args: [root] });
+    expect(registered.get("marketplace_discount_v1")!.specification.annotations["neutron:effects"]).not.toContain("write");
+    for (const code of ["CHANGED", ""]) {
+      await ui(true, "setDiscountCode", { code });
+      expect(calls.at(-1)).toEqual({ name: "setDiscountCode", args: [tile, code] });
+    }
+    expect(registered.has("marketplace_discount_set_v1")).toBe(false);
+    for (const context of [root, normalAgent, { ...tile, caller: { appId: "marketplace", role: "background" } }]) {
+      await expect(ui(true, "setDiscountCode", { code: "CHANGED" }, context)).rejects.toThrow("marketplace tile");
+    }
   });
   test("browser quote and journal mutations require the owner tile", async () => {
     for (const context of [root, normalAgent, { ...tile, caller: { appId: "marketplace", role: "background" } }]) {
@@ -120,9 +196,14 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
   });
   test("durable protocol history resumes the original invoice after local loss", async () => {
     original = { quote: { request: { appIds: ["editor"], referralCode: ["CODE"] } } };
-    await expect(tool("marketplace_ethereum_purchase_v1", { operationId: OPERATION, appIds: ["editor"] })).rejects.toThrow("original Ethereum invoice");
-    await tool("marketplace_ethereum_purchase_v1", { operationId: OPERATION, appIds: ["editor"], affiliateCode: "CODE" });
+    await tool("marketplace_ethereum_purchase_v1", { operationId: OPERATION, appIds: ["editor"] });
     expect(calls).toEqual([{ name: "ethResume", args: [root, OPERATION] }]);
+    for (const affiliateCode of ["", "NEW"]) {
+      await expect(tool("marketplace_ethereum_purchase_v1", { operationId: OPERATION, appIds: ["editor"], affiliateCode })).rejects.toThrow("original Ethereum invoice");
+    }
+    await tool("marketplace_ethereum_purchase_v1", { operationId: OPERATION, appIds: ["editor"], affiliateCode: "CODE" });
+    expect(calls.filter(call => call.name === "ethResume")).toHaveLength(2);
+    expect(calls.some(call => ["ethQuote", "ethPurchase", "discount"].includes(call.name))).toBe(false);
   });
   test("an existing payment ID cannot cross between IC and Ethereum", async () => {
     stored.set(`operation:${OPERATION}`, { quote: quote(), kind: "purchase" });

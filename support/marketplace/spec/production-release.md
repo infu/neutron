@@ -236,3 +236,52 @@ retains the exact file and browser evidence.
 
 These updates do not install apps into existing production Neutrons. The legacy
 source and Dispenser starter are unchanged, and no Git push is included.
+
+## Saved discounts and Activity — Marketplace113
+
+Marketplace `0.1.13` was published in catalog batch `5` on 2026-09-11.
+The archive is 482,863 bytes with SHA-256
+`a0ecb6c8839c7bfd765518a5dbb488215d83bc4dade8476022d79d68a50fa689`.
+Its offered source is 1,766,790 bytes with SHA-256
+`7727dc04d7f3dcbfef3056a03a594405bf79c5751a3578e457e4d09c432d4ac4`.
+Only Marketplace changed in the 27-package transaction. Existing listing prices,
+icons, screenshots and approved releases were retained.
+
+The app remembers a validated discount code for new purchases. Its header
+control changes or clears that preference; listings show original and discounted
+prices, and checkout shows the activated code. Validation uses the protocol's
+new authenticated `referral_quote` query directly from the browser. Existing
+payment IDs keep their original referral terms after the preference changes.
+
+A bell tab after Earnings opens Activity. Financial progress and recovery controls
+live on that page. Confirmed browser refusals before submission are omitted from
+active notifications; unknown outcomes and transaction evidence remain available.
+Fresh receipt observations supersede older local status, and remote payment or
+settlement evidence takes precedence over a stale browser rejection.
+
+App managed memory advances from state v1 to v2 through one explicit migration.
+The released v1 schema and its lock entries are unchanged. A focused PocketIC
+checked upgrade from exact Marketplace112 and Kernel359 preserved the read key,
+delegation, seed, configuration revision, pending purchase/install records and
+history, and verified clean v2 initialization and discount change/clear behavior.
+The gate passed 90 assertions; Kernel359 stayed unchanged. Backend semantic
+migration tests, typecheck, complete packaging, focused client/recovery tests
+and four focused browser suites also passed. Browser checks cover 320–960px
+layouts, activation/change/clear, late preference loading, quiet cancellation,
+original-payment recovery and newer receipt precedence. No live purchase or
+wallet transaction was used for qualification.
+
+The protocol was upgraded in place with memory retained to
+`7ec8262e5067d5e8c20c990767eeb5c214c7741bb1fb3cb1da4477efe29af0a5`.
+Its persistent schema and stable types are unchanged. Five focused domain cases
+and an exact production-predecessor PocketIC upgrade passed, including delegated
+owner authentication, self-code rejection and preservation of listings,
+entitlements and referral records. Deployment postflight verified the running
+module, unchanged controllers, retained paid listing details and query access.
+
+The repeated publication returned receipt-v2 `batch_id: null`: all 27 packages
+and their offered-source artifacts were `unchanged`, with matching versions,
+paths, URLs, sizes and SHA-256 digests. The frozen 54 local artifacts matched
+both publication postflights. Publication makes the update discoverable in
+Settings; it does not install it into existing Neutrons or change the Dispenser
+starter.

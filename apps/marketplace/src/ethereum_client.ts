@@ -29,11 +29,12 @@ async function quoteView(client: Client, quote: Checkout, selection: EthereumPur
     warnings: [...view.warnings, "Ethereum approval and payment each cost ETH gas in addition to the displayed USDC total. App access begins after the protocol verifies the Ethereum payment; wrapping and revenue settlement continue separately."],
   };
 }
-export async function ethereumQuote(context: MsgBusToolContext, input: { appIds: string[]; affiliateCode: string; ethereum: EthereumPurchaseSelection; operationId?: string }): Promise<PurchaseQuote> {
+export async function ethereumQuote(context: MsgBusToolContext, input: { appIds: string[]; affiliateCode?: string | undefined; ethereum: EthereumPurchaseSelection; operationId?: string }): Promise<PurchaseQuote> {
   const selection = { ...input.ethereum, payerAddress: payer(input.ethereum.payerAddress) };
   const client = await protocolClient(context), selected = client.token("ckUSDC");
+  const affiliateCode = await client.purchaseCode(input.affiliateCode);
   const [quote, fees] = await Promise.all([
-    client.query<Checkout>("ethereum_quote", [{ requestId: input.operationId ?? randomId(), appIds: input.appIds, ledger: selected.ledger, referralCode: some(input.affiliateCode.trim() || null) }]),
+    client.query<Checkout>("ethereum_quote", [{ requestId: input.operationId ?? randomId(), appIds: input.appIds, ledger: selected.ledger, referralCode: some(affiliateCode || null) }]),
     client.transport.query<EthereumFees>("ethereum_fees"),
   ]);
   return quoteView(client, quote, selection, fees);

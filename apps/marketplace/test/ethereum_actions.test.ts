@@ -66,7 +66,7 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
   mock.module("../src/client.ts", () => ({ ...actualClient, protocolClient: async () => client, randomId: () => (++idCounter).toString(16).padStart(32, "0") }));
   mock.module("../src/ethereum_client.ts", () => ({ ...actualEthereumClient,
     ethereumQuote: async (_context: unknown, input: { ethereum: { wallet: EthereumWalletSource } }) => { events.push("quote"); return quote(input.ethereum.wallet); },
-    ethereumInvoiceView: async (_context: unknown, _result: unknown, source: EthereumWalletSource) => quote(source, true),
+    ethereumInvoiceView: async (_context: unknown, result: EthereumInvoiceResult, source: EthereumWalletSource) => ({ ...quote(source, true), affiliateCode: result.quote.request.referralCode[0] ?? "" }),
     ethereumInvoiceStatus: async () => { events.push("status"); return status; }, ethereumFees: async () => fees,
   }));
   mock.module("../src/ethereum.ts", () => ({ ...actualEthereum,
@@ -83,7 +83,7 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
       return journal.record(record, { ...record, state, transactionHash: state === "unknown" ? null : hash, message: state === "confirmed" ? "Confirmed" : "Pending" });
     },
   }));
-  const { runEthereumPurchase, resumeEthereumPurchase, prepareEthereumBrowser, ethereumJournalClaim, ethereumJournalRecord, finishEthereumBrowser, ethereumSavedStatus } = await import("../src/ethereum_actions.ts");
+  const { quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, prepareEthereumBrowser, ethereumJournalClaim, ethereumJournalRecord, finishEthereumBrowser, ethereumSavedStatus } = await import("../src/ethereum_actions.ts");
   function context(root = false): MsgBusToolContext {
     return { agentMode: root, signal: new AbortController().signal,
       caller: { appId: root ? "agent" : "marketplace", installationUid: "install-1", role: root ? "background" : "tile", endpoint: root ? "app:agent:background" : "app:marketplace:tile:main:instance:test" },
@@ -111,6 +111,21 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
   }
   beforeEach(() => { stored = new Map(); events = []; reviews = []; updates = []; sends = []; observations = []; status = null; prepared = fixture(); idCounter = 0; ownerApproved = true; lostClaimReply = false; approvalRequired = true; states = { approval: "confirmed", deposit: "submitted" }; });
 
+  test("saved Ethereum quote retains its original discount when omitted", async () => {
+    const retained = { ...quote("browser"), affiliateCode: "ORIGINAL" };
+    stored.set(opKey, new TextEncoder().encode(JSON.stringify({ version: 1, kind: "ethereum_purchase", scope: { canister: PROTOCOL, owner: OWNER, callerApp: "marketplace", installation: "install-1", root: false }, quote: retained, source: "browser" })));
+    const input = { operationId: ID, appIds: ["sample"], ethereum: { wallet: "browser" as const, payerAddress: PAYER } };
+    expect(await quoteEthereumPurchase(context(), input)).toEqual(retained);
+    await expect(quoteEthereumPurchase(context(), { ...input, affiliateCode: "NEW" })).rejects.toThrow("original Ethereum invoice");
+    expect(events).toEqual([]); expect(updates).toEqual([]); expect(sends).toEqual([]);
+  });
+  test("Ethereum quote recovers the remote original discount before resolving a new default", async () => {
+    status = { ...prepared, quote: { ...prepared.quote, request: { ...prepared.quote.request, referralCode: ["ORIGINAL"] } } };
+    const input = { operationId: ID, appIds: ["sample"], ethereum: { wallet: "browser" as const, payerAddress: PAYER } };
+    expect((await quoteEthereumPurchase(context(), input)).affiliateCode).toBe("ORIGINAL");
+    await expect(quoteEthereumPurchase(context(), { ...input, ethereum: { ...input.ethereum, payerAddress: "0x1111111111111111111111111111111111111111" } })).rejects.toThrow("original apps and payer");
+    expect(events).toEqual(["status", "status"]); expect(updates).toEqual([]); expect(sends).toEqual([]);
+  });
   test("invoice and exact owner review are durable before the first funding call", async () => {
     const result = await runEthereumPurchase(context(), quote());
     expect(result.state).toBe("pending"); expect(updates).toEqual(["ethereum_prepare"]);
@@ -193,6 +208,47 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
     const record: EthereumFundingRecord = { version: 1, invoiceId: ID, source: "browser", step: plan.steps.deposit, state: "unknown", transactionHash: null, walletIntent: null, receipt: null, message: null };
     return { ctx, record };
   }
+  async function rejectedBrowserRecord() {
+    const { ctx, record } = await browserRecord();
+    await ethereumJournalClaim(ctx, ID, record);
+    await ethereumJournalRecord(ctx, ID, record, { ...record, state: "rejected", message: "The browser wallet declined this transaction before submission." });
+    return ctx;
+  }
+  test("a retained browser refusal is marked pre-submission without canceling the protocol invoice", async () => {
+    const ctx = await rejectedBrowserRecord(), before = stored.size;
+    expect(await ethereumSavedStatus(ctx, ID)).toMatchObject({ state: "failed", ethereumWallet: "browser", canceledBeforeSubmission: true });
+    expect(saved(stepKey("deposit")).record).toMatchObject({ state: "rejected", transactionHash: null });
+    expect(stored.size).toBe(before); expect(updates).toEqual(["ethereum_prepare"]); expect(sends).toEqual([]);
+  });
+  test("remote buyer-credit settlement outranks a stale local browser refusal", async () => {
+    const ctx = await rejectedBrowserRecord();
+    status = { ...prepared, invoice: { ...prepared.invoice, canceledAtNs: [15n] }, nextAction: { settle: null } };
+    const result = await ethereumSavedStatus(ctx, ID);
+    expect(result).toMatchObject({ state: "failed", settlement: { state: "pending" }, nextAction: "resume" });
+    expect(result?.canceledBeforeSubmission).toBeUndefined();
+    expect(updates).toEqual(["ethereum_prepare"]); expect(sends).toEqual([]);
+  });
+  test("remote receipt outranks a stale local browser refusal and keeps the original transaction hash", async () => {
+    const ctx = await rejectedBrowserRecord(), transactionHash = `0x${"33".repeat(32)}`;
+    status = { ...prepared, receipt: [{ id: 3n, invoiceId: 1n, eventKey: "remote-receipt", transactionHash, logIndex: 0n, blockNumber: 25_950_000n, blockHash: `0x${"44".repeat(32)}`, payer: PAYER, amount: wire.amount + wire.fee, observedAtNs: 10n }] };
+    const result = await ethereumSavedStatus(ctx, ID);
+    expect(result?.ethereumTransactionHash).toBe(transactionHash);
+    expect(result?.canceledBeforeSubmission).toBeUndefined();
+    expect(updates).toEqual(["ethereum_prepare"]); expect(sends).toEqual([]);
+  });
+  for (const evidence of ["balance", "sweep", "credit", "acceptedReceipt", "wrapping", "review", "feeShortfall"] as const) test(`remote ${evidence} evidence cannot be hidden by a stale local browser refusal`, async () => {
+    const ctx = await rejectedBrowserRecord();
+    status = { ...prepared, invoice: { ...prepared.invoice } };
+    if (evidence === "balance") status.invoice.lastBalance = [1n];
+    if (evidence === "sweep") status.invoice.currentSweepId = [4n];
+    if (evidence === "credit") status.invoice.creditedBuyerAtoms = 1n;
+    if (evidence === "acceptedReceipt") status.invoice.acceptedReceiptId = [4n];
+    if (evidence === "wrapping") status.nextAction = { wait_wrapping: null };
+    if (evidence === "review") status.nextAction = { review_required: null };
+    if (evidence === "feeShortfall") status.nextAction = { fee_shortfall: null };
+    expect((await ethereumSavedStatus(ctx, ID))?.canceledBeforeSubmission).toBeUndefined();
+    expect(updates).toEqual(["ethereum_prepare"]); expect(sends).toEqual([]);
+  });
   test("two same-record claim writers get exactly one winner through unique claim nonces", async () => {
     const { ctx, record } = await browserRecord();
     const claims = await Promise.all([ethereumJournalClaim(ctx, ID, record), ethereumJournalClaim(ctx, ID, record)]);

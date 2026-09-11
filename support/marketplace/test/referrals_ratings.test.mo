@@ -66,6 +66,29 @@ persistent actor {
     });
   };
 
+  public func referral_quote_validates_without_acquiring_or_allocating() : async Test.Metrics {
+    Test.test(func () {
+      let mem = memory();
+      let db = Store.Use(mem);
+      let affiliate = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+      let buyer = Principal.fromText("mxzaz-hqaaa-aaaar-qaada-cai");
+      let anotherBuyer = Principal.fromText("xevnm-gaaaa-aaaar-qafnq-cai");
+      let referral = Referrals.getOrCreate(db, affiliate, 10);
+      let expected = #ok({ code = referral.code; affiliate; discountBps = 1_000; termsVersion = 1 });
+      assert Referrals.quote(db, buyer, " \tn1\r\n") == expected;
+      assert Referrals.quote(db, anotherBuyer, referral.code) == expected;
+      assert Referrals.quote(db, buyer, "NUNKNOWN") == #err({ code = "invalid_referral"; message = "This affiliate code is not registered." });
+      assert Referrals.quote(db, buyer, " \t\n") == #err({ code = "invalid_referral"; message = "Enter a discount code." });
+      assert Referrals.quote(db, affiliate, " n1 ") == #err({ code = "invalid_referral"; message = "You cannot use your own affiliate code." });
+      assert db.referrals.size() == 1 and db.orders.size() == 0 and db.entitlements.size() == 0 and db.acquisitions.size() == 0;
+      assert Store.getReferralByOwner(db, buyer) == null;
+      assert Store.getReferralByOwner(db, anotherBuyer) == null;
+      // Read validation did not advance the durable code sequence.
+      assert Referrals.getOrCreate(db, buyer, 20).code == "N2";
+      assert Referrals.quote(Store.Use(mem), anotherBuyer, referral.code) == expected;
+    });
+  };
+
   public func entitled_owners_edit_one_rating_without_acquisition_effects() : async Test.Metrics {
     Test.test(func () {
       let mem = memory();
