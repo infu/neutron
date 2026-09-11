@@ -4,13 +4,14 @@ import { first, some, type Fee, type Option, type WireApp } from "./protocol.ts"
 import { loadIntent, saveIntent } from "./store.ts";
 import { unbase64, type PublicationPlan, UPLOAD_CHUNK_BYTES } from "./publication.ts";
 import type { PublicationQuote } from "./view-types.ts";
+import { validateListingText } from "./listing-text.ts";
 
 type Upload = { requestId: string; uploadedBytes: bigint; size: bigint; artifactId: Option<bigint>; state: Record<string, null> };
 type SavedPublication = { version: 1; canister: string; owner: string; plan: PublicationPlan; originalRevision: string | null; iconArtifact: string | null; screenshotArtifacts: string[] };
 function validatePlan(plan: PublicationPlan): void {
   const price = BigInt(plan.priceUsdMicros);
   if (price !== 0n && (price < 1_000_000n || price > 50_000_000n)) throw new Error("Apps must be free or priced from $1 to $50.");
-  if (!plan.title.trim() || !plan.summary.trim() || !plan.appId) throw new Error("Add the app ID, title and summary.");
+  if (!plan.title.trim() || !plan.summary.trim() || !plan.appId) throw new Error("Add the app ID, title and excerpt.");
   for (const file of plan.artifacts) if (!Number.isSafeInteger(file.size) || file.size < 1 || file.digest.length !== 32) throw new Error("An uploaded artifact has an invalid size or SHA-256 digest.");
 }
 function listingRequest(plan: PublicationPlan, existing: WireApp | null) {
@@ -26,6 +27,7 @@ async function existingApp(client: Client, appId: string): Promise<WireApp | nul
 }
 export async function quotePublication(context: MsgBusToolContext, plan: PublicationPlan): Promise<PublicationQuote> {
   validatePlan(plan);
+  validateListingText(plan);
   const client = await protocolClient(context);
   const current = await existingApp(client, plan.appId);
   const base = await client.estimateUpdate("listing_save", listingRequest(plan, current));
@@ -52,8 +54,11 @@ async function saved(context: MsgBusToolContext, requestId: string): Promise<Sav
 function sameMetadata(app: WireApp, plan: PublicationPlan): boolean { return app.title === plan.title && app.summary === plan.summary && app.description === plan.description && String(app.priceUsdMicros) === plan.priceUsdMicros; }
 export async function beginPublication(context: MsgBusToolContext, quote: PublicationQuote): Promise<{ requestId: string }> {
   const plan = quote.opaque as PublicationPlan; validatePlan(plan);
-  const client = await protocolClient(context);
   let retained = await loadIntent<SavedPublication>(context.kernel, `publication:${plan.requestId}`);
+  // Exact saved publications may predate today's listing limits. Their original
+  // scope, reviewed plan and remote listing must still pass the checks below.
+  if (!retained) validateListingText(plan);
+  const client = await protocolClient(context);
   if (retained) {
     await saved(context, plan.requestId);
     if (JSON.stringify(retained.plan) !== JSON.stringify(plan)) throw new Error("This upload ID belongs to different files or listing text.");

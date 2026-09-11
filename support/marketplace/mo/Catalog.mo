@@ -37,12 +37,28 @@ module {
     })) != "";
   };
 
-  public func validateListing(appId : Text, title : Text, summary : Text, priceUsdMicros : Nat) : Result<()> {
+  func validateListingIdentity(appId : Text, title : Text, summary : Text, priceUsdMicros : Nat) : Result<()> {
     if (not validAppId(appId)) return #err("App IDs must use 4–30 lowercase letters or digits, separated by single underscores.");
     if (not hasText(title)) return #err("Enter an app title.");
     if (not hasText(summary)) return #err("Enter a short app description.");
     if (not validPrice(priceUsdMicros)) return #err("An app must be free or priced between $1 and $50 before discounts.");
     #ok(());
+  };
+
+  // Text.size counts Unicode scalar values, matching Array.from(text).length
+  // in listing clients. These bounds apply to new listing revisions only.
+  func validateListingText(summary : Text, description : Text) : Result<()> {
+    if (summary.size() > 255) return #err("The app excerpt must be 255 characters or fewer.");
+    if (description.size() > 5_000) return #err("The app description must be 5000 characters or fewer.");
+    #ok(());
+  };
+
+  public func validateListing(appId : Text, title : Text, summary : Text, description : Text, priceUsdMicros : Nat) : Result<()> {
+    switch (validateListingIdentity(appId, title, summary, priceUsdMicros)) {
+      case (#err(error)) return #err(error);
+      case (#ok(())) {};
+    };
+    validateListingText(summary, description);
   };
 
   public type ListingInput = {
@@ -83,7 +99,7 @@ module {
   };
 
   public func save(db : Store.DB, owner : Principal, input : ListingInput, now : Int) : Result<Types.App> {
-    switch (validateListing(input.appId, input.title, input.summary, input.priceUsdMicros)) {
+    switch (validateListingIdentity(input.appId, input.title, input.summary, input.priceUsdMicros)) {
       case (#err(error)) return #err(error);
       case (#ok(())) {};
     };
@@ -109,6 +125,12 @@ module {
           case (?revision) { if (revision != 0) return #err("This listing does not exist at the expected revision.") };
         };
       };
+    };
+    // Retained listings and exact retries predate these bounds. Check after
+    // the no-op return so an upgrade never rewrites or rejects that history.
+    switch (validateListingText(input.summary, input.description)) {
+      case (#err(error)) return #err(error);
+      case (#ok(())) {};
     };
     let revision : Nat64 = switch (previous) { case null 1; case (?app) app.revision + 1 };
     let createdAtNs = switch (previous) { case null now; case (?app) app.createdAtNs };

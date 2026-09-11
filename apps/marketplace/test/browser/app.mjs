@@ -11,6 +11,8 @@ import { join } from "node:path";
 
 const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const output = process.env.MARKETPLACE_BROWSER_ARTIFACTS || "/tmp/neutron-marketplace-ui/browser";
+const listingExcerpt = "Find the connections in your research. Explore ideas with agent tools and keep the full context close at hand. ".repeat(3).slice(0, 255);
+const listingDescription = "Bring your research together in a workspace built for discovery.\n\nExplore your notes, connect ideas and use agent tools to work with your knowledge.\n\n".repeat(40).slice(0, 5000);
 await mkdir(output, { recursive: true });
 const transport = `export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler}); export const removeExposedTool=name=>window.marketplaceTools.delete(name); export const copyToClipboard=text=>{const state=window.marketplaceFixture;state.copies.push({text,active:navigator.userActivation.isActive});return state.copyFailure?Promise.reject(Error('Clipboard temporarily unavailable.')):Promise.resolve();}; export const connectEthereumProvider=()=>{throw Error('Unexpected browser wallet connection in IC checkout regression')};`;
 const fixture = `
@@ -26,11 +28,11 @@ const entries=[
  ['notes','Quiet Notes','A little space for your biggest ideas.','0'],
  ['garden','Garden','A clearer view of your day.','0'],
  ['studio','Canvas Studio','Create and collect what inspires you.','0'],
- ['atlas','Atlas','Find the connections in your research.','10000000'],
+ ['atlas','Atlas',${JSON.stringify(listingExcerpt)},'10000000'],
  ['focus','Focus','A considered space for your best work.','1999999'],
  ['folio','Folio','Your portfolio, beautifully in view.','5000000'],
 ];
-const listing=([id,title,summary,priceUsdMicros])=>({id,title,summary,priceUsdMicros,category:'Productivity',publisher:principal,version:'3',rating:id==='studio'?null:4.8,ratingCount:id==='studio'?0:42,owned:state.owned.includes(id),freeAcquisitions:priceUsdMicros==='0'?'42':'0',paidPurchases:priceUsdMicros==='0'?'0':'1234'});
+const listing=([id,title,summary,priceUsdMicros])=>({id,title,summary,priceUsdMicros,category:'Productivity',publisher:principal,version:'3',rating:id==='studio'?null:4.8,ratingCount:id==='studio'?0:42,owned:state.owned.includes(id),installed:state.installed.includes(id),freeAcquisitions:priceUsdMicros==='0'?'42':'0',paidPurchases:priceUsdMicros==='0'?'0':'1234'});
 const money=atoms=>({atoms,decimals:6,symbol:'ckUSDC'});
 const cycles={total:'1100000',processing:'1100000',schedule:'fixed-v1'};
 const quote=(args)=>{
@@ -45,7 +47,7 @@ const client={
  setDiscountCode:async input=>{const code=input.trim().toUpperCase();state.discountSaves.push(code);if(code&&code!=='QUIET-CODE'&&code!=='OTHER-CODE')throw Error(code==='SELF-CODE'?'You cannot use your own affiliate code.':'That discount code was not found.');state.discountCode=code||null;if(code)localStorage.setItem('discountCode',code);else localStorage.removeItem('discountCode');return discount(state.discountCode);},
  initialize:async()=>{state.initializations++;if(scenario.get('setup')==='fatal'&&state.initializations===1)throw Error('Neutron is temporarily unavailable.');if(scenario.get('setup')==='delegate')return {...session,connected:false,connectionError:'Read access could not be prepared.'};return session;},configure:async x=>({...session,...x}),connect:async()=>{state.connections++;return session;},
  catalog:async input=>{state.calls.push(['catalog',input]);if(scenario.get('catalog')==='paid-error'&&input.tier==='paid'&&!state.paidReadFailed){state.paidReadFailed=true;throw Error('Paid charts are temporarily unavailable.');}const matches=entries.filter(x=>(input.tier==='free'?x[3]==='0':x[3]!=='0')&&x[1].toLowerCase().includes(input.search.toLowerCase()));const paged=scenario.get('catalog')==='paged';return {items:(paged?(input.cursor?matches.slice(1):matches.slice(0,1)):matches).map(listing),nextCursor:paged&&!input.cursor&&matches.length>1?input.tier+'-next':null,asOf:'2026-09-10T00:00:00Z',warning:'Rankings are refreshing. These results share the displayed snapshot time.'}},
- detail:async id=>({...listing(entries.find(x=>x[0]===id)),description:'Your ideas deserve a place of their own. Work in a calm, focused space, with everything you need at your fingertips.',screenshots:[],audit:{auditor:principal,verdict:'approved',analysis:'The submitted package was checked for malware. No malicious behavior was found in this review.',date:'2026-09-10T00:00:00Z',packageHash:'a'.repeat(64)},ownRating:null}),
+ detail:async id=>({...listing(entries.find(x=>x[0]===id)),description:${JSON.stringify(listingDescription)},screenshots:[],audit:{auditor:principal,verdict:'approved',analysis:'The submitted package was checked for malware. No malicious behavior was found in this review.',date:'2026-09-10T00:00:00Z',packageHash:'a'.repeat(64)},ownRating:null}),
  library:async()=>({items:entries.filter(x=>state.owned.includes(x[0])).map(x=>({...listing(x),acquiredAt:'2026-09-10',installedVersion:state.installed.includes(x[0])?'1':null,available:true})),nextCursor:null}),
  publisherApps:async()=>({items:[],nextCursor:null}),
  quotePublication:async()=>{throw Error('Unexpected publication')},publish:async()=>{throw Error('Unexpected publication')},
@@ -102,6 +104,10 @@ try {
   assert.equal(await page.getByText("Rankings are refreshing. These results share the displayed snapshot time.", { exact: true }).count(), 0);
   assert.equal(await page.getByRole("region", { name: "Top paid", exact: true }).getByText("1,234 purchases", { exact: true }).count(), 3);
   assert.equal(await page.getByRole("region", { name: "Top free", exact: true }).getByText("42 added", { exact: true }).count(), 3);
+  assert.equal(await page.locator('.mp-app-card').count(), 6);
+  assert.equal(await page.locator('button.mp-app-card[aria-haspopup="dialog"]').count(), 6);
+  assert.equal(await page.locator('.mp-app-card button, .mp-app-card a, .mp-app-card [tabindex]').count(), 0, "each card has one native keyboard-accessible target");
+  assert.equal(await page.getByRole("button", { name: /Atlas Productivity/ }).locator('.mp-card-summary').innerText(), listingExcerpt);
   checks.push("Marketplace initializes automatically for this Neutron, without a Connect action; paid then free charts are visible together with no rank numbers.");
   for (const width of [320, 380, 480, 960]) {
     await page.setViewportSize({ width, height: 760 });
@@ -117,13 +123,32 @@ try {
   }
   checks.push("Explore is compact at 320, 380, 480 and 960px, with readable paid purchase/free acquisition counts and no ranking-refresh notice or horizontal overflow.");
   await page.setViewportSize({ width: 380, height: 760 });
+  await page.getByRole("searchbox", { name: "Search apps", exact: true }).focus();
+  const searchFocus = await page.locator('.mp-search input').evaluate(input => {
+    const field = getComputedStyle(input), wrapper = getComputedStyle(input.closest('.mp-search'));
+    const accent = document.createElement('span'); accent.style.color = wrapper.getPropertyValue('--nt-accent'); document.body.append(accent);
+    const accentColor = getComputedStyle(accent).color; accent.remove();
+    return { focused: input === document.activeElement, outline: field.outlineStyle, border: field.borderWidth, shadow: field.boxShadow, appearance: field.appearance, wrapperBorder: wrapper.borderColor, accent: accentColor };
+  });
+  assert.equal(searchFocus.focused, true);
+  assert.equal(searchFocus.outline, "none");
+  assert.equal(searchFocus.border, "0px");
+  assert.equal(searchFocus.shadow, "none");
+  assert.equal(searchFocus.appearance, "none");
+  assert.equal(searchFocus.wrapperBorder, searchFocus.accent);
+  await page.screenshot({ path: join(output, "search-focus-380.png") });
+  checks.push("Focused search has one visible accent border around the entire field and no nested input border or focus ring.");
   await page.getByRole("combobox", { name: "Ranking period" }).selectOption("month");
-  await page.getByRole("button", { name: "$1.999999", exact: true }).waitFor();
+  await page.locator(".mp-card-price").getByText("$1.999999", { exact: true }).waitFor();
   assert.ok(await page.evaluate(() => ['paid','free'].every(tier=>window.marketplaceFixture.calls.some(x=>x[0]==='catalog' && x[1].tier===tier && x[1].window==='month'))));
   checks.push("Ranking controls request the selected rolling window; exact micro-dollar list prices are not truncated.");
-  await page.getByRole("button", { name: /Atlas Productivity/ }).click();
+  await page.getByRole("button", { name: /Atlas Productivity/ }).locator('.mp-card-price').click();
   const appDetail = page.getByRole("dialog", { name: "Atlas", exact: true });
   await appDetail.getByText("Audited by AI", { exact: true }).waitFor();
+  assert.equal(await page.getByRole("dialog", { name: "Review purchase", exact: true }).count(), 0);
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.calls.filter(call => ['quotePurchase', 'purchase'].includes(call[0])).length), 0, "clicking a price only opens app details");
+  assert.equal(await appDetail.locator('.mp-description').first().innerText(), listingDescription);
+  assert.equal(await appDetail.locator('.mp-description').first().evaluate(node => getComputedStyle(node).whiteSpace), "pre-wrap");
   const purchases = appDetail.locator('.mp-detail-stats > div').filter({ hasText: 'Purchases · All time' });
   assert.equal(await purchases.locator('strong').innerText(), '1,234');
   await page.setViewportSize({ width: 320, height: 760 });
@@ -134,7 +159,8 @@ try {
   assert.match(await appDetail.locator('.mp-audit').innerText(), /3rurp-vyaaa-aaaay-aacua-cai/);
   assert.match(await appDetail.locator('.mp-audit').innerText(), /submitted package was checked for malware/);
   await appDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
-  await page.getByRole("button", { name: /Quiet Notes Productivity/ }).click();
+  await page.getByRole("button", { name: /Quiet Notes Productivity/ }).focus();
+  await page.keyboard.press("Enter");
   const freeDetail = page.getByRole("dialog", { name: "Quiet Notes", exact: true });
   const additions = freeDetail.locator('.mp-detail-stats > div').filter({ hasText: 'Added · All time' });
   await additions.waitFor();
@@ -144,6 +170,31 @@ try {
   await freeDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.setViewportSize({ width: 380, height: 760 });
   checks.push("Paid and free details show their all-time acquisition counts on narrow tiles; Audited by AI retains the auditor principal and exact review analysis.");
+  checks.push("Whole cards, including price and Owned labels, open details with one keyboard-accessible target; 255-character excerpts wrap and full 5,000-character descriptions preserve paragraphs.");
+  const installationQuotesBefore = await page.evaluate(() => window.marketplaceFixture.installationQuotes.length);
+  await page.evaluate(() => { window.marketplaceFixture.installed = ['atlas', 'studio']; });
+  await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
+  for (const title of ['Atlas', 'Canvas Studio']) {
+    const card = page.getByRole("button", { name: new RegExp(title + " Productivity") });
+    await card.locator('.mp-card-price').getByText('Owned', { exact: true }).waitFor();
+    await card.locator('.mp-card-price').click();
+    const installedDetail = page.getByRole("dialog", { name: title, exact: true });
+    await installedDetail.getByText("Audited by AI", { exact: true }).waitFor();
+    assert.equal(await installedDetail.getByRole("button", { name: "Installed", exact: true }).isDisabled(), true);
+    assert.equal(await installedDetail.getByRole("button", { name: /^(Get|Buy|Install app)/ }).count(), 0);
+    assert.equal(await installedDetail.getByRole("button", { name: "Rate app", exact: true }).count(), 0, "local installation does not grant marketplace rating entitlement");
+    assert.equal(await installedDetail.locator('.mp-detail-stats').getByText('Owned', { exact: true }).count(), 1);
+    assert.equal(await installedDetail.getByText('Installed on this Neutron', { exact: true }).count(), 1);
+    assert.equal(await installedDetail.getByText('Future updates included', { exact: true }).count(), 0);
+    await installedDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
+  }
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.installationQuotes.length), installationQuotesBefore, "installed apps do not quote installation or acquisition");
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.calls.filter(call => ['quotePurchase', 'purchase'].includes(call[0])).length), 0);
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.owned), ['notes', 'garden'], "installed app display leaves durable entitlements unchanged");
+  await page.evaluate(() => { window.marketplaceFixture.installed = []; });
+  await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
+  await page.getByRole("button", { name: /Atlas Productivity/ }).locator('.mp-card-price').getByText('$10.00', { exact: true }).waitFor();
+  checks.push("Locally installed free and paid apps display Owned immediately on refreshed cards and Installed in details, without acquisition/installation calls or implied marketplace rating entitlements.");
   const headerDiscount = page.locator('.mp-header').getByRole('button', { name: /^Discount code/ });
   await headerDiscount.click();
   const discountDialog = page.getByRole('dialog', { name: 'Discount code', exact: true });
@@ -158,9 +209,9 @@ try {
   await page.screenshot({ path: join(output, 'discount-activated-380.png') });
   await discountDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   assert.match(await headerDiscount.getAttribute('aria-label'), /10%/);
-  const atlasCard = page.locator('.mp-app-card').filter({ has: page.getByRole('button', { name: /Atlas Productivity/ }) });
+  const atlasCard = page.getByRole('button', { name: /Atlas Productivity/ });
   assert.match(await atlasCard.locator('del').innerText(), /\$10\.00$/);
-  assert.match(await atlasCard.getByRole('button', { name: /\$9\.00/ }).innerText(), /\$9\.00/);
+  assert.match(await atlasCard.locator('.mp-card-price').innerText(), /\$9\.00/);
   for (const width of [320, 380, 960]) {
     await page.setViewportSize({ width, height: 760 });
     assert.equal(await page.locator('.mp-navigation').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, `Activity tab must fit at ${width}px`);
@@ -187,7 +238,8 @@ try {
   await atlasCard.locator('del').waitFor();
   assert.match(await headerDiscount.getAttribute('aria-label'), /10%/);
   checks.push('A saved discount activates once, renders crossed-out original and exact discounted prices, restores after reload, rejects invalid/self-code changes without dropping the old code, supports change/clear, and fits alongside the bell tab at 320px.');
-  await atlasCard.getByRole('button', { name: /\$9\.00/ }).click();
+  await atlasCard.locator('.mp-card-price').click();
+  await page.getByRole('dialog', { name: 'Atlas', exact: true }).getByRole('button', { name: 'Get · $9.00', exact: true }).click();
   const checkout = page.getByRole("dialog", { name: "Review purchase", exact: true });
   assert.equal(await checkout.getByLabel(/Affiliate code/).count(), 0);
   assert.match(await checkout.innerText(), /QUIET-CODE/);
@@ -327,8 +379,9 @@ try {
   await discountDialog.getByRole('button', { name: 'Remove code', exact: true }).click();
   await discountDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole("button", { name: "Explore", exact: true }).click();
-  const studio = page.locator('.mp-app-card').filter({ has: page.getByRole("button", { name: /Canvas Studio/ }) });
-  await studio.getByRole("button", { name: "Free", exact: true }).click();
+  const studio = page.getByRole('button', { name: /Canvas Studio/ });
+  await studio.locator(".mp-card-price").click();
+  await page.getByRole("dialog", { name: "Canvas Studio", exact: true }).getByRole("button", { name: "Get app", exact: true }).click();
   const freeRoot = page.getByRole("dialog", { name: "Add to My Apps", exact: true });
   await freeRoot.getByRole("button", { name: "Review costs", exact: true }).click();
   const dependencyCheckout = page.getByRole("dialog", { name: "Review purchase", exact: true });
@@ -379,7 +432,8 @@ try {
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), [], 'opening activity cannot dispatch or replay a payment');
   checks.push('The bell is a fifth Activity tab; confirmed pre-submission browser cancellation is absent, uncertain and unclassified failures remain recoverable, and no wallet status is pinned over browsing. Activity fits 320/380/960px without replay.');
   await page.goto(url);
-  await page.getByRole('button', { name: '$10.00', exact: true }).click();
+  await page.getByRole('button', { name: /Atlas Productivity/ }).click();
+  await page.getByRole('dialog', { name: 'Atlas', exact: true }).getByRole('button', { name: 'Get · $10.00', exact: true }).click();
   await page.evaluate(() => { window.marketplaceFixture.cancelPurchase = true; });
   const canceledCheckout = page.getByRole('dialog', { name: 'Review purchase', exact: true });
   await canceledCheckout.getByRole('button', { name: 'Review costs', exact: true }).click();
@@ -396,7 +450,8 @@ try {
   checks.push('A later durable receipt supersedes a locally canceled observation on refresh; visibility is based on the newest evidence, without a replacement purchase.');
 
   await page.goto(url);
-  await page.getByRole('button', { name: '$10.00', exact: true }).click();
+  await page.getByRole('button', { name: /Atlas Productivity/ }).click();
+  await page.getByRole('dialog', { name: 'Atlas', exact: true }).getByRole('button', { name: 'Get · $10.00', exact: true }).click();
   await page.evaluate(() => { window.marketplaceFixture.cancelPurchase = 'ic'; });
   const declinedIcCheckout = page.getByRole('dialog', { name: 'Review purchase', exact: true });
   await declinedIcCheckout.getByRole('button', { name: 'Review costs', exact: true }).click();

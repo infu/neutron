@@ -45,6 +45,28 @@ let connectionFlight: { generation: number; promise: Promise<Session> } | null =
 let agentCache: { key: string; agent: Awaited<ReturnType<typeof makeAgent>> } | null = null;
 let infoCache: { key: string; info: Promise<Info> } | null = null;
 let discountCache: { key: string; preference: ReturnType<typeof createDiscountPreferences> } | null = null;
+let installedAppsFlight: Promise<ReadonlySet<string>> | null = null;
+
+async function installedApps(context: MsgBusToolContext): Promise<ReadonlySet<string> | null> {
+  context.signal?.throwIfAborted();
+  // Concurrent storefront sections share one Kernel read. Keep no completed
+  // snapshot, so opening another listing observes installs and uninstalls.
+  if (!installedAppsFlight) {
+    const flight = Promise.resolve().then(() => context.kernel.listApps()).then(apps => {
+      if (!isJsonObject(apps) || !Array.isArray(apps.apps)) throw new Error("Installed app information is unavailable.");
+      return new Set(apps.apps.flatMap(app => isJsonObject(app) && typeof app.id === "string" ? [app.id] : []));
+    }).finally(() => { if (installedAppsFlight === flight) installedAppsFlight = null; });
+    installedAppsFlight = flight;
+  }
+  try {
+    const apps = await installedAppsFlight;
+    context.signal?.throwIfAborted();
+    return apps;
+  } catch {
+    context.signal?.throwIfAborted();
+    return null;
+  }
+}
 
 async function currentState(context: MsgBusToolContext): Promise<StoredState> {
   if (savedState) return savedState;
@@ -55,7 +77,7 @@ async function currentState(context: MsgBusToolContext): Promise<StoredState> {
   return stateFlight;
 }
 export function session(state: StoredState): Session { return { configured: state.canisterId !== null, canisterId: state.canisterId ?? "", host: state.host, account: state.owner, connected }; }
-export function clearClient(): void { clientGeneration++; savedState = null; stateFlight = null; connected = false; browserReadIdentity = null; connectionFlight = null; agentCache = null; infoCache = null; discountCache = null; }
+export function clearClient(): void { clientGeneration++; savedState = null; stateFlight = null; connected = false; browserReadIdentity = null; connectionFlight = null; agentCache = null; infoCache = null; discountCache = null; installedAppsFlight = null; }
 export async function configured(context: MsgBusToolContext, input: { canisterId: string; host: string }): Promise<Session> {
   const state = await configureState(context.kernel, input); clearClient(); savedState = state; return session(state);
 }
@@ -134,15 +156,16 @@ export async function protocolClient(context: MsgBusToolContext) {
     if (url.origin !== new URL(base).origin) throw new Error("A marketplace image referenced another origin.");
     return url.toString();
   }
-  function listing(value: WireApp): AppListing {
+  function listing(value: WireApp, installed?: ReadonlySet<string> | null): AppListing {
     const icon = first(value.iconUrl);
     const counts = first(value.acquisitionCounts ?? []);
-    return { id: value.appId, title: value.title, summary: value.summary, category: "Apps", publisher: value.publisher.toText(), priceUsdMicros: String(value.priceUsdMicros), ...(icon ? { iconUrl: artifactUrl(icon) } : {}), version: String(first(value.version) ?? 0n), rating: value.ratingCount ? Number(value.ratingTotal) / Number(value.ratingCount) : null, ratingCount: Number(value.ratingCount), ...(counts ? { freeAcquisitions: String(counts.free), paidPurchases: String(counts.paid) } : {}), owned: value.owned };
+    return { id: value.appId, title: value.title, summary: value.summary, category: "Apps", publisher: value.publisher.toText(), priceUsdMicros: String(value.priceUsdMicros), ...(icon ? { iconUrl: artifactUrl(icon) } : {}), version: String(first(value.version) ?? 0n), rating: value.ratingCount ? Number(value.ratingTotal) / Number(value.ratingCount) : null, ratingCount: Number(value.ratingCount), ...(counts ? { freeAcquisitions: String(counts.free), paidPurchases: String(counts.paid) } : {}), owned: value.owned, ...(installed ? { installed: installed.has(value.appId) } : {}) };
   }
   async function detailWire(appId: string): Promise<Detail> { return query("app_detail", [appId]); }
   async function detail(appId: string): Promise<AppDetail> {
-    const value = await detailWire(appId), review = first(value.audit), candidate = first(value.candidate), rating = first(value.rating);
-    return { ...listing(value.app), description: value.app.description, screenshots: value.app.screenshots.map(url => ({ url: artifactUrl(url) })), audit: review ? { auditor: review.auditor.toText(), verdict: Object.keys(review.decision)[0] as "approved" | "rejected" | "revoked", analysis: first(review.reason) ?? review.analysis, date: date(review.createdAtNs), packageHash: candidate ? hex(candidate.digest) : "" } : null, ownRating: rating ? { stars: Number(rating.stars), text: rating.review } : null };
+    const [value, installed] = await Promise.all([detailWire(appId), installedApps(context)]);
+    const review = first(value.audit), candidate = first(value.candidate), rating = first(value.rating);
+    return { ...listing(value.app, installed), description: value.app.description, screenshots: value.app.screenshots.map(url => ({ url: artifactUrl(url) })), audit: review ? { auditor: review.auditor.toText(), verdict: Object.keys(review.decision)[0] as "approved" | "rejected" | "revoked", analysis: first(review.reason) ?? review.analysis, date: date(review.createdAtNs), packageHash: candidate ? hex(candidate.digest) : "" } : null, ownRating: rating ? { stars: Number(rating.stars), text: rating.review } : null };
   }
   async function purchaseView(quote: Checkout, includeWallet = false): Promise<PurchaseQuote> {
     const selected = info.tokens.find(t => t.ledger.toText() === quote.request.ledger.toText());
@@ -184,11 +207,15 @@ export async function protocolClient(context: MsgBusToolContext) {
     purchaseCode: (explicit: string | undefined) => preference.purchaseCode(discountAccess, explicit), estimateUpdate, grantSourceAccess, listing, detailWire, detail, purchaseView, withdrawalView,
     async catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>> {
       const parsed = input.cursor ? JSON.parse(input.cursor) as { generation: string; offset: string } : null;
-      const value = await query<{ apps: WireApp[]; nextCursor: Option<{ generation: bigint; offset: bigint }>; asOfNs: bigint; refreshing: boolean }>("catalog_query", [{ search: input.search, tier: { [input.tier]: null }, window: { [input.window]: null }, cursor: parsed ? [{ generation: BigInt(parsed.generation), offset: BigInt(parsed.offset) }] : [], limit: 24n }]);
+      const [value, installed] = await Promise.all([
+        query<{ apps: WireApp[]; nextCursor: Option<{ generation: bigint; offset: bigint }>; asOfNs: bigint; refreshing: boolean }>("catalog_query", [{ search: input.search, tier: { [input.tier]: null }, window: { [input.window]: null }, cursor: parsed ? [{ generation: BigInt(parsed.generation), offset: BigInt(parsed.offset) }] : [], limit: 24n }]),
+        installedApps(context),
+      ]);
       const next = first(value.nextCursor);
+      const warning = [value.refreshing ? "Rankings are refreshing. These results share the displayed snapshot time." : "", installed === null ? "Installed-app status is unavailable." : ""].filter(Boolean).join(" ");
       // System packages stay available to the installer and update source, but
       // do not occupy the storefront or its discovery-tool results.
-      return { items: value.apps.filter(app => app.appId !== "kernel" && app.appId !== "marketplace").map(listing), nextCursor: next ? JSON.stringify({ generation: String(next.generation), offset: String(next.offset) }) : null, asOf: date(value.asOfNs), ...(value.refreshing ? { warning: "Rankings are refreshing. These results share the displayed snapshot time." } : {}) };
+      return { items: value.apps.filter(app => app.appId !== "kernel" && app.appId !== "marketplace").map(app => listing(app, installed)), nextCursor: next ? JSON.stringify({ generation: String(next.generation), offset: String(next.offset) }) : null, asOf: date(value.asOfNs), ...(warning ? { warning } : {}) };
     },
     async library(cursor?: string): Promise<Page<LibraryApp>> {
       const value = await query<{ apps: WireApp[]; nextCursor: Option<bigint> }>("library_query", [{ cursor: cursor ? [BigInt(cursor)] : [], limit: 24n }]);

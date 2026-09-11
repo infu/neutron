@@ -1,5 +1,20 @@
 # Catalog prices and acquisition rankings
 
+## Listing text
+
+The existing `summary` field is the app excerpt: new listing revisions accept
+at most 255 Unicode scalar values. The expanded `description` accepts at most
+5000. Motoko `Text.size()` and JavaScript `Array.from(text).length` count these
+consistently, including supplementary characters such as emoji. Excerpts remain
+required; the protocol retains compatibility with empty descriptions.
+
+Every listing write uses the same domain validation, including trusted
+publisher writes and publisher reservations. Rejected writes leave the current
+listing and revision history unchanged. Existing listings are retained verbatim,
+and an exact retry remains a no-op even when historical text exceeds a new bound;
+an edited revision must satisfy both limits. Package publication and historical
+receipts do not revalidate or rewrite saved listing text.
+
 ## Price and counting rules
 
 The protocol accepts list price `0`, or integer USD micro-units in the inclusive

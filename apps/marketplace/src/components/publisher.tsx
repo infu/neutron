@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { MarketplaceClient, PublicationInput, PublicationQuote, PublishedApp } from "../view-types.ts";
 import { AppIcon, CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, dateLabel, decimalAmount, errorMessage, parseAmount, usd } from "./primitives.tsx";
+import { EXCERPT_MAX_CHARACTERS, DESCRIPTION_MAX_CHARACTERS, listingCharacterCount, validateListingText } from "../listing-text.ts";
 
 type Props = {
   client: MarketplaceClient;
@@ -121,6 +122,7 @@ export function PublisherPanel({ client, connected, refresh, onChanged }: Props)
     actionInFlight.current = true;
     setQuoting(true); setError("");
     try {
+      validateListingText(draft);
       const priceUsdMicros = draft.paid ? parseAmount(draft.price, 6) : "0";
       if (draft.paid && (BigInt(priceUsdMicros) < 1_000_000n || BigInt(priceUsdMicros) > 50_000_000n)) throw new Error("Choose a price from $1 to $50, or make your app free.");
       if (!editing && !draft.packageFile) throw new Error("Choose the .neutron package for your app.");
@@ -150,6 +152,7 @@ export function PublisherPanel({ client, connected, refresh, onChanged }: Props)
 
   const retainedDraft = draftStarted && !success;
   const editorBusy = quoting || publishing || detailLoading;
+  const excerptCharacters = listingCharacterCount(draft.summary), descriptionCharacters = listingCharacterCount(draft.description);
   const fileLabel = (file: File | null, fallback: string) => file ? `${file.name} · ${bytesLabel(file.size)}` : fallback;
 
   if (!connected) return <EmptyState icon="publish" title="Your publications are unavailable">Retry setup above to load your publications and saved releases.</EmptyState>;
@@ -189,8 +192,8 @@ export function PublisherPanel({ client, connected, refresh, onChanged }: Props)
         <fieldset disabled={editorBusy || !!detailError} className="mp-form-group"><legend>App details</legend>
           <label className="mp-field"><span>App name</span><input required value={draft.title} onChange={(event) => update("title", event.target.value)} autoComplete="off" /></label>
           <label className="mp-field"><span>App ID</span><input required value={draft.appId} readOnly={!!editing} onChange={(event) => update("appId", event.target.value)} autoCapitalize="none" autoComplete="off" spellCheck={false} /></label>
-          <label className="mp-field"><span>Short description</span><input required value={draft.summary} onChange={(event) => update("summary", event.target.value)} /></label>
-          <label className="mp-field"><span>Full description</span><textarea required rows={5} value={draft.description} onChange={(event) => update("description", event.target.value)} /></label>
+          <div className="mp-field"><label htmlFor="mp-publication-excerpt">Excerpt</label><textarea id="mp-publication-excerpt" required rows={3} value={draft.summary} aria-describedby="mp-publication-excerpt-help" aria-invalid={excerptCharacters > EXCERPT_MAX_CHARACTERS} onChange={(event) => update("summary", event.target.value)} /><small id="mp-publication-excerpt-help" className={excerptCharacters > EXCERPT_MAX_CHARACTERS ? "mp-field-error" : "mp-muted"}>{excerptCharacters.toLocaleString()} / {EXCERPT_MAX_CHARACTERS} characters · Shown on the app card.</small></div>
+          <div className="mp-field"><label htmlFor="mp-publication-description">Description</label><textarea id="mp-publication-description" required rows={8} value={draft.description} aria-describedby="mp-publication-description-help" aria-invalid={descriptionCharacters > DESCRIPTION_MAX_CHARACTERS} onChange={(event) => update("description", event.target.value)} /><small id="mp-publication-description-help" className={descriptionCharacters > DESCRIPTION_MAX_CHARACTERS ? "mp-field-error" : "mp-muted"}>{descriptionCharacters.toLocaleString()} / {DESCRIPTION_MAX_CHARACTERS.toLocaleString()} characters · Shown when someone opens your app.</small></div>
         </fieldset>
         <fieldset disabled={editorBusy || !!detailError} className="mp-form-group"><legend>Price</legend>
           <div className="mp-price-options"><label><input type="radio" name="mp-publication-price" checked={!draft.paid} onChange={() => update("paid", false)} />Free</label><label><input type="radio" name="mp-publication-price" checked={draft.paid} onChange={() => update("paid", true)} />Paid</label></div>

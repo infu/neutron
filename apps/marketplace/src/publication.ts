@@ -3,12 +3,14 @@ import { normalizeManifestDependencies, type NeutronManifest } from "neutron-too
 import { NEUTRON_APP_SOURCE_MEDIA_TYPE } from "neutron-tools/src/package_record.js";
 import { randomId } from "./client.ts";
 import type { PublicationInput } from "./view-types.ts";
+import { validateListingText } from "./listing-text.ts";
 
 export type ArtifactInput = { requestId: string; role: "package" | "source" | "icon" | "screenshot"; name: string; size: number; digest: number[]; mediaType: string; purpose: "package" | "source" | "image" };
 export type PublicationPlan = { requestId: string; appId: string; title: string; summary: string; description: string; priceUsdMicros: string; artifacts: ArtifactInput[]; version: string | null; dependencies: Array<{ appId: string; minVersion: string }> };
 export const UPLOAD_CHUNK_BYTES = 48 * 1024; // Leaves room for base64 and message metadata under the existing bus envelope.
 export const NEUTRON_PACKAGE_MEDIA_TYPE = "application/vnd.neutron.package";
 export async function preparePublication(input: PublicationInput): Promise<PublicationPlan> {
+  validateListingText(input);
   if (!/^[a-z][a-z0-9_-]*$/.test(input.appId)) throw new Error("Enter the package's application ID.");
   const price = BigInt(input.priceUsdMicros);
   if (price !== 0n && (price < 1_000_000n || price > 50_000_000n)) throw new Error("Apps must be free or priced from $1 to $50.");

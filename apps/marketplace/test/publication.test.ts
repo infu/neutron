@@ -4,6 +4,8 @@ import { gzipSync } from "node:zlib";
 import { NEUTRON_APP_SOURCE_MEDIA_TYPE } from "neutron-tools/src/package_record.js";
 import { NEUTRON_PACKAGE_MEDIA_TYPE, preparePublication } from "../src/publication.ts";
 import type { PublicationInput } from "../src/view-types.ts";
+import { beginPublication, quotePublication } from "../src/publishing.ts";
+import { DESCRIPTION_MAX_CHARACTERS, EXCERPT_MAX_CHARACTERS } from "../src/listing-text.ts";
 
 // The packer emits a MessagePack string -> binary map of individually gzipped
 // files. This small fixture uses that format without a built production app.
@@ -51,3 +53,26 @@ test("supported image MIME and original image digests are retained", async () =>
 for (const type of ["", "text/plain"]) test(`unsupported image MIME ${JSON.stringify(type)} is still rejected`, async () => {
   await expect(preparePublication({ ...input(), iconFile: new File(["image fixture"], "icon.png", { type }) })).rejects.toThrow("Choose a supported image file");
 });
+
+for (const character of ["a", "🪐"]) {
+  test(`listing text accepts exact character limits for ${character}`, async () => {
+    const fields = { ...input(), summary: character.repeat(EXCERPT_MAX_CHARACTERS), description: character.repeat(DESCRIPTION_MAX_CHARACTERS) };
+    const plan = await preparePublication(fields);
+    expect(plan.summary).toBe(fields.summary);
+    expect(plan.description).toBe(fields.description);
+  });
+
+  for (const [field, limit, message] of [
+    ["summary", EXCERPT_MAX_CHARACTERS, "Keep the excerpt to 255 characters or fewer."],
+    ["description", DESCRIPTION_MAX_CHARACTERS, "Keep the description to 5,000 characters or fewer."],
+  ] as const) test(`overlong ${field} is rejected before reading files or accessing the service for ${character}`, async () => {
+    const files = { ...input(), [field]: character.repeat(limit + 1) };
+    files.packageFile!.arrayBuffer = async () => { throw new Error("Invalid text must be rejected before reading uploads."); };
+    await expect(preparePublication(files)).rejects.toThrow(message);
+    const validPlan = await preparePublication(input());
+    const plan = { ...validPlan, [field]: files[field] };
+    const context = { kernel: { querySelf: async () => [] } } as unknown as Parameters<typeof quotePublication>[0];
+    await expect(quotePublication(context, plan)).rejects.toThrow(message);
+    await expect(beginPublication(context, { opaque: plan } as Parameters<typeof beginPublication>[1])).rejects.toThrow(message);
+  });
+}

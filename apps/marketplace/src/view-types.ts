@@ -8,7 +8,12 @@ export type Page<T> = { items: T[]; nextCursor: string | null; asOf?: string; wa
 export type AppListing = {
   id: string; title: string; summary: string; category: string; publisher: string;
   priceUsdMicros: string; iconUrl?: string; version: string;
-  rating: number | null; ratingCount: number; owned?: boolean;
+  rating: number | null; ratingCount: number;
+  /** Acquisition recorded by Marketplace, independent of local installation. */
+  owned?: boolean;
+  /** Current Kernel installation; omitted when the installed-app read fails. */
+  installed?: boolean;
+  installedVersion?: string | null;
   /** Exact lifetime counts; retries and reinstalls do not count again. */
   freeAcquisitions?: string; paidPurchases?: string;
 };

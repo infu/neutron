@@ -316,3 +316,58 @@ command passed. No live financial action was used for qualification.
 Both publication postflights matched all 54 frozen package/source artifacts. The
 exact repeat returned receipt-v2 `batch_id: null`, with all 27 packages and sources
 `unchanged` and their versions, paths, URLs, lengths and digests verified.
+
+## Listing descriptions and ownership display — Marketplace115
+
+Marketplace `0.1.15` was published in catalog batch `7` on 2026-09-11.
+The archive is 485,071 bytes with SHA-256
+`9478432201668f3984621b934d89eb48969c34d89c47e957671a3a9ce4cbca26`.
+Its offered source is 1,779,461 bytes with SHA-256
+`c69040503aa37ea33b84ad0cc492ee61e4be0b391e503389b0709f4624f7d236`.
+Only Marketplace changed in the 27-package transaction. Kernel359, the legacy
+source and the Dispenser starter remain unchanged.
+
+The storefront recognizes apps currently installed in the Neutron, including
+older installations, and shows Owned on cards and Installed in app details.
+Local installation stays distinct from Marketplace acquisition records; it does
+not grant paid-download access or rating eligibility. My Apps keeps its existing
+entitlement and installed-version behavior. Whole cards, including price labels,
+open details. The search input uses one visible focus border.
+
+Publishers can edit an excerpt of up to 255 Unicode characters and an expanded
+description of up to 5,000, with matching counters and validation. New listing
+revisions enforce those limits. Historical records remain intact, and exact
+saved publication retries retain their original text and recovery identities.
+All 27 first-party listings received reviewed feature and agent-tool copy from
+[the curated inventory](../content/listings.en.json). ICPSwap, Uniswap, Curve,
+Hyperliquid and Aave excerpts identify independent Neutron integrations.
+The 25 storefront apps remain visible across all ranking windows; Kernel and
+Marketplace stay excluded by the storefront filter. Existing prices, titles,
+icons, screenshots and approved package references were preserved.
+
+App managed memory remains state v2. Backend, released schemas, migration and
+lock lineage are byte-for-byte unchanged. Backend clean initialization,
+v1-to-v2 migration and restoration checks passed, along with focused client,
+publication and saved-publication recovery tests, typecheck, complete packaging,
+and app, publisher, Ethereum-checkout and installation browser suites. Browser
+checks cover compact layouts, long copy, installed paid/free apps, detail-first
+navigation and the single search focus border.
+
+The protocol was upgraded in place with memory retained to
+`f3665ba9677b98df17c6c85fde1207e205bfe3e8bded609a864e5648e3bd2d5e`.
+Candid and stable types are unchanged. Four focused catalog domain tests and a
+PocketIC clean-initialization/exact-production-predecessor upgrade case passed,
+including Unicode boundaries, historical listing retries, preserved acquisitions,
+referrals, approvals, publication receipts, package/source data and access grants.
+Live postflight verified the running module, retained controllers and matching
+listing/release/media records for all 27 apps before the copy update.
+
+The initial publisher attempt stopped in the local response verifier. The exact
+same frozen bytes and publication request were retained for reconciliation.
+Publication succeeded; its required exact repeat returned receipt-v2
+`batch_id: null`, with all 27 packages and offered sources unchanged on repeat,
+matching versions, URLs, paths, lengths and digests. All 54 frozen artifacts
+matched. Listing-copy postflight separately verified all 27 exact descriptions,
+preserved prices/media/releases, and all six public ranking views. No live
+purchase or wallet transaction was used for qualification, and no Git push is
+included.

@@ -125,7 +125,8 @@ try {
   const snapshot = () => page.evaluate(() => ({ events: window.ethereumFixture.events, quotes: window.ethereumFixture.quotes, purchases: window.ethereumFixture.purchases, resumes: window.ethereumFixture.resumes, verifications: window.ethereumFixture.verifications, owned: window.ethereumFixture.owned, installed: window.ethereumFixture.installed, stage: window.ethereumFixture.stage, closed: window.ethereumFixture.connections.map(connection=>connection.closed) }));
   const open = async wallet => {
     await page.goto(url);
-    await page.getByRole("button", { name: "$5.00", exact: true }).click();
+    await page.getByRole("button", { name: /Canvas Studio/ }).click();
+    await page.getByRole("dialog", { name: "Canvas Studio", exact: true }).getByRole("button", { name: "Get · $5.00", exact: true }).click();
     const checkout = page.getByRole("dialog", { name: "Review purchase", exact: true });
     await checkout.getByLabel("Pay with", { exact: true }).selectOption('ethereum');
     await checkout.getByLabel("Ethereum wallet", { exact: true }).selectOption(wallet);

@@ -14,7 +14,7 @@ module {
     // Check the entire owner inventory before any write. The final installation
     // exposes all reserved IDs together, never a partially imported namespace.
     for (reservation in reservations.vals()) {
-      switch (Catalog.validateListing(reservation.appId, reservation.title, "Publisher reservation", 0)) {
+      switch (Catalog.validateListing(reservation.appId, reservation.title, "Publisher reservation", "", 0)) {
         case (#err(message)) return #err(message);
         case (#ok(())) {};
       };

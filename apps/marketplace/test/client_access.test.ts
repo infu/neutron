@@ -43,6 +43,8 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
   let waitEarnings: Deferred | null;
   let waitReserve: { canister: string; gate: Deferred } | null;
   let earningsEntered: Deferred, reserveEntered: Deferred;
+  let installed: string[], failInstalled: boolean, waitInstalled: Deferred | null, installedEntered: Deferred;
+  let appOverrides: Map<string, Partial<WireApp>>;
   const calls = {
     stateReads: [] as string[],
     localWrites: [] as Array<{ method: string; args: unknown[] }>,
@@ -51,6 +53,8 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
     queries: [] as Array<{ canister: string; method: string; args: unknown[] }>,
     reservations: [] as string[],
     updates: [] as Array<{ canister: string; method: string; args: Array<{ browser: Principal; active: boolean; feeVersion: bigint }>; cycles: bigint }>,
+    installedReads: [] as string[],
+    appDescriptions: [] as string[],
   };
   const rawState = () => ({ seed: state.seed, canister: state.canisterId ? [state.canisterId] : [], host: state.host, owner: state.owner, revision: state.revision });
   const context = (signal = new AbortController().signal) => ({ signal, kernel: {
@@ -68,6 +72,17 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
       } else throw new Error(`Unexpected self update ${method}`);
       return rawState();
     },
+    listApps: async () => {
+      calls.installedReads.push(state.owner);
+      installedEntered.resolve();
+      if (waitInstalled) await waitInstalled.promise;
+      if (failInstalled) throw new Error("Kernel app list is temporarily unavailable");
+      return { apps: installed.map(id => ({ id, description: `${id} description` })) };
+    },
+    describeApp: async (id: string) => {
+      calls.appDescriptions.push(id);
+      return { version: 100 };
+    },
   } }) as unknown as MsgBusToolContext;
   const info = (canister: string): Info => ({
     version: 1n, canister: Principal.fromText(canister), tokens: [],
@@ -76,7 +91,7 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
   });
   const app = (appId: string): WireApp => ({ appId, title: appId, summary: `${appId} summary`, description: `${appId} description`, publisher: OWNER,
     priceUsdMicros: 0n, revision: 1n, version: [101n], iconUrl: [], screenshots: [], iconArtifact: [], screenshotArtifacts: [], ratingCount: 0n, ratingTotal: 0n,
-    ...(appId === "notes" ? { acquisitionCounts: [{ free: 9007199254740993n, paid: 7n }] as [{ free: bigint; paid: bigint }] } : {}), owned: false, visible: true });
+    ...(appId === "notes" ? { acquisitionCounts: [{ free: 9007199254740993n, paid: 7n }] as [{ free: bigint; paid: bigint }] } : {}), owned: false, visible: true, ...appOverrides.get(appId) });
   const actualTransport = await import("../src/transport.ts");
   mock.module("../src/transport.ts", () => ({
     ...actualTransport,
@@ -97,6 +112,8 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
           return { ok: { credits: [], referral: [] } };
         }
         if (method === "catalog_query") return { ok: { apps: [app("kernel"), app("notes"), app("marketplace"), app("wallet")], nextCursor: [{ generation: 3n, offset: 24n }], asOfNs: 1_789_056_000_000_000_000n, refreshing: false } };
+        if (method === "app_detail") return { ok: { app: app(args[0] as string), candidate: [], audit: [], rating: [] } };
+        if (method === "library_query") return { ok: { apps: [app("notes"), app("wallet")].filter(value => value.owned), nextCursor: [] } };
         throw new Error(`Unexpected protocol query ${method}`);
       },
       reserve: async () => {
@@ -125,6 +142,7 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
     state = { seed: new Uint8Array(SEED), canisterId: PROTOCOL.toText(), host: "https://icp-api.io", owner: OWNER.toText(), revision: 1 };
     authorization = new Map(); failEarnings = false; waitEarnings = null; waitReserve = null;
     earningsEntered = deferred(); reserveEntered = deferred();
+    installed = []; failInstalled = false; waitInstalled = null; installedEntered = deferred(); appOverrides = new Map();
     for (const entries of Object.values(calls)) entries.length = 0;
   });
 
@@ -265,6 +283,77 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
     expect(page.nextCursor).toBe('{"generation":"3","offset":"24"}');
     await client.catalog({ tier: "free", window: "month", search: "", cursor: page.nextCursor! });
     expect(calls.queries.at(-1)).toMatchObject({ method: "catalog_query", args: [{ cursor: [{ generation: 3n, offset: 24n }], tier: { free: null }, window: { month: null } }] });
+    expect(calls.updates).toEqual([]);
+  });
+
+  for (const priceUsdMicros of [0n, 9000000n]) for (const owned of [false, true]) {
+    test(`${priceUsdMicros === 0n ? "free" : "paid"} installed apps are recognized independently of ${owned ? "recorded" : "missing"} Marketplace ownership`, async () => {
+      installed = ["notes"];
+      appOverrides.set("notes", { priceUsdMicros, owned });
+      appOverrides.set("wallet", { owned: true });
+      const client = await protocolClient(context());
+      const catalog = await client.catalog({ tier: priceUsdMicros === 0n ? "free" : "paid", window: "week", search: "" });
+      expect(catalog.items[0]).toMatchObject({ id: "notes", priceUsdMicros: String(priceUsdMicros), owned, installed: true });
+      expect(catalog.items[0]?.installedVersion).toBeUndefined();
+      expect(catalog.items[1]).toMatchObject({ id: "wallet", owned: true, installed: false });
+      expect(await client.detail("notes")).toMatchObject({ id: "notes", owned, installed: true });
+      expect(calls.installedReads).toHaveLength(2);
+      expect(calls.appDescriptions).toEqual([]);
+      expect(calls.reservations).toEqual([]);
+      expect(calls.updates).toEqual([]);
+    });
+  }
+
+  test("concurrent catalog sections and details share one pending installed-app read", async () => {
+    installed = ["notes", "wallet"];
+    const gate = deferred(); waitInstalled = gate;
+    const firstClient = await protocolClient(context()), secondClient = await protocolClient(context());
+    const pending = [
+      firstClient.catalog({ tier: "free", window: "week", search: "" }),
+      secondClient.catalog({ tier: "paid", window: "week", search: "" }),
+      secondClient.detail("notes"),
+    ];
+    await installedEntered.promise;
+    expect(calls.installedReads).toHaveLength(1);
+    gate.resolve();
+    const [free, paid, detail] = await Promise.all(pending);
+    expect(free).toMatchObject({ items: [{ installed: true }, { installed: true }] });
+    expect(paid).toMatchObject({ items: [{ installed: true }, { installed: true }] });
+    expect(detail).toMatchObject({ installed: true, owned: false });
+    expect(calls.appDescriptions).toEqual([]);
+  });
+
+  test("a later listing read observes installation and uninstallation without keeping a cached snapshot", async () => {
+    const client = await protocolClient(context());
+    expect(await client.detail("notes")).toMatchObject({ installed: false, owned: false });
+    installed = ["notes"];
+    expect(await client.detail("notes")).toMatchObject({ installed: true, owned: false });
+    installed = [];
+    expect(await client.detail("notes")).toMatchObject({ installed: false, owned: false });
+    expect(calls.installedReads).toHaveLength(3);
+  });
+
+  test("an unavailable installed-app read leaves status unknown and can be retried", async () => {
+    installed = ["notes"]; failInstalled = true;
+    appOverrides.set("notes", { owned: true });
+    const client = await protocolClient(context());
+    const catalog = await client.catalog({ tier: "free", window: "week", search: "" });
+    expect(catalog.warning).toBe("Installed-app status is unavailable.");
+    expect(catalog.items[0]?.installed).toBeUndefined();
+    expect(catalog.items[0]?.owned).toBe(true);
+    failInstalled = false;
+    expect(await client.detail("notes")).toMatchObject({ owned: true, installed: true });
+    expect(calls.updates).toEqual([]);
+  });
+
+  test("My Apps still contains only Marketplace acquisitions and retains installed versions", async () => {
+    installed = ["notes", "wallet"];
+    appOverrides.set("wallet", { owned: true });
+    const client = await protocolClient(context());
+    const library = await client.library();
+    expect(library.items).toHaveLength(1);
+    expect(library.items[0]).toMatchObject({ id: "wallet", owned: true, installedVersion: "100" });
+    expect(calls.appDescriptions).toEqual(["wallet"]);
     expect(calls.updates).toEqual([]);
   });
 }
