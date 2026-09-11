@@ -13,6 +13,13 @@ by your Neutron. Eligibility comes from each proposal's actual ballots and your
 Neutron's current permissions. A decided proposal can still accept votes until
 its voting deadline; decision status and reward voting are shown separately.
 
+Use the feed's filter button to select communities, select all, or hide specific
+SNSes. This browser remembers the selection. Only communities with a successful
+governance read appear in the picker; confirmed stopped, empty or out-of-cycles
+canisters stay out. Refresh checks for recovered communities. Temporary read
+failures retain a compact retry control. Proposal cards render Markdown without
+embedded HTML, with bounded headings and expandable summaries.
+
 **My neurons** brings staking, lock settings, following, maturity, permissions
 and withdrawals together. Common actions use labeled forms and token amounts;
 Candid fields, identifiers and less common options are in advanced details.

@@ -16,13 +16,13 @@ export const A = { canisters: { root: "extk7-gaaaa-aaaaq-aacda-cai", governance:
 export const B = { ...A, canisters:{...A.canisters,root:"csyra-haaaa-aaaaq-aacva-cai",governance:"gov-b"}, metadata:{name:"Second community"} };
 export const ids = ["11".repeat(32),"22".repeat(32),"33".repeat(32),"44".repeat(32),"55".repeat(32)];
 const now = BigInt(Math.floor(Date.now()/1000));
-export const proposal = (id, extra={}) => ({ id:BigInt(id),title:"Readable proposal title " + id,summary:"A detailed summary that stays readable in the proposal feed. ".repeat(9),url:"https://example.com/proposal",status:"open",actionKind:"Motion",createdAtSeconds:now-(100n-BigInt(id)),deadlineSeconds:now+10000n,tally:{yes:25n,no:5n,total:100n,timestampSeconds:now},...extra });
+export const proposal = (id, extra={}) => ({ id:BigInt(id),title:globalThis.__proposalTitle ?? "Readable proposal title " + id,summary:globalThis.__proposalSummary ?? "A detailed summary that stays readable in the proposal feed. ".repeat(9),url:"https://example.com/proposal",status:"open",actionKind:"Motion",createdAtSeconds:now-(100n-BigInt(id)),deadlineSeconds:now+10000n,tally:{yes:25n,no:5n,total:100n,timestampSeconds:now},...extra });
 let ballots = ids.map(id=>({neuronId:id,vote:0,votingPower:100n,castAtSeconds:0n}));
 let operation = 0;
 export const MAX_PROPOSALS_PER_CALL = 100;
 export const listDeployedSnses = async()=>[A.canisters,B.canisters];
 export const getRegistry = async()=>({entries:[A,B],byRoot:new Map([[A.canisters.root,A],[B.canisters.root,B]]),livenessKnown:true});
-export const peekRegistry = ()=>({entries:[A,B],byRoot:new Map([[A.canisters.root,A],[B.canisters.root,B]])});
+export const peekRegistry = ()=>{const cachedB=globalThis.__knownDeadB?{...B,liveness:{governance:false,ledger:true}}:B;return {entries:[A,cachedB],byRoot:new Map([[A.canisters.root,A],[B.canisters.root,cachedB]])};};
 export const requireEntry = async root=>root===B.canisters.root?B:A;
 export const displayName = entry=>entry.metadata?.name??entry.canisters.root;
 export const readMetadata = async gov=>(gov==="gov-b"?B:A).metadata;
@@ -30,8 +30,9 @@ export const listProposals = async (gov, options) => {
   calls.push({kind:"list",gov,before:options.beforeProposal?.toString()});
   if (globalThis.__failRead) throw Error("Proposal refresh unavailable");
   if (gov === "gov-b" && globalThis.__slowB) await new Promise(resolve=>pending.feedB=resolve);
+  if (gov === "gov-b" && globalThis.__deadB) throw Error("IC0537: Canister contains no Wasm module");
   if (gov === "gov-b" && globalThis.__failB) throw Error("Second community unavailable");
-  const all = globalThis.__olderOnly ? Array.from({length:24},(_,i)=>proposal(30-i,{status:"rejected",deadlineSeconds:now-1n,...(i===23?{title:"Older proposal accepting votes",deadlineSeconds:now+10000n}: {})})) : [proposal(3,{title:gov==="gov-b"?"Second community proposal":"Readable proposal title 3"}),proposal(2),proposal(1)];
+  const all = globalThis.__olderOnly ? Array.from({length:24},(_,i)=>proposal(30-i,{status:"rejected",deadlineSeconds:now-1n,...(i===23?{title:"Older proposal accepting votes",deadlineSeconds:now+10000n}: {})})) : [proposal(3,{title:globalThis.__proposalTitle ?? (gov==="gov-b"?"Second community proposal":"Readable proposal title 3")}),proposal(2),proposal(1)];
   const rows=all.filter(p=>options.beforeProposal===undefined||p.id<options.beforeProposal).slice(0,options.limit);
   return {proposals:rows,...(rows.length===options.limit&&rows.at(-1).id>7n?{nextBefore:rows.at(-1).id}: {})};
 };

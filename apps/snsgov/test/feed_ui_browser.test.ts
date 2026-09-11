@@ -8,16 +8,16 @@ test("feed renders healthy communities while another is slow, reports failures a
     await ui.getByRole("button", { name: "Readable proposal title 3", exact: true }).waitFor();
     await ui.getByText("Checking 1 of 2 communities…", { exact: true }).waitFor();
     await ui.evaluate(() => { (globalThis as any).__failB = true; (globalThis as any).__pending.feedB(); });
-    await ui.getByText("Feed coverage is incomplete:", { exact: false }).waitFor();
+    await ui.getByText("Couldn't refresh", { exact: false }).waitFor();
     expect(await ui.getByRole("button", { name: "Readable proposal title 3", exact: true }).count()).toBe(1);
     await ui.evaluate(() => { (globalThis as any).__failB = false; (globalThis as any).__slowB = false; });
-    await ui.getByRole("button", { name: "Retry failed communities", exact: true }).click();
+    await ui.getByRole("button", { name: "Retry unavailable communities", exact: true }).click();
     await ui.getByRole("button", { name: "Second community proposal", exact: true }).waitFor();
     expect(await ui.getByRole("article").count()).toBe(6);
-    expect(await ui.getByText("Feed coverage is incomplete:", { exact: false }).count()).toBe(0);
+    expect(await ui.getByText("Couldn't refresh", { exact: false }).count()).toBe(0);
     await ui.evaluate(() => { (globalThis as any).__failRead = true; });
     await ui.getByRole("button", { name: "Refresh", exact: true }).click();
-    await ui.getByText("Feed coverage is incomplete:", { exact: false }).waitFor();
+    await ui.getByText("Couldn't refresh", { exact: false }).waitFor();
     expect(await ui.getByRole("article").count()).toBe(6);
   }, { flags: { __slowB: true } });
 }, 120_000);
@@ -95,6 +95,105 @@ test("sandbox proposal screens keep wrapping text and controls visible at narrow
         expect(await dialog.getByRole("button", { name: "Review proposal", exact: true }).isVisible()).toBe(true);
       }
       await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    }
+  });
+}, 120_000);
+
+test("confirmed inactive communities leave filter and create choices without failure noise and refresh restores a recovered community", async () => {
+  await proposalBrowser(async ui => {
+    await ui.getByRole("button", { name: "Readable proposal title 3", exact: true }).waitFor();
+    // The cached inactive entry is absent before its delayed fresh query returns.
+    await ui.getByRole("button", { name: "Filter communities", exact: true }).click();
+    expect(await ui.getByRole("dialog").getByRole("checkbox", { name: "Second community", exact: false }).count()).toBe(0);
+    await ui.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+    await ui.waitForFunction(() => typeof (globalThis as any).__pending.feedB === "function");
+    await ui.evaluate(() => { (globalThis as any).__slowB = false; (globalThis as any).__pending.feedB(); });
+    await ui.waitForFunction(() => !(document.querySelector('.snsgov-feed button') as HTMLButtonElement)?.disabled);
+    expect(await ui.getByText("Couldn't refresh", { exact: false }).count()).toBe(0);
+    expect(await ui.getByText("Feed coverage is incomplete", { exact: false }).count()).toBe(0);
+    await ui.getByRole("button", { name: "Filter communities", exact: true }).click();
+    const filter = ui.getByRole("dialog", { name: "Filter communities", exact: true });
+    expect(await filter.getByRole("checkbox").count()).toBe(1);
+    expect(await filter.getByRole("checkbox", { name: "Second community", exact: false }).count()).toBe(0);
+    await filter.getByRole("button", { name: "Close", exact: true }).click();
+    await ui.getByRole("button", { name: "Create proposal", exact: true }).click();
+    expect(await ui.getByRole("dialog").getByRole("option", { name: "Second community", exact: true }).count()).toBe(0);
+    await ui.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+    await ui.evaluate(() => { (globalThis as any).__deadB = false; });
+    await ui.getByRole("button", { name: "Refresh", exact: true }).click();
+    await ui.getByRole("button", { name: "Show 3 new proposals", exact: true }).waitFor();
+    await ui.getByRole("button", { name: "Filter communities", exact: true }).click();
+    expect(await ui.getByRole("dialog").getByRole("checkbox", { name: "Second community", exact: false }).count()).toBe(1);
+  }, { flags: { __deadB: true, __knownDeadB: true, __slowB: true } });
+}, 120_000);
+
+test("community checkbox exclusions persist across remounts, intersect My communities and allow an explicit empty selection", async () => {
+  await proposalBrowser(async ui => {
+    await ui.getByRole("button", { name: "Second community proposal", exact: true }).waitFor();
+    await ui.getByRole("button", { name: "Filter communities", exact: true }).click();
+    let filter = ui.getByRole("dialog", { name: "Filter communities", exact: true });
+    await filter.getByRole("checkbox", { name: "Second community", exact: false }).uncheck();
+    await filter.getByRole("button", { name: "Apply filter", exact: true }).click();
+    await ui.getByText("1 community selected", { exact: false }).waitFor();
+    expect(await ui.getByRole("button", { name: "Second community proposal", exact: true }).count()).toBe(0);
+    await show(ui, { kind: "proposals" });
+    await show(ui, { kind: "feed" });
+    await ui.getByRole("button", { name: "Readable proposal title 3", exact: true }).waitFor();
+    expect(await ui.getByRole("button", { name: "Second community proposal", exact: true }).count()).toBe(0);
+    await ui.getByRole("button", { name: "My communities", exact: true }).click();
+    await ui.getByRole("button", { name: "Readable proposal title 3", exact: true }).waitFor();
+    expect(await ui.getByRole("button", { name: "All communities", exact: true }).getAttribute("aria-pressed")).toBe("false");
+    await ui.getByRole("button", { name: "Filter communities", exact: true }).click();
+    filter = ui.getByRole("dialog", { name: "Filter communities", exact: true });
+    await filter.getByRole("button", { name: "Clear selection", exact: true }).click();
+    await filter.getByRole("button", { name: "Apply filter", exact: true }).click();
+    await ui.getByText("No communities selected.", { exact: false }).waitFor();
+    expect(await ui.getByRole("article").count()).toBe(0);
+    await ui.getByRole("button", { name: "Choose communities", exact: true }).click();
+    await ui.getByRole("dialog").getByRole("button", { name: "Select all", exact: true }).click();
+    await ui.getByRole("dialog").getByRole("button", { name: "Apply filter", exact: true }).click();
+    await ui.getByRole("button", { name: "Readable proposal title 3", exact: true }).waitFor();
+    await ui.getByRole("button", { name: "All communities", exact: true }).click();
+    await ui.getByRole("button", { name: "Second community proposal", exact: true }).waitFor();
+  });
+}, 120_000);
+
+test("a transient community failure stays selectable and exposes compact retry details", async () => {
+  await proposalBrowser(async ui => {
+    await ui.getByText("Couldn't refresh 1 community", { exact: true }).waitFor();
+    expect(await ui.locator(".snsgov-feed-read-note.nt-alert").count()).toBe(0);
+    expect(await ui.getByText("Showing proposals read so far.", { exact: false }).isVisible()).toBe(false);
+    await ui.getByText("Couldn't refresh 1 community", { exact: true }).click();
+    await ui.getByText("Showing proposals read so far.", { exact: false }).waitFor();
+    await ui.getByRole("button", { name: "Filter communities", exact: true }).click();
+    expect(await ui.getByRole("dialog").getByRole("checkbox", { name: "Second community", exact: false }).count()).toBe(1);
+    await ui.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+    await ui.evaluate(() => { (globalThis as any).__failB = false; });
+    await ui.getByRole("button", { name: "Retry unavailable communities", exact: true }).click();
+    await ui.getByRole("button", { name: "Second community proposal", exact: true }).waitFor();
+    expect(await ui.getByText("Couldn't refresh", { exact: false }).count()).toBe(0);
+  }, { flags: { __failB: true } });
+}, 120_000);
+
+test("the community filter remains readable and keyboard accessible at 320 and 960 pixels", async () => {
+  await proposalBrowser(async (ui, page) => {
+    await ui.getByRole("button", { name: "Second community proposal", exact: true }).waitFor();
+    for (const width of [320, 960]) {
+      await page.setViewportSize({ width, height: 850 });
+      await ui.getByRole("button", { name: "Filter communities", exact: true }).click();
+      const filter = ui.getByRole("dialog", { name: "Filter communities", exact: true });
+      const dimensions = await filter.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth }));
+      expect(dimensions.content).toBeLessThanOrEqual(dimensions.width + 1);
+      await filter.getByRole("checkbox", { name: "Second community", exact: false }).focus();
+      await page.keyboard.press("Space");
+      expect(await filter.getByRole("checkbox", { name: "Second community", exact: false }).isChecked()).toBe(false);
+      if (process.env.SNSGOV_UI_EVIDENCE_DIR) {
+        await mkdir(process.env.SNSGOV_UI_EVIDENCE_DIR, { recursive: true });
+        await page.screenshot({ path: join(process.env.SNSGOV_UI_EVIDENCE_DIR, `community-filter-${width}.png`), fullPage: true });
+      }
+      await page.keyboard.press("Escape");
+      expect(await ui.getByRole("dialog").count()).toBe(0);
+      expect(await ui.getByRole("button", { name: "Filter communities", exact: true }).evaluate(element => element === document.activeElement)).toBe(true);
     }
   });
 }, 120_000);

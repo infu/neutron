@@ -165,7 +165,7 @@ test("an exactly full final upstream page finishes on its empty continuation", a
   const first = await loadProposalFeedPage({ sns: ["alpha"], limit: 2 }, read);
   expect(keys(first.proposals)).toEqual(["alpha/2", "alpha/1"]);
   const second = await loadProposalFeedPage({ sns: ["alpha"], limit: 2, cursor: first.nextCursor! }, read);
-  expect(second).toEqual({ proposals: [], failures: [] });
+  expect(second).toEqual({ proposals: [], failures: [], activeSns: ["alpha"] });
   expect(calls.at(-1)?.beforeProposal).toBe(1n);
 });
 

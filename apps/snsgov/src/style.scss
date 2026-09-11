@@ -1,4 +1,5 @@
 @use "neutron-design-system/styles.scss";
+@use "./ui/feed.scss";
 @layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
 
 @layer app {
@@ -46,7 +47,7 @@
   .snsgov-app .nt-detail-label { display: flex; align-items: center; gap: 3px; line-height: 1.4; }
   .snsgov-app .nt-detail { padding: 12px 10px; }
   .snsgov-app .nt-pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font-size: 12px; line-height: 1.5; }
-  .snsgov-post-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden !important; }
+
   .snsgov-app .nt-code, .snsgov-app code { overflow-wrap: anywhere; }
   .snsgov-app .nt-button { min-height: 32px; max-width: 100%; }
   .snsgov-app :is(button, a, input, select, textarea, summary):focus-visible { outline: 1px solid var(--nt-line-focus); outline-offset: 2px; }
@@ -281,16 +282,16 @@
 }
 .snsgov-feed, .snsgov-proposals, .snsgov-proposal-detail, .snsgov-draft-list, .snsgov-review { min-width: 0; width: 100%; max-width: 48rem; margin-inline: auto; }
 .snsgov-feed [hidden], .snsgov-proposals [hidden] { display: none !important; }
-.snsgov-post { padding: 1.15rem 0; border-bottom: 1px solid var(--nt-line-subtle); min-width: 0; }
+.snsgov-feed-posts { display: grid; gap: 14px; margin-block: 14px; min-width: 0; }
+.snsgov-post { padding: 16px; border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-panel); background: var(--nt-bg-panel); min-width: 0; }
 .snsgov-post-byline, .snsgov-post-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .6rem; min-width: 0; }
 .snsgov-post-byline .snsgov-logo { flex-shrink: 0; }
 .snsgov-post-community { font-weight: 600; overflow-wrap: anywhere; text-align: left; min-width: 0; max-width: 100%; }
-.snsgov-post-title { margin: .55rem 0; font-size: 1.1rem; line-height: 1.45; }
-.snsgov-post-title .snsgov-link { display: block; width: 100%; max-width: 100%; font: inherit; font-weight: 600; text-align: left; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
+.snsgov-post-title { margin: .65rem 0 .5rem; font-size: 16px; line-height: 1.4; }
+.snsgov-post-title .snsgov-link { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; width: 100%; max-width: 100%; font: inherit; font-weight: 600; text-align: left; white-space: normal; overflow: hidden; overflow-wrap: anywhere; text-overflow: clip; }
 .snsgov-post .snsgov-proposal-body, .snsgov-proposal-detail .snsgov-proposal-body, .snsgov-review .snsgov-proposal-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; margin: .65rem 0; max-height: none; }
-.snsgov-proposal-title { white-space: normal; overflow-wrap: anywhere; margin: .7rem 0; }
-.snsgov-feed-filters, .snsgov-proposal-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .75rem; }
-.snsgov-feed-filters { margin: 1rem 0 .5rem; }
+.snsgov-proposal-title { white-space: normal; overflow-wrap: anywhere; margin: .7rem 0; font-size: 20px; line-height: 1.4; }
+.snsgov-proposal-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .75rem; }
 .snsgov-field { display: flex; flex-direction: column; gap: .35rem; min-width: 0; width: 100%; }
 .snsgov-field > span:first-child { font-weight: 600; }
 .snsgov-field .nt-input, .snsgov-field .nt-select, .snsgov-field textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
@@ -325,6 +326,28 @@
   .snsgov-post-byline .nt-meta { flex-basis: 100%; }
   .snsgov-proposal-toolbar .nt-cluster { width: 100%; }
   .snsgov-vote-buttons .nt-meta { flex-basis: 100%; }
-  .snsgov-feed-filters { grid-template-columns: 1fr; }
   .snsgov-proposal-title { font-size: 1.2rem; }
 }
+
+/* Markdown is constrained by the tile, independent of author heading sizes. */
+.snsgov-proposal-body.snsgov-post-excerpt { max-height: 9.6rem; overflow: hidden; }
+.snsgov-post-excerpt--clipped { mask-image: linear-gradient(to bottom, black calc(100% - 1rem), transparent); }
+.snsgov-markdown { min-width: 0; max-width: 100%; white-space: normal; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.snsgov-markdown > :first-child { margin-top: 0; }
+.snsgov-markdown > :last-child { margin-bottom: 0; }
+.snsgov-markdown p, .snsgov-markdown :is(ul, ol, blockquote, pre, table) { margin-block: .65em; }
+.snsgov-markdown h4 { font-size: 14px; line-height: 1.5; font-weight: 600; margin: .9em 0 .35em; }
+.snsgov-markdown :is(ul, ol) { padding-left: 1.5em; }
+.snsgov-markdown li { margin-block: .2em; }
+.snsgov-markdown li > p { margin-block: .2em; }
+.snsgov-markdown blockquote { border-left: 2px solid var(--nt-line-strong); padding-left: .85em; margin-inline: 0; color: var(--nt-text-muted); }
+.snsgov-markdown a { color: var(--nt-accent); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.snsgov-markdown :not(pre) > code { font-size: .95em; padding: .1em .3em; border-radius: 3px; background: var(--nt-bg-control); }
+.snsgov-markdown pre { max-width: 100%; padding: .75em; overflow-x: auto; border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-control); background: var(--nt-bg-control); white-space: pre; font-size: 12px; }
+.snsgov-markdown pre code { overflow-wrap: normal; }
+.snsgov-markdown img { display: block; max-width: 100%; max-height: 24rem; height: auto; object-fit: contain; border-radius: var(--nt-radius-control); }
+.snsgov-markdown-table { max-width: 100%; overflow-x: auto; }
+.snsgov-markdown table { border-collapse: collapse; font-size: 12px; color: var(--nt-text); }
+.snsgov-markdown :is(th, td) { padding: .4em .7em; border: 1px solid var(--nt-line-subtle); text-align: left; }
+.snsgov-markdown input[type="checkbox"] { width: auto; vertical-align: middle; margin-right: .4em; }
+.snsgov-markdown .task-list-item { list-style: none; }

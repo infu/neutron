@@ -9,6 +9,7 @@ import { SnsLogo } from "./Logo";
 import { Empty, Pending } from "./Status";
 import { VoteControls } from "./ProposalVote";
 import { ProposalCreate } from "./ProposalCreate";
+import { ProposalExcerpt, ProposalMarkdown } from "./ProposalMarkdown";
 
 export { FeedView } from "./Feed";
 
@@ -120,8 +121,6 @@ export function ProposalPost({ entry, proposal, onOpen, onOpenSns }: {
   entry: RegistryEntry; proposal: ProposalSummary;
   onOpen: (button: HTMLButtonElement) => void; onOpenSns?: ((entry: RegistryEntry) => void) | undefined;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const summaryIsLong = proposal.summary.length > 360;
   return <article className="snsgov-post" aria-label={`${displayName(entry)} proposal ${proposal.id}`}>
     <div className="snsgov-post-byline">
       <SnsLogo logo={entry.metadata?.logo} name={displayName(entry)} size={28} />
@@ -130,10 +129,9 @@ export function ProposalPost({ entry, proposal, onOpen, onOpenSns }: {
         : <span className="snsgov-post-community">{displayName(entry)}</span>}
       <span className="nt-meta">#{proposal.id.toString()} · <ProposalTime seconds={proposal.createdAtSeconds} relative /></span>
     </div>
-    <h3 className="snsgov-post-title"><button type="button" className="snsgov-link" onClick={event => onOpen(event.currentTarget)}>{proposal.title || "Untitled proposal"}</button></h3>
+    <h3 className="snsgov-post-title"><button type="button" className="snsgov-link" title={proposal.title || "Untitled proposal"} onClick={event => onOpen(event.currentTarget)}>{proposal.title || "Untitled proposal"}</button></h3>
     <div className="snsgov-post-meta"><ProposalStatusBadge proposal={proposal} /><span className="nt-meta">{actionLabel(proposal.actionKind)}</span></div>
-    {proposal.summary && <p className={`snsgov-proposal-body${summaryIsLong && !expanded ? " snsgov-post-excerpt" : ""}`}>{summaryIsLong && !expanded ? `${proposal.summary.slice(0, 360)}…` : proposal.summary}</p>}
-    {summaryIsLong && <button type="button" className="nt-button nt-button--ghost snsgov-show-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? "Show less" : "Show more"}</button>}
+    {proposal.summary && <ProposalExcerpt text={proposal.summary} />}
     {proposal.tally && <Tally {...proposal.tally} />}
     <VoteControls entry={entry} proposal={proposal} />
   </article>;
@@ -180,7 +178,7 @@ export function ProposalDetailView({ entry, proposalId, onBack }: {
       <div className="snsgov-post-byline"><SnsLogo logo={entry.metadata?.logo} name={displayName(entry)} size={28} /><span>{displayName(entry)}</span></div>
       <h3 className="nt-title snsgov-proposal-title">{detail.title || "Untitled proposal"}</h3>
       <div className="snsgov-post-meta"><ProposalStatusBadge proposal={detail} /><span>{actionLabel(detail.actionKind)}</span></div>
-      {detail.summary && <p className="snsgov-proposal-body">{detail.summary}</p>}
+      {detail.summary && <div className="snsgov-proposal-body"><ProposalMarkdown text={detail.summary} /></div>}
       {safeExternalUrl(detail.url) && <p className="nt-text"><a href={safeExternalUrl(detail.url)} target="_blank" rel="noopener noreferrer">Read supporting information ↗</a></p>}
       {detail.tally && <Tally {...detail.tally} />}
       {detail.deadlineSeconds !== undefined && <p className="nt-meta">Voting closes <ProposalTime seconds={detail.deadlineSeconds} /> <Help label="Voting deadline">A proposal may be decided while voting remains available for rewards. Late votes can extend this deadline under the community's rules.</Help></p>}

@@ -2,7 +2,7 @@
   "format": 3,
   "name": "SNS Governance",
   "id": "snsgov",
-  "version": 115,
+  "version": 116,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Follow SNS proposals, stake tokens, manage neurons and govern with your Neutron or AI agents.",
   "src": "main.mo",
