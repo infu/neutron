@@ -5,6 +5,7 @@ import Int "mo:core/Int";
 import Iter "mo:core/Iter";
 import List "mo:core/List";
 import Map "mo:core/Map";
+import Nat "mo:core/Nat";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
@@ -27,6 +28,7 @@ module {
     public let MAX_CYCLES_PER_CALL : Nat = 100_000_000_000_000;
     public let MAX_CYCLES_PER_DAY : Nat = 1_000_000_000_000_000;
     public let MIN_REMAINING_CYCLES : Nat = 250_000_000_000;
+    public let OWNER_MIN_REMAINING_CYCLES : Nat = 5_000_000_000_000;
     // Longest compiler-owned app wrapper is 185 ASCII bytes in V1.
     let MAX_METHOD_BYTES = 192;
 
@@ -183,7 +185,7 @@ module {
                         method;
                         args = Blob.fromArray([]);
                         cycles = 0;
-                    }, budget) == null;
+                    }, budget, false) == null;
                 };
                 call = func(request : Types.CallRequest) : async* Types.CallResult {
                     await* callOne(appScope, selfPrincipal, declaration, budget, request);
@@ -192,6 +194,56 @@ module {
                     await* callBatch(appScope, selfPrincipal, declaration, budget, requests);
                 };
             };
+        };
+
+        public func ownerCallQuote(
+            appScope : CapabilityTypes.AppScope,
+            selfPrincipal : Principal,
+            request : Types.CallRequest,
+            allowPartial : Bool,
+        ) : Types.OwnerCallQuoteResult {
+            switch (policyError(appScope, selfPrincipal, request, null, true)) {
+                case (?#err(error)) return #err(error);
+                case (_) {};
+            };
+            let ?declaration = backendDeclaration(appScope) else {
+                return #err({ code = "capability_missing"; message = "Backend-call capability is unavailable" });
+            };
+            let balance = transport.cycle_balance();
+            let callCost = transport.call_cost(request.method, request.args.size());
+            let minimum = OWNER_MIN_REMAINING_CYCLES + callCost;
+            let maximum = if (balance > minimum) balance - minimum else 0;
+            #ok({
+                balance; call_cost = callCost;
+                min_remaining_cycles = OWNER_MIN_REMAINING_CYCLES;
+                max_cycles = maximum;
+                actual_cycles = if (allowPartial) Nat.min(request.cycles, maximum) else request.cycles;
+                max_cycles_per_call = declaration.max_cycles_per_call;
+                max_cycles_per_day = declaration.max_cycles_per_day;
+            });
+        };
+
+        // The authenticated Kernel owner endpoint alone calls this method.
+        // No application receives it through BackendCallsV1.
+        public func ownerCall(
+            appScope : CapabilityTypes.AppScope,
+            selfPrincipal : Principal,
+            request : Types.CallRequest,
+            allowPartial : Bool,
+            hooks : Types.OwnerCallHooks,
+        ) : async* Types.CallResult {
+            if (request.cycles == 0) {
+                return failure("invalid_cycles", "Choose a positive cycle amount above the retained Neutron reserve");
+            };
+            let ?declaration = backendDeclaration(appScope) else {
+                return failure("capability_missing", "Backend-call capability is unavailable");
+            };
+            let results = await* callBatchInner(
+                appScope, selfPrincipal, declaration, null,
+                [request], ?{ hooks; allow_partial = allowPartial },
+            );
+            ignore registry.record(appScope, #backend_calls, "default", "owner_call_once", capabilityOutcome(results));
+            results[0];
         };
 
         public func reservations() : [Types.ReservationSummary] {
@@ -494,6 +546,7 @@ module {
                 declaration,
                 budget,
                 [request],
+                null,
             );
             let result = results[0];
             ignore registry.record(
@@ -519,6 +572,7 @@ module {
                 declaration,
                 budget,
                 requests,
+                null,
             );
             ignore registry.record(
                 appScope,
@@ -536,7 +590,10 @@ module {
             declaration : Types.BackendCallsDeclaration,
             budget : ?ScheduledBudget,
             requests : [Types.CallRequest],
+            owner : ?{ hooks : Types.OwnerCallHooks; allow_partial : Bool },
         ) : async* [Types.CallResult] {
+            let ownerApproved = switch (owner) { case null false; case (?_) true };
+            assert (not ownerApproved or requests.size() == 1);
             if (requests.size() == 0) return [];
             if (
                 requests.size() > MAX_BATCH or
@@ -550,7 +607,7 @@ module {
             var attachedCycles = 0;
             var callCosts = 0;
             for (request in requests.vals()) {
-                switch (policyError(appScope, selfPrincipal, request, budget)) {
+                switch (policyError(appScope, selfPrincipal, request, budget, ownerApproved)) {
                     case (?failure) List.add(prepared, #ready(failure));
                     case null {
                         List.add(prepared, #request(request));
@@ -600,11 +657,23 @@ module {
                     "Scheduled backend-call budget is exhausted",
                 );
             };
-            if (not cycleBalanceAvailable(
-                transport.cycle_balance(),
-                attachedCycles,
-                callCosts,
-            )) {
+            let reserve = if (ownerApproved) OWNER_MIN_REMAINING_CYCLES else MIN_REMAINING_CYCLES;
+            let currentBalance = transport.cycle_balance();
+            var ownerRequest = if (ownerApproved) ?requests[0] else null;
+            switch (owner) {
+                case (?approval) {
+                    if (approval.allow_partial) {
+                        let maximum = if (currentBalance > reserve + callCosts) currentBalance - reserve - callCosts else 0;
+                        attachedCycles := Nat.min(attachedCycles, maximum);
+                        let adjusted = { requests[0] with cycles = attachedCycles };
+                        ownerRequest := ?adjusted;
+                        List.put(prepared, 0, #request(adjusted));
+                    };
+                    if (attachedCycles == 0) return preparedError(prepared, "low_cycles", "There are no spendable cycles above the retained 5 trillion cycle reserve");
+                };
+                case null {};
+            };
+            if (currentBalance < attachedCycles + callCosts + reserve) {
                 return preparedError(
                     prepared,
                     "low_cycles",
@@ -614,7 +683,7 @@ module {
             let ?cycleReservation = outgoingCycles.reserve(
                 appScope,
                 attachedCycles,
-                ?declaration.max_cycles_per_day,
+                if (ownerApproved) null else ?declaration.max_cycles_per_day,
                 approved,
             ) else {
                 return preparedError(
@@ -627,6 +696,14 @@ module {
             // await, so this cannot fail unless an internal invariant breaks.
             assert (consumeScheduledBudget(budget, approved));
             increment(appScope, approved);
+
+            switch (owner) {
+                case (?approval) {
+                    let ?actual = ownerRequest else Runtime.trap("Missing owner call request");
+                    approval.hooks.before_dispatch(actual, callCosts);
+                };
+                case null {};
+            };
 
             // Build every proper remote future before the first regular await.
             // Keep them in direct-indexed mutable arrays: iterator containers
@@ -698,6 +775,12 @@ module {
                         );
                     };
                 };
+                // Save the original remote outcome before a revoked app
+                // lease can suppress delivery to the initiating surface.
+                switch (owner) {
+                    case (?approval) approval.hooks.settled(result, charged);
+                    case null {};
+                };
                 chargedCycles += charged;
                 decrement(appScope, 1);
                 slots[futureSlots[futureIndex]] := ?enforcePostDispatch(
@@ -724,6 +807,7 @@ module {
             selfPrincipal : Principal,
             request : Types.CallRequest,
             budget : ?ScheduledBudget,
+            ownerApproved : Bool,
         ) : ?Types.CallResult {
             switch (budget) {
                 case (?scheduled) {
@@ -760,7 +844,7 @@ module {
             if (request.args.size() > MAX_ARGUMENT_BYTES) {
                 return ?failure("argument_limit", "Backend-call arguments are too large");
             };
-            if (request.cycles > declaration.max_cycles_per_call) {
+            if (not ownerApproved and request.cycles > declaration.max_cycles_per_call) {
                 return ?failure(
                     "cycles_per_call_limit",
                     "Backend-call cycles exceed the app's per-call ceiling",

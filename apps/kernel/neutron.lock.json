@@ -25,6 +25,15 @@
         }
       },
       "migrations": {}
+    },
+    "kernel_cycle_calls": {
+      "schemas": {
+        "1": {
+          "hash": "a25001683a310cd6879290deacd9eb201958adb9e21011230d94da0028585a22",
+          "entry": "f04680c732228f8818dd02e8ce74c9ca79a29c6f40f9c6103e898f7c12b6d2d1"
+        }
+      },
+      "migrations": {}
     }
   }
 }

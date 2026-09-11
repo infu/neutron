@@ -2672,6 +2672,15 @@ button:focus-visible,
     color: #ffd9dd;
 }
 
+.consent-cycle-spend {
+  p { overflow-wrap: anywhere; margin: 12px 0; }
+  code { font-size: 0.85em; }
+  .consent-cycle-spend-amount { color: var(--color-danger, #ef6262); font-size: 1.65rem; font-weight: 750; margin: 16px 0; overflow-wrap: anywhere; }
+  .consent-cycle-usual { font-size: 0.8rem; opacity: 0.75; }
+  .consent-cycle-ack { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--color-danger, #ef6262); border-radius: 8px; font-weight: 600; }
+  .consent-cycle-ack input { flex: 0 0 auto; margin-top: 3px; }
+}
+
 .consent-notice--success {
     background: rgba(137, 224, 170, 0.08);
     box-shadow: inset 2px 0 rgba(137, 224, 170, 0.72);

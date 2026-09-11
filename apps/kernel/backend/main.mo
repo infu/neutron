@@ -49,6 +49,9 @@ import GatewayAuthority "./http_routes/GatewayAuthority";
 import RouteNamespace "./http_routes/Namespace";
 import KernelMemory "./memory/kernel/v4";
 import ActivationMemory "./memory/activation/v1";
+import OwnerCycleMemory "./memory/kernel_cycle_calls/v1";
+import OwnerCycleService "./owner_cycle_calls/Service";
+import OwnerCycleTypes "./owner_cycle_calls/Types";
 import ActivationService "./activation/Service";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
@@ -933,6 +936,7 @@ module {
     public class Init(
         mem : KernelMemory.Mem,
         activationMem : ActivationMemory.Mem,
+        ownerCycleMem : OwnerCycleMemory.Mem,
         runningDeploymentId : Text,
         activeAppInstanceInventory : [InstallTypes.RuntimeApp],
         canisterPrincipal : Principal,
@@ -1072,6 +1076,14 @@ module {
             runtimeCapabilityRegistry,
             BackendCallsRaw.transport(),
             outgoingCycleAccounting,
+        );
+        let ownerCycleCalls = OwnerCycleService.Service(
+            ownerCycleMem,
+            backendCalls,
+            func(scope) { InstallMemory.scopeActive(mem.install, runningDeploymentId, scope) },
+            func(principal) { Set.contains(mem.core.authorized, Principal.compare, principal) },
+            canisterPrincipal,
+            nowNanos,
         );
         let randomness = RandomnessService.Service(
             RandomnessAdapter.management(),
@@ -3999,6 +4011,25 @@ module {
             await* SettingsService.memorySnapshot(self);
         };
 
+        public func /*query*/kernel_owner_cycle_call_quote_v1(input : OwnerCycleTypes.Request) : OwnerCycleTypes.QuoteResult {
+            ownerCycleCalls.quote(input);
+        };
+
+        public func /*update*/kernel_owner_cycle_call_execute_v1(
+            input : OwnerCycleTypes.Request,
+            /*caller*/ caller : Principal,
+        ) : async* OwnerCycleTypes.Result {
+            await* ownerCycleCalls.execute(input, caller);
+        };
+
+        public func /*query*/kernel_owner_cycle_call_status_v1(input : OwnerCycleTypes.StatusInput) : ?OwnerCycleTypes.Receipt {
+            ownerCycleCalls.status(input);
+        };
+
+        public func /*query*/kernel_owner_cycle_call_list_v1(input : OwnerCycleTypes.ListInput) : OwnerCycleTypes.Page {
+            ownerCycleCalls.list(input);
+        };
+
         public func /*query*/kernel_backend_reservations_snapshot(
             (),
         ) : [BackendCallTypes.ReservationSummary] {
@@ -4623,6 +4654,18 @@ public type kernel_app_usage_snapshot_Output = AppUsageTypes.SnapshotV2;
 
 public type kernel_memory_snapshot_Input = (());
 public type kernel_memory_snapshot_Output = SettingsTypes.MemorySnapshot;
+
+public type kernel_owner_cycle_call_quote_v1_Input = (input : OwnerCycleTypes.Request);
+public type kernel_owner_cycle_call_quote_v1_Output = OwnerCycleTypes.QuoteResult;
+
+public type kernel_owner_cycle_call_execute_v1_Input = (input : OwnerCycleTypes.Request);
+public type kernel_owner_cycle_call_execute_v1_Output = OwnerCycleTypes.Result;
+
+public type kernel_owner_cycle_call_status_v1_Input = (input : OwnerCycleTypes.StatusInput);
+public type kernel_owner_cycle_call_status_v1_Output = ?OwnerCycleTypes.Receipt;
+
+public type kernel_owner_cycle_call_list_v1_Input = (input : OwnerCycleTypes.ListInput);
+public type kernel_owner_cycle_call_list_v1_Output = OwnerCycleTypes.Page;
 
 public type kernel_backend_reservations_snapshot_Input = ((),);
 public type kernel_backend_reservations_snapshot_Output = [BackendCallTypes.ReservationSummary];

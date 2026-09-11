@@ -48,12 +48,12 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 359;
+export const KERNEL_NPL_RELEASE_VERSION = 360;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
 export const KERNEL_RELEASE_MEMORY_LOCK_SHA256 =
-  "ef6f809aadfbdc10e76c5e5f37bd5d796ef8f38ae0974dd84033ddc412040585";
+  "b21e05c8fc094d1ab721b884c37e3cb9b3aaacff2c101ca54a8af314146f57d7";
 export const KERNEL_NPL_LICENSE_PATH = "legal/LICENSE.NPL-1.0.txt";
 export const KERNEL_APPLICATION_NOTICE_PATH = "legal/APPLICATION-NOTICE.txt";
 export const KERNEL_ESBUILD_META_PATH = "meta.json";
@@ -67,6 +67,7 @@ const KERNEL_PRODUCTION_UPDATE_SOURCE = "sj2r4-haaaa-aaaay-aadgq-cai";
 const KERNEL_RELEASE_INIT_ARGS = Object.freeze([
   "memory_kernel",
   "memory_kernel_activation",
+  "memory_kernel_cycle_calls",
   "deployment_id",
   "active_app_instance_inventory",
   "canister_principal",
@@ -125,6 +126,17 @@ const KERNEL_MEMORY_SCHEMA_BINDINGS: Readonly<Record<string, KernelMemoryRelease
         src: "memory/activation/v1.mo",
         hash: "f73560cae883ddc894cc4ad8e474aaea0cb4d7f64a017d9fd72e391306e88d9b",
         entry: "f2380721e6147d0f0af208a70183e3d8ce6ac19ad533e1367b3f5780305e7ad3",
+      },
+    },
+    migrations: [],
+  }),
+  kernel_cycle_calls: Object.freeze({
+    version: 1,
+    schemas: {
+      "1": {
+        src: "memory/kernel_cycle_calls/v1.mo",
+        hash: "a25001683a310cd6879290deacd9eb201958adb9e21011230d94da0028585a22",
+        entry: "f04680c732228f8818dd02e8ce74c9ca79a29c6f40f9c6103e898f7c12b6d2d1",
       },
     },
     migrations: [],
@@ -1299,12 +1311,13 @@ function assertReleasedMemoryManifest(
 ): void {
   const memoryIds = Object.keys(memory).sort(compareCanonicalText);
   if (
-    memoryIds.length !== 2 ||
+    memoryIds.length !== 3 ||
     memoryIds[0] !== "kernel" ||
-    memoryIds[1] !== "kernel_activation"
+    memoryIds[1] !== "kernel_activation" ||
+    memoryIds[2] !== "kernel_cycle_calls"
   ) {
     throw new Error(
-      "The Kernel release must preserve exactly its two released memory roots",
+      "The Kernel release must include exactly its three reviewed memory roots",
     );
   }
   for (const [memoryId, binding] of Object.entries(
@@ -1395,7 +1408,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.59 (packed version 359)",
+    "Package release: v0.3.60 (packed version 360)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

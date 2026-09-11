@@ -59,6 +59,10 @@ import type {
   AppStateChangeListener,
   BackendCallReservationAction,
   BackendCallReservationsRequest,
+  OneTimeCycleCallRequest,
+  OneTimeCycleCallQuote,
+  OneTimeCycleCallReceipt,
+  OneTimeCycleCallPage,
   EthereumProviderConnection,
   EthereumProviderRequestArguments,
   EthereumProviderProxy,
@@ -2789,6 +2793,32 @@ export function listBackendCallReservations(
     },
     timeout,
   );
+}
+
+/** Quote only. Pass context.kernel when called from a frontend tool. */
+export function quoteOneTimeCycleCall(request: OneTimeCycleCallRequest, kernel?: ScopedKernelClient): Promise<OneTimeCycleCallQuote> {
+  return oneTimeCycleCallTool("quote", request, kernel);
+}
+
+/** Always opens Kernel owner consent, including calls from root agents. Keep
+ * requestId and use status after interruption; an unknown call is never resent.
+ * ONE_TIME_CYCLE_CALL_NOT_DISPATCHED/CANCELLED attest only that this attempt
+ * stopped before execution; they never settle a previously interrupted attempt. */
+export function requestOneTimeCycleCall(request: OneTimeCycleCallRequest, kernel?: ScopedKernelClient): Promise<OneTimeCycleCallReceipt> {
+  return oneTimeCycleCallTool("request", request, kernel);
+}
+
+export function getOneTimeCycleCallStatus(requestId: string, kernel?: ScopedKernelClient): Promise<OneTimeCycleCallReceipt | null> {
+  return oneTimeCycleCallTool("status", { requestId }, kernel);
+}
+
+export function listOneTimeCycleCalls(request: { before?: string; limit?: number } = {}, kernel?: ScopedKernelClient): Promise<OneTimeCycleCallPage> {
+  return oneTimeCycleCallTool("list", request, kernel);
+}
+
+function oneTimeCycleCallTool<T>(action: "quote" | "request" | "status" | "list", args: OneTimeCycleCallRequest | { requestId: string } | { before?: string; limit?: number }, kernel?: ScopedKernelClient): Promise<T> {
+  const call = { target: "kernel" as const, name: `backend_calls.cycles_${action}`, arguments: { ...args } };
+  return (kernel ? kernel.callTool(call, action === "request" ? 0 : MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS) : callTool(call, action === "request" ? 0 : MSG_BUS_DEFAULT_CALL_TIMEOUT_SECONDS)) as Promise<T>;
 }
 
 export async function connectEthereumProvider(

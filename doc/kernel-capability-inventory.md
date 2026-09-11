@@ -156,6 +156,25 @@ claimed across apps.
 The Kernel also supports explicit later owner changes. Both paths produce the
 same reservation records and broker checks.
 
+An app can request one exceptional cycle transfer with
+`requestOneTimeCycleCall`. Kernel presents a red owner confirmation showing
+the exact app, destination, method, cycle amount and estimated remaining
+balance. The owner must acknowledge the warning for each request, including
+requests originating from root agents. Acceptance dispatches that call; it
+does not grant an allowance or change the app's per-call or daily budget.
+Existing backend declarations, reservations and installation checks still apply.
+
+The request contains a 16-byte hexadecimal `requestId`, `canister`, `method`,
+raw Candid `argsHex`, decimal `cyclesAtoms`, and optional `allowPartial`.
+The latter approves an upper amount that can decrease at dispatch to retain
+five trillion operating cycles plus the call cost. Exact amounts reject if
+they no longer fit. `quoteOneTimeCycleCall` previews this calculation without
+spending; `getOneTimeCycleCallStatus` and paginated `listOneTimeCycleCalls`
+read retained outcomes. Frontend tools pass their `context.kernel` to these
+SDK helpers. Reusing an ID returns the saved result, including an unresolved
+dispatch; it never sends the call again. Applications must decode the remote
+reply before describing a protocol-specific success.
+
 ## Public Protocol Surfaces
 
 The three public mechanisms are deliberately separate:

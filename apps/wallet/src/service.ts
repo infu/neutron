@@ -1,4 +1,5 @@
 import { queryWalletRead } from "./wallet_read.ts";
+import { registerOperatingCyclesTools } from "./cycles_conversion_tools.ts";
 import { registerRefillTools } from "./refill_tools.ts";
 import { registerLedgerTools } from "./ledger_tools.ts";
 import { registerHistoryTools } from "./history_tools.ts";
@@ -60,6 +61,7 @@ import {
   walletTokenInfoRequest,
 } from "./token_info.ts";
 
+registerOperatingCyclesTools();
 registerRefillTools();
 registerLedgerTools();
 registerHistoryTools();

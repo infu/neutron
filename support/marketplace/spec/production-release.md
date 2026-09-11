@@ -418,3 +418,59 @@ No verifier checks were bypassed and no runtime workaround was needed. The
 intermittent local verifier trap remains undiagnosed. Publication request:
 `f2b1031284c93bbaeae7f0076b9db486151f7473e8f93b5f148183076a0167c4`.
 No Git push is included.
+
+
+## Owner-approved operating-cycle conversion — Kernel360 / Wallet327
+
+Kernel `0.3.60` and Wallet `0.3.27` were published together in catalog batch
+`9` on 2026-09-11. Only those two packages changed in the
+27-package transaction. The Marketplace protocol, legacy source and Dispenser
+starter were unchanged.
+
+| Package | Archive bytes | Archive SHA-256 | Offered-source bytes | Offered-source SHA-256 |
+| --- | ---: | --- | ---: | --- |
+| Kernel360 | 2,476,358 | `e2abbcac2aaa0d7eec8538a17923454ce4e2ab2d6d634630880533a3af8f2410` | 3,407,733 | `1ca08750d4ece62072b29114e8cdd95261ee2b6d0fc7ad1da79c1cd4e7c98b93` |
+| Wallet327 | 941,193 | `c9d8f1ca6ddd9e48af622d91a1a8383905638888a76edef0257359730cb486cd` | 852,993 | `0c0f2c25aeaef5ad19602c560efab53bb852ae8654fab3dcf6375a1ca40914a2` |
+
+Wallet's Refill → Get TCYCLES page now accepts Neutron operating cycles as well
+as ICP. My Neutron is the default TCYCLES recipient, with another principal
+under Advanced. Max approves an upper amount and trims it downward at dispatch
+to leave at least 5T operating cycles plus the measured call cost. The ledger
+mint fee is deducted from attached cycles. The receipt records the deposit
+block and recipient total balance; the displayed net amount remains an estimate
+using the fee retained at review.
+
+The generic Kernel capability reuses backend reservations and owner attention.
+Every such call requires the red owner dialog and its unchecked acknowledgment,
+including calls requested by root agents. It authorizes one exact target,
+method, arguments and amount or upper amount; ordinary app budgets are unchanged.
+The new independent `kernel_cycle_calls` v1 root retains the original call and
+response before delivery checks. Repeated IDs return the saved result and never
+reattach cycles, including after interruption or upgrade. Wallet history pages
+read compact records and load full receipts only when requested. Confirmed
+pre-dispatch cancellation clears a fresh attempt; uncertain dispatch retains
+its original recovery identity.
+
+All eight Wallet roots and lock lineage remain unchanged. Existing Kernel v3/v4
+schemas, the v3→v4 migration and activation v1 remain unchanged; the new root
+initializes separately. Full package commands, 873 Kernel tests (10,104
+assertions), 34 Kernel Motoko suites, 323 Wallet tests (2,838 assertions),
+19 Wallet Motoko suites, memory restoration and 17 historical Kernel archive
+migration-planning cases passed. Real PocketIC tests verify attached cycles,
+reserve enforcement, pending/terminal duplicate prevention and restoration
+across upgrades. Certified-HTTP qualification and exact candidate binding
+passed. Wallet browser suites and the red-dialog browser checks cover compact
+layouts, cancellation, one review and recovery without another deposit.
+SDK and compiler release suites also passed. No production financial conversion
+was used for testing.
+
+The first postflight stopped on a public source streaming rejection after the
+journal had already recorded batch commit. An exact-byte retry reconciled it and
+verified the published artifacts; no grant or protocol changes were made. The
+precise cause of the transient callback rejection was not established.
+The subsequent identical-byte repeat returned receipt-v2 `batch_id: null`, with
+all 27 packages and offered sources `unchanged`, matching versions, URLs, paths,
+lengths and SHA-256 digests across all 54 frozen artifacts. Publication request:
+`87ac78efd271bcd265774fc1d1b577ec6c62feb709c46236c3b18995e1705052`. These updates are installed through the existing Settings
+upgrade flow; publication does not install them into an existing Neutron.
+No Git push is included.

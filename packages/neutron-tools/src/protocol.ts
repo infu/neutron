@@ -49,6 +49,52 @@ export type BackendCallReservationsRequest = {
   };
 };
 
+/** One owner-approved call. This never changes an app's recurring cycle budget. */
+export type OneTimeCycleCallRequest = {
+  requestId: string;
+  canister: string;
+  method: string;
+  /** Complete Candid arguments, encoded as lowercase hexadecimal without 0x. */
+  argsHex: string;
+  cyclesAtoms: string;
+  /** Approve up to the cap, reducing the amount if needed to retain the reserve. */
+  allowPartial?: boolean;
+};
+
+export type OneTimeCycleCallQuote = {
+  balanceAtoms: string;
+  callCostAtoms: string;
+  reserveAtoms: string;
+  maxCyclesAtoms: string;
+  requestedCyclesAtoms: string;
+  selectedCyclesAtoms: string;
+  remainingCyclesAtoms: string;
+  usualLimitPerCallAtoms: string;
+  usualLimitPerDayAtoms: string;
+};
+
+export type OneTimeCycleCallReceipt = {
+  request: OneTimeCycleCallRequest;
+  sequence: string;
+  createdAtNs: string;
+  updatedAtNs: string;
+  dispatched: boolean;
+  actualCyclesAtoms: string;
+  chargedCyclesAtoms: string | null;
+  /** null after dispatch means pending/unknown: never send a replacement call. */
+  result: { replyHex: string } | { error: { code: string; message: string } } | null;
+};
+
+export type OneTimeCycleCallSummary = Omit<OneTimeCycleCallReceipt, "request" | "result"> & {
+  request: Omit<OneTimeCycleCallRequest, "argsHex">;
+  outcome: "pending" | "replied" | "rejected";
+};
+
+export type OneTimeCycleCallPage = {
+  calls: OneTimeCycleCallSummary[];
+  nextBefore: string | null;
+};
+
 export type OpenAppTileRequest = JsonObject & {
   appId: string;
   tileId: string;
@@ -299,6 +345,10 @@ export type KernelPolicyErrorCode =
   | "APP_PAUSED"
   | "REQUEST_EXPIRED"
   | "REQUEST_CANCELLED"
+  /** The current one-time cycle request failed before its execution call. This
+   * does not resolve a different, previously interrupted attempt with its id. */
+  | "ONE_TIME_CYCLE_CALL_NOT_DISPATCHED"
+  | "ONE_TIME_CYCLE_CALL_CANCELLED"
   | "OWNER_REQUIRED"
   | "USER_INTERACTION_REQUIRED"
   | "INVOCATION_INVALID"

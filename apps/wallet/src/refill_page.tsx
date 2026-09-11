@@ -28,6 +28,19 @@ import {
   type RefillSnapshot,
 } from "./refill.ts";
 
+import {
+  executeOperatingCyclesConversion,
+  isOperatingCyclesCancellation,
+  isOperatingCyclesNotDispatched,
+  loadOperatingCyclesSnapshot,
+  quoteOperatingCyclesConversion,
+  readOperatingCyclesConversionStatus,
+  type OperatingCyclesOperation,
+  type OperatingCyclesQuote,
+  type OperatingCyclesSnapshot,
+} from "./cycles_conversion.ts";
+import { OperatingCyclesHistory } from "./operating_cycles_history.tsx";
+
 type Mode = "refill" | "convert";
 type Source = "ICP" | "TCYCLES";
 const text = (reason: unknown) =>
@@ -94,6 +107,20 @@ export function WalletRefillPage({
 }) {
   const [mode, setMode] = useState<Mode>("refill");
   const [source, setSource] = useState<Source>("ICP");
+  const [conversionSource, setConversionSource] = useState<"ICP" | "cycles">(
+    "ICP",
+  );
+  const operatingCycles = mode === "convert" && conversionSource === "cycles";
+  const [operatingSnapshot, setOperatingSnapshot] =
+    useState<OperatingCyclesSnapshot | null>(null);
+  const [operatingError, setOperatingError] = useState<string | null>(null);
+  const [operatingLoading, setOperatingLoading] = useState(false);
+  const [allowPartialCycles, setAllowPartialCycles] = useState(false);
+  const [cyclesRequestId, setCyclesRequestId] = useState(createRefillRequestId);
+  const [latestCyclesOperation, setLatestCyclesOperation] =
+    useState<OperatingCyclesOperation | null>(null);
+  const [cyclesRevision, setCyclesRevision] = useState(0);
+  const [cyclesAttempted, setCyclesAttempted] = useState(false);
   const [amount, setAmount] = useState("");
   const [advanced, setAdvanced] = useState(false);
   const [otherTarget, setOtherTarget] = useState(false);
@@ -118,6 +145,14 @@ export function WalletRefillPage({
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const loadGeneration = useRef(0);
+  const operatingGeneration = useRef(0);
+  const operatingTarget = useMemo(() => {
+    try {
+      return otherTarget ? destination(target, "convert") : owner;
+    } catch {
+      return null;
+    }
+  }, [otherTarget, target, owner]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -169,6 +204,31 @@ export function WalletRefillPage({
     void load();
   }, [load, refreshRevision]);
 
+  const loadOperating = useCallback(async () => {
+    const generation = ++operatingGeneration.current;
+    if (!operatingTarget) {
+      setOperatingLoading(false);
+      return;
+    }
+    setOperatingLoading(true);
+    try {
+      const next = await loadOperatingCyclesSnapshot(owner, operatingTarget);
+      if (mounted.current && generation === operatingGeneration.current) {
+        setOperatingSnapshot(next);
+        setOperatingError(null);
+      }
+    } catch (reason) {
+      if (mounted.current && generation === operatingGeneration.current)
+        setOperatingError(text(reason));
+    } finally {
+      if (mounted.current && generation === operatingGeneration.current)
+        setOperatingLoading(false);
+    }
+  }, [owner, operatingTarget]);
+  useEffect(() => {
+    if (operatingCycles) void loadOperating();
+  }, [operatingCycles, loadOperating, refreshRevision, cyclesRevision]);
+
   const loadMore = async (section: "pending" | "history") => {
     const cursor = section === "pending" ? pendingCursor : historyCursor;
     if (!cursor || moreInFlight.current || loading) return;
@@ -195,8 +255,23 @@ export function WalletRefillPage({
 
   const effectiveSource = mode === "convert" ? "ICP" : source;
   const token = effectiveSource === "ICP" ? snapshot?.icp : snapshot?.tcycles;
-  const maximum =
-    token?.balanceAtoms != null && token.feeAtoms != null
+  const sourceDecimals = operatingCycles
+    ? 12
+    : effectiveSource === "ICP"
+      ? 8
+      : 12;
+  const sourceLabel = operatingCycles ? "T cycles" : effectiveSource;
+  const amountLabel = operatingCycles
+    ? "Amount of Neutron cycles"
+    : `Amount of ${effectiveSource}`;
+  const balanceAtoms = operatingCycles
+    ? operatingSnapshot?.balanceAtoms
+    : token?.balanceAtoms;
+  const maximum = operatingCycles
+    ? operatingSnapshot
+      ? BigInt(operatingSnapshot.maxCyclesAtoms)
+      : null
+    : token?.balanceAtoms != null && token.feeAtoms != null
       ? BigInt(token.balanceAtoms) > BigInt(token.feeAtoms)
         ? BigInt(token.balanceAtoms) - BigInt(token.feeAtoms)
         : 0n
@@ -205,7 +280,7 @@ export function WalletRefillPage({
     input: RefillInput | null;
     error: string | null;
   } => {
-    if (!amount.trim()) return { input: null, error: null };
+    if (operatingCycles || !amount.trim()) return { input: null, error: null };
     try {
       const amountAtoms = parseTokenAmount(
         amount,
@@ -228,7 +303,15 @@ export function WalletRefillPage({
     } catch (reason) {
       return { input: null, error: text(reason) };
     }
-  }, [amount, effectiveSource, mode, otherTarget, owner, target]);
+  }, [
+    amount,
+    effectiveSource,
+    mode,
+    operatingCycles,
+    otherTarget,
+    owner,
+    target,
+  ]);
   const estimate = useMemo((): {
     quote: RefillQuote | null;
     error: string | null;
@@ -241,33 +324,68 @@ export function WalletRefillPage({
       return { quote: null, error: text(reason) };
     }
   }, [request, snapshot]);
+  const operatingEstimate = useMemo((): {
+    quote: OperatingCyclesQuote | null;
+    error: string | null;
+  } => {
+    if (!operatingCycles || !operatingSnapshot || !amount.trim())
+      return { quote: null, error: null };
+    try {
+      return {
+        quote: quoteOperatingCyclesConversion(
+          {
+            requestId: cyclesRequestId,
+            owner,
+            target: otherTarget ? destination(target, "convert") : owner,
+            amountAtoms: parseTokenAmount(amount, 12),
+            allowPartial: allowPartialCycles,
+          },
+          operatingSnapshot,
+        ),
+        error: null,
+      };
+    } catch (reason) {
+      return { quote: null, error: text(reason) };
+    }
+  }, [
+    operatingCycles,
+    operatingSnapshot,
+    amount,
+    cyclesRequestId,
+    owner,
+    otherTarget,
+    target,
+    allowPartialCycles,
+  ]);
+  const formError = operatingCycles ? operatingEstimate.error : estimate.error;
+  const canReview = operatingCycles
+    ? cyclesAttempted || operatingEstimate.quote !== null
+    : estimate.quote !== null;
+
   const percent = useMemo(() => {
     if (!maximum || !amount.trim()) return 0;
     try {
-      const atoms = BigInt(
-        parseTokenAmount(amount, effectiveSource === "ICP" ? 8 : 12),
-      );
+      const atoms = BigInt(parseTokenAmount(amount, sourceDecimals));
       return Math.min(100, Number((atoms * 100n) / maximum));
     } catch {
       return 0;
     }
-  }, [maximum, amount, effectiveSource]);
+  }, [maximum, amount, sourceDecimals]);
   const selectPercent = (value: number) => {
     if (maximum === null) return;
     const atoms = (maximum * BigInt(value)) / 100n;
     setAmount(
       atoms === 0n
         ? ""
-        : amountText(
-            atoms.toString(),
-            effectiveSource === "ICP" ? 8 : 12,
-          ).replaceAll(",", ""),
+        : amountText(atoms.toString(), sourceDecimals).replaceAll(",", ""),
     );
+    setAllowPartialCycles(operatingCycles && value === 100);
     setError(null);
   };
   const changeMode = (next: Mode) => {
     setMode(next);
     setAmount("");
+    setAllowPartialCycles(false);
     setOtherTarget(false);
     setTarget("");
     setReview(null);
@@ -280,7 +398,87 @@ export function WalletRefillPage({
     setOperations((current) => mergeOperations(current, [operation]));
   };
 
+  const convertOperating = async () => {
+    if (inFlight.current) return;
+    if (tray) {
+      await openInTile();
+      return;
+    }
+    if (!operatingEstimate.quote && !cyclesAttempted) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError(null);
+    const id = cyclesRequestId;
+    const recovering = cyclesAttempted;
+    try {
+      if (recovering) {
+        const saved = await readOperatingCyclesConversionStatus(id);
+        if (!mounted.current) return;
+        if (saved) {
+          setLatestCyclesOperation(saved);
+          if (saved.status === "complete" || saved.status === "failed") {
+            setCyclesAttempted(false);
+            setAmount("");
+            setCyclesRequestId(createRefillRequestId());
+          }
+        } else
+          setError(
+            "No receipt is available yet. Keep this saved request and check again; another conversion could spend cycles twice.",
+          );
+        setCyclesRevision((value) => value + 1);
+        return;
+      }
+      if (!operatingEstimate.quote) return;
+      const fresh = await loadOperatingCyclesSnapshot(
+        owner,
+        operatingEstimate.quote.target,
+      );
+      const approved = quoteOperatingCyclesConversion(
+        operatingEstimate.quote,
+        fresh,
+      );
+      if (!mounted.current) return;
+      setOperatingSnapshot(fresh);
+      setCyclesAttempted(true);
+      const result = await executeOperatingCyclesConversion(approved);
+      if (mounted.current) {
+        setLatestCyclesOperation(result);
+        if (result.status === "complete" || result.status === "failed") {
+          setAmount("");
+          setCyclesAttempted(false);
+          setCyclesRequestId(createRefillRequestId());
+        }
+        setCyclesRevision((value) => value + 1);
+      }
+    } catch (reason) {
+      if (!recovering && isOperatingCyclesNotDispatched(reason)) {
+        if (mounted.current) {
+          setError(isOperatingCyclesCancellation(reason) ? null : text(reason));
+          setCyclesAttempted(false);
+        }
+        return;
+      }
+      try {
+        const saved = await readOperatingCyclesConversionStatus(id);
+        if (saved && mounted.current) setLatestCyclesOperation(saved);
+      } catch {
+        /* The original request ID remains selected; the history can check it. */
+      }
+      if (mounted.current) {
+        setError(text(reason));
+        setCyclesRevision((value) => value + 1);
+      }
+    } finally {
+      inFlight.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  };
+
   const prepareReview = async () => {
+    if (operatingCycles) {
+      await convertOperating();
+      return;
+    }
     if (inFlight.current || !request.input) return;
     if (tray) {
       await openInTile();
@@ -390,8 +588,16 @@ export function WalletRefillPage({
             <IoFlashOutline aria-hidden="true" />
           </span>
           <div>
-            <h1>Keep your Neutron running</h1>
-            <p>Top up with ICP or TCYCLES.</p>
+            <h1>
+              {mode === "convert" ? "Get TCYCLES" : "Keep your Neutron running"}
+            </h1>
+            <p>
+              {mode === "convert"
+                ? operatingCycles
+                  ? "Convert available Neutron cycles into TCYCLES."
+                  : "Convert ICP into tokens you can use for refills."
+                : "Top up with ICP or TCYCLES."}
+            </p>
           </div>
         </header>
         <div
@@ -424,7 +630,7 @@ export function WalletRefillPage({
         >
           <div className="wallet-refill-source-row">
             <label htmlFor="wallet-refill-amount">
-              {mode === "convert" ? "Convert ICP" : "Pay with"}
+              {mode === "convert" ? "Convert" : "Pay with"}
             </label>
             {mode === "refill" ? (
               <div
@@ -449,15 +655,34 @@ export function WalletRefillPage({
                 ))}
               </div>
             ) : (
-              <span className="wallet-refill-token">
-                ICP <IoArrowForward aria-hidden="true" /> TCYCLES
-              </span>
+              <div
+                className="wallet-refill-source"
+                role="group"
+                aria-label="TCYCLES conversion source"
+              >
+                {(["ICP", "cycles"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-pressed={conversionSource === item}
+                    disabled={busy}
+                    onClick={() => {
+                      setConversionSource(item);
+                      setAmount("");
+                      setAllowPartialCycles(false);
+                      setError(null);
+                    }}
+                  >
+                    {item === "cycles" ? "Neutron cycles" : "ICP"}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
           <div className="wallet-refill-amount-field">
             <input
               id="wallet-refill-amount"
-              aria-label={`Amount of ${effectiveSource}`}
+              aria-label={amountLabel}
               autoComplete="off"
               inputMode="decimal"
               placeholder="0.00"
@@ -465,24 +690,25 @@ export function WalletRefillPage({
               disabled={busy}
               onChange={(event) => {
                 setAmount(event.target.value);
+                setAllowPartialCycles(false);
                 setError(null);
               }}
             />
-            <span>{effectiveSource}</span>
+            <span>{sourceLabel}</span>
           </div>
           <div className="wallet-refill-balance">
             <span>
-              {loading && !snapshot ? (
+              {(
+                operatingCycles
+                  ? operatingLoading && !operatingSnapshot
+                  : loading && !snapshot
+              ) ? (
                 "Checking balance…"
-              ) : token?.balanceAtoms != null ? (
+              ) : balanceAtoms != null ? (
                 <>
-                  Available{" "}
+                  {operatingCycles ? "Neutron balance" : "Available"}{" "}
                   <strong>
-                    {amountText(
-                      token.balanceAtoms,
-                      effectiveSource === "ICP" ? 8 : 12,
-                    )}{" "}
-                    {effectiveSource}
+                    {amountText(balanceAtoms, sourceDecimals)} {sourceLabel}
                   </strong>
                 </>
               ) : (
@@ -522,6 +748,12 @@ export function WalletRefillPage({
               </button>
             ))}
           </div>
+          {operatingCycles ? (
+            <p className="wallet-refill-reserve">
+              At least <strong>5 T cycles</strong> stay in your Neutron to keep
+              it running.
+            </p>
+          ) : null}
           <div className="wallet-refill-destination">
             <span>{mode === "convert" ? "Receive in" : "Refill"}</span>
             <strong>
@@ -582,37 +814,67 @@ export function WalletRefillPage({
               )}
             </div>
           </details>
-          <div className="wallet-refill-estimate" aria-live="polite">
-            <span>
-              {mode === "convert"
-                ? "You receive approximately"
-                : "Estimated refill"}
-            </span>
-            <strong>
-              {estimate.quote
-                ? mode === "convert"
-                  ? tokenText(estimate.quote.estimatedReceivedCycles, "TCYCLES")
-                  : cyclesText(estimate.quote.estimatedReceivedCycles)
-                : "—"}
-            </strong>
-            <span>Total from Wallet</span>
-            <span>
-              {estimate.quote
-                ? tokenText(estimate.quote.totalDebitAtoms, effectiveSource)
-                : "—"}
-            </span>
-            {estimate.quote ? (
-              <small>
-                Includes{" "}
-                {tokenText(estimate.quote.sourceFeeAtoms, effectiveSource)}{" "}
-                transfer fee.
-                {mode === "convert" &&
-                BigInt(estimate.quote.cyclesFeeAtoms) > 0n
-                  ? ` Conversion costs ${tokenText((BigInt(estimate.quote.estimatedCycles) - BigInt(estimate.quote.estimatedReceivedCycles)).toString(), "TCYCLES")}, deducted from the result.`
-                  : ""}
-              </small>
-            ) : null}
-          </div>
+          {operatingCycles ? (
+            <div className="wallet-refill-estimate" aria-live="polite">
+              <span>You receive approximately</span>
+              <strong>
+                {operatingEstimate.quote
+                  ? tokenText(
+                      operatingEstimate.quote.expectedNetAtoms,
+                      "TCYCLES",
+                    )
+                  : "—"}
+              </strong>
+              <span>Neutron keeps approximately</span>
+              <span>
+                {operatingEstimate.quote
+                  ? cyclesText(operatingEstimate.quote.remainingCyclesAtoms)
+                  : "—"}
+              </span>
+              {operatingEstimate.quote ? (
+                <small>
+                  Includes{" "}
+                  {tokenText(operatingEstimate.quote.feeAtoms, "TCYCLES")}{" "}
+                  minting fee. Network costs are reserved separately.
+                </small>
+              ) : null}
+            </div>
+          ) : (
+            <div className="wallet-refill-estimate" aria-live="polite">
+              <span>
+                {mode === "convert"
+                  ? "You receive approximately"
+                  : "Estimated refill"}
+              </span>
+              <strong>
+                {estimate.quote
+                  ? mode === "convert"
+                    ? tokenText(
+                        estimate.quote.estimatedReceivedCycles,
+                        "TCYCLES",
+                      )
+                    : cyclesText(estimate.quote.estimatedReceivedCycles)
+                  : "—"}
+              </strong>
+              <span>Total from Wallet</span>
+              <span>
+                {estimate.quote
+                  ? tokenText(estimate.quote.totalDebitAtoms, effectiveSource)
+                  : "—"}
+              </span>
+              {estimate.quote ? (
+                <small>
+                  Includes{" "}
+                  {tokenText(estimate.quote.sourceFeeAtoms, effectiveSource)}{" "}
+                  transfer fee.
+                  {mode === "convert" &&
+                  BigInt(estimate.quote.cyclesFeeAtoms) > 0n
+                    ? ` Conversion costs ${tokenText((BigInt(estimate.quote.estimatedCycles) - BigInt(estimate.quote.estimatedReceivedCycles)).toString(), "TCYCLES")}, deducted from the result.`
+                    : ""}
+                </small>
+              ) : null}
+            </div>
+          )}
           {mode === "convert" ? (
             <p className="wallet-refill-help">
               TCYCLES are tokens you can hold, send, or use for a later refill.
@@ -622,9 +884,9 @@ export function WalletRefillPage({
               Cycles pay for your Neutron's storage and activity.
             </p>
           )}
-          {estimate.error && amount ? (
+          {formError && amount ? (
             <p className="wallet-refill-inline-error" role="status">
-              {estimate.error}
+              {formError}
             </p>
           ) : null}
           {error ? (
@@ -637,6 +899,19 @@ export function WalletRefillPage({
                 onClick={() => setError(null)}
               >
                 <IoClose />
+              </button>
+            </div>
+          ) : null}
+          {operatingCycles && operatingError ? (
+            <div className="wallet-refill-error" role="alert">
+              <span>{operatingError}</span>
+              <button
+                type="button"
+                aria-label="Retry Neutron cycles balance"
+                disabled={busy || operatingLoading}
+                onClick={() => void loadOperating()}
+              >
+                <IoRefresh />
               </button>
             </div>
           ) : null}
@@ -653,7 +928,7 @@ export function WalletRefillPage({
           <button
             className="nt-button nt-button--accent wallet-refill-submit"
             type="submit"
-            disabled={busy || !estimate.quote}
+            disabled={busy || (!canReview && !(tray && operatingCycles))}
           >
             {busy ? (
               <>
@@ -667,7 +942,11 @@ export function WalletRefillPage({
               </>
             ) : (
               <>
-                Review {mode === "convert" ? "conversion" : "refill"}
+                {operatingCycles
+                  ? cyclesAttempted
+                    ? "Check conversion"
+                    : "Convert Neutron cycles"
+                  : `Review ${mode === "convert" ? "conversion" : "refill"}`}
                 <IoArrowForward aria-hidden="true" />
               </>
             )}
@@ -681,6 +960,11 @@ export function WalletRefillPage({
             ))}
           </details>
         ) : null}
+        <OperatingCyclesHistory
+          owner={owner}
+          refreshRevision={refreshRevision + cyclesRevision}
+          latestOperation={latestCyclesOperation}
+        />
         {historyError ? (
           <div className="wallet-refill-error" role="alert">
             <span>{historyError}</span>

@@ -47,7 +47,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v359 NPL package metadata", () => {
+describe("Kernel v360 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -108,7 +108,7 @@ describe("Kernel v359 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(359);
+    expect(packagedManifest.version).toBe(360);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -129,7 +129,7 @@ describe("Kernel v359 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 359");
+    ).toThrow("restricted to Kernel version 360");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -168,7 +168,7 @@ describe("Kernel v359 NPL package metadata", () => {
     ).toThrow("changed the schema binding");
   });
 
-  test("requires schema 3 history, the custody schema 4, and its exact forward migration", async () => {
+  test("requires released roots and migration plus the independent cycle-call root", async () => {
     const fixture = await metadataFixture();
     const original = JSON.parse(textDecoder.decode(fixture.packagedManifest));
     expect(original.memory.kernel.version).toBe(4);
@@ -181,8 +181,23 @@ describe("Kernel v359 NPL package metadata", () => {
     }]);
     expect(original.memory.kernel_activation.version).toBe(1);
     expect(original.memory.kernel_activation.migrations).toEqual([]);
+    expect(original.memory.kernel_cycle_calls.version).toBe(1);
+    expect(Object.keys(original.memory.kernel_cycle_calls.schemas)).toEqual(["1"]);
+    expect(original.memory.kernel_cycle_calls.migrations).toEqual([]);
 
     const mutations = [
+      {
+        mutate: (manifest: typeof original) => { delete manifest.memory.kernel_cycle_calls; },
+        message: "reviewed memory roots",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel_cycle_calls.version = 2; },
+        message: "memory kernel_cycle_calls v1",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel_cycle_calls.schemas["1"].entry = "0".repeat(64); },
+        message: "changed the schema binding for kernel_cycle_calls v1",
+      },
       {
         mutate: (manifest: typeof original) => { delete manifest.memory.kernel.schemas["3"]; },
         message: "schema history for kernel",
@@ -344,7 +359,7 @@ describe("Kernel v359 NPL package metadata", () => {
       }),
     );
 
-    await installKernelInstalledArtifactInventory(root, 359);
+    await installKernelInstalledArtifactInventory(root, 360);
     const inventoryPath = path.join(
       root,
       KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
@@ -357,7 +372,7 @@ describe("Kernel v359 NPL package metadata", () => {
       parsed.artifacts.map((file) => [file.package_path, file] as const),
     );
 
-    expect(parsed.package).toEqual({ id: "kernel", version: 359 });
+    expect(parsed.package).toEqual({ id: "kernel", version: 360 });
     expect(byPackagePath.has("neutron.did")).toBe(false);
     expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
     expect(
@@ -382,7 +397,7 @@ describe("Kernel v359 NPL package metadata", () => {
     }
 
     await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
-    await installKernelInstalledArtifactInventory(root, 359);
+    await installKernelInstalledArtifactInventory(root, 360);
     expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
       firstBytes,
     );

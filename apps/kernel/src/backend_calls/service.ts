@@ -323,7 +323,7 @@ export async function revokeBackendReservation(
   });
 }
 
-function requireDeclaration(endpoint: RegisteredEndpoint) {
+export function requireDeclaration(endpoint: RegisteredEndpoint) {
   const declaration = declaredCapability(
     useAppsStore.getState().list[endpoint.context.appId],
     "backend_calls",
@@ -334,7 +334,7 @@ function requireDeclaration(endpoint: RegisteredEndpoint) {
   return declaration;
 }
 
-function requestSource(endpoint: RegisteredEndpoint): BackendCallRequestSource {
+export function requestSource(endpoint: RegisteredEndpoint): BackendCallRequestSource {
   if (endpoint.context.role === "background") return { role: "background" };
   if (endpoint.context.role === "tray") {
     throw new KernelPolicyError(
@@ -350,7 +350,7 @@ function requestSource(endpoint: RegisteredEndpoint): BackendCallRequestSource {
   };
 }
 
-function assertEndpointCurrent(
+export function assertEndpointCurrent(
   endpoint: RegisteredEndpoint,
   request: { endpointSession?: string },
 ): void {

@@ -4,6 +4,7 @@ import { IDL } from "@dfinity/candid";
 import {
   isJsonObject,
   msgBusLocalActions,
+  validateToolArguments,
   NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
   NEUTRON_TOOL_AUDIENCE_FOREGROUND_TILE,
   NEUTRON_TOOL_VISIBILITY_SAME_APP,
@@ -2928,6 +2929,23 @@ test("agent stop during external discovery prevents signed-call dispatch", async
   releaseOwnerBinding();
   await expect(pending).rejects.toMatchObject({ code: "INVOCATION_INVALID" });
   expect(counts.ownerMethodCalls).toBe(0);
+});
+
+test("one-time cycle tools register with safe schemas in the real Kernel router", async () => {
+  installFakeWindow();
+  const caller = registerTile({} as Window, "hello", "cycle-discovery");
+  const descriptors = (await listTargetTools("kernel", caller)).filter(({ name }) => name.startsWith("backend_calls.cycles_"));
+  expect(descriptors.map(({ name }) => name).sort()).toEqual([
+    "backend_calls.cycles_list", "backend_calls.cycles_quote", "backend_calls.cycles_request", "backend_calls.cycles_status",
+  ]);
+  const request = descriptors.find(({ name }) => name.endsWith("_request"))!;
+  const args = { requestId: "ab".repeat(16), canister: "um5iw-rqaaa-aaaaq-qaaba-cai", method: "deposit", argsHex: "4449444c0000", cyclesAtoms: "50000000000000", allowPartial: true };
+  expect(() => validateToolArguments(request, args)).not.toThrow();
+  expect(() => validateToolArguments(request, { ...args, cyclesAtoms: "1.5" })).toThrow();
+  expect(() => validateToolArguments(request, { ...args, cyclesAtoms: "01" })).toThrow();
+  expect(request.description).toContain("Root agents cannot approve it");
+  expect(request.annotations?.["neutron:effects"]).toContain("user_visible_ui");
+  expect(descriptors.filter(({ name }) => !name.endsWith("_request")).every(({ annotations }) => annotations?.["neutron:effects"]?.join() === "read")).toBe(true);
 });
 
 test("generic backend access tool rejects attached calls", async () => {

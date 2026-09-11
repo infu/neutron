@@ -2,6 +2,7 @@ import icblast from "icblast";
 import {
   useEffect,
   useRef,
+  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
@@ -290,10 +291,13 @@ export function BackendCallRequest({
   const dialogRef = useRef<HTMLDivElement>(null);
   const additions = request.actions.filter((action) => action.kind === "reserve");
   const broad = additions.some((action) => action.scope.kind !== "exact");
+  const oneTime = request.oneTimeCycleCall;
+  const [acknowledged, setAcknowledged] = useState(false);
   const titleId = `backend-call-title-${request.id}`;
   const warningId = `backend-call-warning-${request.id}`;
 
   useEffect(() => {
+    setAcknowledged(false);
     const previousFocus =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -312,7 +316,7 @@ export function BackendCallRequest({
         aria-describedby={warningId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className={`dialog ${broad ? "dialog-danger" : "dialog-warning"}`}
+        className={`dialog ${broad || oneTime ? "dialog-danger" : "dialog-warning"}`}
         data-tid="backend-call-dialog"
         onKeyDown={(event) => {
           if (
@@ -328,14 +332,28 @@ export function BackendCallRequest({
         role="alertdialog"
       >
         <div className="title" id={titleId}>
-          Allow {appName} backend access?
+          {oneTime ? `Spend Neutron cycles once?` : `Allow ${appName} backend access?`}
         </div>
         <div className="call">
-          <BackendAccessDecisionSummary
+          {oneTime ? <div id={warningId} className="consent-cycle-spend">
+            <ConsentNotice tone="danger">
+              <strong>{appName}</strong> wants to spend your Neutron’s operating cycles beyond its usual app budget. Cycles keep your Neutron running. This transfer cannot be undone by Neutron.
+            </ConsentNotice>
+            <div className="consent-cycle-spend-amount">{oneTime.allowPartial ? "Up to " : ""}{exactTrillionCycles(oneTime.cyclesAtoms)}</div>
+            <div className="consent-backend-limits">
+              <span>Current balance <strong>{exactTrillionCycles(oneTime.balanceAtoms)}</strong></span>
+              <span>Estimated remaining <strong>{exactTrillionCycles(oneTime.remainingCyclesAtoms)}</strong></span>
+              <span>At least <strong>{exactTrillionCycles(oneTime.reserveAtoms)}</strong> kept for running Neutron at dispatch.</span>
+            </div>
+            <p>One call to <code>{oneTime.canister}</code> · <code>{oneTime.method}</code></p>
+            <p>{oneTime.allowPartial ? "The amount may decrease before sending to preserve the reserve. " : ""}This approval applies only to this call. The app’s recurring limits stay unchanged.</p>
+            <p className="consent-cycle-usual">Usual app budget: {exactTrillionCycles(oneTime.usualLimitPerCallAtoms)} per call · {exactTrillionCycles(oneTime.usualLimitPerDayAtoms)} per day.</p>
+            <label className="consent-cycle-ack"><input type="checkbox" data-tid="one-time-cycle-acknowledgement" checked={acknowledged} onChange={(event) => setAcknowledged(event.currentTarget.checked)} />I understand this spends my Neutron’s operating cycles.</label>
+          </div> : <BackendAccessDecisionSummary
             appName={appName}
             id={warningId}
             request={request}
-          />
+          />}
           <ConsentTechnicalDetails mode={uiMode}>
           <div className="a-infogrid">
             <div className="label">App id</div>
@@ -367,6 +385,10 @@ export function BackendCallRequest({
               </>
             ) : null}
           </div>
+          {oneTime ? <>
+            <div className="a-infogrid"><div className="label">Request id</div><div className="val instance-id">{oneTime.requestId}</div><div className="label">Call cost estimate</div><div className="val">{oneTime.callCostAtoms} cycles</div></div>
+            <CanonicalJsonReview ariaLabel="Exact Candid arguments for the cycle transfer" heading="Exact Candid arguments (hexadecimal)" value={oneTime.argsHex} />
+          </> : null}
           {request.actions.length > 0 ? (
             <div className="a-args backend-access-actions">
               {request.actions.map((action, index) => (
@@ -394,11 +416,11 @@ export function BackendCallRequest({
               ) : null}
             </>
           ) : null}
-          <div className="uninstall-warning">
+          {!oneTime ? <div className="uninstall-warning">
             {backendAccessWarning(request.actions)} Method names are
             app-selected identifiers; the kernel does not attest their
             behavior.
-          </div>
+          </div> : null}
           </ConsentTechnicalDetails>
           <div className="btn-actions">
             <PauseRequests
@@ -406,12 +428,13 @@ export function BackendCallRequest({
               onPause={() => rejectBackendCallRequest(request.id)}
             />
             <button
-              className={broad ? "btn btn-danger" : "btn btn-warning"}
+              className={broad || oneTime ? "btn btn-danger" : "btn btn-warning"}
               data-tid="backend-call-approve"
+              disabled={Boolean(oneTime && !acknowledged)}
               onClick={() => approveBackendCallRequest(request.id)}
               type="button"
             >
-              {additions.length > 0
+              {oneTime ? `Spend ${oneTime.allowPartial ? "up to " : ""}${exactTrillionCycles(oneTime.cyclesAtoms)}` : additions.length > 0
                 ? "Grant access"
                 : request.actions.length > 0
                   ? "Remove access"
@@ -424,13 +447,20 @@ export function BackendCallRequest({
               ref={rejectRef}
               type="button"
             >
-              Reject
+              {oneTime ? "Cancel" : "Reject"}
             </button>
           </div>
         </div>
       </div>
     </>
   );
+}
+
+function exactTrillionCycles(atoms: string): string {
+  const value = BigInt(atoms);
+  const whole = value / 1_000_000_000_000n;
+  const fraction = (value % 1_000_000_000_000n).toString().padStart(12, "0").replace(/0+$/, "");
+  return `${whole.toLocaleString("en-US")}${fraction ? `.${fraction}` : ""} T cycles`;
 }
 
 function BackendAccessDecisionSummary({

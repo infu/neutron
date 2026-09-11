@@ -55,6 +55,10 @@ type IcblastPreset = string | IDL.InterfaceFactory;
 type IcblastClient = (canister: string, preset?: IcblastPreset) => Promise<any>;
 
 export type KernelActor = CertifiedAssetsSettingsActor & {
+  kernel_owner_cycle_call_quote_v1(req: unknown): Promise<unknown>;
+  kernel_owner_cycle_call_execute_v1(req: unknown): Promise<unknown>;
+  kernel_owner_cycle_call_status_v1(req: unknown): Promise<unknown>;
+  kernel_owner_cycle_call_list_v1(req: unknown): Promise<unknown>;
   kernel_repository_access_v1(req: {
     source: Principal;
     cycles: bigint;
@@ -748,6 +752,15 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
     app_id: IDL.Text,
     installation_uid: IDL.Nat64,
   });
+  const CycleCallError = IDL.Record({ code: IDL.Text, message: IDL.Text });
+  const OwnerCycleRequest = IDL.Record({
+    id: IDL.Vec(IDL.Nat8), app_scope: AppScope,
+    call: IDL.Record({ canister: IDL.Principal, method: IDL.Text, args: IDL.Vec(IDL.Nat8), cycles: IDL.Nat }),
+    allow_partial: IDL.Bool,
+  });
+  const OwnerCycleQuote = IDL.Record({ balance: IDL.Nat, call_cost: IDL.Nat, min_remaining_cycles: IDL.Nat, max_cycles: IDL.Nat, actual_cycles: IDL.Nat, max_cycles_per_call: IDL.Nat, max_cycles_per_day: IDL.Nat });
+  const OwnerCycleReceipt = IDL.Record({ request: OwnerCycleRequest, sequence: IDL.Nat, created_at: IDL.Nat64, updated_at: IDL.Nat64, dispatched: IDL.Bool, actual_cycles: IDL.Nat, result: IDL.Opt(IDL.Variant({ ok: IDL.Vec(IDL.Nat8), err: CycleCallError })), charged_cycles: IDL.Opt(IDL.Nat) });
+  const OwnerCycleSummary = IDL.Record({ id: IDL.Vec(IDL.Nat8), sequence: IDL.Nat, canister: IDL.Principal, method: IDL.Text, requested_cycles: IDL.Nat, actual_cycles: IDL.Nat, allow_partial: IDL.Bool, created_at: IDL.Nat64, updated_at: IDL.Nat64, dispatched: IDL.Bool, settled: IDL.Bool, charged_cycles: IDL.Opt(IDL.Nat), error: IDL.Opt(CycleCallError) });
   const CertifiedAssetsSettings = certifiedAssetsSettingsIdl(IDL, AppScope);
   const AppInstance = IDL.Record({
     scope: AppScope,
@@ -1112,6 +1125,10 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
       [IDL.Vec(BackendReservationSummary)],
       ["query"],
     ),
+    kernel_owner_cycle_call_quote_v1: IDL.Func([OwnerCycleRequest], [IDL.Variant({ ok: OwnerCycleQuote, err: CycleCallError })], ["query"]),
+    kernel_owner_cycle_call_execute_v1: IDL.Func([OwnerCycleRequest], [IDL.Variant({ ok: OwnerCycleReceipt, err: CycleCallError })], []),
+    kernel_owner_cycle_call_status_v1: IDL.Func([IDL.Record({ app_scope: AppScope, id: IDL.Vec(IDL.Nat8) })], [IDL.Opt(OwnerCycleReceipt)], ["query"]),
+    kernel_owner_cycle_call_list_v1: IDL.Func([IDL.Record({ app_scope: AppScope, before: IDL.Opt(IDL.Nat), limit: IDL.Nat })], [IDL.Record({ calls: IDL.Vec(OwnerCycleSummary), next_before: IDL.Opt(IDL.Nat) })], ["query"]),
     kernel_access_snapshot: IDL.Func([IDL.Null], [KernelAccessSnapshot], []),
     kernel_authorized_add: IDL.Func([IDL.Principal], [IDL.Null], []),
     kernel_authorized_rem: IDL.Func([IDL.Principal], [IDL.Null], []),

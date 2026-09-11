@@ -122,6 +122,7 @@ import {
   requestBackendReservationForEndpoint,
   type NormalizedBackendAccessRequest,
 } from "./backend_calls/service.ts";
+import { oneTimeCycleCallForEndpoint } from "./backend_calls/one_time_cycles.ts";
 import {
   beginEthereumProviderForEndpoint,
   endEthereumProviderForEndpoint,
@@ -1009,6 +1010,7 @@ function agentStatus(appId: string): JsonObject {
 
 function kernelToolSupportsRequestCancellation(name: string): boolean {
   return (
+    name.startsWith("backend_calls.cycles_") ||
     name === "canister.schema_v2" ||
     name === "canister.call_dialog_v2" ||
     name === "permissions.request" ||
@@ -1349,6 +1351,27 @@ defineKernelTool(
   },
   (args, caller) => listBackendReservationsForEndpoint(args, caller),
 );
+
+const oneTimeCycleCallSchema: JsonObject = {
+  type: "object", additionalProperties: false,
+  required: ["requestId", "canister", "method", "argsHex", "cyclesAtoms"],
+  properties: {
+    requestId: { type: "string", pattern: "^[a-f0-9]{32}$" },
+    canister: { type: "string" },
+    method: { type: "string", minLength: 1, maxLength: CANISTER_METHOD_MAX_LENGTH, pattern: "^[a-zA-Z0-9_]+$" },
+    argsHex: { type: "string", pattern: "^4449444c[a-f0-9]*$", description: "Complete Candid argument bytes in lowercase hexadecimal; whole bytes are validated before review." },
+    cyclesAtoms: { type: "string", pattern: "^0$|^[1-9][0-9]*$" },
+    allowPartial: { type: "boolean", description: "Allow less than the exact cap to retain the Neutron reserve. Defaults to false." },
+  },
+};
+for (const action of ["quote", "request", "status", "list"] as const) {
+  defineKernelTool(`backend_calls.cycles_${action}`, {
+    title: { quote: "Quote one-time cycle spend", request: "Request one-time cycle spend", status: "Read saved cycle call", list: "List saved cycle calls" }[action],
+    description: action === "request" ? "Always ask the Neutron owner to approve one exact call beyond the app's recurring cycle budget. Root agents cannot approve it. Retain requestId and use status after interruption; never replace an unknown call." : "Read the requesting app's one-time cycle call quote or saved receipt without spending cycles.",
+    inputSchema: action === "quote" || action === "request" ? oneTimeCycleCallSchema : action === "status" ? { type: "object", required: ["requestId"], properties: { requestId: { type: "string", pattern: "^[a-f0-9]{32}$" } }, additionalProperties: false } : { type: "object", properties: { before: { type: "string", pattern: "^0$|^[1-9][0-9]*$" }, limit: { type: "integer", minimum: 1 } }, additionalProperties: false },
+    annotations: { "neutron:effects": action === "request" ? ["network", "user_visible_ui", "write"] : ["read"] },
+  }, (args, caller, _invocation, _context, signal) => oneTimeCycleCallForEndpoint(action, args, caller, signal));
+}
 
 defineKernelTool(
   "apps.list",

@@ -78,6 +78,19 @@ module {
         #err : TransportFailure;
     };
 
+    // Runtime-only hooks for an exact owner-approved dispatch. These are
+    // never included in an application capability object.
+    public type OwnerCallHooks = {
+        before_dispatch : (CallRequest, Nat) -> ();
+        settled : (CallResult, Nat) -> ();
+    };
+    public type OwnerCallQuote = {
+        balance : Nat; call_cost : Nat; min_remaining_cycles : Nat;
+        max_cycles : Nat; actual_cycles : Nat;
+        max_cycles_per_call : Nat; max_cycles_per_day : Nat;
+    };
+    public type OwnerCallQuoteResult = { #ok : OwnerCallQuote; #err : CallError };
+
     public type Transport = {
         cycle_balance : () -> Nat;
         call_cost : (Text, Nat) -> Nat;

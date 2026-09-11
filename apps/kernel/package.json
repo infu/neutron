@@ -16,7 +16,8 @@
     "validate": "bun ../../packages/neutron-scripts/src/validate.ts",
     "watch": "bun build.ts watch",
     "start": "npm run watch",
-    "test": "bun test && bun test/motoko/run.ts"
+    "test": "bun test && bun test/motoko/run.ts && npm run test:owner-cycles",
+    "test:owner-cycles": "bun test/motoko/run_owner_cycles.ts"
   },
   "neutron": {
     "loadLevel": 0

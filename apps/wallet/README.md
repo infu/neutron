@@ -19,15 +19,15 @@ owner-trusted apps and live agents, not a cold-storage boundary against the
 installed Wallet package. Installing or updating Wallet is therefore a
 consequential trust decision.
 
-Release 326 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
-The seven released version-1 roots and their lineage remain unchanged. A new,
-independent `wallet_refills` version-1 root retains refill and conversion progress.
+Release 327 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
+All eight released version-1 roots and their lineage remain unchanged, including
+the `wallet_refills` journal added in release 326.
 
 ## Refill a Neutron
 
 The Refill tab offers ICP or TCYCLES funding for **My Neutron**, with another
-canister under Advanced. **Get TCYCLES** converts ICP into tokens held by this
-Neutron; Advanced can select another recipient principal. Fresh Wallets include
+canister under Advanced. **Get TCYCLES** accepts ICP or this Neutron's operating
+cycles; Advanced can select another recipient principal. Fresh Wallets include
 TCYCLES with ICP, ckBTC and ckUSDC. Upgrades retain the owner's selected tokens;
 refilling can read both supported ledgers even when either is not selected.
 
@@ -41,7 +41,8 @@ CMC's timestamped ICP/XDR rate and can change before conversion. TCYCLES has
 | --- | --- |
 | Refill with ICP | Transfer ICP to the CMC's target-canister subaccount with the top-up memo, then notify the CMC using the original ledger block. |
 | Refill with TCYCLES | Withdraw from the cycles ledger to the selected canister. This converts the tokens into operating cycles. |
-| Get TCYCLES | Transfer ICP with the mint memo, then notify the CMC to mint into this Neutron's cycles-ledger account. An alternative recipient adds one TCYCLES transfer. |
+| Get TCYCLES with ICP | Transfer ICP with the mint memo, then notify the CMC to mint into this Neutron's cycles-ledger account. An alternative recipient adds one TCYCLES transfer. |
+| Get TCYCLES with Neutron cycles | Attach operating cycles to the cycles ledger's `deposit`, which credits the selected recipient directly, less its mint fee. |
 
 The [CMC interface](https://github.com/dfinity/ic/blob/18a551adafb15fdbfce04c0b1ab2397d4a9a4b59/rs/nns/cmc/cmc.did)
 and [cycles-ledger interface](https://github.com/dfinity/cycles-ledger/blob/2703d3630ef91ad23b4b10e7e4781c2825af4df0/cycles-ledger/cycles-ledger.did)
@@ -49,6 +50,28 @@ define these flows. CMC minting always credits the caller; it cannot directly
 mint to an arbitrary recipient. The cycles-ledger deposit fee is deducted from
 the gross minted amount, and an onward transfer has its own fee. Direct ICP
 refilling avoids these extra cycles-ledger steps.
+
+Operating-cycle conversion uses Kernel's generic one-time cycle call, available
+in Kernel 360. Its red warning shows the amount, app, destination and estimated
+remaining balance, and requires the owner's acknowledgment even for root-agent
+requests. This one decision replaces the Wallet review for this flow. It never
+raises Wallet's recurring zero-cycle spending allowance. Max approves an upper
+amount that can decrease at dispatch to preserve five trillion operating cycles
+and the call cost. With 55T available, approximately 50T can be converted.
+
+Kernel's independent journal retains the exact cycle call and raw ledger reply;
+no new Wallet memory root is needed. A successful decoded `deposit` reply proves
+the recorded ledger block. Its `balance` is the recipient's total balance, not
+this conversion's amount. The displayed net amount is an estimate using actual
+attached cycles and the fee retained in the deposit memo. This method has no
+remote deduplication: status/history reads recover the original result, and
+reusing its request ID never attaches cycles again. An unresolved result must
+not be replaced with another deposit.
+
+`wallet_cycles_conversion_quote_v1` previews the operating-cycle flow;
+`wallet_cycles_conversion_v1` requests its Kernel owner confirmation.
+`wallet_cycles_conversion_status_v1` decodes the retained receipt and
+`wallet_cycles_conversions_v1` pages compact history. There is no root bypass.
 
 Wallet saves exact requests before dispatch. A closed tile or interrupted reply
 does not discard a paid ICP transfer, pending CMC notification or recipient
@@ -72,7 +95,8 @@ Agent tools expose the same flows:
 The frontend uses `wallet_read_v1` for snapshot, catalog and refill reads, and
 `wallet_refill_action_v1` for prepare/execute/continue. This keeps the existing
 32-method frontend grant inventory. Released individual snapshot and catalog
-owner APIs remain available; no Kernel change is required.
+owner APIs remain available. Those three ledger-funded flows also work on
+earlier compatible Kernels; operating-cycle conversion requires Kernel 360.
 
 Keep `callerRequestId` with the original execution input. `operation.requestId`
 is Wallet's durable identity for status and continuation. Reusing that returned

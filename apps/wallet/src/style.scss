@@ -2538,3 +2538,8 @@ body {
     .wallet-refill-review .nt-dialog-body { padding: 16px; }
   }
 }
+
+@layer app {
+  .wallet-refill-reserve { color: var(--nt-text-faint); font-size: .66rem; line-height: 1.5; margin: -3px 0 15px; }
+  .wallet-refill-reserve strong { color: var(--nt-text-muted); font-weight: 550; white-space: nowrap; }
+}
