@@ -63,7 +63,14 @@ export function ethereumOperationView(result: EthereumInvoiceResult, source?: Et
   };
   if (first(result.invoice.canceledAtNs) !== null) {
     const pendingCredit = "settle" in result.nextAction || "review_required" in result.nextAction;
+    // The protocol also marks a canceled invoice active while polling its
+    // balance. That read alone does not reopen a canceled checkout.
+    const checkoutCanceled = "none" in result.nextAction && !receipt
+      && !result.invoice.acceptedReceiptId.length && !result.invoice.currentSweepId.length && result.invoice.nextSweepOrdinal === 0n
+      && !result.sweep.length && !result.attempt.length && !result.invoice.entitlementGrantedAtNs.length && !result.invoice.revenueFinalizedAtNs.length
+      && (first(result.invoice.lastBalance) ?? 0n) === 0n && result.invoice.creditedBuyerAtoms === 0n;
     return { ...identity, state: "failed", nextAction: result.active ? "none" : "settle" in result.nextAction ? "resume" : "review_required" in result.nextAction ? "review" : "none",
+      ...(checkoutCanceled ? { checkoutCanceled: true } : {}),
       message: detail ?? "This invoice was canceled and has not granted app access. Retain its ID to reconcile any earlier payment.",
       ...(pendingCredit ? { settlement: { state: "pending" as const, message: "Funds associated with this canceled invoice still need buyer-credit settlement. Continue the original invoice without paying again." } } : {}),
     };

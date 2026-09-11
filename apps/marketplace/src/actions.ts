@@ -2,11 +2,19 @@ import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
 import { checkoutType, withdrawalType, encodeOpaque, decodeOpaque, first, type Checkout, type WithdrawQuote, type WireResult, type Option } from "./protocol.ts";
 import { protocolClient, operationView, randomId, ProtocolError } from "./client.ts";
 import { loadIntent, listIntents, saveIntent, reviseIntent } from "./store.ts";
-import { createPurchaseFundingRequest, parseFundingResult, requestFunding, rootFundingInstruction, spenderAccountText, type PurchaseFundingRequest, type FundingInstruction } from "./wallet.ts";
+import { createPurchaseFundingRequest, parseFundingResult, requestFunding, rootFundingInstruction, spenderAccountText, type PurchaseFundingRequest, type FundingInstruction, type FundingResult } from "./wallet.ts";
 import type { OperationResult, PurchaseQuote, WithdrawalQuote } from "./view-types.ts";
 
 export type Scope = { canister: string; owner: string; callerApp: string; installation: string; root: boolean };
-export type SavedIntent = { version: 1; scope: Scope; kind: "purchase"; quote: PurchaseQuote; funding: PurchaseFundingRequest | null } | { version: 1; scope: Scope; kind: "withdrawal"; quote: WithdrawalQuote };
+type PurchaseProgress = {
+  version: 1;
+  /** Written before requesting collection. A missing reply must remain recoverable. */
+  dispatch: "not_requested" | "requested" | "rejected";
+  fundingResult?: FundingResult;
+  rejection?: string;
+};
+type PurchaseIntent = { version: 1; scope: Scope; kind: "purchase"; quote: PurchaseQuote; funding: PurchaseFundingRequest | null; progress?: PurchaseProgress };
+export type SavedIntent = PurchaseIntent | { version: 1; scope: Scope; kind: "withdrawal"; quote: WithdrawalQuote };
 export type ActionResult = OperationResult & { fundingInstructions?: FundingInstruction[] };
 export function scope(context: MsgBusToolContext, canister: string, owner: string): Scope {
   const caller = context.caller;
@@ -49,6 +57,45 @@ function fundingFor(wire: Checkout): PurchaseFundingRequest | null {
   return createPurchaseFundingRequest({ requestId: randomId(), ledger: wire.request.ledger.toText(), saleAtoms: String(wire.amount), spender: first(wire.spender.subaccount) ? spenderAccountText(wire.spender.owner.toText(), first(wire.spender.subaccount)!) : wire.spender.owner.toText(), validUntilNs: String(now + 240_000_000_000n), expiresAtNs: String(now + 300_000_000_000n) });
 }
 function id(value: string): string { if (!/^[0-9a-f]{32}$/.test(value)) throw new Error("Retain one 32-character lowercase hexadecimal operation ID."); return value; }
+async function savePurchaseProgress(context: MsgBusToolContext, saved: PurchaseIntent, progress: PurchaseProgress): Promise<PurchaseIntent> {
+  if (JSON.stringify(saved.progress) === JSON.stringify(progress)) return saved;
+  const replacement = { ...saved, progress };
+  await reviseIntent(context.kernel, `operation:${saved.quote.operationId}`, saved, replacement);
+  return replacement;
+}
+
+/** UI dismissal never deletes the retained request. A later protocol payment
+ * observation replaces this classification and restores its recovery controls. */
+function purchaseObservation(operationId: string, observed: WireResult | null, saved?: PurchaseIntent): OperationResult {
+  const progress = saved?.progress?.version === 1 ? saved.progress : undefined;
+  if (observed) {
+    const view = operationView(observed), attempt = first(observed.attempt);
+    if (view.state === "complete") return { ...view, canDismiss: true };
+    const state = Object.keys(observed.order?.state ?? {})[0];
+    const noEffect = !observed.active && !view.ledgerBlock && attempt?.state.no_effect === null && attempt.hadUnknown === false;
+    const notAttempted = !observed.active && !attempt && ["prepared", "funding_required", "failed"].includes(state ?? "");
+    if (!noEffect && !notAttempted) return view;
+    if (progress?.dispatch === "not_requested" && progress.fundingResult?.status === "rejected") {
+      return { ...view, state: "failed", nextAction: "none", checkoutCanceled: true, canDismiss: true,
+        message: `${progress.fundingResult.message ?? "The Wallet approval was declined."} No purchase payment was made.` };
+    }
+    return { ...view, canDismiss: true };
+  }
+  if (progress?.dispatch === "requested") return { operationId, state: "pending", nextAction: "resume",
+    message: "The original purchase was requested, but its outcome is not available yet. Check this saved request before any further payment." };
+  if (progress?.dispatch === "not_requested" && progress.fundingResult?.status === "rejected") return {
+    operationId, state: "failed", nextAction: "none", checkoutCanceled: true, canDismiss: true,
+    message: `${progress.fundingResult.message ?? "The Wallet approval was declined."} No purchase payment was requested.`,
+  };
+  if (progress?.dispatch === "rejected") return { operationId, state: "failed", nextAction: "review", canDismiss: true,
+    message: `${progress.rejection ?? "The protocol declined this purchase."} No protocol ledger attempt is recorded for this request.` };
+  return { operationId, state: "approval_required", nextAction: "resume", canDismiss: true,
+    message: progress?.dispatch === "not_requested"
+      ? progress.fundingResult?.status === "approved"
+        ? "The Wallet allowance was approved, but purchase payment was not requested. You can dismiss this checkout; its approval fee is already paid."
+        : "The original reviewed quote is saved. Purchase payment has not been requested."
+      : "No protocol purchase payment is currently recorded. You can dismiss this notification; its saved request remains available and any later payment evidence will appear again." };
+}
 async function dispatchError(context: MsgBusToolContext, kind: "purchase" | "withdraw", operationId: string, error: unknown): Promise<OperationResult> {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ProtocolError) {
@@ -58,7 +105,7 @@ async function dispatchError(context: MsgBusToolContext, kind: "purchase" | "wit
       const client = await protocolClient(context);
       const observed = first(await client.query<Option<WireResult>>(`${kind}_status`, [{ requestId: operationId }]));
       if (observed) return { ...operationView(observed), message: `${message} ${operationView(observed).message}` };
-      if (!error.code.endsWith("_interrupted")) return { operationId, state: "failed", nextAction: "review", message: `${message} No protocol ledger attempt is recorded for this request.` };
+      if (!error.code.endsWith("_interrupted")) return { operationId, state: "failed", nextAction: "review", canDismiss: kind === "purchase", message: `${message} No protocol ledger attempt is recorded for this request.` };
     } catch { /* Preserve uncertainty if the status observation is unavailable. */ }
   }
   return { operationId, state: "pending", nextAction: "resume", message: `${message} The original ${kind} request is saved. Check its status before any further payment.` };
@@ -83,7 +130,7 @@ export async function runPurchase(context: MsgBusToolContext, supplied: Purchase
       const canonical = await client.purchaseView(authoritative);
       if (canonical.commitment !== supplied.commitment) throw new Error("The reviewed commitment differs from the protocol quote.");
       if (saved.funding) canonical.warnings.push("An earlier approval may remain for the previous quote. These updated terms use their own bounded Wallet approval.");
-      const replacement: SavedIntent = { ...saved, quote: canonical, funding: fundingFor(authoritative) };
+      const replacement: PurchaseIntent = { ...saved, quote: canonical, funding: fundingFor(authoritative), progress: { version: 1, dispatch: "not_requested" } };
       await authorize(context, { kind: "purchase", quote: canonical as unknown as JsonObject }, true);
       await reviseIntent(context.kernel, key, saved, replacement);
       saved = replacement; reviewedRevision = true; fundingResult = undefined;
@@ -96,19 +143,20 @@ export async function runPurchase(context: MsgBusToolContext, supplied: Purchase
     const canonical = await client.purchaseView(wire);
     if (canonical.commitment !== supplied.commitment || JSON.stringify(canonical.appIds) !== JSON.stringify(supplied.appIds)) throw new Error("The purchase display does not match the selected apps and original quote.");
     const funding = fundingFor(wire);
-    saved = { version: 1, kind: "purchase", scope: currentScope, quote: canonical, funding };
+    saved = { version: 1, kind: "purchase", scope: currentScope, quote: canonical, funding, progress: { version: 1, dispatch: "not_requested" } };
     // The exact quote and Wallet request are durable before either financial call.
     await saveIntent(context.kernel, key, saved);
   }
   const original = decodeOpaque<Checkout>(checkoutType, saved.quote.opaque);
   const observed = first(await client.query<Option<WireResult>>("purchase_status", [{ requestId: operationId }]));
-  if (observed && operationView(observed).state === "complete") return operationView(observed);
-  if (observed && operationView(observed).nextAction === "none") return operationView(observed);
+  if (observed && operationView(observed).state === "complete") return purchaseObservation(operationId, observed, saved);
+  if (observed && operationView(observed).nextAction === "none") return purchaseObservation(operationId, observed, saved);
   if (!reviewedRevision) await authorize(context, { kind: "purchase", quote: saved.quote as unknown as JsonObject });
   const state = observed?.order ? Object.keys(observed.order.state)[0] : null;
   // Once dispatched, let the protocol reconcile its same immutable ledger attempt.
-  if (saved.funding && !["dispatched", "outcome_unknown"].includes(state ?? "")) {
-    if (context.agentMode && fundingResult === undefined) return { operationId, state: "approval_required", nextAction: "resume", message: "Authorize this exact Wallet allowance from the root agent, then call marketplace_purchase_v1 with the same operation ID and the raw fundingResult.", fundingInstructions: [rootFundingInstruction(saved.funding)] };
+  let confirmedFunding = saved.progress?.fundingResult;
+  if (saved.funding && !["dispatched", "outcome_unknown"].includes(state ?? "") && !(saved.progress?.dispatch === "requested" && !observed)) {
+    if (context.agentMode && fundingResult === undefined) return { operationId, state: "approval_required", nextAction: "resume", canDismiss: purchaseObservation(operationId, observed, saved).canDismiss === true, message: "Authorize this exact Wallet allowance from the root agent, then call marketplace_purchase_v1 with the same operation ID and the raw fundingResult.", fundingInstructions: [rootFundingInstruction(saved.funding)] };
     let funded = context.agentMode ? parseFundingResult(fundingResult, saved.funding.requestId, currentScope.callerApp) : await requestFunding(context.kernel, saved.funding);
     const now = BigInt(Date.now()) * 1_000_000n;
     const expiredRejection = funded.status === "rejected" && now >= BigInt(saved.funding.validUntilNs);
@@ -125,21 +173,43 @@ export async function runPurchase(context: MsgBusToolContext, supplied: Purchase
       if (mayRenew) {
         const authoritative = await client.query<Checkout>("purchase_quote", [original.request]);
         if (!samePurchase(original, authoritative)) throw new Error("Purchase costs changed. Continue this same operation to review the updated quote before renewing its approval.");
-        const replacement: SavedIntent = { ...saved, quote: { ...saved.quote, warnings: [...saved.quote.warnings, "The previous Wallet approval expired. Renewing requires another bounded approval and its ledger fee; the purchase keeps its original request ID."] }, funding: fundingFor(original) };
+        const replacement: PurchaseIntent = { ...saved, quote: { ...saved.quote, warnings: [...saved.quote.warnings, "The previous Wallet approval expired. Renewing requires another bounded approval and its ledger fee; the purchase keeps its original request ID."] }, funding: fundingFor(original), progress: { version: 1, dispatch: "not_requested" } };
         await authorize(context, { kind: "purchase", quote: replacement.quote as unknown as JsonObject }, true);
         await reviseIntent(context.kernel, key, saved, replacement);
         saved = replacement;
-        if (context.agentMode) return { operationId, state: "approval_required", nextAction: "resume", message: "The expired approval was retained in history. Authorize this replacement Wallet request, then continue the SAME purchase ID with its raw fundingResult.", fundingInstructions: [rootFundingInstruction(saved.funding!)] };
+        if (context.agentMode) return { operationId, state: "approval_required", nextAction: "resume", canDismiss: true, message: "The expired approval was retained in history. Authorize this replacement Wallet request, then continue the SAME purchase ID with its raw fundingResult.", fundingInstructions: [rootFundingInstruction(saved.funding!)] };
         funded = await requestFunding(context.kernel, saved.funding!);
       }
     }
-    if (funded.status !== "approved") return { operationId, state: funded.status === "pending" ? "pending" : "failed", nextAction: "resume", message: funded.message ?? "The original Wallet approval is not confirmed. Resume its saved request." };
+    if (funded.status !== "approved") {
+      // Allowance approval is separate from transferFrom. Retain an explicit
+      // refusal so a reload cannot revive it as an unfinished purchase.
+      // Legacy journals did not record dispatch. A newly rejected approval
+      // cannot prove that an earlier invocation never reached collection.
+      const progress: PurchaseProgress = { version: 1, dispatch: saved.progress?.dispatch ?? "requested", fundingResult: funded };
+      saved = await savePurchaseProgress(context, saved, progress);
+      if (funded.status === "rejected") return purchaseObservation(operationId, observed, saved);
+      return { operationId, state: "pending", nextAction: "resume", canDismiss: progress.dispatch === "not_requested",
+        message: funded.message ?? (progress.dispatch === "not_requested" ? "The Wallet allowance result is not confirmed. Purchase payment has not been requested." : "The Wallet allowance result is not confirmed. Check this original purchase before any further payment.") };
+    }
+    confirmedFunding = funded;
+    if (context.signal?.aborted) {
+      saved = await savePurchaseProgress(context, saved, { version: 1, dispatch: saved.progress?.dispatch ?? "requested", fundingResult: funded });
+      context.signal.throwIfAborted();
+    }
   }
   context.signal?.throwIfAborted();
+  saved = await savePurchaseProgress(context, saved, { version: 1, dispatch: "requested", ...(confirmedFunding ? { fundingResult: confirmedFunding } : {}) });
+  context.signal?.throwIfAborted();
   try {
-    return operationView(await client.update<WireResult>("purchase", { quote: original }, original.cycles));
+    return purchaseObservation(operationId, await client.update<WireResult>("purchase", { quote: original }, original.cycles), saved);
   } catch (error) {
-    return dispatchError(context, "purchase", operationId, error);
+    const result = await dispatchError(context, "purchase", operationId, error);
+    if (error instanceof ProtocolError && result.canDismiss === true) {
+      saved = await savePurchaseProgress(context, saved, { ...saved.progress!, dispatch: "rejected", rejection: error.message });
+      return purchaseObservation(operationId, null, saved);
+    }
+    return result;
   }
 }
 
@@ -182,13 +252,17 @@ export async function operationStatus(context: MsgBusToolContext, operationId: s
   for (const name of names) {
     const result = first(await client.query<Option<WireResult>>(name, [{ requestId: operationId }]));
     if (result) {
-      const view = operationView(result);
+      const view = name === "purchase_status" ? purchaseObservation(operationId, result, saved?.kind === "purchase" ? saved : undefined) : operationView(result);
       if (saved && JSON.stringify(saved.scope) !== JSON.stringify(scope(context, client.state.canisterId!, client.state.owner)) && view.nextAction === "resume") return { ...view, nextAction: "none", message: `${view.message} Continue from the original ${saved.scope.callerApp} ${saved.scope.root ? "root agent" : "application"} so its saved Wallet authority remains unchanged.` };
       return view;
     }
   }
   if (saved) {
     const same = JSON.stringify(saved.scope) === JSON.stringify(scope(context, client.state.canisterId!, client.state.owner));
+    if (saved.kind === "purchase") {
+      const view = purchaseObservation(operationId, null, saved);
+      return !same && view.nextAction !== "none" ? { ...view, nextAction: "none", message: `${view.message} Continue from the original ${saved.scope.callerApp} ${saved.scope.root ? "root agent" : "application"}.` } : view;
+    }
     return { operationId, state: "approval_required", nextAction: same ? "resume" : "none", message: same ? "The original reviewed quote is saved. No protocol dispatch has been recorded." : `This request belongs to the original ${saved.scope.callerApp} ${saved.scope.root ? "root agent" : "application"}. Resume it there to preserve its exact Wallet request.` };
   }
   throw new Error("No saved operation was found for this ID.");
@@ -206,7 +280,7 @@ export async function operationHistory(context: MsgBusToolContext, input: { purc
   type Cursor = { start: null } | { done: null } | { after: bigint };
   const next = (value: Cursor): string => "after" in value ? String(value.after) : "done" in value ? "done" : "start";
   const page = await client.query<{ purchases: WireResult[]; withdrawals: WireResult[]; nextPurchaseCursor: Cursor; nextWithdrawalCursor: Cursor }>("operation_history", [{ purchaseCursor: cursor(input.purchaseCursor), withdrawalCursor: cursor(input.withdrawalCursor), limit: 24n }]);
-  return { purchases: page.purchases.map(operationView), withdrawals: page.withdrawals.map(operationView), nextPurchaseCursor: next(page.nextPurchaseCursor), nextWithdrawalCursor: next(page.nextWithdrawalCursor) };
+  return { purchases: page.purchases.map(value => purchaseObservation(value.order!.requestId, value)), withdrawals: page.withdrawals.map(operationView), nextPurchaseCursor: next(page.nextPurchaseCursor), nextWithdrawalCursor: next(page.nextWithdrawalCursor) };
 }
 export async function resumeOperation(context: MsgBusToolContext, operationId: string, fundingResult?: unknown): Promise<ActionResult> {
   const saved = await loadIntent<SavedIntent>(context.kernel, `operation:${id(operationId)}`);

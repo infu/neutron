@@ -21,7 +21,7 @@ import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const principal='3rurp-vyaaa-aaaay-aacua-cai';
 const scenario=new URL(location.href).searchParams;
-const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[],installations:[],discountCode:localStorage.getItem('discountCode'),discountReads:0,discountSaves:[],operations:[],cancelPurchase:false,discountRelease:null};
+const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[],installations:[],discountCode:localStorage.getItem('discountCode'),discountReads:0,discountSaves:[],operations:JSON.parse(sessionStorage.getItem('canceledCheckoutFixture')||'[]'),cancelPurchase:false,discountRelease:null};
 const entries=[
  ['notes','Quiet Notes','A little space for your biggest ideas.','0'],
  ['garden','Garden','A clearer view of your day.','0'],
@@ -50,9 +50,10 @@ const client={
  publisherApps:async()=>({items:[],nextCursor:null}),
  quotePublication:async()=>{throw Error('Unexpected publication')},publish:async()=>{throw Error('Unexpected publication')},
  quotePurchase:async input=>{const args={...input,affiliateCode:input.affiliateCode===undefined?(state.discountCode||''):input.affiliateCode};state.calls.push(['quotePurchase',args]);return quote(args)},
- purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);if(state.cancelPurchase)return {operationId:q.operationId,state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'};return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
+ purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);if(state.cancelPurchase==='ic')return {operationId:q.operationId,state:'failed',nextAction:'none',checkoutCanceled:true,message:'The Wallet approval was declined. No purchase payment was requested.'};if(state.cancelPurchase)return {operationId:q.operationId,state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'};return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
  operation:async id=>{state.calls.push(['operation',id]);return {operationId:id,state:'pending',message:'Waiting for the original payment.',nextAction:'resume'}},
  resumeOperation:async id=>{state.calls.push(['resumeOperation',id]);return {operationId:id,state:'complete',message:'Your app is ready.',nextAction:'none'}},
+ cancelEthereumCheckout:async id=>{state.calls.push(['cancelEthereumCheckout',id]);const canceled={operationId:id,paymentRail:'ethereum',state:'failed',nextAction:'none',checkoutCanceled:true,message:'Checkout canceled.'};state.operations=state.operations.map(item=>item.operationId===id?canceled:item);sessionStorage.setItem('canceledCheckoutFixture',JSON.stringify(state.operations));return canceled;},
  recentOperations:async()=>[...state.operations,...state.installations.map(installResult),...(state.restored?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[])],
  quoteInstallation:async(ids,operationId)=>{const saved=state.installations.find(item=>operationId?item.operationId===operationId:JSON.stringify(item.appIds)===JSON.stringify(ids));const quote=saved??{operationId:operationId??(state.installationQuotes.length+1).toString(16).padStart(32,'0'),appIds:[...ids],canisterId:session.canisterId,owner:principal,cycles,fee:{feeVersion:'1',processingCycles:cycles.processing,storageCycles:'0',totalCycles:cycles.total,processingBytes:'1024',newStorageBytes:'0'}};state.installationQuotes.push(quote);return quote;},
  install:async(ids,quote)=>{if(!state.installationQuotes.includes(quote)||JSON.stringify(ids)!==JSON.stringify(quote.appIds))throw Error('Install must retain the exact reviewed quote and app selection.');state.calls.push(['install',ids,quote.operationId]);let saved=state.installations.find(item=>item.operationId===quote.operationId);if(!saved){saved={...quote,setupUrl:'https://example.invalid/#manifest='+quote.operationId,cycles:{...cycles,total:'0',processing:'0'},fee:{...quote.fee,totalCycles:'0',processingCycles:'0'}};state.installations.push(saved);}return installResult(saved)},
@@ -393,6 +394,90 @@ try {
   assert.equal(await page.locator('.mp-activity-card').count(), 1, 'fresh saved receipt supersedes the earlier local cancellation and remains visible even if an obsolete cancellation flag remains');
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), ['0123456789abcdef0123456789abcdef']);
   checks.push('A later durable receipt supersedes a locally canceled observation on refresh; visibility is based on the newest evidence, without a replacement purchase.');
+
+  await page.goto(url);
+  await page.getByRole('button', { name: '$10.00', exact: true }).click();
+  await page.evaluate(() => { window.marketplaceFixture.cancelPurchase = 'ic'; });
+  const declinedIcCheckout = page.getByRole('dialog', { name: 'Review purchase', exact: true });
+  await declinedIcCheckout.getByRole('button', { name: 'Review costs', exact: true }).click();
+  await declinedIcCheckout.getByRole('button', { name: 'Buy · 10 ckUSDC', exact: true }).click();
+  await declinedIcCheckout.waitFor({ state: 'hidden' });
+  await activityTab.click();
+  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-notification-badge').count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), ['0123456789abcdef0123456789abcdef']);
+  checks.push('An explicitly rejected IC approval closes Checkout quietly and leaves no Activity card or badge.');
+
+  await page.goto(url);
+  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.evaluate(() => {
+    window.marketplaceFixture.operations = [{operationId:'ffffffffffffffffffffffffffffffff',paymentRail:'ethereum',state:'pending',nextAction:'resume',message:'An unpaid checkout is waiting.'}];
+  });
+  await page.getByRole('button', { name: 'Refresh marketplace', exact: true }).click();
+  await page.locator('.mp-notification-badge').getByText('1', { exact: true }).waitFor();
+  await activityTab.click();
+  await page.getByText('An unpaid checkout is waiting.', { exact: true }).waitFor();
+  await page.locator('.mp-activity-details summary').click();
+  await page.getByRole('button', { name: 'Cancel checkout', exact: true }).click();
+  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-notification-badge').count(), 0, 'successful Cancel checkout clears the badge immediately');
+  for (const refresh of ['Refresh activity', 'Refresh marketplace']) {
+    await page.getByRole('button', { name: refresh, exact: true }).click();
+    await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
+    assert.equal(await page.locator('.mp-notification-badge').count(), 0, 'saved canceled invoice cannot reappear as an unresolved failure');
+  }
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.calls.filter(call => call[0]==='cancelEthereumCheckout')), [['cancelEthereumCheckout','ffffffffffffffffffffffffffffffff']]);
+  await page.reload();
+  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await activityTab.click();
+  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-notification-badge').count(), 0, 'the persisted protocol cancellation also stays quiet after a browser reload');
+  await page.evaluate(() => {
+    window.marketplaceFixture.operations = [{operationId:'ffffffffffffffffffffffffffffffff',paymentRail:'ethereum',state:'failed',nextAction:'review',checkoutCanceled:true,ethereumTransactionHash:'0x'+'b'.repeat(64),settlement:{state:'pending',message:'Buyer credit still needs settlement.'},message:'An earlier payment now needs reconciliation.'}];
+  });
+  await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+  await page.getByText('An earlier payment now needs reconciliation.', { exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-notification-badge').textContent(), '1', 'a later payment must remain visible even with an obsolete canceled flag');
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), []);
+  await page.evaluate(() => sessionStorage.removeItem('canceledCheckoutFixture'));
+  checks.push('Cancel checkout removes the unpaid card and badge immediately, survives app refresh and browser reload, and later payment evidence restores recovery without another cancellation or payment.');
+
+  await page.goto(url);
+  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await page.evaluate(() => {
+    window.marketplaceFixture.operations = [
+      {operationId:'11111111111111111111111111111111',state:'approval_required',nextAction:'resume',canDismiss:true,message:'An ICP approval is saved. No marketplace payment is recorded.'},
+      {operationId:'22222222222222222222222222222222',state:'failed',nextAction:'none',checkoutCanceled:true,message:'The IC approval was rejected before payment.'},
+    ];
+    sessionStorage.setItem('canceledCheckoutFixture', JSON.stringify(window.marketplaceFixture.operations));
+  });
+  await page.getByRole('button', { name: 'Refresh marketplace', exact: true }).click();
+  await activityTab.click();
+  await page.getByText('An ICP approval is saved. No marketplace payment is recorded.', { exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-activity-card').count(), 1, 'a fully rejected IC approval needs no activity card');
+  await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
+  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-notification-badge').count(), 0);
+  await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();
+  await activityTab.click();
+  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-notification-badge').count(), 0, 'dismissed approval-only history remains quiet after browser reload');
+  await page.evaluate(() => {
+    window.marketplaceFixture.operations[0] = {...window.marketplaceFixture.operations[0],state:'pending',canDismiss:false,message:'The original ICP payment outcome is unknown.'};
+  });
+  await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
+  await page.getByText('The original ICP payment outcome is unknown.', { exact: true }).waitFor();
+  assert.equal(await page.locator('.mp-notification-badge').textContent(), '1');
+  assert.equal(await page.getByRole('button', { name: 'Dismiss notification', exact: true }).count(), 0, 'a submitted or uncertain payment retains recovery');
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), []);
+  await page.evaluate(() => {
+    sessionStorage.removeItem('canceledCheckoutFixture');
+    for (const key of Object.keys(localStorage)) if (key.startsWith('marketplace:activity-dismissed:')) localStorage.removeItem(key);
+  });
+  checks.push('Rejected IC approvals disappear; approval-only reminders can be dismissed across refresh/reload, while later unknown payments resurface and retain recovery without replay.');
 
   await page.goto(`${url}/?discount=delayed`);
   await page.getByRole('button', { name: /Atlas Productivity/ }).waitFor();

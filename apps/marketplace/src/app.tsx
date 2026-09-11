@@ -8,7 +8,7 @@ import { EarningsPanel } from "./components/earnings.tsx";
 import { PublisherPanel } from "./components/publisher.tsx";
 import { InstallControl } from "./components/install.tsx";
 import { NotificationsPanel, NotificationBell } from "./components/notifications.tsx";
-import { notificationAttentionCount } from "./notification-state.ts";
+import { canDismissNotification, notificationAttentionCount, notificationFingerprint, readDismissedNotifications, visibleNotifications, type DismissedNotifications } from "./notification-state.ts";
 import { AppPrice, DiscountCodeDialog, discountPercent, noDiscount } from "./components/discount.tsx";
 import { AgentReviewHost } from "./components/agent_review.tsx";
 import { AppIcon, EmptyState, ErrorNote, Icon, Loading, acquisitionStats, dateLabel, errorMessage, useRead } from "./components/primitives.tsx";
@@ -24,6 +24,7 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
   const [discount, setDiscount] = useState<DiscountPreference>(noDiscount), [discountOpen, setDiscountOpen] = useState(false), [discountRevision, setDiscountRevision] = useState(0);
   const discountGeneration = useRef(0);
   const [observations, setObservations] = useState<Record<string, OperationResult>>({}), [activityError, setActivityError] = useState("");
+  const [dismissedState, setDismissedState] = useState<{ key: string; entries: DismissedNotifications } | null>(null);
   const observationSequence = useRef(0), observationVersions = useRef<Record<string, number>>({});
   const [initializing, setInitializing] = useState(true), [setupError, setSetupError] = useState("");
   const setupInFlight = useRef<Promise<Session> | null>(null);
@@ -75,7 +76,24 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
   }, [client, session?.canisterId, session?.account, session?.connected, discountRevision]);
   function changeDiscount(value: DiscountPreference) { ++discountGeneration.current; setDiscount(value); }
   const operations = [...Object.values(observations).reverse(), ...(saved.data?.operations ?? [])];
-  const attentionCount = notificationAttentionCount(operations);
+  const notificationStorageKey = session?.account ? `marketplace:activity-dismissed:${JSON.stringify([session.host, session.canisterId, session.account])}` : null;
+  useEffect(() => {
+    if (!notificationStorageKey) { setDismissedState(null); return; }
+    let entries: DismissedNotifications = {};
+    try { entries = readDismissedNotifications(localStorage, notificationStorageKey); } catch { /* Browser storage may be unavailable. */ }
+    setDismissedState({ key: notificationStorageKey, entries });
+  }, [notificationStorageKey]);
+  const dismissed = dismissedState?.key === notificationStorageKey ? dismissedState.entries : {};
+  const notifications = visibleNotifications(operations, dismissed);
+  const attentionCount = notificationAttentionCount(notifications);
+  function dismissOperation(operation: OperationResult) {
+    const latest = operations.find(item => item.operationId === operation.operationId);
+    if (!notificationStorageKey || !latest || !canDismissNotification(latest) || notificationFingerprint(latest) !== notificationFingerprint(operation)) return;
+    const entries = { ...dismissed, [operation.operationId]: notificationFingerprint(latest) };
+    setDismissedState({ key: notificationStorageKey, entries });
+    try { localStorage.setItem(notificationStorageKey, JSON.stringify(entries)); }
+    catch { setActivityError("Dismissed for this session. This browser could not remember the change after a reload."); }
+  }
   useEffect(() => {
     if (active?.result.state !== "pending" || active.result.installation) return;
     const operationId = active.result.operationId;
@@ -157,7 +175,7 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
       {setupError && <div className="mp-error mp-setup-error" role="alert"><div><strong>Marketplace setup is unavailable</strong><p>{setupError}</p></div><button type="button" className="mp-secondary" disabled={initializing} onClick={retrySetup}>{initializing ? "Retrying…" : "Retry setup"}</button></div>}
       {initializing && <Loading label={session?.configured ? "Preparing your apps…" : "Opening marketplace…"} />}
       {session && !session.configured && !setupError && <ErrorNote error="Marketplace setup is unavailable." retry={retrySetup} />}
-      {session?.configured && (tab === "explore" ? <Explore key={session.canisterId} client={client} refresh={revision} discount={discount} editDiscount={() => setDiscountOpen(true)} select={setDetail} acquire={(app) => void acquire(app)} /> : tab === "library" ? <Library key={`${session.canisterId}:${session.account ?? ""}`} client={client} connected={session.connected} refresh={revision} select={setDetail} install={(ids, quote) => install(ids, quote)} installing={installing} explore={() => setTab("explore")} /> : tab === "activity" ? <NotificationsPanel operations={operations} loading={saved.loading} error={saved.error || activityError} onRefresh={() => setRevision(v => v + 1)} onCheck={item => observe(client.operation(item.operationId))} onResume={resumeOperation} onVerify={(item, hash) => observe(client.verifyEthereumTransaction(item.operationId, hash))} onCancel={item => observe(client.cancelEthereumCheckout(item.operationId))} /> : tab === "earnings" ? <EarningsPanel key={session.canisterId} client={client} connected={session.connected} refresh={revision} onOperation={onOperation} /> : null)}
+      {session?.configured && (tab === "explore" ? <Explore key={session.canisterId} client={client} refresh={revision} discount={discount} editDiscount={() => setDiscountOpen(true)} select={setDetail} acquire={(app) => void acquire(app)} /> : tab === "library" ? <Library key={`${session.canisterId}:${session.account ?? ""}`} client={client} connected={session.connected} refresh={revision} select={setDetail} install={(ids, quote) => install(ids, quote)} installing={installing} explore={() => setTab("explore")} /> : tab === "activity" ? <NotificationsPanel operations={notifications} onDismiss={dismissOperation} loading={saved.loading} error={saved.error || activityError} onRefresh={() => setRevision(v => v + 1)} onCheck={item => observe(client.operation(item.operationId))} onResume={resumeOperation} onVerify={(item, hash) => observe(client.verifyEthereumTransaction(item.operationId, hash))} onCancel={item => observe(client.cancelEthereumCheckout(item.operationId))} /> : tab === "earnings" ? <EarningsPanel key={session.canisterId} client={client} connected={session.connected} refresh={revision} onOperation={onOperation} /> : null)}
       {session?.configured && publisherOpened && <div hidden={tab !== "publish"}><PublisherPanel key={session.canisterId} client={client} connected={session.connected} refresh={revision} onChanged={() => setRevision((v) => v + 1)} /></div>}
     </div>
     {detail && <AppDetailDialog key={`${session?.canisterId ?? ""}:${session?.account ?? ""}:${detail.id}`} client={client} app={detail} discount={discount} installing={installing} close={() => setDetail(null)} acquire={(app) => void acquire(app)} install={(ids, quote) => install(ids, quote)} connected={session?.connected ?? false} connect={connect} />}
@@ -232,4 +250,3 @@ function Library({ client, connected, refresh, select, install, installing, expl
   }
   return <div className="mp-stack"><div className="mp-section-title"><div><h2>My Apps</h2><p>Owned by this Neutron. Yours to install again.</p></div><button className="mp-text-button" type="button" onClick={explore}>Explore apps <Icon name="arrow" /></button></div><ErrorNote error={read.error || error} />{read.loading && !read.data ? <Loading label="Loading your apps…" /> : apps.length === 0 && !read.error ? <EmptyState title="Make room for something useful" action={<button type="button" className="mp-primary" onClick={explore}>Explore apps</button>}>Your free and purchased apps will be saved here, even after uninstalling them.</EmptyState> : <><div className="mp-library-toolbar"><label className="mp-check-label"><input type="checkbox" checked={installable.length > 0 && actualSelected.length === installable.length} onChange={(event) => setSelected(new Set(event.target.checked ? installable.map((app) => app.id) : []))} disabled={installable.length === 0 || installing} />Select available</label><span className="mp-muted">{apps.length} {apps.length === 1 ? "app" : "apps"}</span></div><div className="mp-library-list">{apps.map((app) => <article className="mp-library-row" key={app.id}><input type="checkbox" aria-label={`Select ${app.title}`} checked={selected.has(app.id)} disabled={!app.available || !!app.installedVersion || installing} onChange={(event) => setSelected((old) => { const next = new Set(old); event.target.checked ? next.add(app.id) : next.delete(app.id); return next; })} /><button type="button" className="mp-library-app" onClick={() => select(app)}><AppIcon app={app} /><span><strong>{app.title}</strong><small>{app.available ? app.installedVersion === app.version ? "Installed · Up to date" : app.installedVersion ? `Update to ${app.version} in Settings` : "Ready to install" : app.unavailableReason || "Waiting for an approved release"}</small></span></button><InstallControl client={client} appIds={[app.id]} disabled={!app.available || !!app.installedVersion} busy={installing} label={app.installedVersion ? "Installed" : "Install"} className="mp-get-button" onInstall={install} /></article>)}</div>{(more ? more.nextCursor : read.data?.nextCursor) && <button type="button" className="mp-secondary mp-load-more" disabled={paging} onClick={() => void next()}>{paging ? "Loading…" : "Load more"}</button>}{actualSelected.length > 0 && <div className="mp-selection-bar"><span>{actualSelected.length} selected</span><InstallControl client={client} appIds={actualSelected} busy={installing} label="Install selected" className="mp-primary" onInstall={install} /></div>}</>}</div>;
 }
-

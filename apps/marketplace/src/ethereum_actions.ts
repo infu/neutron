@@ -124,8 +124,20 @@ function fundingJournal(context: MsgBusToolContext, saved: SavedEthereum): Ether
 function stepResult(saved: SavedEthereum, record: EthereumFundingRecord): OperationResult {
   return { operationId: saved.quote.operationId, appIds: saved.quote.appIds, ethereumWallet: saved.source, ...(saved.source === "browser" && record.state === "rejected" && !record.transactionHash ? { canceledBeforeSubmission: true } : {}), ...(record.transactionHash ? { ethereumTransactionHash: record.transactionHash } : {}), state: record.state === "reverted" || record.state === "rejected" ? "failed" : "pending", nextAction: record.state === "reverted" || record.state === "rejected" || record.state === "unknown" && !record.transactionHash ? "review" : "resume", message: record.message ?? "Retain the original Ethereum transaction and continue its receipt check." };
 }
+/** Canceling an invoice does not cancel an already dispatched Ethereum request.
+ * A quiet protocol snapshot must not erase that locally retained evidence. */
+async function savedInvoiceView(context: MsgBusToolContext, result: EthereumInvoiceResult, saved?: SavedEthereum | null): Promise<OperationResult> {
+  const view = ethereumOperationView(result, saved?.source);
+  if (!view.checkoutCanceled || !saved) return view;
+  const deposit = await fundingJournal(context, saved).read("deposit");
+  if (!deposit || deposit.state === "rejected" && !deposit.transactionHash && !deposit.receipt) return view;
+  const { checkoutCanceled: _canceled, ...retained } = view;
+  return { ...retained, ...(deposit.transactionHash ? { ethereumTransactionHash: deposit.transactionHash } : {}), nextAction: "review",
+    message: "Checkout canceled. The original Ethereum payment still has a saved wallet request. Check its original transaction before treating the payment as resolved; do not send another payment.",
+  };
+}
 async function verify(context: MsgBusToolContext, saved: SavedEthereum, result: EthereumInvoiceResult): Promise<OperationResult> {
-  if (result.entitled || result.active) return ethereumOperationView(result, saved.source);
+  if (result.entitled || result.active) return savedInvoiceView(context, result, saved);
   if ("settle" in result.nextAction) return invoiceAction(context, saved.quote.operationId, "settle");
   const deposit = await fundingJournal(context, saved).read("deposit");
   if (!deposit || deposit.state !== "confirmed" || !deposit.transactionHash) return deposit ? stepResult(saved, deposit) : ethereumOperationView(result, saved.source);
@@ -133,7 +145,7 @@ async function verify(context: MsgBusToolContext, saved: SavedEthereum, result: 
   if (String(fees.verify.totalCycles) !== saved.quote.ethereum!.verifyCycles.total) throw new Error("The receipt-verification cycle fee changed. Review current fees before verifying the saved payment.");
   // Protocol receipt proof, not this local observation, is the purchase authority.
   const verified = await client.update<EthereumInvoiceResult>("ethereum_verify", { requestId: saved.quote.operationId, transactionHash: deposit.transactionHash }, fees.verify);
-  return ethereumOperationView(verified, saved.source);
+  return savedInvoiceView(context, verified, saved);
 }
 export async function runEthereumPurchase(context: MsgBusToolContext, quote: PurchaseQuote): Promise<OperationResult> {
   if (quote.ethereum?.wallet !== "evm_wallet") throw new Error("Browser payments must run from the connected Marketplace tile.");
@@ -142,9 +154,9 @@ export async function runEthereumPurchase(context: MsgBusToolContext, quote: Pur
 async function executeEthereum(context: MsgBusToolContext, quote?: PurchaseQuote, id?: string): Promise<OperationResult> {
   const { saved, result } = await prepare(context, quote, id);
   if (saved.source !== "evm_wallet") throw new Error("Reconnect the original browser wallet to continue this invoice.");
-  if (result.entitled || result.active) return ethereumOperationView(result, saved.source);
+  if (result.entitled || result.active) return savedInvoiceView(context, result, saved);
   if ("settle" in result.nextAction) return invoiceAction(context, saved.quote.operationId, "settle");
-  if (!("pay_ethereum" in result.nextAction || "verify_ethereum" in result.nextAction)) return ethereumOperationView(result, saved.source);
+  if (!("pay_ethereum" in result.nextAction || "verify_ethereum" in result.nextAction)) return savedInvoiceView(context, result, saved);
   const journal = fundingJournal(context, saved), wallet = createEthereumFundingWallet(context);
   const depositExisting = await journal.read("deposit");
   if (!depositExisting) {
@@ -160,12 +172,16 @@ async function executeEthereum(context: MsgBusToolContext, quote?: PurchaseQuote
 }
 export async function resumeEthereumPurchase(context: MsgBusToolContext, id: string): Promise<OperationResult> {
   const observed = await ethereumInvoiceStatus(context, operationId(id));
-  if (observed?.entitled || observed?.active) return ethereumOperationView(observed);
+  if (observed?.entitled) return ethereumOperationView(observed);
+  if (observed?.active) {
+    const local = await loadIntent<SavedEthereum>(context.kernel, key(id));
+    return savedInvoiceView(context, observed, local ? await savedEthereum(context, id, false) : null);
+  }
   return executeEthereum(context, undefined, id);
 }
 export async function prepareEthereumBrowser(context: MsgBusToolContext, quote?: PurchaseQuote, id?: string) {
   assertBrowser(context); const { saved, result } = await prepare(context, quote, id); assertBrowser(context, saved);
-  return { plan: saved.plan!, result: ethereumOperationView(result, saved.source), fundingRequired: "pay_ethereum" in result.nextAction || "verify_ethereum" in result.nextAction };
+  return { plan: saved.plan!, result: await savedInvoiceView(context, result, saved), fundingRequired: "pay_ethereum" in result.nextAction || "verify_ethereum" in result.nextAction };
 }
 export async function ethereumJournalRead(context: MsgBusToolContext, id: string, kind: EthereumFundingKind) { const saved = await savedEthereum(context, id); assertBrowser(context, saved); return fundingJournal(context, saved).read(kind); }
 export async function ethereumJournalClaim(context: MsgBusToolContext, id: string, record: EthereumFundingRecord) { const saved = await savedEthereum(context, id); assertBrowser(context, saved); return fundingJournal(context, saved).claim(record); }
@@ -180,16 +196,16 @@ export async function ethereumSavedStatus(context: MsgBusToolContext, id: string
     const remote = await ethereumInvoiceStatus(context, id);
     if (!remote) return null;
     const view = ethereumOperationView(remote);
-    return remote.entitled || remote.active ? view : { ...view, nextAction: "review", message: `${view.message} Local wallet request details are unavailable. Do not create another payment; the original invoice can still receive and reconcile its existing deposit.` };
+    return remote.entitled || remote.active || view.checkoutCanceled ? view : { ...view, nextAction: "review", message: `${view.message} Local wallet request details are unavailable. Do not create another payment; the original invoice can still receive and reconcile its existing deposit.` };
   }
   const saved = await savedEthereum(context, id, false), result = await ethereumInvoiceStatus(context, id);
-  if (result?.entitled || result?.active) return ethereumOperationView(result, saved.source);
+  if (result?.entitled || result?.active) return savedInvoiceView(context, result, saved);
   // A local wallet rejection cannot override later protocol evidence of funds,
   // cancellation, wrapping or operator review for this same retained invoice.
   if (result && (!("pay_ethereum" in result.nextAction || "verify_ethereum" in result.nextAction)
     || result.receipt.length || result.invoice.canceledAtNs.length || result.invoice.acceptedReceiptId.length
     || result.invoice.currentSweepId.length || result.invoice.entitlementGrantedAtNs.length || result.invoice.revenueFinalizedAtNs.length
-    || (result.invoice.lastBalance[0] ?? 0n) > 0n || result.invoice.creditedBuyerAtoms > 0n)) return ethereumOperationView(result, saved.source);
+    || (result.invoice.lastBalance[0] ?? 0n) > 0n || result.invoice.creditedBuyerAtoms > 0n)) return savedInvoiceView(context, result, saved);
   const journal = fundingJournal(context, saved), record = await journal.read("deposit") ?? await journal.read("approval");
   if (record) return stepResult(saved, record);
   return result ? ethereumOperationView(result, saved.source) : { operationId: id, appIds: saved.quote.appIds, ethereumWallet: saved.source, state: "pending", nextAction: "resume", message: "The original Ethereum checkout is saved. Continue it to recover invoice preparation without another payment." };
@@ -207,12 +223,12 @@ async function invoiceAction(context: MsgBusToolContext, id: string, kind: "sett
   const client = await protocolClient(context), fees = await ethereumFees(context), observed = await ethereumInvoiceStatus(context, id);
   if (!observed) throw new Error("The original Ethereum invoice was not found.");
   if (kind === "cancel" && observed.entitled) throw new Error("These apps are already acquired. Canceling checkout does not refund a completed purchase.");
-  if (kind === "cancel" && observed.invoice.canceledAtNs.length || kind === "settle" && observed.earningsAvailable) return ethereumOperationView(observed);
   const saved = await loadIntent<SavedEthereum>(context.kernel, key(id));
   if (saved) assertScope(saved.scope, scope(context, client.state.canisterId!, client.state.owner));
+  if (kind === "cancel" && observed.invoice.canceledAtNs.length || kind === "settle" && observed.earningsAvailable) return savedInvoiceView(context, observed, saved);
   const quote = saved?.quote ?? await ethereumInvoiceView(context, observed, "evm_wallet");
   await authorize(context, { kind: `ethereum_${kind}`, operationId: id, quote: quote as unknown as JsonObject, cycles: cycleView(fees[kind]) as unknown as JsonObject }, true);
-  return ethereumOperationView(await client.update<EthereumInvoiceResult>(`ethereum_${kind}`, { requestId: id }, fees[kind]), saved?.source);
+  return savedInvoiceView(context, await client.update<EthereumInvoiceResult>(`ethereum_${kind}`, { requestId: id }, fees[kind]), saved);
 }
 export const settleEthereumPurchase = (context: MsgBusToolContext, id: string) => invoiceAction(context, id, "settle");
 export const cancelEthereumPurchase = (context: MsgBusToolContext, id: string) => invoiceAction(context, id, "cancel");
@@ -224,11 +240,12 @@ export async function verifyEthereumTransaction(context: MsgBusToolContext, id: 
   if (!/^0x[0-9a-fA-F]{64}$/.test(transactionHash)) throw new Error("Enter the original Ethereum deposit transaction hash.");
   const client = await protocolClient(context), observed = await ethereumInvoiceStatus(context, id);
   if (!observed) throw new Error("The original Ethereum invoice was not found.");
-  if (observed.entitled || observed.active) return ethereumOperationView(observed);
+  if (observed.entitled) return ethereumOperationView(observed);
   const local = await loadIntent<SavedEthereum>(context.kernel, key(id));
   if (local) assertScope(local.scope, scope(context, client.state.canisterId!, client.state.owner));
+  if (observed.active) return savedInvoiceView(context, observed, local);
   const quote = await ethereumInvoiceView(context, observed, local?.source ?? "evm_wallet"), fees = await ethereumFees(context);
   await authorize(context, { kind: "ethereum_verify", operationId: id, transactionHash, quote: quote as unknown as JsonObject, cycles: cycleView(fees.verify) as unknown as JsonObject }, true);
   const result = await client.update<EthereumInvoiceResult>("ethereum_verify", { requestId: id, transactionHash }, fees.verify);
-  return ethereumOperationView(result, local?.source);
+  return savedInvoiceView(context, result, local);
 }

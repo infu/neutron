@@ -35,7 +35,7 @@ function option(name: string): string | undefined {
   assert.ok(value && !value.startsWith("--"), `${name} needs a value`);
   return value;
 }
-const expectedVersion = negativeControl ? 107 : Number(option("--version") ?? 113);
+const expectedVersion = negativeControl ? 107 : Number(option("--version") ?? 114);
 assert.ok(Number.isSafeInteger(expectedVersion) && expectedVersion >= 107);
 const expectedArchiveHash = option("--sha256") ?? (!negativeControl ? ({
   109: "8bdeb24571521f33ef4a91a684dcea89e7085a569f8ef7726f03769c1a0c6db2",
@@ -43,6 +43,7 @@ const expectedArchiveHash = option("--sha256") ?? (!negativeControl ? ({
   111: "e2f861cc3147ed0933216730999d5f74272a988a1e63fb3470faf64d687931be",
   112: "6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21",
   113: "a0ecb6c8839c7bfd765518a5dbb488215d83bc4dade8476022d79d68a50fa689",
+  114: "07ff117cdc5b0a3a27884f7ec9d742f7f6d240d27aa973f1f2f168c0eaca6066",
 } as Record<number, string>)[expectedVersion] : undefined);
 assert.ok(negativeControl || expectedArchiveHash, "An unpinned Marketplace release needs --sha256");
 if (expectedArchiveHash) assert.match(expectedArchiveHash, /^[a-f0-9]{64}$/);

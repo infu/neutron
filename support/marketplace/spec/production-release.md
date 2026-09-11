@@ -285,3 +285,34 @@ paths, URLs, sizes and SHA-256 digests. The frozen 54 local artifacts matched
 both publication postflights. Publication makes the update discoverable in
 Settings; it does not install it into existing Neutrons or change the Dispenser
 starter.
+
+## Canceled checkout Activity — Marketplace114
+
+Marketplace `0.1.14` was published in catalog batch `6` on 2026-09-11.
+The archive is 484,466 bytes with SHA-256
+`07ff117cdc5b0a3a27884f7ec9d742f7f6d240d27aa973f1f2f168c0eaca6066`.
+Its offered source is 1,773,176 bytes with SHA-256
+`6776661910c8184af1738f4c8816f650b80ecee54b20dbb65386959f9ae9ef4b`.
+Only Marketplace changed; Kernel359, the protocol, listing prices and media,
+the legacy source and Dispenser starter are unchanged.
+
+Canceled unpaid Ethereum invoices remain quiet across history refresh, browser
+reload and background balance polling. A retained deposit request or later
+payment evidence still exposes recovery. IC purchase intents now retain explicit
+Wallet approval rejection and whether collection was requested. Rejected approvals
+do not return as approval-required reminders; requested purchases with missing
+replies remain recoverable without another Wallet approval. Approval-only and
+fully completed notifications can be dismissed. Dismissal is a browser preference
+for that observation and does not delete the saved intent; new payment evidence
+restores its Activity entry.
+
+Managed memory remains state v2. Released v1/v2 schema sources, the v1-to-v2
+migration, lock lineage and backend are byte-for-byte unchanged. Optional purchase
+progress fits the existing retained JSON intent map. Focused IC and Ethereum
+recovery tests, notification tests, browser refresh/reload regressions, typecheck,
+backend clean initialization/migration/restoration checks and the complete package
+command passed. No live financial action was used for qualification.
+
+Both publication postflights matched all 54 frozen package/source artifacts. The
+exact repeat returned receipt-v2 `batch_id: null`, with all 27 packages and sources
+`unchanged` and their versions, paths, URLs, lengths and digests verified.

@@ -51,6 +51,10 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
       updates.push(name); events.push(`update:${name}`);
       expect(saved()).not.toBeNull();
       if (name === "ethereum_prepare") { expect(estimate).toEqual(fees.prepare); expect(request.payer).toBe(PAYER); status = prepared; return status; }
+      if (name === "ethereum_cancel") {
+        expect(estimate).toEqual(fees.cancel);
+        status = { ...status!, invoice: { ...status!.invoice, canceledAtNs: [20n] }, nextAction: { none: null } }; return status;
+      }
       if (name === "ethereum_settle") {
         expect(estimate).toEqual(fees.settle); expect(status?.receipt.length).toBe(1);
         status = { ...prepared, entitled: true, nextAction: { wait_wrapping: null } }; return status;
@@ -83,7 +87,7 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
       return journal.record(record, { ...record, state, transactionHash: state === "unknown" ? null : hash, message: state === "confirmed" ? "Confirmed" : "Pending" });
     },
   }));
-  const { quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, prepareEthereumBrowser, ethereumJournalClaim, ethereumJournalRecord, finishEthereumBrowser, ethereumSavedStatus } = await import("../src/ethereum_actions.ts");
+  const { quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, prepareEthereumBrowser, ethereumJournalClaim, ethereumJournalRecord, finishEthereumBrowser, ethereumSavedStatus, cancelEthereumPurchase } = await import("../src/ethereum_actions.ts");
   function context(root = false): MsgBusToolContext {
     return { agentMode: root, signal: new AbortController().signal,
       caller: { appId: root ? "agent" : "marketplace", installationUid: "install-1", role: root ? "background" : "tile", endpoint: root ? "app:agent:background" : "app:marketplace:tile:main:instance:test" },
@@ -219,6 +223,45 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
     expect(await ethereumSavedStatus(ctx, ID)).toMatchObject({ state: "failed", ethereumWallet: "browser", canceledBeforeSubmission: true });
     expect(saved(stepKey("deposit")).record).toMatchObject({ state: "rejected", transactionHash: null });
     expect(stored.size).toBe(before); expect(updates).toEqual(["ethereum_prepare"]); expect(sends).toEqual([]);
+  });
+  test("canceling a refused browser payment remains terminal after reloading saved status", async () => {
+    const ctx = await rejectedBrowserRecord(), before = stored.size;
+    expect(await cancelEthereumPurchase(ctx, ID)).toMatchObject({ state: "failed", nextAction: "none", checkoutCanceled: true });
+    expect(await ethereumSavedStatus(ctx, ID)).toMatchObject({ state: "failed", nextAction: "none", checkoutCanceled: true });
+    status = { ...status!, active: true };
+    expect(await ethereumSavedStatus(ctx, ID)).toMatchObject({ state: "failed", nextAction: "none", checkoutCanceled: true });
+    expect(await cancelEthereumPurchase(ctx, ID)).toMatchObject({ state: "failed", nextAction: "none", checkoutCanceled: true });
+    expect(stored.size).toBe(before); expect(updates).toEqual(["ethereum_prepare", "ethereum_cancel"]); expect(sends).toEqual([]);
+  });
+  test("historical canceled invoice with no local journal is not reopened for review", async () => {
+    status = { ...prepared, invoice: { ...prepared.invoice, canceledAtNs: [20n] }, nextAction: { none: null } };
+    expect(await ethereumSavedStatus(context(), ID)).toMatchObject({ state: "failed", nextAction: "none", checkoutCanceled: true });
+    expect(stored.size).toBe(0); expect(updates).toEqual([]); expect(sends).toEqual([]);
+  });
+  test("a terminal cancellation becomes recoverable if late funds are later observed", async () => {
+    const ctx = await rejectedBrowserRecord();
+    expect((await cancelEthereumPurchase(ctx, ID)).checkoutCanceled).toBe(true);
+    status = { ...status!, invoice: { ...status!.invoice, lastBalance: [wire.amount + wire.fee] }, nextAction: { settle: null } };
+    const refreshed = await ethereumSavedStatus(ctx, ID);
+    expect(refreshed).toMatchObject({ state: "failed", nextAction: "resume", settlement: { state: "pending" } });
+    expect(refreshed?.checkoutCanceled).toBeUndefined(); expect(refreshed?.canceledBeforeSubmission).toBeUndefined();
+    expect(updates).toEqual(["ethereum_prepare", "ethereum_cancel"]); expect(sends).toEqual([]);
+  });
+  for (const depositState of ["prepared", "unknown", "submitted", "confirmed", "reverted"] as const) test(`canceling checkout preserves its ${depositState} deposit for review after reload`, async () => {
+    const { ctx, record } = await browserRecord();
+    const hash = ["submitted", "confirmed", "reverted"].includes(depositState) ? `0x${"22".repeat(32)}` as const : null;
+    await ethereumJournalClaim(ctx, ID, { ...record, state: depositState, transactionHash: hash });
+    const canceled = await cancelEthereumPurchase(ctx, ID), refreshed = await ethereumSavedStatus(ctx, ID);
+    status = { ...status!, active: true };
+    const polling = await ethereumSavedStatus(ctx, ID), resumed = await resumeEthereumPurchase(ctx, ID);
+    for (const result of [canceled, refreshed, polling, resumed]) {
+      expect(result).toMatchObject({ state: "failed", nextAction: "review" });
+      expect(result?.checkoutCanceled).toBeUndefined();
+      expect(result?.canceledBeforeSubmission).toBeUndefined();
+      if (hash) expect(result?.ethereumTransactionHash).toBe(hash);
+    }
+    expect((await prepareEthereumBrowser(ctx, undefined, ID)).result.checkoutCanceled).toBeUndefined();
+    expect(updates).toEqual(["ethereum_prepare", "ethereum_cancel"]); expect(sends).toEqual([]);
   });
   test("remote buyer-credit settlement outranks a stale local browser refusal", async () => {
     const ctx = await rejectedBrowserRecord();

@@ -143,14 +143,45 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
     expect(ethereumOperationView(current).message).toContain("do not send another payment");
   });
   test("canceled invoices and missing entitlement never appear purchased", () => {
-    current.invoice.canceledAtNs = [20n];
-    expect(ethereumOperationView(current)).toMatchObject({ state: "failed", nextAction: "none", entitled: false });
+    current.invoice.canceledAtNs = [20n]; current.nextAction = { none: null };
+    expect(ethereumOperationView(current)).toMatchObject({ state: "failed", nextAction: "none", entitled: false, checkoutCanceled: true });
     current.invoice.canceledAtNs = []; current.order.state = { complete: null }; current.nextAction = { none: null };
     expect(ethereumOperationView(current)).toMatchObject({ state: "pending", nextAction: "none", entitled: false });
+    expect(ethereumOperationView(current).checkoutCanceled).toBeUndefined();
+  });
+  test("historical canceled invoices keep their quiet terminal status in status and history reads", async () => {
+    current.invoice.canceledAtNs = [20n]; current.nextAction = { none: null }; current.invoice.lastBalance = [0n];
+    expect(await ethereumStatus(context, current.invoice.requestId)).toMatchObject({ state: "failed", nextAction: "none", checkoutCanceled: true });
+    expect((await ethereumHistory(context)).items[0]).toMatchObject({ state: "failed", nextAction: "none", checkoutCanceled: true });
+  });
+  test("background balance polling does not reopen an unpaid canceled invoice", () => {
+    current.invoice.canceledAtNs = [20n]; current.nextAction = { none: null };
+    for (const active of [false, true, false]) {
+      current.active = active;
+      expect(ethereumOperationView(current)).toMatchObject({ state: "failed", nextAction: "none", checkoutCanceled: true });
+    }
+  });
+  for (const evidence of ["balance", "credit", "acceptedReceipt", "sweep", "priorSweep", "entitlement", "revenue", "review", "settle", "feeShortfall", "wrapping"] as const) test(`cancellation with ${evidence} is not treated as an unpaid terminal checkout`, () => {
+    current.invoice.canceledAtNs = [20n]; current.nextAction = { none: null };
+    if (evidence === "balance") current.invoice.lastBalance = [1n];
+    if (evidence === "credit") current.invoice.creditedBuyerAtoms = 1n;
+    if (evidence === "acceptedReceipt") current.invoice.acceptedReceiptId = [1n];
+    if (evidence === "sweep") current.invoice.currentSweepId = [1n];
+    if (evidence === "priorSweep") current.invoice.nextSweepOrdinal = 1n;
+    if (evidence === "entitlement") current.invoice.entitlementGrantedAtNs = [1n];
+    if (evidence === "revenue") current.invoice.revenueFinalizedAtNs = [1n];
+    if (evidence === "review") current.nextAction = { review_required: null };
+    if (evidence === "settle") current.nextAction = { settle: null };
+    if (evidence === "feeShortfall") current.nextAction = { fee_shortfall: null };
+    if (evidence === "wrapping") current.nextAction = { wait_wrapping: null };
+    expect(ethereumOperationView(current).checkoutCanceled).toBeUndefined();
+    current.active = true;
+    expect(ethereumOperationView(current).checkoutCanceled).toBeUndefined();
   });
   test("a canceled invoice with late funds can still resume buyer-credit settlement", () => {
     current.invoice.canceledAtNs = [20n]; current.nextAction = { settle: null };
     expect(ethereumOperationView(current)).toMatchObject({ state: "failed", nextAction: "resume", entitled: false, settlement: { state: "pending" } });
+    expect(ethereumOperationView(current).checkoutCanceled).toBeUndefined();
     current.active = true;
     expect(ethereumOperationView(current).nextAction).toBe("none");
   });

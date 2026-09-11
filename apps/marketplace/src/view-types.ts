@@ -52,6 +52,10 @@ export type OperationResult = {
   installation?: InstallationQuote;
   /** The browser wallet explicitly rejected this payment step before submission; no transaction hash exists. The invoice remains retained. */
   canceledBeforeSubmission?: boolean;
+  /** Checkout was canceled or its approval rejected with no observed payment or outstanding work. Later payment evidence can reopen recovery. */
+  checkoutCanceled?: boolean;
+  /** This observation can be dismissed from Activity without deleting its saved recovery intent. New payment evidence must reappear. */
+  canDismiss?: boolean;
   settlement?: { state: "pending" | "complete" | "failed"; message: string };
 };
 export type Earnings = {

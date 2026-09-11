@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { OperationResult } from "../view-types.ts";
-import { canRecoverEthereumPayment, notificationTitle, visibleNotifications } from "../notification-state.ts";
+import { canDismissNotification, canRecoverEthereumPayment, notificationTitle, visibleNotifications } from "../notification-state.ts";
 import { ErrorNote, Icon, Loading, errorMessage } from "./primitives.tsx";
 
 type ActionResult = Promise<unknown>;
@@ -14,6 +14,7 @@ export type NotificationsPanelProps = {
   onResume: (operation: OperationResult) => ActionResult;
   onVerify: (operation: OperationResult, transactionHash: string) => ActionResult;
   onCancel: (operation: OperationResult) => ActionResult;
+  onDismiss: (operation: OperationResult) => void;
 };
 
 export function NotificationBell() {
@@ -25,11 +26,11 @@ export function NotificationsPanel(props: NotificationsPanelProps) {
   return <section className="mp-activity" aria-label="Activity">
     <div className="mp-section-title"><div><h2>Activity</h2><p>Your purchases and wallet updates.</p></div><button type="button" className="mp-icon-button" aria-label="Refresh activity" title="Refresh activity" onClick={props.onRefresh}><Icon name="refresh" /></button></div>
     <ErrorNote error={props.error ?? ""} retry={props.onRefresh} />
-    {props.loading && operations.length === 0 ? <Loading label="Loading activity…" /> : operations.length === 0 && !props.error ? <div className="mp-activity-empty"><span><NotificationBell /></span><h3>You're all caught up</h3><p>Purchases and wallet progress will appear here.</p></div> : <div className="mp-activity-list">{operations.map(operation => <NotificationCard key={operation.operationId} operation={operation} onCheck={props.onCheck} onResume={props.onResume} onVerify={props.onVerify} onCancel={props.onCancel} />)}</div>}
+    {props.loading && operations.length === 0 ? <Loading label="Loading activity…" /> : operations.length === 0 && !props.error ? <div className="mp-activity-empty"><span><NotificationBell /></span><h3>You're all caught up</h3><p>Purchases and wallet progress will appear here.</p></div> : <div className="mp-activity-list">{operations.map(operation => <NotificationCard key={operation.operationId} operation={operation} onCheck={props.onCheck} onResume={props.onResume} onVerify={props.onVerify} onCancel={props.onCancel} onDismiss={props.onDismiss} />)}</div>}
   </section>;
 }
 
-function NotificationCard({ operation, onCheck, onResume, onVerify, onCancel }: Pick<NotificationsPanelProps, "onCheck" | "onResume" | "onVerify" | "onCancel"> & { operation: OperationResult }) {
+function NotificationCard({ operation, onCheck, onResume, onVerify, onCancel, onDismiss }: Pick<NotificationsPanelProps, "onCheck" | "onResume" | "onVerify" | "onCancel" | "onDismiss"> & { operation: OperationResult }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [hash, setHash] = useState("");
   const pending = useRef(false);
   async function run(action: () => ActionResult) {
@@ -44,7 +45,7 @@ function NotificationCard({ operation, onCheck, onResume, onVerify, onCancel }: 
   const showStatusCheck = !complete || settlement?.state === "pending" || settlement?.state === "failed";
   const canResume = !operation.entitled && (operation.nextAction === "resume" || operation.nextAction === "review");
   return <article className={`mp-activity-card${complete ? " is-complete" : ""}`} aria-label={`${notificationTitle(operation)}${operation.appIds?.length ? `: ${operation.appIds.join(", ")}` : ""}`}>
-    <div className="mp-activity-card-heading"><span className="mp-activity-state-icon">{complete ? <Icon name="check" /> : <NotificationBell />}</span><div><h3>{notificationTitle(operation)}</h3>{operation.appIds?.length ? <p className="mp-activity-apps">{operation.appIds.map(id => id.replaceAll("_", " ")).join(" · ")}</p> : null}</div></div>
+    <div className="mp-activity-card-heading"><span className="mp-activity-state-icon">{complete ? <Icon name="check" /> : <NotificationBell />}</span><div><h3>{notificationTitle(operation)}</h3>{operation.appIds?.length ? <p className="mp-activity-apps">{operation.appIds.map(id => id.replaceAll("_", " ")).join(" · ")}</p> : null}</div>{canDismissNotification(operation) && <button type="button" className="mp-icon-button" style={{ marginLeft: "auto" }} aria-label="Dismiss notification" title="Dismiss notification" disabled={busy} onClick={() => onDismiss(operation)}><Icon name="close" /></button>}</div>
     <p className="mp-activity-message">{operation.message}</p>
     {settlement && <p className={`mp-activity-settlement${settlement.state === "failed" ? " is-failed" : ""}`}>{settlement.message}</p>}
     {error && <ErrorNote error={error} />}

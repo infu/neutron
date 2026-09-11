@@ -83,7 +83,7 @@ export function Checkout({ client, apps, discount = noDiscount, close, complete,
       else if (quote.ethereum && result.state === "complete") {
         pending({ ...result, state: "pending", entitled: false, nextAction: "none", message: "Waiting for the marketplace to verify app access for this original Ethereum payment." }, resume(quote)); close();
       }
-      else if (result.canceledBeforeSubmission) { pending(result, resume(quote)); close(); }
+      else if (result.canceledBeforeSubmission || result.checkoutCanceled) { pending(result, resume(quote)); close(); }
       else if (result.nextAction === "resume" || result.nextAction === "review" || result.state === "pending" || result.state === "approval_required") {
         pending(result, resume(quote)); close();
       } else { setError(result.message); }

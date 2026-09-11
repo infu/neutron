@@ -74,6 +74,11 @@ Uninstall still removes app-local journals and browser signing data.
 - **Earnings:** obtain a referral code, inspect available/reserved earnings and
   review withdrawals. The ledger fee comes out of the chosen withdrawal debit.
   Self-referrals are not allowed.
+- **Activity:** rejected approvals and canceled unpaid checkouts disappear
+  automatically. Approval-only reminders and completed payments can be dismissed;
+  that preference is remembered in this browser without deleting recovery data.
+  Submitted or uncertain payments retain their recovery controls, and later
+  payment evidence brings a dismissed checkout back into Activity.
 
 Free and paid acquisitions include future approved updates. Either kind of
 owner can leave one editable rating. Upload review retains the selected files
