@@ -1,414 +1,151 @@
-/**
- * Review and send agent-written proposals.
- *
- * This is the human gate the whole drafting design rests on: an agent can write
- * a proposal but has no tool that submits one, so nothing reaches an SNS until
- * a person reads it here and presses send. The screen therefore shows the
- * proposal as voters will see it, not as a database row.
- */
-
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  deleteDraft,
-  listDrafts,
-  sendDraft,
-  canPropose,
-  type DraftRow,
-} from "../data/drafts";
-import { readRegistration, type NeuronRegistration } from "../data/registration";
+import { invoke } from "../data/actions_client";
+import { canPropose, listDrafts, type DraftRow } from "../data/drafts";
+import { formatTokenAmount, shortenId, toHex } from "../data/format";
+import { readRegistration } from "../data/registration";
 import { readHotkey } from "../data/relay";
-import { formatTimestamp, shortenId, toHex } from "../data/format";
-import { IconButton } from "./IconButton";
-import { rowProps } from "./Row";
-import { BusyOr, Empty, Pending } from "./Status";
-import { BackIcon, ProposalIcon, RefreshIcon, TrashIcon, WarnIcon } from "./Icons";
+import { getRegistry, requireEntry, displayName } from "../data/registry";
+import { readParameters } from "../data/governance";
+import { decodeProposalAction, proposalActionToJson } from "../data/proposal_actions";
+import { Disclosure, ErrorNote, Help, PageHeading, useRead } from "./Common";
+import { SnsLogo } from "./Logo";
+import { Empty, Pending } from "./Status";
+import { actionLabel, ProposalTime, safeExternalUrl } from "./Proposals";
+import { confirmedProposalId, ProposalReceipt, type ProposalOperationResult } from "./ProposalCreate";
 
-type State =
-  | { phase: "loading" }
-  | { phase: "ready"; drafts: DraftRow[] }
-  | { phase: "error"; message: string };
-
-export function DraftsView({
-  onBack,
-  focusDraftId = null,
-  onChanged,
-}: {
-  onBack: () => void;
-  /** Opened straight to this draft — how an agent points at what it just wrote. */
-  focusDraftId?: string | null;
-  onChanged?: () => void;
+export function DraftsView({ onBack, focusDraftId = null, onChanged }: {
+  onBack: () => void; focusDraftId?: string | null; onChanged?: (() => void) | undefined;
 }) {
-  const [state, setState] = useState<State>({ phase: "loading" });
+  const [drafts, setDrafts] = useState<DraftRow[] | null>(null);
   const [open, setOpen] = useState<string | null>(focusDraftId);
-  const [sent, setSent] = useState<{ title: string; proposalId?: bigint; cleanupWarning?: string } | null>(null);
-  // A confirmed proposal is not another pending draft if removal of the saved
-  // row failed. Keep the receipt visible and hide that stale row this session.
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const generation = useRef(0);
   const submitted = useRef(new Set<string>());
-  // A refresh keeps the list on screen; only a first read has nothing to show.
-  const [busy, setBusy] = useState(false);
-
-  // Held in a ref: a parent that passes an inline arrow gives `onChanged` a new
-  // identity every render, and depending on it here makes `load` new every
-  // render too, which re-fires the effect below, which calls `onChanged`, which
-  // re-renders the parent — an endless load/clear/load flicker.
-  const changed = useRef(onChanged);
-  changed.current = onChanged;
-
+  const registry = useRead("draft-communities", () => getRegistry());
   const load = useCallback(async () => {
-    setBusy(true);
-    try {
-      const drafts = await listDrafts();
-      setState({ phase: "ready", drafts: drafts.filter(draft => !submitted.current.has(draft.id)) });
-      changed.current?.();
-    } catch (error) {
-      setState({ phase: "error", message: String(error) });
-    } finally {
-      setBusy(false);
-    }
+    const request = ++generation.current;
+    setBusy(true); setError(null);
+    try { const rows = await listDrafts(); if (request === generation.current) setDrafts(rows); }
+    catch (reason) { if (request === generation.current) setError(describe(reason)); }
+    finally { if (request === generation.current) setBusy(false); }
   }, []);
+  useEffect(() => { void load(); return () => { generation.current++; }; }, [load]);
+  useEffect(() => { setOpen(focusDraftId); void load(); }, [focusDraftId, load]);
+  const selected = drafts?.find(draft => draft.id === open);
+  const available = drafts?.filter(draft => !submitted.current.has(draft.id));
+  const changed = () => { onChanged?.(); void load(); };
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // A second agent draft while this screen is already open must retarget it.
-  useEffect(() => {
-    setOpen(focusDraftId);
-    void load();
-  }, [focusDraftId, load]);
-
-  const selected =
-    state.phase === "ready" ? state.drafts.find((draft) => draft.id === open) : undefined;
-
-  return (
-    <div className="nt-page">
-      <header className="nt-page-header snsgov-toolbar">
-        <div className="nt-cluster">
-          <IconButton label="Back to the SNS list" onClick={onBack}>
-            <BackIcon />
-          </IconButton>
-          <h1 className="nt-title snsgov-detail-title">Drafts</h1>
-          {state.phase === "ready" && (
-            <span className="nt-section-count">{state.drafts.length}</span>
-          )}
-        </div>
-        <div className="nt-cluster snsgov-toolbar-actions">
-          <IconButton
-            disabled={busy}
-            label="Refresh drafts"
-            onClick={() => void load()}
-          >
-            <BusyOr busy={busy}>
-              <RefreshIcon />
-            </BusyOr>
-          </IconButton>
-        </div>
-      </header>
-
-      <section className="nt-page-main">
-        {sent && (
-          <div className="nt-alert nt-alert--success" role="status">
-            Sent “{sent.title}”
-            {sent.proposalId === undefined ? "" : ` — proposal ${sent.proposalId.toString()}`}.
-            {sent.cleanupWarning && <p className="nt-text">{sent.cleanupWarning}</p>}
-          </div>
-        )}
-        {state.phase === "loading" && <Pending label="Reading drafts" />}
-        {state.phase === "error" && (
-          <div className="nt-alert nt-alert--danger" role="alert">
-            {state.message}
-          </div>
-        )}
-        {state.phase === "ready" && state.drafts.length === 0 && (
-          <Empty label="No drafts. Ask the agent to draft a proposal and it will appear here for review." />
-        )}
-        {state.phase === "ready" && state.drafts.length > 0 && !selected && (
-          <div className="nt-table-wrap">
-            <table className="nt-table snsgov-table snsgov-table--drafts">
-              <caption className="nt-sr-only">Proposal drafts awaiting review</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Title</th>
-                  <th className="snsgov-nowrap" scope="col">
-                    Type
-                  </th>
-                  <th className="snsgov-nowrap" scope="col">
-                    By
-                  </th>
-                  <th className="snsgov-nowrap" scope="col">
-                    Updated
-                  </th>
-                  <th scope="col">
-                    <span className="nt-sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.drafts.map((draft) => (
-                  <tr key={draft.id} {...rowProps(() => setOpen(draft.id))}>
-                    <th scope="row">
-                      <button
-                        className="snsgov-link"
-                        onClick={() => setOpen(draft.id)}
-                        title={draft.title}
-                        type="button"
-                      >
-                        {draft.title || "(untitled)"}
-                      </button>
-                    </th>
-                    <td className="snsgov-nowrap" title={draft.actionKind}>
-                      {draft.actionKind}
-                    </td>
-                    <td className="snsgov-nowrap">{draft.createdBy}</td>
-                    <td className="snsgov-nowrap">
-                      {formatTimestamp(draft.updatedAtSeconds).slice(0, 10)}
-                    </td>
-                    <td className="snsgov-row-actions">
-                      <IconButton label={`Review “${draft.title}”`} onClick={() => setOpen(draft.id)}>
-                        <ProposalIcon />
-                      </IconButton>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {selected && (
-          <DraftDetail
-            key={JSON.stringify(selected, (_key, value) => typeof value === "bigint" ? value.toString() : value)}
-            draft={selected}
-            onClose={() => setOpen(null)}
-            onSent={(proposalId, cleanupWarning) => {
-              submitted.current.add(selected.id);
-              setSent({
-                title: selected.title,
-                ...(proposalId === undefined ? {} : { proposalId }),
-                ...(cleanupWarning === undefined ? {} : { cleanupWarning }),
-              });
-              setOpen(current => current === selected.id ? null : current);
-              void load();
-            }}
-            onDiscarded={() => {
-              setOpen(current => current === selected.id ? null : current);
-              void load();
-            }}
-          />
-        )}
-      </section>
-    </div>
-  );
-}
-
-function DraftDetail({
-  draft,
-  onClose,
-  onSent,
-  onDiscarded,
-}: {
-  draft: DraftRow;
-  onClose: () => void;
-  onSent: (proposalId?: bigint, cleanupWarning?: string) => void;
-  onDiscarded: () => void;
-}) {
-  const [neurons, setNeurons] = useState<NeuronRegistration[] | null>(null);
-  const [registrationFailed, setRegistrationFailed] = useState(false);
-  const [neuronId, setNeuronId] = useState<string>(
-    draft.proposer ? toHex(draft.proposer) : "",
-  );
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const hotkey = await readHotkey();
-        const status = await readRegistration(draft.governance, hotkey.principal);
-        if (cancelled) return;
-        const eligible = status.found.filter((entry) => canPropose(entry.missing));
-        setNeurons(eligible);
-        // One eligible neuron is the common case; do not make them choose.
-        if (!draft.proposer && eligible.length === 1) setNeuronId(eligible[0]!.neuronId);
-      } catch (error) {
-        if (!cancelled) {
-          setMessage(String(error));
-          setRegistrationFailed(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [draft.governance, draft.proposer]);
-
-  const send = useCallback(async () => {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const result = await sendDraft(draft, neuronId);
-      onSent(result.proposalId, result.cleanupWarning);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-      setConfirming(false);
-    } finally {
-      setBusy(false);
-    }
-  }, [draft, neuronId, onSent]);
-
-  const discard = useCallback(async () => {
-    setBusy(true);
-    try {
-      await deleteDraft(draft.id);
-      onDiscarded();
-    } catch (error) {
-      setMessage(String(error));
-    } finally {
-      setBusy(false);
-    }
-  }, [draft.id, onDiscarded]);
-
-  const ready = neurons?.some(neuron => neuron.neuronId === neuronId) ?? false;
-
-  return (
-    <section className="nt-section snsgov-review">
-      <header className="nt-section-header">
-        <h2 className="nt-section-heading">Review</h2>
-        <div className="nt-cluster snsgov-toolbar-actions">
-          <IconButton disabled={busy} label="Discard this draft" onClick={() => void discard()}>
-            <TrashIcon />
-          </IconButton>
-          <button className="nt-button nt-button--ghost" disabled={busy} onClick={onClose} type="button">
-            Close
-          </button>
-        </div>
-      </header>
-
-      {message && (
-        <div className="nt-alert nt-alert--danger" role="alert">
-          {message}
-        </div>
-      )}
-
-      {/* Shown the way voters will see it, so review means something. */}
-      <article className="snsgov-proposal">
-        <h3 className="nt-title snsgov-proposal-title">{draft.title || "(untitled)"}</h3>
-        <dl className="snsgov-facts">
-          <dt>Type</dt>
-          <dd>{draft.actionKind}</dd>
-          <dt>SNS</dt>
-          <dd>
-            <code className="nt-code">{shortenId(draft.sns, 8, 6)}</code>
-          </dd>
-          {draft.functionId !== undefined && (
-            <>
-              <dt>Function</dt>
-              <dd>{draft.functionId.toString()}</dd>
-            </>
-          )}
-          {draft.url && (
-            <>
-              <dt>URL</dt>
-              <dd>{draft.url}</dd>
-            </>
-          )}
-          <dt>Drafted by</dt>
-          <dd>{draft.createdBy}</dd>
-        </dl>
-
-        <h4 className="nt-section-title">Summary</h4>
-        <p className="nt-text snsgov-proposal-body">{draft.summary}</p>
-
-        {draft.motionText !== undefined && (
-          <>
-            <h4 className="nt-section-title">Motion</h4>
-            <p className="nt-text snsgov-proposal-body">{draft.motionText}</p>
-          </>
-        )}
-        {draft.rendering !== undefined && (
-          <>
-            <h4 className="nt-section-title">Payload, as the DAO renders it</h4>
-            <pre className="nt-pre">{draft.rendering}</pre>
-          </>
-        )}
-        {draft.motionText === undefined && draft.rendering === undefined && draft.payload && (
-          <>
-            <h4 className="nt-section-title">Payload</h4>
-            <pre className="nt-pre">{toHex(draft.payload)}</pre>
-          </>
-        )}
-      </article>
-
-      <h4 className="nt-section-title">Propose with</h4>
-      {neurons === null && !registrationFailed && <Pending label="Finding neurons that may propose" />}
-      {neurons !== null && neurons.length === 0 && (
-        <div className="nt-alert nt-alert--warning snsgov-alert" role="status">
-          <WarnIcon />
-          <span>
-            No neuron on this SNS grants your voting principal{" "}
-            <code className="nt-code">SubmitProposal</code>, so this draft cannot be sent yet. Add
-            the hotkey on a neuron, then come back.
-          </span>
-        </div>
-      )}
-      {neurons !== null && neurons.length > 0 && (
-        <div className="snsgov-filter">
-          <label className="nt-sr-only" htmlFor="snsgov-proposer">
-            Neuron to propose with
-          </label>
-          <select
-            className="nt-select"
-            disabled={busy}
-            id="snsgov-proposer"
-            onChange={(event) => {
-              setNeuronId(event.target.value);
-              setConfirming(false);
-            }}
-            value={neuronId}
-          >
-            <option value="">Choose a neuron…</option>
-            {neurons.map((entry) => (
-              <option key={entry.neuronId} value={entry.neuronId}>
-                {shortenId(entry.neuronId, 10, 6)}
-              </option>
-            ))}
-          </select>
-          {confirming ? (
-            <>
-              <button
-                className="nt-button"
-                disabled={busy || !ready}
-                onClick={() => void send()}
-                type="button"
-              >
-                {busy ? "Sending…" : "Confirm — put this on-chain"}
-              </button>
-              <button
-                className="nt-button nt-button--ghost"
-                disabled={busy}
-                onClick={() => setConfirming(false)}
-                type="button"
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              className="nt-button"
-              disabled={busy || !ready}
-              onClick={() => setConfirming(true)}
-              type="button"
-            >
-              Send
-            </button>
-          )}
-        </div>
-      )}
-      <p className="nt-meta">
-        Sending submits the proposal to the SNS immediately and charges the reject fee if it is
-        rejected. It cannot be undone.
-      </p>
+  return <div className="nt-page snsgov-drafts">
+    <PageHeading title="Drafts" description="Saved proposals ready for a human review." onBack={onBack} actions={<button className="nt-button nt-button--ghost" type="button" disabled={busy} onClick={() => void load()}>{busy ? "Refreshing…" : "Refresh drafts"}</button>} />
+    <section className="nt-page-main">
+      {error && <ErrorNote message={error} />}
+      {!drafts && !error && <Pending label="Reading drafts" />}
+      {open && drafts && !selected && <p className="nt-meta">This draft is no longer available.</p>}
+      {!selected && available?.length === 0 && <Empty label="No saved drafts. Create a proposal from the feed or a community page, or ask your agent to prepare one." />}
+      {!selected && <div className="snsgov-draft-list">{available?.map(draft => {
+        const entry = registry.data?.entries.find(entry => entry.canisters.root === draft.sns);
+        const name = entry ? displayName(entry) : shortenId(draft.sns, 8, 6);
+        return <article className="snsgov-post" key={draft.id}>
+          <div className="snsgov-post-byline"><SnsLogo name={name} logo={entry?.metadata?.logo} size={28} /><span className="snsgov-post-community">{name}</span><span className="nt-meta">Updated <ProposalTime seconds={draft.updatedAtSeconds} relative /></span></div>
+          <h3 className="snsgov-post-title"><button className="snsgov-link" type="button" onClick={() => setOpen(draft.id)}>{draft.title || "Untitled proposal"}</button></h3>
+          <p className="nt-meta">{draftActionLabel(draft)} · Drafted by {draft.createdBy}</p>
+          <p className="snsgov-proposal-body">{draft.summary.length > 240 ? `${draft.summary.slice(0, 240)}…` : draft.summary}</p>
+          <button className="nt-button nt-button--ghost" type="button" onClick={() => setOpen(draft.id)}>Review draft</button>
+        </article>;
+      })}</div>}
+      {selected && <DraftDetail key={JSON.stringify(selected, (_name, value: unknown) => typeof value === "bigint" ? value.toString() : value)} draft={selected} onClose={() => setOpen(null)} onSubmitted={() => { submitted.current.add(selected.id); onChanged?.(); }} onDiscarded={() => { setOpen(null); changed(); }} />}
     </section>
-  );
+  </div>;
 }
+
+function DraftDetail({ draft, onClose, onSubmitted, onDiscarded }: {
+  draft: DraftRow; onClose: () => void; onSubmitted: () => void; onDiscarded: () => void;
+}) {
+  const [neuronId, setNeuronId] = useState(draft.proposer ? toHex(draft.proposer) : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ProposalOperationResult | null>(null);
+  const [started, setStarted] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const [discarding, setDiscarding] = useState(false);
+  const sent = useRef(false);
+  const access = useRead(`draft-access:${draft.governance}`, async () => {
+    const hotkey = await readHotkey();
+    return readRegistration(draft.governance, hotkey.principal);
+  }, refresh);
+  const metadata = useRead(`draft-community:${draft.sns}`, () => requireEntry(draft.sns));
+  const parameters = useRead(`draft-parameters:${draft.governance}`, () => readParameters(draft.governance));
+  const eligible = access.data?.found.filter(neuron => canPropose(neuron.missing)) ?? [];
+  useEffect(() => {
+    if (!draft.proposer && eligible.length === 1 && !neuronId) setNeuronId(eligible[0]!.neuronId);
+  }, [access.data, draft.proposer, neuronId]);
+  const name = metadata.data ? displayName(metadata.data) : draft.sns;
+  const ready = eligible.some(neuron => neuron.neuronId === neuronId);
+  const token = metadata.data?.token;
+  const cost = parameters.data?.rejectCostE8s;
+
+  const submit = async (checkOnly = false) => {
+    if (busy || (!started && !ready)) return;
+    setBusy(true); setError(null); setStarted(true);
+    try {
+      // The service derives one immutable operation ID from this saved draft.
+      // Retargeting a screen, losing a reply or cleanup failure cannot create a
+      // second proposal operation for the same draft.
+      let next: ProposalOperationResult;
+      if (checkOnly) {
+        const id = result?.operationId ?? (await invoke<{ drafts: { id: string; operationId: string }[] }>("sns_drafts")).drafts.find(row => String(row.id) === draft.id)?.operationId;
+        if (!id) throw new Error("The saved draft's operation ID could not be read.");
+        next = await invoke<ProposalOperationResult>("sns_operation_status_v1", { operationId: id });
+      } else next = result?.operationId
+        ? await invoke<ProposalOperationResult>("sns_continue_v1", { operationId: result.operationId })
+        : await invoke<ProposalOperationResult>("sns_submit_draft_v1", { draftId: draft.id, neuronId });
+      setResult(next);
+      if (confirmedProposalId(next) !== undefined && !sent.current) { sent.current = true; onSubmitted(); }
+    } catch (reason) { setError(`${describe(reason)} Check the saved submission before trying another proposal.`); }
+    finally { setBusy(false); }
+  };
+  const discard = async () => {
+    setBusy(true); setError(null);
+    try { await invoke("sns_delete_draft_v1", { draftId: draft.id }); onDiscarded(); }
+    catch (reason) { setError(describe(reason)); }
+    finally { setBusy(false); }
+  };
+  const payload = nativeAction(draft);
+  const confirmed = result ? confirmedProposalId(result) : undefined;
+  return <section className="nt-section snsgov-review">
+    <header className="nt-section-header snsgov-proposal-toolbar"><h2 className="nt-section-heading">Review draft</h2><div className="nt-cluster"><button className="nt-button nt-button--ghost" type="button" onClick={onClose}>Close</button>{!started && <button className="nt-button nt-button--ghost" type="button" disabled={busy} onClick={() => setDiscarding(true)}>Discard draft</button>}</div></header>
+    {error && <ErrorNote message={error} />}
+    {discarding && <div className="nt-alert nt-alert--warning"><p>Discard this saved draft?</p><div className="nt-cluster"><button type="button" className="nt-button" disabled={busy} onClick={() => void discard()}>Discard</button><button type="button" className="nt-button nt-button--ghost" disabled={busy} onClick={() => setDiscarding(false)}>Keep draft</button></div></div>}
+    {result && <ProposalReceipt result={result} />}
+    <article className="snsgov-proposal">
+      <div className="snsgov-post-byline"><SnsLogo name={name} logo={metadata.data?.metadata?.logo} size={28} /><span className="snsgov-post-community">{name}</span></div>
+      <h3 className="nt-title snsgov-proposal-title">{draft.title || "Untitled proposal"}</h3>
+      <p className="nt-meta">{draftActionLabel(draft)}</p>
+      <p className="snsgov-proposal-body">{draft.summary}</p>
+      {safeExternalUrl(draft.url) && <a href={safeExternalUrl(draft.url)} target="_blank" rel="noopener noreferrer">Supporting information ↗</a>}
+      {draft.motionText !== undefined && <><h4 className="nt-section-title">Motion</h4><p className="snsgov-proposal-body">{draft.motionText}</p></>}
+      {draft.rendering !== undefined && <><h4 className="nt-section-title">Proposed change</h4><pre className="nt-pre nt-pre--wrap snsgov-readable-payload">{draft.rendering}</pre></>}
+      {payload !== undefined && <><h4 className="nt-section-title">Proposed change</h4><pre className="nt-pre nt-pre--wrap snsgov-readable-payload">{JSON.stringify(payload, null, 2)}</pre></>}
+    </article>
+    {confirmed === undefined && <>
+      {cost !== undefined && <p className="nt-text">Cost if rejected: <strong>{token ? `${formatTokenAmount(cost, token.decimals)} ${token.symbol}` : `${cost} atoms`}</strong> <Help label="Cost if rejected">This amount is charged to the proposing neuron's fee balance when the proposal is submitted. Adoption restores the rejection cost; rejection keeps the charge.</Help></p>}
+      {parameters.error && <p className="nt-meta">The rejection cost could not be read. The final submission preview checks current parameters.</p>}
+      {access.loading && <Pending label="Finding neurons that may propose" />}
+      {access.error && <><ErrorNote message={access.error} /><button type="button" className="nt-button nt-button--ghost" disabled={access.loading} onClick={() => setRefresh(value => value + 1)}>Retry proposer lookup</button></>}
+      {access.data && !eligible.length && <p className="nt-alert nt-alert--warning">No connected neuron grants SubmitProposal permission on this community. Add proposal access in the wallet that controls a neuron, then check again.</p>}
+      {eligible.length > 0 && <label className="snsgov-field" htmlFor="snsgov-proposer"><span>Neuron to propose with</span><select className="nt-select" id="snsgov-proposer" aria-label="Neuron to propose with" value={neuronId} disabled={busy || started} onChange={event => setNeuronId(event.target.value)}><option value="">Choose a neuron…</option>{eligible.map(neuron => <option key={neuron.neuronId} value={neuron.neuronId}>Neuron {shortenId(neuron.neuronId, 10, 6)} · Can propose</option>)}</select></label>}
+      {access.data?.truncated && <p className="nt-meta snsgov-warning">Neuron discovery is incomplete; more eligible proposers may exist.</p>}
+      <p className="nt-meta">Submitting puts this proposal on-chain. Review its exact contents and consequences before approving.</p>
+      <button className="nt-button" type="button" disabled={busy || (!started && !ready)} onClick={() => void submit(started)}>{busy ? "Checking submission…" : started ? "Check saved submission" : "Review and submit"}</button>
+      {started && <button className="nt-button nt-button--ghost" type="button" disabled={busy} onClick={() => void submit()}>Continue saved submission</button>}
+    </>}
+    <Disclosure title="Draft details and original payload"><dl className="nt-detail-grid"><div className="nt-detail"><dt>Draft ID</dt><dd>{draft.id}</dd></div><div className="nt-detail"><dt>Created by</dt><dd>{draft.createdBy}</dd></div><div className="nt-detail"><dt>Updated</dt><dd><ProposalTime seconds={draft.updatedAtSeconds} /></dd></div><div className="nt-detail"><dt>Community root</dt><dd className="snsgov-wrap-anywhere">{draft.sns}</dd></div>{draft.functionId !== undefined && <div className="nt-detail"><dt>Function ID</dt><dd>{draft.functionId.toString()}</dd></div>}</dl>{draft.payload && <pre className="nt-pre nt-pre--wrap">{toHex(draft.payload)}</pre>}</Disclosure>
+  </section>;
+}
+function nativeAction(draft: DraftRow): unknown {
+  if (draft.actionKind !== "NativeActionV1" || !draft.payload) return undefined;
+  try { return proposalActionToJson(decodeProposalAction(draft.payload)); } catch { return undefined; }
+}
+function draftActionLabel(draft: DraftRow) { const action = nativeAction(draft); return action && typeof action === "object" ? actionLabel(Object.keys(action)[0] ?? draft.actionKind) : actionLabel(draft.actionKind); }
+function describe(reason: unknown) { return reason instanceof Error ? reason.message : String(reason); }

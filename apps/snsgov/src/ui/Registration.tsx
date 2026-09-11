@@ -1,24 +1,11 @@
-/**
- * The one-click path from "my neurons exist" to "this app can vote with them".
- *
- * It lives in the SNS header rather than a separate Setup screen because that
- * is where the owner already is when they think about a DAO. Everything it can
- * do without the owner's signature, it does on one click; everything it cannot,
- * it names precisely and links straight to.
- */
-
-import { useCallback, useEffect, useState } from "react";
-import { querySelf, updateSelf } from "neutron-tools/app";
-import {
-  describeRegistration,
-  readRegistration,
-  type RegistrationStatus,
-} from "../data/registration";
-import { encodeAddVotingPermissions } from "../data/manage_neuron";
-import { readHotkey, relayManageNeuron, type HotkeyStatus } from "../data/relay";
+import { useRef, useState } from "react";
+import { copyToClipboard, querySelf, updateSelf } from "neutron-tools/app";
+import { invoke, operationId } from "../data/actions_client";
+import { readRegistration, type NeuronRegistration } from "../data/registration";
+import { readHotkey } from "../data/relay";
+import type { NeuronOperationResult } from "../data/neuron_actions";
 import { shortenId } from "../data/format";
-import { IconButton } from "./IconButton";
-import { NeuronIcon } from "./Icons";
+import { Disclosure, ErrorNote, useRead } from "./Common";
 
 export interface RegistrationTarget {
   rootCanisterId: string;
@@ -26,236 +13,175 @@ export interface RegistrationTarget {
   label: string;
 }
 
-interface Allowlisted {
-  votingEnabled: boolean;
-  agentVotingEnabled: boolean;
-  present: boolean;
-}
+interface Allowlisted { votingEnabled: boolean; agentVotingEnabled: boolean; present: boolean; label: string }
+interface PermissionAction { id: string; result?: NeuronOperationResult; error?: string }
 
-/** Read this SNS's row out of the owner-approved allowlist. */
 async function readAllowlisted(rootCanisterId: string): Promise<Allowlisted> {
-  const raw = (await querySelf("snsgov_config", [null])) as unknown as {
-    snses: {
-      sns: string | { toText(): string };
-      voting_enabled?: boolean;
-      agent_voting_enabled?: boolean;
-    }[];
+  const raw = await querySelf("snsgov_config", [null]) as unknown as {
+    snses: { sns: string | { toText(): string }; voting_enabled?: boolean; agent_voting_enabled?: boolean; label_text?: string }[];
   };
-  const row = raw.snses.find((entry) => {
-    const sns = typeof entry.sns === "string" ? entry.sns : entry.sns.toText();
-    return sns === rootCanisterId;
-  });
-  return {
-    present: row !== undefined,
-    votingEnabled: Boolean(row?.voting_enabled),
-    agentVotingEnabled: Boolean(row?.agent_voting_enabled),
-  };
+  const row = raw.snses.find(entry => (typeof entry.sns === "string" ? entry.sns : entry.sns.toText()) === rootCanisterId);
+  return { present: row !== undefined, votingEnabled: Boolean(row?.voting_enabled), agentVotingEnabled: Boolean(row?.agent_voting_enabled), label: row?.label_text ?? "" };
 }
 
-export function RegistrationButton({
-  target,
-  onChanged,
-}: {
-  target: RegistrationTarget;
-  onChanged?: () => void;
-}) {
-  const [hotkey, setHotkey] = useState<HotkeyStatus | null>(null);
-  const [status, setStatus] = useState<RegistrationStatus | null>(null);
-  const [allowlisted, setAllowlisted] = useState<Allowlisted | null>(null);
+export function RegistrationButton({ target, onChanged }: { target: RegistrationTarget; onChanged?: () => void }) {
+  return <VotingAccess key={`${target.rootCanisterId}:${target.governanceCanisterId}`} target={target} {...(onChanged ? { onChanged } : {})} />;
+}
+
+function VotingAccess({ target, onChanged }: { target: RegistrationTarget; onChanged?: () => void }) {
+  const [opened, setOpened] = useState(false);
+  const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [actions, setActions] = useState<Record<string, PermissionAction>>({});
+  const running = useRef(false);
+  const key = opened ? `${target.rootCanisterId}:${target.governanceCanisterId}` : null;
+  const read = useRead(key, async () => {
+    const hotkey = await readHotkey();
+    const [status, allowlisted] = await Promise.all([
+      readRegistration(target.governanceCanisterId, hotkey.principal), readAllowlisted(target.rootCanisterId),
+    ]);
+    return { hotkey, status, allowlisted };
+  }, refresh);
+  const data = read.data;
+  const refreshAccess = () => { setRefresh(value => value + 1); onChanged?.(); };
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const key = await readHotkey();
-      setHotkey(key);
-      const [registration, allow] = await Promise.all([
-        readRegistration(target.governanceCanisterId, key.principal),
-        readAllowlisted(target.rootCanisterId),
-      ]);
-      setStatus(registration);
-      setAllowlisted(allow);
-    } catch (error) {
-      setMessage(String(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [target.governanceCanisterId, target.rootCanisterId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  /**
-   * Do everything that does not need the owner's own signature: admit the SNS,
-   * turn voting on, and finish any grant we are already allowed to finish.
-   */
-  const register = useCallback(async () => {
-    if (!hotkey) return;
+  const enableVoting = async () => {
+    if (!data || running.current) return;
+    running.current = true;
     setBusy(true);
     setMessage(null);
     try {
-      const allow = await readAllowlisted(target.rootCanisterId);
-      if (!allow.present || !allow.votingEnabled) {
-        // The Kernel throws the backend's `#err` text, so there is no
-        // `{ err }` envelope here — a refusal lands in the catch below.
-        await updateSelf("snsgov_sns_upsert", [
-          {
-            sns: target.rootCanisterId,
-            governance: target.governanceCanisterId,
-            voting_enabled: true,
-            agent_voting_enabled: allow.agentVotingEnabled,
-            label_text: target.label.slice(0, 64),
-          },
-        ]);
-      }
+      // This changes an app preference. Permission changes below use the resident tool.
+      const current = await readAllowlisted(target.rootCanisterId);
+      await updateSelf("snsgov_sns_upsert", [{
+        sns: target.rootCanisterId, governance: target.governanceCanisterId,
+        voting_enabled: true, agent_voting_enabled: current.agentVotingEnabled, label_text: (current.label || target.label).slice(0, 64),
+      }]);
+      refreshAccess();
+    } catch (error) { setMessage(String(error)); }
+    finally { running.current = false; setBusy(false); }
+  };
 
-      const repairable = status?.repairable ?? [];
-      const failures: string[] = [];
-      for (const neuron of repairable) {
-        const outcome = await relayManageNeuron({
-          snsRootCanisterId: target.rootCanisterId,
-          args: encodeAddVotingPermissions({
-            neuronId: neuron.neuronId,
-            principal: hotkey.principal,
-          }),
-          kind: "grant",
-        });
-        if (!outcome.ok) {
-          failures.push(`${shortenId(neuron.neuronId, 6, 4)}: ${outcome.errorMessage ?? "rejected"}`);
-        }
-      }
-      await load();
-      if (failures.length > 0) {
-        setMessage((refreshError) =>
-          [`Could not finish: ${failures.join("; ")}`, refreshError].filter(Boolean).join("\n"),
-        );
-      }
-      onChanged?.();
+  const grant = async (neuron: NeuronRegistration) => {
+    if (!data || running.current) return;
+    const permissions = grantable(neuron);
+    if (permissions.length === 0) return;
+    const id = operationId();
+    running.current = true;
+    setBusy(true);
+    setMessage(null);
+    setActions(previous => ({ ...previous, [neuron.neuronId]: { id } }));
+    try {
+      const result = await invoke<NeuronOperationResult>("sns_manage_neuron_v1", {
+        operationId: id, rootCanisterId: target.rootCanisterId, neuronId: neuron.neuronId,
+        command: { AddNeuronPermissions: { principal_id: data.hotkey.principal, permissions_to_add: { permissions } } },
+      });
+      setActions(previous => ({ ...previous, [neuron.neuronId]: { id, result } }));
+      refreshAccess();
     } catch (error) {
-      setMessage(String(error));
-    } finally {
-      setBusy(false);
-    }
-  }, [hotkey, status, target, load, onChanged]);
+      setActions(previous => ({ ...previous, [neuron.neuronId]: { id, error: String(error) } }));
+    } finally { running.current = false; setBusy(false); }
+  };
 
-  const enabled = allowlisted?.votingEnabled ?? false;
-  const found = status?.found.length ?? 0;
-  const label = status === null && !loading
-    ? "Retry checking your neurons"
-    : describeRegistration(status, enabled);
-  // Nothing left to do only when this SNS is admitted and every neuron is ready.
-  const settled = enabled && status !== null && status.repairable.length === 0 && found > 0;
+  const checkAction = async (neuronId: string, action: PermissionAction) => {
+    if (running.current) return;
+    running.current = true;
+    setBusy(true);
+    try {
+      const result = await invoke<NeuronOperationResult>("sns_operation_status_v1", { operationId: action.id });
+      setActions(previous => ({ ...previous, [neuronId]: { id: action.id, result } }));
+      refreshAccess();
+    } catch (error) { setMessage(String(error)); }
+    finally { running.current = false; setBusy(false); }
+  };
 
-  return (
-    // The panel must not be a flex child of the header's action cluster: it
-    // gets squeezed into an icon-width column and wraps one character per
-    // line. Anchor it and float it beneath the button instead.
-    <span className="snsgov-anchor">
-      <IconButton
-        disabled={busy || loading}
-        label={label}
-        onClick={() => {
-          if (status === null) {
-            void load();
-          } else if (settled || found === 0) {
-            setOpen((value) => !value);
-            if (!open) void load();
-          } else {
-            void register();
-          }
-        }}
-        pressed={settled}
-      >
-        <span className="snsgov-count">
-          <NeuronIcon />
-          <span className="snsgov-count-text">
-            {status === null ? "…" : `${status.ready}/${found}`}
-          </span>
-        </span>
-      </IconButton>
+  const copyPrincipal = async () => {
+    if (!data) return;
+    try { await copyToClipboard(data.hotkey.principal); setCopied(true); }
+    catch (error) { setMessage(`Could not copy your principal: ${String(error)}`); }
+  };
+  const voteCount = data?.status.found.filter(neuron => !neuron.missing.includes(4)).length ?? 0;
+  const proposeCount = data?.status.found.filter(neuron => !neuron.missing.includes(3)).length ?? 0;
+  const incomplete = data?.status.truncated || (data?.status.failures?.length ?? 0) > 0;
 
-      {(open || message) && (
-        <RegistrationPanel
-          hotkey={hotkey}
-          message={message}
-          onClose={() => {
-            setOpen(false);
-            setMessage(null);
-          }}
-          status={status}
-          target={target}
-        />
-      )}
-    </span>
-  );
-}
-
-function RegistrationPanel({
-  status,
-  hotkey,
-  target,
-  message,
-  onClose,
-}: {
-  status: RegistrationStatus | null;
-  hotkey: HotkeyStatus | null;
-  target: RegistrationTarget;
-  message: string | null;
-  onClose: () => void;
-}) {
-  return (
-    <div className="nt-panel snsgov-panel" role="status">
-      <div className="snsgov-panel-head">
-        <strong className="nt-text">Voting access</strong>
-        <button className="nt-button nt-button--ghost" onClick={onClose} type="button">
-          Close
+  return <details className="nt-disclosure snsgov-disclosure snsgov-voting-access" onToggle={event => {
+    if (event.currentTarget.open) setOpened(true);
+  }}>
+    <summary className="snsgov-disclosure-summary"><span>Voting access</span><span aria-hidden="true">⌄</span></summary>
+    <div className="snsgov-disclosure-body">
+      <div className="snsgov-settings-row-head">
+        <strong>{target.label}</strong>
+        <button className="nt-button nt-button--ghost" disabled={busy || read.loading} onClick={() => setRefresh(value => value + 1)} type="button">
+          {read.loading ? "Checking access…" : "Refresh access"}
         </button>
       </div>
-      {message && (
-        <p className="nt-alert nt-alert--danger" role="alert">
-          {message}
-        </p>
-      )}
-      {status && status.found.length === 0 && hotkey && (
-        <p className="nt-text">
-          No neuron here names <code className="nt-code">{shortenId(hotkey.principal, 8, 6)}</code>{" "}
-          yet. Add it as a hotkey on the neuron in a wallet that controls it, then reopen this.
-        </p>
-      )}
-      {status && status.blocked.length > 0 && (
-        <>
-          <p className="nt-text">
-            These neurons name your principal but withhold voting, and the SNS only lets a holder of{" "}
-            <code className="nt-code">ManagePrincipals</code> change that — so this one is yours to
-            make:
-          </p>
-          <ul className="snsgov-principals">
-            {status.blocked.map((neuron) => (
-              <li key={neuron.neuronId}>
-                <a
-                  className="nt-link"
-                  href={`https://nns.ic0.app/neuron/?u=${target.rootCanisterId}&neuron=${neuron.neuronId}`}
-                  rel="noreferrer noopener"
-                  target="_blank"
-                >
-                  {shortenId(neuron.neuronId, 8, 6)}
-                </a>{" "}
-                <span className="nt-meta">missing {neuron.missing.join(" and ")}</span>
-              </li>
-            ))}
+      <ErrorNote message={read.error || message} />
+      {!data && read.loading && <p className="nt-meta" role="status">Checking the permissions granted to this Neutron…</p>}
+      {data && <>
+        <p className="nt-text">{voteCount} neuron{voteCount === 1 ? "" : "s"} can vote · {proposeCount} can propose.</p>
+        <p className="nt-meta">{data.allowlisted.votingEnabled ? "This community is connected." : "This community is disconnected in the app."}</p>
+        {!data.allowlisted.votingEnabled && <div className="snsgov-settings-actions"><button className="nt-button" disabled={busy || read.loading} onClick={() => void enableVoting()} type="button">Connect {target.label}</button></div>}
+        {!data.hotkey.canManageNeuron && <p className="nt-alert nt-alert--warning" role="status">The installed app does not have its governance signing capability. Install a compatible app update before changing neuron permissions.</p>}
+        {incomplete && <p className="nt-alert nt-alert--warning" role="status">Access checks are incomplete. Additional neurons or permissions may be unavailable until you refresh.</p>}
+        {data.status.found.length === 0 && <p className="nt-text">{incomplete
+          ? "No neurons were found in the available results."
+          : "No neurons in this community currently name this Neutron."} In the wallet that controls your neuron, add the principal below with Vote permission, then refresh access.</p>}
+        <Disclosure title="Connect from another wallet">
+          <p className="nt-text">Add this principal as a hotkey with Vote (4). Also add SubmitProposal (3) to let this Neutron publish proposals.
+            These permissions alone do not move tokens or change a neuron's unlock date.</p>
+          <div className="snsgov-principal-row">
+            <code className="nt-code snsgov-principal-text">{data.hotkey.principal}</code>
+            <button className="nt-button nt-button--ghost" onClick={() => void copyPrincipal()} type="button">{copied ? "Copied" : "Copy principal"}</button>
+          </div>
+          <p className="nt-meta">A principal with ManagePrincipals or ManageVotingPermission must grant the relevant permissions. The SNS also decides which permissions may be granted.</p>
+        </Disclosure>
+        {data.status.found.length > 0 && <Disclosure title="Neuron permissions">
+          <ul className="snsgov-settings-list">
+            {data.status.found.map(neuron => {
+              const permissions = grantable(neuron);
+              const action = actions[neuron.neuronId];
+              const unresolved = action !== undefined && action.result?.status !== "completed" && action.result?.status !== "rejected";
+              const external = neuron.missing.some(permission => !permissions.includes(permission));
+              return <li className="snsgov-settings-row" key={neuron.neuronId}>
+                <strong>Neuron {shortenId(neuron.neuronId, 6, 4)}</strong>
+                <p className="nt-meta">{neuron.missing.includes(4) ? "Cannot vote" : "Can vote"} · {neuron.missing.includes(3) ? "Cannot propose" : "Can propose"}</p>
+                <code className="nt-code snsgov-principal-text">{neuron.neuronId}</code>
+                {permissions.length > 0 && !unresolved && <>
+                  <p className="nt-text">This Neutron can add {permissionNames(permissions)} to its own access on this neuron.</p>
+                  <button className="nt-button" disabled={busy || read.loading || !data.hotkey.canManageNeuron || !data.allowlisted.votingEnabled}
+                    onClick={() => void grant(neuron)} type="button">Add {permissionNames(permissions)}</button>
+                </>}
+                {external && <a className="nt-link" href={`https://nns.ic0.app/neuron/?u=${encodeURIComponent(target.rootCanisterId)}&neuron=${encodeURIComponent(neuron.neuronId)}`} target="_blank" rel="noreferrer noopener">Manage missing permissions in NNS dapp</a>}
+                {action && <div className="snsgov-permission-outcome" role="status">
+                  <p>{action.result?.status === "completed" ? "Permission change confirmed." : action.result?.status === "rejected" ? "The permission change was rejected." : "The permission change is not confirmed. Check its saved status before trying again."}</p>
+                  <ErrorNote message={action.error || action.result?.message || null} />
+                  <button className="nt-button nt-button--ghost" disabled={busy} onClick={() => void checkAction(neuron.neuronId, action)} type="button">Check saved status</button>
+                  <Disclosure title="Permission change details">
+                    <p className="nt-meta">Operation <code className="nt-code snsgov-principal-text">{action.id}</code></p>
+                    {action.result && <pre className="nt-pre nt-pre--wrap">{JSON.stringify(action.result.outcomes ?? action.result, (_key, value) => typeof value === "bigint" ? value.toString() : value, 2)}</pre>}
+                    <p className="nt-meta">Activity keeps this action's saved result and any next steps.</p>
+                  </Disclosure>
+                </div>}
+              </li>;
+            })}
           </ul>
-        </>
-      )}
-      {status?.truncated && (
-        <p className="nt-meta">
-          Only the first 100 neurons are visible for one principal; there may be more.
-        </p>
-      )}
+        </Disclosure>}
+        {(data.status.failures?.length ?? 0) > 0 && <Disclosure title="Unavailable access reads">
+          <ul className="snsgov-settings-list">{data.status.failures!.map((failure, index) => <li className="snsgov-settings-row" key={`${failure.scope}:${index}`}>
+            <p className="nt-text">{failure.message}</p><code className="nt-code snsgov-principal-text">{failure.code} · {failure.scope}</code>
+          </li>)}</ul>
+        </Disclosure>}
+      </>}
     </div>
-  );
+  </details>;
+}
+
+function grantable(neuron: NeuronRegistration): number[] {
+  const canManage = neuron.held?.some(permission => permission === 2 || permission === 10) ?? false;
+  return canManage ? (neuron.grantableMissing ?? []).filter(permission => permission === 3 || permission === 4) : [];
+}
+function permissionNames(permissions: number[]): string {
+  return permissions.map(permission => permission === 4 ? "Vote" : "SubmitProposal").join(" and ");
 }

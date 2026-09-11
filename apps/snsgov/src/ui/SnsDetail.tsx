@@ -1,402 +1,121 @@
 import { useEffect, useState } from "react";
 import { copyToClipboard } from "neutron-tools/app";
-import { SnsError } from "../data/errors";
-import {
-  formatDuration,
-  formatPercent,
-  formatRewardRate,
-  formatTokenAmount,
-  shortenId,
-} from "../data/format";
-import {
-  listNervousSystemFunctions,
-  maxVotingPeriodExtensionSeconds,
-  readMode,
-  readParameters,
-  uncategorizedFunctions,
-} from "../data/governance";
+import { formatDuration, formatPercent, formatRewardRate, formatTokenAmount } from "../data/format";
+import { listNervousSystemFunctions, maxVotingPeriodExtensionSeconds, readMode, readParameters, uncategorizedFunctions } from "../data/governance";
 import { readTreasuries } from "../data/ledger";
 import { displayName, requireEntry, type RegistryEntry } from "../data/registry";
 import type { NervousSystemFunctionInfo, SnsParameters, TreasuryBalances } from "../data/types";
+import type { SnsTab } from "../data/views";
 import { NeuronsView } from "./Neurons";
 import { ProposalsView } from "./Proposals";
-import { IconButton } from "./IconButton";
 import { SnsLogo } from "./Logo";
 import { CanistersView } from "./Canisters";
 import { RegistrationButton } from "./Registration";
 import { Empty, Pending } from "./Status";
-import { BackIcon, CopyIcon, ExternalIcon, WarnIcon } from "./Icons";
+import { Disclosure, ErrorNote, Help, PageHeading, safeExternalUrl, useRead } from "./Common";
 
-interface Loaded {
-  entry: RegistryEntry;
-  params?: SnsParameters;
-  treasury?: TreasuryBalances;
-  mode?: number;
-  functions?: NervousSystemFunctionInfo[];
-}
+type Tab = "overview" | "proposals" | "neurons" | "details";
+const localTab = (tab: SnsTab | undefined): Tab => tab === "types" || tab === "canisters" ? "details" : tab ?? "overview";
 
-type State =
-  | { phase: "loading" }
-  | { phase: "ready"; data: Loaded }
-  | { phase: "error"; message: string };
-
-import { SNS_TABS, type SnsTab } from "../data/views";
-
-type Tab = SnsTab;
-
-export function SnsDetailView({
-  rootCanisterId,
-  onBack,
-  initialTab,
-  initialProposalId,
-}: {
-  rootCanisterId: string;
-  onBack: () => void;
-  /** Where an agent asked the owner to land. */
-  initialTab?: Tab | undefined;
-  initialProposalId?: bigint | undefined;
+export function SnsDetailView({ rootCanisterId, onBack, initialTab, initialProposalId }: {
+  rootCanisterId: string; onBack: () => void; initialTab?: SnsTab | undefined; initialProposalId?: bigint | undefined;
 }) {
-  const [state, setState] = useState<State>({ phase: "loading" });
-  const [tab, setTab] = useState<Tab>(initialTab ?? "overview");
-
-  // A second request while this SNS is already open must retarget it.
-  useEffect(() => {
-    if (initialTab) setTab(initialTab);
-  }, [initialTab, initialProposalId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      setState({ phase: "loading" });
-      try {
-        const entry = await requireEntry(rootCanisterId);
-        // Each read degrades independently: a dead governance canister must
-        // still let the token and ledger panels render.
-        const [params, mode, treasury, functions] = await Promise.all([
-          entry.liveness.governance ? safe(() => readParameters(entry.canisters.governance)) : undefined,
-          entry.liveness.governance ? safe(() => readMode(entry.canisters.governance)) : undefined,
-          entry.liveness.ledger
-            ? safe(() =>
-                readTreasuries({
-                  governanceCanisterId: entry.canisters.governance,
-                  ledgerCanisterId: entry.canisters.ledger,
-                }),
-              )
-            : undefined,
-          entry.liveness.governance
-            ? safe(() => listNervousSystemFunctions(entry.canisters.governance))
-            : undefined,
-        ]);
-        if (cancelled) return;
-        setState({
-          phase: "ready",
-          data: {
-            entry,
-            ...(params === undefined ? {} : { params }),
-            ...(treasury === undefined ? {} : { treasury }),
-            ...(mode === undefined ? {} : { mode }),
-            ...(functions === undefined ? {} : { functions }),
-          },
-        });
-      } catch (error) {
-        if (cancelled) return;
-        setState({
-          phase: "error",
-          message: error instanceof SnsError ? error.message : String(error),
-        });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [rootCanisterId]);
-
-  return (
-    <div className="nt-page">
-      <header className="nt-page-header snsgov-toolbar">
-        <div className="nt-cluster">
-          <IconButton label="Back to the SNS list" onClick={onBack}>
-            <BackIcon />
-          </IconButton>
-          <h1 className="nt-title snsgov-detail-title">
-            {state.phase === "ready" ? displayName(state.data.entry) : "…"}
-          </h1>
-        </div>
-        <div className="nt-cluster snsgov-toolbar-actions">
-          {state.phase === "ready" && state.data.entry.liveness.governance && (
-            <RegistrationButton
-              target={{
-                rootCanisterId,
-                governanceCanisterId: state.data.entry.canisters.governance,
-                label: displayName(state.data.entry),
-              }}
-            />
-          )}
-          <IconButton
-            label="Copy root canister id"
-            onClick={() => void copyToClipboard(rootCanisterId)}
-          >
-            <CopyIcon />
-          </IconButton>
-          {state.phase === "ready" && (
-            <SnsLogo
-              logo={state.data.entry.metadata?.logo}
-              name={displayName(state.data.entry)}
-              size={28}
-            />
-          )}
-        </div>
-      </header>
-
-      <section className="nt-page-main">
-        {state.phase === "loading" && (
-          <Pending label="Reading this SNS" />
-        )}
-        {state.phase === "error" && (
-          <div className="nt-alert nt-alert--danger" role="alert">
-            {state.message}
-          </div>
-        )}
-        {state.phase === "ready" && (
-          <>
-            {state.data.entry.liveness.governance && (
-              <div className="nt-tabs snsgov-tabs">
-                <div aria-label="SNS sections" className="nt-tab-list" role="tablist">
-                  {SNS_TABS.map((value) => (
-                    <button
-                      aria-selected={tab === value}
-                      className="nt-tab"
-                      key={value}
-                      onClick={() => setTab(value)}
-                      role="tab"
-                      type="button"
-                    >
-                      {value[0]!.toUpperCase() + value.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {tab === "overview" && <DetailBody data={state.data} />}
-            {tab === "types" && <ProposalTypes functions={state.data.functions} />}
-            {tab === "canisters" && <CanistersView rootCanisterId={rootCanisterId} />}
-            {tab === "proposals" && (
-              <ProposalsView entry={state.data.entry} initialProposalId={initialProposalId} />
-            )}
-            {tab === "neurons" && <NeuronsView entry={state.data.entry} />}
-          </>
-        )}
-      </section>
-    </div>
-  );
+  const [tab, setTab] = useState<Tab>(() => localTab(initialTab));
+  const [refresh, setRefresh] = useState(0);
+  const entryRead = useRead(rootCanisterId, () => requireEntry(rootCanisterId), refresh);
+  const entry = entryRead.data;
+  const governance = entry?.liveness.governance ? entry.canisters.governance : null;
+  const parameters = useRead(governance, () => readParameters(governance!), refresh);
+  const mode = useRead(governance, () => readMode(governance!), refresh);
+  const treasuries = useRead(entry?.liveness.ledger ? rootCanisterId : null, () => readTreasuries({ governanceCanisterId: entry!.canisters.governance, ledgerCanisterId: entry!.canisters.ledger }), refresh);
+  const functions = useRead(governance, () => listNervousSystemFunctions(governance!), refresh);
+  useEffect(() => { setTab(localTab(initialTab)); }, [initialTab, initialProposalId]);
+  const url = safeExternalUrl(entry?.metadata?.url);
+  return <section className="nt-page snsgov-community-page">
+    <PageHeading title={entry ? displayName(entry) : "Community"} onBack={onBack} actions={entry && <SnsLogo logo={entry.metadata?.logo} name={displayName(entry)} size={36} />} />
+    <ErrorNote message={entryRead.error} />
+    {!entry && entryRead.loading && <Pending label="Reading this community" />}
+    {entryRead.error && <button className="nt-button" type="button" onClick={() => setRefresh(value => value + 1)}>Try again</button>}
+    {entry && <>
+      <nav className="snsgov-context-navigation" aria-label="Community sections">{([
+        ["overview", "Overview"], ["proposals", "Proposals"], ["neurons", "My neurons"], ["details", "Details"],
+      ] as const).filter(([value]) => entry.liveness.governance || value === "overview" || value === "details").map(([value, label]) => <button className="nt-tab" type="button" key={value} data-active={tab === value} aria-current={tab === value ? "page" : undefined} onClick={() => setTab(value)}>{label}</button>)}</nav>
+      {tab === "overview" && <>
+        {entry.metadata?.description && <p className="snsgov-community-intro">{entry.metadata.description}</p>}
+        {!entry.liveness.governance && <p className="nt-alert nt-alert--warning" role="status">Governance is unavailable for this community.{entry.liveness.ledger ? " Its token ledger is still available." : ""}</p>}
+        {entry.liveness.governance && <div className="snsgov-community-actions"><button className="nt-button" type="button" onClick={() => setTab("proposals")}>View proposals</button><button className="nt-button nt-button--secondary" type="button" onClick={() => setTab("neurons")}>Stake & manage neurons</button></div>}
+        <section className="nt-section"><h3 className="nt-section-heading">Getting involved</h3><dl className="nt-detail-grid snsgov-summary-grid">
+          <Detail label="Token" value={entry.token?.symbol ?? "Unavailable"} />
+          <Detail label="Minimum stake" value={amount(parameters.data?.neuronMinimumStakeE8s, entry)} help="The smallest stake this community accepts when creating a neuron. A network transfer fee may also apply." />
+          <Detail label="Unlock delay to vote" value={duration(parameters.data?.neuronMinimumDissolveDelayToVoteSeconds)} help="A neuron needs at least this much remaining unlock delay to qualify for new proposals. Only neurons in a proposal’s ballot can vote on that proposal." />
+        </dl></section>
+        {parameters.error && <p className="nt-meta snsgov-muted">Some community requirements could not be read. Refresh the details to try again.</p>}
+        {entry.liveness.governance && <RegistrationButton target={{ rootCanisterId, governanceCanisterId: entry.canisters.governance, label: displayName(entry) }} />}
+        {url && <a className="nt-link snsgov-community-site" href={url} target="_blank" rel="noopener noreferrer">Visit community website ↗</a>}
+        <Disclosure title="How staking works"><p className="nt-text">Staking creates a neuron: tokens held for governance with an unlock delay you choose. The countdown starts when you choose to unlock, rather than automatically after staking.</p><p className="nt-text">Already have a neuron in another wallet? Add this Neutron’s address there to share voting access, while keeping the controls your wallet already has.</p></Disclosure>
+      </>}
+      {tab === "proposals" && <ProposalsView entry={entry} initialProposalId={initialProposalId} />}
+      {tab === "neurons" && <NeuronsView entry={entry} />}
+      {tab === "details" && <>
+        <div className="nt-cluster"><p className="nt-text snsgov-muted snsgov-grow">The community’s current settings and infrastructure.</p><button className="nt-button nt-button--ghost" type="button" disabled={parameters.loading || functions.loading} onClick={() => setRefresh(value => value + 1)}>Refresh details</button></div>
+        <Disclosure title="Token & treasury"><TokenDetails entry={entry} treasury={treasuries.data} /><ErrorNote message={treasuries.error} /></Disclosure>
+        <Disclosure title="Voting & staking rules"><GovernanceDetails entry={entry} params={parameters.data} mode={mode.data} /><ErrorNote message={parameters.error || mode.error} /></Disclosure>
+        <Disclosure title="Proposal types" open={initialTab === "types"}><ProposalTypes functions={functions.data} loading={functions.loading} error={functions.error} /></Disclosure>
+        <Disclosure title="Canisters" open={initialTab === "canisters"}><CanistersView rootCanisterId={rootCanisterId} /></Disclosure>
+        <Disclosure title="Community addresses"><dl className="snsgov-addresses">{Object.entries(entry.canisters).filter((pair): pair is [string, string] => typeof pair[1] === "string").map(([role, principal]) => <div key={role}><dt>{role}</dt><dd><code>{principal}</code><button className="nt-button nt-button--ghost" type="button" aria-label={`Copy ${role} address`} onClick={() => void copyToClipboard(principal)}>Copy</button></dd></div>)}</dl></Disclosure>
+      </>}
+    </>}
+  </section>;
 }
 
-function DetailBody({ data }: { data: Loaded }) {
-  const { entry, params, treasury, mode } = data;
-  const token = entry.token;
-  const symbol = token?.symbol ?? "";
-
-  const amount = (value: bigint | undefined): string =>
-    value === undefined ? "—" : token
-      ? `${formatTokenAmount(value, token.decimals, { group: false })} ${symbol}`.trim()
-      : `${value} atoms`;
-
-  return (
-    <>
-      {!entry.liveness.governance && (
-        <div className="nt-alert nt-alert--warning snsgov-alert" role="status">
-          <WarnIcon />
-          <span>
-            This SNS&rsquo;s governance canister has no code installed, so parameters and proposals
-            are unavailable.
-            {entry.liveness.ledger ? " Token data below still comes from its live ledger." : ""}
-          </span>
-        </div>
-      )}
-
-      {entry.metadata?.description && (
-        <p className="nt-text snsgov-description">{entry.metadata.description}</p>
-      )}
-
-      <Section count={token ? undefined : 0} title="Token">
-        <dl className="nt-detail-grid">
-          <Detail label="Name" value={token?.name ?? "—"} />
-          <Detail label="Symbol" value={token?.symbol ?? "—"} />
-          <Detail
-            label="Transaction fee"
-            value={token ? `${formatTokenAmount(token.fee, token.decimals, { group: false })} ${symbol}` : "—"}
-          />
-          <Detail
-            label="Total supply"
-            value={
-              token?.totalSupply === undefined
-                ? "—"
-                : formatTokenAmount(token.totalSupply, token.decimals)
-            }
-          />
-          <Detail
-            label="ICP treasury"
-            value={treasury?.icpE8s === undefined ? "—" : `${formatTokenAmount(treasury.icpE8s, 8)} ICP`}
-          />
-          <Detail
-            label={`${symbol || "Token"} treasury`}
-            value={
-              amount(treasury?.tokenE8s)
-            }
-          />
-        </dl>
-      </Section>
-
-      {params && (
-        <Section title="Governance">
-          <dl className="nt-detail-grid">
-            <Detail label="Status" value={mode === 1 ? "Normal" : mode === 2 ? "Pre-swap" : "—"} />
-            <Detail label="Initial voting period" value={duration(params.initialVotingPeriodSeconds)} />
-            {/* Twice the raw parameter: a proposal extends to at most
-                initial + 2 × wait_for_quiet_deadline_increase. */}
-            <Detail
-              label="Max voting period extension"
-              value={duration(maxVotingPeriodExtensionSeconds(params))}
-            />
-            <Detail label="Reject cost" value={amount(params.rejectCostE8s)} />
-            <Detail label="Min neuron stake" value={amount(params.neuronMinimumStakeE8s)} />
-            <Detail
-              label="Min dissolve delay to vote"
-              value={duration(params.neuronMinimumDissolveDelayToVoteSeconds)}
-            />
-            <Detail label="Max dissolve delay" value={duration(params.maxDissolveDelaySeconds)} />
-            <Detail
-              label="Max dissolve delay bonus"
-              value={percent(params.maxDissolveDelayBonusPercentage)}
-            />
-            <Detail label="Max age for age bonus" value={duration(params.maxNeuronAgeForAgeBonusSeconds)} />
-            <Detail label="Max age bonus" value={percent(params.maxAgeBonusPercentage)} />
-            <Detail label="Reward rate" value={formatRewardRate(params.rewards ?? {}) ?? "—"} />
-            <Detail
-              label="Max principals per neuron"
-              value={params.maxNumberOfPrincipalsPerNeuron?.toString() ?? "—"}
-            />
-          </dl>
-        </Section>
-      )}
-
-      {entry.metadata?.url && (
-        <p className="nt-meta snsgov-footnote">
-          <ExternalIcon /> <span>{entry.metadata.url}</span>
-        </p>
-      )}
-    </>
-  );
+function TokenDetails({ entry, treasury }: { entry: RegistryEntry; treasury: TreasuryBalances | null }) {
+  return <dl className="nt-detail-grid">
+    <Detail label="Token name" value={entry.token?.name ?? "Unavailable"} />
+    <Detail label="Symbol" value={entry.token?.symbol ?? "Unavailable"} />
+    <Detail label="Transfer fee" value={amount(entry.token?.fee, entry)} help="The fee charged by the token ledger for a transfer. It is separate from the amount you stake or withdraw." />
+    <Detail label="Total supply" value={amount(entry.token?.totalSupply, entry)} />
+    <Detail label="ICP treasury" value={treasury?.icpE8s === undefined ? "Unavailable" : `${formatTokenAmount(treasury.icpE8s, 8)} ICP`} />
+    <Detail label="Token treasury" value={amount(treasury?.tokenE8s, entry)} />
+  </dl>;
 }
 
-function Section({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count?: number | undefined;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="nt-section">
-      <header className="nt-section-header">
-        <h2 className="nt-section-heading">{title}</h2>
-        {count !== undefined && <span className="nt-section-count">{count}</span>}
-      </header>
-      {children}
-    </section>
-  );
+function GovernanceDetails({ entry, params, mode }: { entry: RegistryEntry; params: SnsParameters | null; mode: number | undefined | null }) {
+  if (!params) return <Empty label="Voting and staking rules are not available yet." />;
+  return <dl className="nt-detail-grid">
+    <Detail label="Governance state" value={mode === 1 ? "Active" : mode === 2 ? "Preparing launch" : "Unavailable"} />
+    <Detail label="Voting period" value={duration(params.initialVotingPeriodSeconds)} />
+    <Detail label="Maximum deadline extension" value={duration(maxVotingPeriodExtensionSeconds(params))} help="Late votes can extend a proposal’s deadline when they change the outcome. The proposal shows its current deadline." />
+    <Detail label="Cost if a proposal is rejected" value={amount(params.rejectCostE8s, entry)} />
+    <Detail label="Minimum stake" value={amount(params.neuronMinimumStakeE8s, entry)} />
+    <Detail label="Unlock delay to vote" value={duration(params.neuronMinimumDissolveDelayToVoteSeconds)} help="A neuron needs this much remaining unlock delay to qualify for new proposals. Each proposal has its own eligible ballots." />
+    <Detail label="Maximum unlock delay" value={duration(params.maxDissolveDelaySeconds)} />
+    <Detail label="Maximum delay bonus" value={percent(params.maxDissolveDelayBonusPercentage)} help="A longer unlock delay can increase a neuron’s voting power, up to this bonus." />
+    <Detail label="Age needed for full age bonus" value={duration(params.maxNeuronAgeForAgeBonusSeconds)} help="Locked neurons build an age bonus over time. Starting to unlock removes the age bonus while the countdown runs." />
+    <Detail label="Maximum age bonus" value={percent(params.maxAgeBonusPercentage)} />
+    <Detail label="Community reward rate" value={formatRewardRate(params.rewards ?? {}) ?? "Unavailable"} help="This is the community’s reward-distribution parameter, not a guaranteed return on your stake. Your rewards depend on voting and the community’s rules." />
+    <Detail label="Maximum addresses per neuron" value={params.maxNumberOfPrincipalsPerNeuron?.toString() ?? "Unavailable"} />
+  </dl>;
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="nt-detail">
-      <dt className="nt-detail-label">{label}</dt>
-      <dd className="nt-detail-value">{value}</dd>
-    </div>
-  );
+function ProposalTypes({ functions, loading, error }: { functions: NervousSystemFunctionInfo[] | null; loading: boolean; error: string }) {
+  const withoutTopic = functions ? uncategorizedFunctions(functions) : [];
+  return <section className="nt-section">
+    <ErrorNote message={error ? "Proposal types could not be read. Refresh details to try again." : ""} />
+    {!functions && loading && <Pending label="Reading proposal types" />}
+    {functions?.length === 0 && <Empty label="No proposal types are registered." />}
+    {withoutTopic.length > 0 && <p className="nt-alert nt-alert--warning" role="status">{withoutTopic.length} custom proposal {withoutTopic.length === 1 ? "type has" : "types have"} no topic. Newer governance versions may require one before submission; older communities can still accept these proposals.</p>}
+    <div className="snsgov-function-list">{functions?.map(fn => <Disclosure key={fn.id.toString()} title={fn.name} description={fn.kind === "generic" ? fn.topic ?? "Topic not assigned" : "Built-in proposal"}>
+      {fn.description && <p className="nt-text">{fn.description}</p>}
+      <dl className="snsgov-facts"><dt>Type ID</dt><dd>{fn.id.toString()}</dd><dt>Topic</dt><dd>{fn.topic ?? "Not assigned"}</dd>{fn.targetCanisterId && <><dt>Target</dt><dd><code>{fn.targetCanisterId}</code></dd><dt>Method</dt><dd><code>{fn.targetMethodName}</code></dd></>}{fn.validatorCanisterId && <><dt>Validator</dt><dd><code>{fn.validatorCanisterId}</code></dd><dt>Validation method</dt><dd><code>{fn.validatorMethodName}</code></dd></>}</dl>
+    </Disclosure>)}</div>
+  </section>;
 }
 
-function duration(seconds: bigint | undefined): string {
-  return seconds === undefined ? "—" : formatDuration(seconds);
+function Detail({ label, value, help }: { label: string; value: string; help?: string }) {
+  return <div className="nt-detail"><dt className="nt-detail-label">{label}{help && <Help label={label}>{help}</Help>}</dt><dd className="nt-detail-value">{value}</dd></div>;
 }
-
-function percent(value: bigint | undefined): string {
-  return value === undefined ? "—" : formatPercent(value);
+function amount(value: bigint | undefined, entry: RegistryEntry): string {
+  return value === undefined ? "Unavailable" : entry.token ? `${formatTokenAmount(value, entry.token.decimals)} ${entry.token.symbol}` : `${value} base units`;
 }
-
-async function safe<T>(run: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await run();
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * The DAO's registered proposal types.
- *
- * Its own tab rather than a slab at the bottom of the overview: OpenChat
- * registers 46 of these, which buried the parameters a reader came for.
- */
-function ProposalTypes({ functions }: { functions: NervousSystemFunctionInfo[] | undefined }) {
-  if (functions === undefined) {
-    return <div className="nt-alert nt-alert--danger" role="alert">Proposal types could not be read.</div>;
-  }
-  const blocked = uncategorizedFunctions(functions);
-  if (functions.length === 0) {
-    return <Empty label="This SNS registers no proposal types." />;
-  }
-  return (
-    <Section count={functions.length} title="Proposal types">
-          {blocked.length > 0 && (
-      <div className="nt-alert nt-alert--warning snsgov-alert" role="status">
-        <WarnIcon />
-        <span>
-          {blocked.length} custom proposal {blocked.length === 1 ? "type has" : "types have"} no
-          topic assigned, so the SNS rejects every submission of{" "}
-          {blocked.length === 1 ? "it" : "them"}. The DAO must submit{" "}
-          <code className="nt-code">SetTopicsForCustomProposals</code> to fix this.
-        </span>
-      </div>
-      )}
-      <div className="nt-table-wrap">
-      <table className="nt-table snsgov-table snsgov-table--functions">
-        <thead>
-          <tr>
-            <th scope="col">Type</th>
-            <th scope="col">Kind</th>
-            <th scope="col">Target</th>
-            <th scope="col">Topic</th>
-          </tr>
-        </thead>
-        <tbody>
-          {functions.map((fn) => (
-            <tr key={fn.id.toString()}>
-              <th scope="row">{fn.name}</th>
-              <td>{fn.kind}</td>
-              <td>
-                {fn.targetCanisterId ? (
-                  <code className="nt-code">
-                    {shortenId(fn.targetCanisterId, 5, 3)}::{fn.targetMethodName}
-                  </code>
-                ) : (
-                  "—"
-                )}
-              </td>
-              <td>
-                {fn.kind === "generic" && fn.topic === undefined ? (
-                  <span className="nt-badge nt-badge--warning">not proposable</span>
-                ) : (
-                  (fn.topic ?? "—")
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
-    </Section>
-  );
-}
+const duration = (value: bigint | undefined) => value === undefined ? "Unavailable" : formatDuration(value);
+const percent = (value: bigint | undefined) => value === undefined ? "Unavailable" : formatPercent(value);

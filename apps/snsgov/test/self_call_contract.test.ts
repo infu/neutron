@@ -77,6 +77,10 @@ mock.module("neutron-tools/app", () => ({
     captured.push({ method, args });
     return replyFor(method);
   },
+  callTool: async () => {
+    if (insideTool) throw new Error("tool attempted ambient callTool");
+    throw new Error("unexpected ambient callTool in self-call test");
+  },
   copyToClipboard: async () => {},
   openAppTile: async (request: { appId: string; tileId: string; view?: string }) => {
     if (insideTool) throw new Error("tool attempted ambient openAppTile");
@@ -92,10 +96,17 @@ mock.module("neutron-tools/app", () => ({
   ) => {
     // A valid handler is unreachable if the resident fails schema registration.
     // Keep the shared production validator even with the Kernel calls stubbed.
-    normalizeToolDescriptor({ name, ...options });
+    normalizeToolDescriptor({ name, ...options } as MsgBusToolDescriptor);
     handlers.set(name, async (args) => {
       insideTool += 1;
-      try { return await handler(args, { kernel: scopedKernel, reportProgress() {} }); }
+      try { return await handler(args, {
+        kernel: scopedKernel,
+        caller: { appId: "agent", installationUid: "12", role: "background", endpoint: "app:agent:background" },
+        agentMode: false,
+        reportProgress() {},
+        requestApproval: async () => { throw new Error("read-only test unexpectedly requested approval"); },
+        presentUserInterface: async () => { throw new Error("read-only test unexpectedly requested owner review"); },
+      } as unknown as MsgBusToolContext); }
       finally { insideTool -= 1; }
     });
   },
@@ -669,28 +680,130 @@ test("an undecodable signed relay response is unknown, never a definite rejectio
   }
 });
 
-test("agent vote planning and execution stay scoped and preserve partial result evidence", async () => {
+test("agent vote planning uses the scoped principal and actual eligibility without the old unattended opt-in", async () => {
   const governance = await import("../src/data/governance");
   const neuronIds = Array.from({ length: 21 }, (_, i) => (i + 1).toString(16).padStart(64, "0"));
   const principal = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+  let discoveryPrincipal: string | undefined;
   mock.module("../src/data/governance", () => ({
     ...governance,
-    listNeurons: async () => ({ neurons: neuronIds.map((id) => ({ id, permissions: [{ principal, permissions: [4] }] })), truncated: false }),
-    getProposal: async () => ({ id: 1066n, title: "Review", status: "open", ballots: neuronIds.map((neuronId) => ({ neuronId, vote: 0 })) }),
+    listAllNeurons: async (_governance: string, options: { ofPrincipal?: string }) => {
+      discoveryPrincipal = options.ofPrincipal;
+      return { neurons: neuronIds.map((id) => ({ id, permissions: [{ principal, permissions: [4] }] })), truncated: false, failures: [] };
+    },
+    getProposal: async () => ({ id: 1066n, title: "Review", status: "open", deadlineSeconds: BigInt(Math.floor(Date.now() / 1000)) + 3600n, ballots: neuronIds.map((neuronId) => ({ neuronId, vote: 0 })) }),
   }));
   const sns = "extk7-gaaaa-aaaaq-aacda-cai";
-  replyOverrides.set("snsgov_config", () => ({ snses: [{ sns, governance: "eqsml-lyaaa-aaaaq-aacdq-cai", voting_enabled: true, agent_voting_enabled: true }] }));
-  const type = (governanceIdl({ IDL }) as unknown as { _fields: [string, { retTypes: IDL.Type[] }][] })._fields.find(([name]) => name === "manage_neuron")![1].retTypes[0]!;
-  const accepted = new Uint8Array(IDL.encode([type], [{ command: [{ RegisterVote: {} }] }]));
-  let chunks = 0;
-  replyOverrides.set("snsgov_relay_batch", () => ++chunks === 1 ? { results: Array.from({ length: 20 }, () => ({ ok: accepted })), attempted: "20", succeeded: "20" } : { results: [], attempted: "0", succeeded: "0", error: "SNS disabled" });
+  replyOverrides.set("snsgov_config", () => ({ snses: [{ sns, governance: "eqsml-lyaaa-aaaaq-aacdq-cai", voting_enabled: true, agent_voting_enabled: false }] }));
   try {
     captured.length = 0;
-    const plan = await handlers.get("sns_vote_plan")!({ rootCanisterId: sns, proposalId: "1066" }) as { eligibleNeuronIds: string[] };
+    const plan = await handlers.get("sns_vote_plan")!({ rootCanisterId: sns, proposalId: "1066" }) as { eligibleNeuronIds: string[]; discoveryComplete: boolean };
     expect(plan.eligibleNeuronIds).toEqual(neuronIds);
+    expect(plan.discoveryComplete).toBe(true);
+    expect(discoveryPrincipal).toBe(principal);
     expect(captured.filter((row) => row.method === "snsgov_hotkey")).toHaveLength(1);
-    const result = await handlers.get("sns_vote")!({ rootCanisterId: sns, proposalId: "1066", vote: "adopt" });
-    expect(result).toMatchObject({ attempted: 20, succeeded: 20, error: "SNS disabled", retrySafe: false });
-    expect(chunks).toBe(2);
+    expect(captured.every((row) => ["snsgov_hotkey", "snsgov_config"].includes(row.method))).toBe(true);
+    // This is a planning/scope test; durable dispatch and partial SNS command
+    // outcomes are covered by the operation and neuron-action suites.
+  } finally { replyOverrides.clear(); }
+});
+
+test("native drafts retain exact action bytes and expose one durable submission identity", async () => {
+  const draft = handlers.get("sns_draft_proposal")!;
+  const { decodeProposalAction, proposalActionToJson } = await import("../src/data/proposal_actions");
+  const { draftOperationId } = await import("../src/action_tools");
+  const action = { Motion: { motion_text: "The DAO resolves to retain this exact action." } };
+  captured.length = 0;
+  await draft({ rootCanisterId: "extk7-gaaaa-aaaaq-aacda-cai", title: "A native Motion", summary: "Review exact content", action });
+  const saved = captured.find(row => row.method === "snsgov_draft_save")!.args[0] as Record<string, unknown>;
+  expect(saved.action_kind).toBe("NativeActionV1");
+  expect(saved.payload).toBeInstanceOf(Uint8Array);
+  expect(proposalActionToJson(decodeProposalAction(saved.payload as Uint8Array))).toEqual(action);
+  expect(captured.filter(row => row.method === "snsgov_draft_save").flatMap(check)).toEqual([]);
+  const row = { ...saved, id: "44", created_at_seconds: "100", updated_at_seconds: "100" };
+  replyOverrides.set("snsgov_drafts", () => [row]);
+  try {
+    const result = await handlers.get("sns_drafts")!({}) as { drafts: Record<string, unknown>[] };
+    const retained = result.drafts[0]!;
+    expect(retained.action).toEqual(action);
+    expect(retained.payloadProvenance).toBe("original_saved_action");
+    expect(retained.operationId).toMatch(/^[0-9a-f]{32}$/);
+    expect(retained.operationId).toBe(await draftOperationId({ ...row, proposer: new Uint8Array(32).fill(7) }));
+    expect(retained.operationId).not.toBe(await draftOperationId({ ...row, summary: "Changed content" }));
+    expect(retained.operationId).not.toBe(await draftOperationId({ ...row, updated_at_seconds: "101" }));
+  } finally { replyOverrides.clear(); }
+  captured.length = 0;
+  await expect(draft({ rootCanisterId: "extk7-gaaaa-aaaaq-aacda-cai", title: "Mixed", summary: "Conflicting encodings", action, motionText: "Other text" })).rejects.toThrow(/mix|combine|legacy|explicit/i);
+  expect(captured.some(row => row.method === "snsgov_draft_save")).toBe(false);
+});
+
+test("saved operation reads retain unknown outcomes and never dispatch while inspecting exact bytes", async () => {
+  const { encodeRegisterVote } = await import("../src/data/manage_neuron");
+  const operationId = "cd".repeat(16);
+  const neuronId = "00".repeat(31) + "07";
+  const request = encodeRegisterVote(neuronId, 1066n, true);
+  const operation = {
+    operation_id: operationId,
+    sns: "extk7-gaaaa-aaaaq-aacda-cai", governance: "eqsml-lyaaa-aaaaq-aacdq-cai",
+    input_json: JSON.stringify({ version: 1, kind: "manage", principal: "rrkah-fqaaa-aaaaa-aaaaq-cai", neuronId }),
+    review_json: JSON.stringify({ title: "Vote yes", proposalId: "1066" }), state_json: '{"version":1,"completedSteps":[]}',
+    initiator: "agent", seq: "7", revision: "2", created_at_seconds: "100", updated_at_seconds: "101",
+    steps: [{ step_id: "command", args: request, status: "unknown", error: "reply interrupted", attempted_at_seconds: "101" }],
+  };
+  replyOverrides.set("snsgov_operation_get", () => operation);
+  try {
+    captured.length = 0;
+    const result = await handlers.get("sns_operation_status_v1")!({ operationId, includeRaw: true }) as {
+      operationId: string; status: string; input: { neuronId: string }; steps: { status: string; argsHex: string; replyHex?: string }[];
+    };
+    expect(result.operationId).toBe(operationId);
+    expect(result.status).toBe("pending");
+    expect(result.input.neuronId).toBe(neuronId);
+    expect(result.steps[0]!.status).toBe("unknown");
+    expect(result.steps[0]!.argsHex).toBe(Buffer.from(request).toString("hex"));
+    expect(result.steps[0]!.replyHex).toBeUndefined();
+    expect(captured).toEqual([{ method: "snsgov_operation_get", args: [operationId] }]);
+  } finally { replyOverrides.clear(); }
+});
+
+test("draft deletion uses the invocation client and the exact decimal draft id", async () => {
+  captured.length = 0;
+  const draftId = "9007199254740993";
+  const result = await handlers.get("sns_delete_draft_v1")!({ draftId });
+  expect(result).toEqual({ deleted: true, draftId });
+  expect(captured).toEqual([{ method: "snsgov_draft_delete", args: [draftId] }]);
+  expect(captured.flatMap(check)).toEqual([]);
+});
+
+test("one-neuron lookup uses the invocation identity and reports an absent neuron as null", async () => {
+  const governance = await import("../src/data/governance");
+  const neuronId = "07".repeat(32);
+  const lookups: [string, string][] = [];
+  mock.module("../src/data/governance", () => ({
+    ...governance,
+    getNeuron: async (governanceId: string, id: string) => { lookups.push([governanceId, id]); return undefined; },
+    readParameters: async () => ({}),
+  }));
+  captured.length = 0;
+  const result = await handlers.get("sns_neuron_v1")!({ rootCanisterId: "extk7-gaaaa-aaaaq-aacda-cai", neuronId });
+  expect(result).toMatchObject({ version: 1, principal: "rrkah-fqaaa-aaaaa-aaaaq-cai", neuron: null, token: null });
+  expect(lookups).toEqual([["eqsml-lyaaa-aaaaq-aacdq-cai", neuronId]]);
+  expect(captured).toEqual([{ method: "snsgov_hotkey", args: [null] }]);
+});
+
+test("operation history keeps a lossless cursor and does not classify replied summaries as accepted", async () => {
+  const operationId = "ef".repeat(16);
+  const cursor = "9007199254740993";
+  replyOverrides.set("snsgov_operation_list", () => ({
+    rows: [{ operation_id: operationId, seq: "7", sns: "extk7-gaaaa-aaaaq-aacda-cai", governance: "eqsml-lyaaa-aaaaq-aacdq-cai", initiator: "agent", revision: "2", created_at_seconds: "100", updated_at_seconds: "101", steps: [{ step_id: "command", status: "replied" }] }],
+    next_before: "7", total: "9007199254740994",
+  }));
+  try {
+    captured.length = 0;
+    const result = await handlers.get("sns_operation_history_v1")!({ cursor, limit: 10 }) as { operations: Record<string, unknown>[]; nextCursor: string; total: string };
+    expect(result.nextCursor).toBe("7");
+    expect(result.total).toBe("9007199254740994");
+    expect(result.operations[0]).toMatchObject({ operationId, status: "recorded", outcomeVerified: false });
+    expect(captured).toEqual([{ method: "snsgov_operation_list", args: [{ before: cursor, limit: "10" }] }]);
   } finally { replyOverrides.clear(); }
 });

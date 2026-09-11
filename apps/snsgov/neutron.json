@@ -2,9 +2,9 @@
   "format": 3,
   "name": "SNS Governance",
   "id": "snsgov",
-  "version": 114,
+  "version": 115,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
-  "description": "Explore, vote, and propose across every SNS on the Internet Computer.",
+  "description": "Follow SNS proposals, stake tokens, manage neurons and govern with your Neutron or AI agents.",
   "src": "main.mo",
   "tiles": [
     {
@@ -40,12 +40,17 @@
         "snsgov_draft_delete",
         "snsgov_hotkey",
         "snsgov_relay",
-        "snsgov_relay_batch"
+        "snsgov_relay_batch",
+        "snsgov_operation_prepare",
+        "snsgov_operation_update",
+        "snsgov_operation_get",
+        "snsgov_operation_list",
+        "snsgov_operation_dispatch"
       ]
     },
     "backend_calls": {
       "api": 1,
-      "description": "Vote and submit proposals on the SNS governance canisters you authorize",
+      "description": "Manage neurons, vote and submit proposals on the SNS governance canisters you authorize",
       "reservation_scopes": [
         "method"
       ],
@@ -53,11 +58,45 @@
         {
           "kind": "method",
           "method": "manage_neuron"
+        },
+        {
+          "kind": "method",
+          "method": "fail_stuck_upgrade_in_progress"
+        },
+        {
+          "kind": "method",
+          "method": "reset_timers"
+        },
+        {
+          "kind": "method",
+          "method": "get_maturity_modulation"
         }
       ],
       "max_concurrency": 20,
       "max_cycles_per_call": 0,
       "max_cycles_per_day": 0
+    },
+    "frontend_tools": {
+      "api": 1,
+      "targets": [
+        {
+          "app": "wallet",
+          "tools": [
+            "wallet_overview",
+            "wallet_token_info_v1",
+            "wallet_add_ledger_v1",
+            "wallet_fund_v1",
+            "wallet_account_transactions_v1",
+            "wallet_transaction_v1"
+          ]
+        }
+      ]
+    },
+    "background_ui_requests": {
+      "api": 1,
+      "categories": [
+        "frontend_tool"
+      ]
     }
   },
   "func": {
@@ -101,6 +140,26 @@
       "type": "update",
       "async": "async*"
     },
+    "snsgov_operation_prepare": {
+      "type": "update",
+      "async": false
+    },
+    "snsgov_operation_get": {
+      "type": "query",
+      "async": false
+    },
+    "snsgov_operation_list": {
+      "type": "query",
+      "async": false
+    },
+    "snsgov_operation_update": {
+      "type": "update",
+      "async": false
+    },
+    "snsgov_operation_dispatch": {
+      "type": "update",
+      "async": "async*"
+    },
     "snsgov_drafts": {
       "type": "query",
       "async": false
@@ -120,6 +179,15 @@
       "schemas": {
         "1": {
           "src": "memory/snsgov/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "snsgov_operations": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/snsgov_operations/v1.mo"
         }
       },
       "migrations": []

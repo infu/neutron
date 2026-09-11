@@ -104,29 +104,8 @@ test("candid bindings are checked in and pinned to a source revision", async () 
   expect(governance).not.toContain("@icp-sdk/core");
 });
 
-test("the agent tool surface cannot submit proposals or grant permissions", async () => {
-  const service = await readFile(new URL("../src/service.ts", import.meta.url), "utf8");
-  const registered = [...service.matchAll(/exposeTool\(\s*"([a-z0-9_]+)"/g)].map((m) => m[1]);
-
-  expect(registered.length).toBeGreaterThan(10);
-  expect(registered).toContain("sns_list");
-  expect(registered).toContain("sns_vote");
-  expect(registered).toContain("sns_draft_proposal");
-
-  // The safety property is structural: a tool that is never registered cannot
-  // be invoked by any prompt, any injected instruction inside a proposal
-  // summary, or any delegated child invocation. Submission and permission
-  // granting happen only from the tile.
-  for (const forbidden of [
-    "sns_submit_proposal",
-    "sns_submit",
-    "sns_add_permissions",
-    "sns_grant",
-    "sns_manage_neuron",
-  ]) {
-    expect(registered).not.toContain(forbidden);
-  }
-});
+// Live tool registration and exact approval behavior are covered by
+// tool_registration.test.ts and action_tool_invocation.test.ts.
 
 test("every tool name is namespaced and discoverable", async () => {
   const service = await readFile(new URL("../src/service.ts", import.meta.url), "utf8");

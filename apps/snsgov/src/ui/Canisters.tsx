@@ -1,195 +1,184 @@
-/**
- * Every canister the DAO owns, and what it is running on.
- *
- * The five system canisters were all this app used to show, which is a third of
- * the picture: Neutrinite owns eleven dapp canisters and a ledger archive on
- * top of them, and those are the ones that actually run out of cycles.
- *
- * The inventory is a free query and loads with the tab. Cycles are not: the
- * only method that returns them is an update that makes root fan out one
- * management call per canister and pay for each, so it is behind a button and
- * the answer is kept until the tab is left.
- */
-
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { copyToClipboard } from "neutron-tools/app";
+import { invoke, operationId } from "../data/actions_client";
 import {
-  formatTCycles,
-  listSnsCanisters,
-  readCanistersCycles,
-  type CanisterCycles,
-  type SnsCanister,
+  formatTCycles, listSnsCanisters, readCanistersCycles,
+  type CanisterCycles, type SnsCanister,
 } from "../data/root";
 import { formatTimestamp } from "../data/format";
-import { IconButton } from "./IconButton";
-import { BusyOr, Empty, Pending } from "./Status";
-import { CopyIcon, RefreshIcon, WarnIcon } from "./Icons";
+import { Disclosure, ErrorNote, Help, useRead } from "./Common";
 
 const ROLE_LABEL: Record<SnsCanister["role"], string> = {
-  root: "Root",
-  governance: "Governance",
-  ledger: "Ledger",
-  index: "Index",
-  swap: "Swap",
-  dapp: "Dapp",
-  archive: "Archive",
+  root: "Root", governance: "Governance", ledger: "Ledger", index: "Index",
+  swap: "Swap", dapp: "Dapp", archive: "Archive",
 };
 
 export function CanistersView({ rootCanisterId }: { rootCanisterId: string }) {
-  const [inventory, setInventory] = useState<SnsCanister[] | null>(null);
+  return <CanisterInventory key={rootCanisterId} rootCanisterId={rootCanisterId} />;
+}
+
+function CanisterInventory({ rootCanisterId }: { rootCanisterId: string }) {
+  const [refresh, setRefresh] = useState(0);
+  const inventory = useRead(rootCanisterId, () => listSnsCanisters(rootCanisterId), refresh);
   const [cycles, setCycles] = useState<Map<string, CanisterCycles> | null>(null);
   const [readAt, setReadAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const mounted = useRef(true);
+  const running = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const list = await listSnsCanisters(rootCanisterId);
-        if (!cancelled) setInventory(list);
-      } catch (error) {
-        if (!cancelled) setMessage(String(error));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [rootCanisterId]);
-
-  const loadCycles = useCallback(async () => {
+  const loadCycles = async () => {
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setMessage(null);
     try {
-      const rows = await readCanistersCycles(rootCanisterId);
-      setCycles(new Map(rows.map((row) => [row.canisterId, row])));
+      const next = await readCanistersCycles(rootCanisterId);
+      if (!mounted.current) return;
+      setCycles(new Map(next.map((row) => [row.canisterId, row])));
       setReadAt(Date.now());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      if (mounted.current) setMessage(String(error));
     } finally {
-      setBusy(false);
+      running.current = false;
+      if (mounted.current) setBusy(false);
     }
-  }, [rootCanisterId]);
+  };
 
-  const total = [...(cycles?.values() ?? [])].reduce(
-    (sum, row) => sum + (row.cycles ?? 0n),
-    0n,
+  const copy = async (principal: string) => {
+    try {
+      await copyToClipboard(principal);
+      if (mounted.current) setCopied(principal);
+    } catch (error) {
+      if (mounted.current) setMessage(`Could not copy the canister ID: ${String(error)}`);
+    }
+  };
+
+  const known = [...(cycles?.values() ?? [])].filter((row) => row.cycles !== undefined);
+  const total = known.reduce((sum, row) => sum + row.cycles!, 0n);
+  const unavailable = cycles === null ? [] : (inventory.data ?? []).filter(
+    (canister) => cycles.get(canister.canisterId)?.cycles === undefined,
   );
-  const unreachable = [...(cycles?.values() ?? [])].filter((row) => row.cycles === undefined);
 
-  return (
-    <section className="nt-section">
-      <header className="nt-section-header">
-        <h2 className="nt-section-heading">Canisters</h2>
-        {inventory && <span className="nt-section-count">{inventory.length}</span>}
-        <span className="snsgov-spacer" />
-        <div className="nt-cluster snsgov-toolbar-actions">
-          <IconButton
-            disabled={busy || inventory === null}
-            label={
-              cycles
-                ? "Re-read cycles — an update call the DAO pays for"
-                : "Read cycles for every canister — an update call the DAO pays for"
-            }
-            onClick={() => void loadCycles()}
-          >
-            <BusyOr busy={busy}>
-              <RefreshIcon />
-            </BusyOr>
-          </IconButton>
-        </div>
-      </header>
-
-
-      {message && (
-        <div className="nt-alert nt-alert--danger" role="alert">
-          {message}
-        </div>
-      )}
-      {inventory === null && !message && <Pending label="Reading the canister list" />}
-      {inventory?.length === 0 && <Empty label="Root reports no canisters." />}
-
-      {inventory && inventory.length > 0 && (
-        <>
-          <div className="nt-table-wrap">
-            <table className="nt-table snsgov-table snsgov-table--canisters">
-              <caption className="nt-sr-only">Canisters owned by this SNS</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Canister</th>
-                  <th className="snsgov-nowrap" scope="col">
-                    Role
-                  </th>
-                  <th className="snsgov-num" scope="col">
-                    Cycles
-                  </th>
-                  <th className="snsgov-nowrap" scope="col">
-                    Status
-                  </th>
-                  <th scope="col">
-                    <span className="nt-sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {inventory.map((canister) => {
-                  const row = cycles?.get(canister.canisterId);
-                  return (
-                    <tr key={canister.canisterId}>
-                      <th scope="row">
-                        <code className="nt-code">{canister.canisterId}</code>
-                      </th>
-                      <td className="snsgov-nowrap" data-label="Role">{ROLE_LABEL[canister.role]}</td>
-                      <td className="snsgov-num" data-label="Cycles">
-                        {cycles === undefined || cycles === null
-                          ? "—"
-                          : row?.cycles === undefined
-                            ? "unknown"
-                            : formatTCycles(row.cycles)}
-                      </td>
-                      <td className="snsgov-nowrap" data-label="Status">{row?.status ?? "—"}</td>
-                      <td className="snsgov-row-actions">
-                        <IconButton
-                          label={`Copy ${canister.canisterId}`}
-                          onClick={() => void copyToClipboard(canister.canisterId)}
-                        >
-                          <CopyIcon />
-                        </IconButton>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {cycles === null ? (
-            <p className="nt-meta snsgov-footnote">
-              Cycles are not in this list yet. Reading them makes root call the management canister
-              once per canister and pay for each, so it happens only when you ask.
-            </p>
-          ) : (
-            <p className="nt-meta snsgov-footnote">
-              {formatTCycles(total)} across {cycles.size} canister
-              {cycles.size === 1 ? "" : "s"}
-              {readAt === null ? "" : `, read ${formatTimestamp(BigInt(Math.floor(readAt / 1000)))}`}
-              {unreachable.length > 0 ? ` · ${unreachable.length} unreachable` : ""}
-            </p>
-          )}
-
-          {unreachable.length > 0 && (
-            <div className="nt-alert nt-alert--warning snsgov-alert" role="status">
-              <WarnIcon />
-              <span>
-                Root could not reach {unreachable.length} canister
-                {unreachable.length === 1 ? "" : "s"}. That is how a stopped, frozen, or
-                cross-subnet canister reports — it is not an error in this app, and the rest of the
-                figures are good.
-              </span>
+  return <section className="nt-section snsgov-canisters">
+    <header className="nt-section-header snsgov-settings-heading">
+      <h2 className="nt-section-heading">Canisters</h2>
+      {inventory.data && <span className="nt-section-count">{inventory.data.length}</span>}
+      <button className="nt-button nt-button--ghost" disabled={inventory.loading} onClick={() => setRefresh(value => value + 1)} type="button">
+        {inventory.loading ? "Reading list…" : "Refresh list"}
+      </button>
+    </header>
+    <p className="nt-text">The software canisters that run this community.</p>
+    <ErrorNote message={inventory.error} />
+    {inventory.data === null && inventory.loading && <p className="nt-meta" role="status">Reading the canister list…</p>}
+    {inventory.data?.length === 0 && <p className="nt-text">This community reports no canisters.</p>}
+    {inventory.data !== null && inventory.data.length > 0 && <>
+      <div className="snsgov-settings-actions">
+        <button className="nt-button" disabled={busy} onClick={() => void loadCycles()} type="button">
+          {busy ? "Reading cycles…" : cycles === null ? "Read cycles" : "Refresh cycles"}
+        </button>
+        <Help label="cycles reads">Cycles pay for canister computation and storage. Reading these balances asks the root canister
+          to check each canister through the management canister. The community pays cycles for those calls.</Help>
+      </div>
+      <p className="nt-meta">Each cycles read makes calls paid for by the community.</p>
+      <ErrorNote message={message} />
+      {cycles !== null && <p className="nt-meta" role="status">
+        {formatTCycles(total)} across {known.length} canister{known.length === 1 ? "" : "s"} with a known balance
+        {readAt === null ? "" : ` · Read ${formatTimestamp(BigInt(Math.floor(readAt / 1000)))}`}
+      </p>}
+      {unavailable.length > 0 && <p className="nt-alert nt-alert--warning" role="status">
+        Balances are unavailable for {unavailable.length} canister{unavailable.length === 1 ? "" : "s"}.
+        The total includes only known balances.
+      </p>}
+      <ul className="snsgov-settings-list" aria-label="Community canisters">
+        {inventory.data.map((canister) => {
+          const row = cycles?.get(canister.canisterId);
+          return <li className="snsgov-settings-row" key={canister.canisterId}>
+            <div className="snsgov-settings-row-head">
+              <strong>{ROLE_LABEL[canister.role]}</strong>
+              {cycles !== null && <span className="nt-meta">
+                {row?.cycles === undefined ? "Balance unavailable" : `${formatTCycles(row.cycles)} cycles`}
+                {row?.status ? ` · ${row.status}` : ""}
+              </span>}
             </div>
-          )}
-        </>
-      )}
-    </section>
-  );
+            <div className="snsgov-principal-row">
+              <code className="nt-code snsgov-principal-text">{canister.canisterId}</code>
+              <button aria-label={`Copy ${canister.canisterId}`} className="nt-button nt-button--ghost" onClick={() => void copy(canister.canisterId)} type="button">
+                {copied === canister.canisterId ? "Copied" : "Copy"}
+              </button>
+            </div>
+            {row && (row.cycles !== undefined || row.memorySize !== undefined || row.idleBurnPerDay !== undefined) && <Disclosure title="Resource details">
+              <dl className="snsgov-settings-values">
+                {row.cycles !== undefined && <><dt>Exact cycles</dt><dd>{row.cycles.toString()}</dd></>}
+                {row.memorySize !== undefined && <><dt>Memory</dt><dd>{row.memorySize.toString()} bytes</dd></>}
+                {row.idleBurnPerDay !== undefined && <><dt>Idle cycles per day</dt><dd>{formatTCycles(row.idleBurnPerDay)}</dd></>}
+              </dl>
+            </Disclosure>}
+          </li>;
+        })}
+      </ul>
+      {unavailable.length > 0 && <Disclosure title="Why a balance may be unavailable">
+        <p className="nt-text">Root may be unable to reach a stopped, frozen, or cross-subnet canister.
+          Registered extensions can also appear in the inventory without a balance in the root summary.
+          An unavailable balance is not a zero balance.</p>
+      </Disclosure>}
+    </>}
+    <GovernanceMaintenance rootCanisterId={rootCanisterId} />
+  </section>;
+}
+
+const MAINTENANCE_ACTIONS = [
+  { method: "fail_stuck_upgrade_in_progress", label: "Check stuck upgrade", description: "Ask governance to mark an upgrade as failed if the SNS considers it stuck and its deadline has passed." },
+  { method: "reset_timers", label: "Restart governance timers", description: "Restart the SNS governance background timers. Governance enforces its own waiting period between restarts." },
+  { method: "get_maturity_modulation", label: "Refresh maturity modulation", description: "Run the governance update that refreshes the maturity adjustment used when maturity is converted to tokens." },
+] as const;
+
+interface MaintenanceResult { operationId?: string; status?: string; message?: string; outcomes?: unknown }
+function GovernanceMaintenance({ rootCanisterId }: { rootCanisterId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [action, setAction] = useState<{ id: string; label: string; result?: MaintenanceResult; error?: string } | null>(null);
+  const running = useRef(false);
+  const start = async (item: typeof MAINTENANCE_ACTIONS[number]) => {
+    if (running.current) return;
+    running.current = true;
+    setBusy(true);
+    const id = operationId();
+    setAction({ id, label: item.label });
+    try {
+      const result = await invoke<MaintenanceResult>("sns_governance_recovery_v1", { operationId: id, rootCanisterId, method: item.method });
+      setAction({ id, label: item.label, result });
+    } catch (error) { setAction({ id, label: item.label, error: String(error) }); }
+    finally { running.current = false; setBusy(false); }
+  };
+  const check = async () => {
+    if (!action || running.current) return;
+    running.current = true;
+    setBusy(true);
+    try {
+      const result = await invoke<MaintenanceResult>("sns_operation_status_v1", { operationId: action.id });
+      setAction({ id: action.id, label: action.label, result });
+    } catch (error) { setAction({ ...action, error: String(error) }); }
+    finally { running.current = false; setBusy(false); }
+  };
+  const unresolved = action !== null && action.result?.status !== "completed" && action.result?.status !== "rejected";
+  return <Disclosure title="Governance maintenance">
+    <p className="nt-text">These actions can change governance maintenance state. Review the requested action before it is sent.</p>
+    <ul className="snsgov-settings-list">{MAINTENANCE_ACTIONS.map(item => <li className="snsgov-settings-row" key={item.method}>
+      <p className="nt-text">{item.description}</p>
+      <button className="nt-button" disabled={busy || unresolved} onClick={() => void start(item)} type="button">{item.label}</button>
+    </li>)}</ul>
+    {action && <div className="snsgov-permission-outcome">
+      <p role="status">{action.label}: {action.result?.status === "completed" ? "completed" : action.result?.status === "rejected" ? "rejected" : "outcome not confirmed"}.</p>
+      {action.result?.status === "completed" && <p className="nt-meta">Governance returned a successful reply. A stuck-upgrade check does not confirm that the upgrade itself completed.</p>}
+      <ErrorNote message={action.error || action.result?.message || null} />
+      <button className="nt-button nt-button--ghost" disabled={busy} onClick={() => void check()} type="button">Check saved status</button>
+      <Disclosure title="Maintenance result details">
+        <p className="nt-meta">Operation <code className="nt-code snsgov-principal-text">{action.id}</code></p>
+        {action.result && <pre className="nt-pre nt-pre--wrap">{JSON.stringify(action.result.outcomes ?? action.result, (_key, value) => typeof value === "bigint" ? value.toString() : value, 2)}</pre>}
+        <p className="nt-meta">Activity keeps the saved result and any next steps for this action.</p>
+      </Disclosure>
+    </div>}
+  </Disclosure>;
 }

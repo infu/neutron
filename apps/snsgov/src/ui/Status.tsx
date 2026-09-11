@@ -38,7 +38,8 @@ export function BusyOr({ busy, children }: { busy: boolean; children: ReactNode 
 export function Pending({ label = "Loading" }: { label?: string }) {
   return (
     <div aria-busy="true" aria-label={label} className="snsgov-pending" role="status">
-      <span className="snsgov-spinner" />
+      <span className="snsgov-spinner" aria-hidden="true" />
+      <span>{label}…</span>
     </div>
   );
 }

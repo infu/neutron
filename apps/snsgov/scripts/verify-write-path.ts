@@ -1,25 +1,7 @@
-/**
- * Write-path verification against a real SNS governance canister.
- *
- * This is the M4 gate. It pulls the genuine SNS governance Wasm out of
- * PocketIC's SNS-W, installs it with a hand-built init containing one neuron
- * and one open proposal, then dispatches a vote encoded by our own
- * `encodeRegisterVote` and checks the ballot actually flipped.
- *
- * Run with `npm run verify:write-path`. By default it resolves the repository's
- * hash-pinned PocketIC binary and starts its own server on a free control port.
- * No HTTP gateway or fixed port is needed. SNSGOV_POCKETIC can optionally point
- * at an existing local control server; only the instance created by this script
- * is deleted. Both the instance and an owned server are cleaned up on failure.
- *
- * Expected output:
- *
- *   our encodeRegisterVote: 103 bytes
- *   manage_neuron -> ok=true command=RegisterVote
- *   after:  ballot vote = 1 (1 = yes)
- *   second vote -> errorType=10 "Neuron already voted on proposal."
- *   isAlreadyVoted() = true
- */
+/** Genuine SNS governance + ledger integration gate. All canisters and funds
+ * are disposable PocketIC fixtures. Production app encoders construct commands;
+ * a forwarding canister makes Neutron's principal the actual inter-canister caller.
+ * Run npm --workspace neutron-snsgov run verify:write-path. */
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -34,6 +16,9 @@ import { idlFactory as govIdl, init as governanceInit } from "../src/candid/sns_
 import { idlFactory as wIdl } from "../src/candid/sns_wasm.did.js";
 import { encodeRegisterVote, decodeManageNeuronResponse, isAlreadyVoted } from "../src/data/manage_neuron";
 import { toHex } from "../src/data/format";
+import { init as ledgerInit } from "../src/candid/icrc_ledger.did.js";
+import { compileNeutronFixture } from "./fixture-wasm";
+import { verifyLifecycle } from "./verify-sns-lifecycle";
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
 const ANON = Principal.anonymous();
@@ -108,7 +93,7 @@ async function verify(BASE: string, INST: number): Promise<void> {
   const appSubnet = Object.entries(topo.subnet_configs).find(([, c]: any) => c.subnet_kind === "Application")![0];
   console.log(`application subnet: ${appSubnet}`);
 
-  // 1. Real SNS governance wasm, straight out of SNS-W.
+  // Genuine protocol Wasms, straight from SNS-W.
   const SNS_W = Principal.fromText("qaa6y-5yaaa-aaaaa-aaafa-cai");
   const wSvc = wIdl({ IDL }) as any;
   const f = (n: string) => wSvc._fields.find(([m]: [string]) => m === n)[1];
@@ -122,39 +107,56 @@ async function verify(BASE: string, INST: number): Promise<void> {
   assert.equal(wasmSha256, govHash.toLowerCase(), "SNS-W must return the requested governance Wasm");
   console.log(`SNS governance wasm from SNS-W: ${wasm.length} bytes, sha256=${wasmSha256}`);
 
-  // 2. Create + install a real governance canister with a pre-made neuron and proposal.
+  const ledgerHash = versions.find(([n]) => n === "Ledger")![1];
+  const ledgerWasmReply = await query(SNS_W, "get_wasm", new Uint8Array(IDL.encode(f("get_wasm").argTypes, [{ hash: Uint8Array.from(Buffer.from(ledgerHash, "hex")) }])));
+  const ledgerWasm = Uint8Array.from((IDL.decode(f("get_wasm").retTypes, ledgerWasmReply)[0] as any).wasm[0].wasm);
+  assert.equal(createHash("sha256").update(ledgerWasm).digest("hex"), ledgerHash.toLowerCase());
+  console.log(`SNS ledger wasm: ${ledgerWasm.length} bytes, sha256=${ledgerHash}`);
+  const fixtureWasm = await compileNeutronFixture();
   const MGMT = Principal.fromText("aaaaa-aa");
   const CreateArg = IDL.Record({ amount: IDL.Opt(IDL.Nat), settings: IDL.Opt(IDL.Record({})), specified_id: IDL.Opt(IDL.Principal), sender_canister_version: IDL.Opt(IDL.Nat64) });
   const CreateRet = IDL.Record({ canister_id: IDL.Principal });
-  const createReply = await call(MGMT, "provisional_create_canister_with_cycles",
-    new Uint8Array(IDL.encode([CreateArg], [{ amount: [100_000_000_000_000n], settings: [], specified_id: [], sender_canister_version: [] }])),
-    { SubnetId: b64(Principal.fromText(appSubnet).toUint8Array()) });
-  const govId = (IDL.decode([CreateRet], createReply)[0] as any).canister_id as Principal;
-  console.log(`governance canister: ${govId.toText()}`);
-
+  const InstallArg = IDL.Record({ mode: IDL.Variant({ install: IDL.Null, reinstall: IDL.Null, upgrade: IDL.Null }), canister_id: IDL.Principal, wasm_module: IDL.Vec(IDL.Nat8), arg: IDL.Vec(IDL.Nat8), sender_canister_version: IDL.Opt(IDL.Nat64) });
+  const effective = (id: Principal): PocketIcRawEffectivePrincipal => ({ CanisterId: b64(id.toUint8Array()) });
+  async function create(): Promise<Principal> {
+    const reply = await call(MGMT, "provisional_create_canister_with_cycles", new Uint8Array(IDL.encode([CreateArg], [{ amount: [100_000_000_000_000n], settings: [], specified_id: [], sender_canister_version: [] }])), { SubnetId: b64(Principal.fromText(appSubnet).toUint8Array()) });
+    return (IDL.decode([CreateRet], reply)[0] as any).canister_id;
+  }
+  async function install(id: Principal, code: Uint8Array, arg: Uint8Array): Promise<void> {
+    await call(MGMT, "install_code", new Uint8Array(IDL.encode([InstallArg], [{ mode: { install: null }, canister_id: id, wasm_module: code, arg, sender_canister_version: [] }])), effective(id));
+  }
+  const govId = await create(), ledgerId = await create(), neutron = await create(), secondNeutron = await create();
+  await install(neutron, fixtureWasm, new Uint8Array(IDL.encode([], [])));
+  await install(secondNeutron, fixtureWasm, new Uint8Array(IDL.encode([], [])));
+  async function forward(target: Principal, method: string, args: Uint8Array, proxy = neutron): Promise<Uint8Array> {
+    const reply = await call(proxy, "forward", new Uint8Array(IDL.encode([IDL.Principal, IDL.Text, IDL.Vec(IDL.Nat8)], [target, method, args])), effective(proxy));
+    return Uint8Array.from(IDL.decode([IDL.Vec(IDL.Nat8)], reply)[0] as unknown as Uint8Array);
+  }
+  console.log(`Neutron caller=${neutron}; governance=${govId}; ledger=${ledgerId}`);
   const neuronBytes = new Uint8Array(32); neuronBytes[31] = 1;
   const key = toHex(neuronBytes);
   const now = BigInt(Math.floor(Date.now() / 1000));
+  const permissions = [1,2,3,4,5,6,7,8,9,10];
   const perms = (ids: number[]) => ({ permissions: Int32Array.from(ids) });
   const params = {
     default_followees: [{ followees: [] }], max_dissolve_delay_seconds: [15_780_096n],
     max_dissolve_delay_bonus_percentage: [100n], max_followees_per_function: [15n],
-    neuron_claimer_permissions: [perms([0,1,2,3,4,5,6,7,8,9,10])], neuron_minimum_stake_e8s: [100_000_000n],
+    neuron_claimer_permissions: [perms(permissions)], neuron_minimum_stake_e8s: [100_000_000n],
     max_neuron_age_for_age_bonus: [15_780_096n], initial_voting_period_seconds: [345_600n],
-    neuron_minimum_dissolve_delay_to_vote_seconds: [2_630_016n], reject_cost_e8s: [100_000_000n],
+    neuron_minimum_dissolve_delay_to_vote_seconds: [1n], reject_cost_e8s: [100_000_000n],
     max_proposals_to_keep_per_action: [100], wait_for_quiet_deadline_increase_seconds: [86_400n],
     max_number_of_neurons: [200_000n], transaction_fee_e8s: [10_000n],
     max_number_of_proposals_with_ballots: [700n], max_age_bonus_percentage: [25n],
-    neuron_grantable_permissions: [perms([0,1,2,3,4,5,6,7,8,9,10])],
+    neuron_grantable_permissions: [perms(permissions)],
     voting_rewards_parameters: [{ final_reward_rate_basis_points: [0n], initial_reward_rate_basis_points: [0n], reward_rate_transition_duration_seconds: [31_557_600n], round_duration_seconds: [86_400n] }],
     maturity_modulation_disabled: [true], max_number_of_principals_per_neuron: [5n],
     automatically_advance_target_version: [], custom_proposal_criticality: [],
   };
-  const gov = {
+  const gov: any = {
     root_canister_id: [MGMT], id_to_nervous_system_functions: [], metrics: [], maturity_modulation: [],
     mode: 1, parameters: [params], is_finalizing_disburse_maturity: [], deployed_version: [],
     cached_upgrade_steps: [], sns_initialization_parameters: "", latest_reward_event: [], pending_version: [],
-    swap_canister_id: [MGMT], ledger_canister_id: [MGMT],
+    swap_canister_id: [MGMT], ledger_canister_id: [ledgerId],
     proposals: [[1n, {
       id: [{ id: 1n }], payload_text_rendering: [], topic: [], action: 1n, failure_reason: [], action_auxiliary: [],
       ballots: [[key, { vote: 0, voting_power: 100_000_000n, cast_timestamp_seconds: 0n }]],
@@ -171,8 +173,8 @@ async function verify(BASE: string, INST: number): Promise<void> {
     sns_metadata: [{ url: ["https://example.invalid"], logo: [], name: ["Local Test SNS"], description: ["A local SNS for write-path verification."] }],
     neurons: [[key, {
       id: [{ id: neuronBytes }], staked_maturity_e8s_equivalent: [],
-      permissions: [{ principal: [ANON], permission_type: Int32Array.from([3, 4]) }],
-      maturity_e8s_equivalent: 0n, cached_neuron_stake_e8s: 100_000_000n,
+      permissions: [{ principal: [neutron], permission_type: Int32Array.from(permissions) }],
+      maturity_e8s_equivalent: 2_000_000_000n, cached_neuron_stake_e8s: 100_000_000_000n,
       created_timestamp_seconds: now, source_nns_neuron_id: [], auto_stake_maturity: [],
       aging_since_timestamp_seconds: now, dissolve_state: [{ DissolveDelaySeconds: 15_780_096n }],
       voting_power_percentage_multiplier: 100n, vesting_period_seconds: [],
@@ -180,18 +182,17 @@ async function verify(BASE: string, INST: number): Promise<void> {
     }]],
     genesis_timestamp_seconds: now, target_version: [], timers: [], upgrade_journal: [],
   };
-  const initArg = new Uint8Array(IDL.encode(governanceInit({ IDL }) as IDL.Type[], [gov]));
-  const InstallArg = IDL.Record({
-    mode: IDL.Variant({ install: IDL.Null, reinstall: IDL.Null, upgrade: IDL.Null }),
-    canister_id: IDL.Principal, wasm_module: IDL.Vec(IDL.Nat8), arg: IDL.Vec(IDL.Nat8),
-    sender_canister_version: IDL.Opt(IDL.Nat64),
-  });
-  await call(MGMT, "install_code", new Uint8Array(IDL.encode([InstallArg], [{
-    mode: { install: null }, canister_id: govId, wasm_module: wasm, arg: initArg, sender_canister_version: [],
-  }])), { CanisterId: b64(govId.toUint8Array()) });
-  console.log("installed real SNS governance with 1 neuron + 1 open proposal");
-
-  // 3. THE TEST: our encoder against the real canister.
+  const secondId = new Uint8Array(32); secondId[31] = 2;
+  const secondKey = toHex(secondId);
+  (gov.neurons as any).push([secondKey, { ...gov.neurons[0][1], id: [{ id: secondId }], permissions: [{ principal: [secondNeutron], permission_type: Int32Array.from(permissions) }], cached_neuron_stake_e8s: 50_000_000_000n, maturity_e8s_equivalent: 0n }]);
+  (gov.proposals[0][1] as any).ballots.push([secondKey, { vote: 0, voting_power: 50_000_000n, cast_timestamp_seconds: 0n }]);
+  (gov.proposals[0][1] as any).latest_tally[0].total = 150_000_000n;
+  const account = (owner: Principal, subaccount: Uint8Array[] = []) => ({ owner, subaccount });
+  const ledgerArgument = { Init: { minting_account: account(govId), fee_collector_account: [], transfer_fee: 10_000n, decimals: [8], max_memo_length: [32], token_symbol: "LOCAL", token_name: "Local SNS", metadata: [], feature_flags: [{ icrc2: true, icrc152: true }], index_principal: [], initial_balances: [[account(neutron), 100_000_000_000n], [account(govId, [neuronBytes]), 100_000_000_000n], [account(govId, [secondId]), 50_000_000_000n]], archive_options: { num_blocks_to_archive: 1_000n, max_transactions_per_response: [], trigger_threshold: 2_000n, max_message_size_bytes: [], cycles_for_archive_creation: [], node_max_memory_size_bytes: [], controller_id: ANON, more_controller_ids: [] } } };
+  await install(ledgerId, ledgerWasm, new Uint8Array(IDL.encode(ledgerInit({ IDL }) as IDL.Type[], [ledgerArgument])));
+  await install(govId, wasm, new Uint8Array(IDL.encode(governanceInit({ IDL }) as IDL.Type[], [gov])));
+  console.log("installed genuine governance and ledger with two canister-controlled fixture neurons");
+  // Check the compact vote encoder and duplicate-vote response first.
   const g = govIdl({ IDL }) as any;
   const gf = (n: string) => g._fields.find(([m]: [string]) => m === n)[1];
   const before = IDL.decode(gf("get_proposal").retTypes, await query(govId, "get_proposal",
@@ -201,7 +202,7 @@ async function verify(BASE: string, INST: number): Promise<void> {
 
   const voteBytes = encodeRegisterVote(key, 1n, true);
   console.log(`our encodeRegisterVote: ${voteBytes.length} bytes`);
-  const reply = await call(govId, "manage_neuron", voteBytes, { CanisterId: b64(govId.toUint8Array()) });
+  const reply = await forward(govId, "manage_neuron", voteBytes);
   const outcome = decodeManageNeuronResponse(reply);
   console.log(`manage_neuron -> ok=${outcome.ok} command=${outcome.command ?? "-"} err=${outcome.errorMessage ?? "-"}`);
   assert.equal(outcome.ok, true, outcome.errorMessage ?? "RegisterVote must succeed");
@@ -215,15 +216,16 @@ async function verify(BASE: string, INST: number): Promise<void> {
   assert.equal(b.ballots[0][1].vote, 1, "The real governance canister must record our yes vote");
   assert.equal(b.latest_tally[0].yes, 100_000_000n, "The yes tally must include the neuron voting power");
 
-  // 4. Double vote must read as success.
-  const second = decodeManageNeuronResponse(await call(govId, "manage_neuron", voteBytes, { CanisterId: b64(govId.toUint8Array()) }));
+  // A duplicate vote is a protocol error recognized as already recorded.
+  const second = decodeManageNeuronResponse(await forward(govId, "manage_neuron", voteBytes));
   console.log(`second vote -> ok=${second.ok} errorType=${second.errorType} msg="${(second.errorMessage ?? "").slice(0, 40)}"`);
   console.log(`isAlreadyVoted() = ${isAlreadyVoted(second)}  <- must be true`);
 
   assert.equal(second.ok, false, "The second vote must return an already-voted result");
   assert.equal(second.errorType, 10);
   assert.equal(isAlreadyVoted(second), true);
-  console.log(JSON.stringify({ verified: true, governanceWasmSha256: wasmSha256, governanceWasmBytes: wasm.length, voteBytes: voteBytes.length, ballotVote: b.ballots[0][1].vote, alreadyVoted: true }));
+  const checks = await verifyLifecycle({ client, base: BASE, instance: INST, govId, ledgerId, neutron, secondNeutron, bootstrapId: key, secondId: secondKey, forward, query });
+  console.log(JSON.stringify({ verified: true, governanceWasmSha256: wasmSha256, governanceWasmBytes: wasm.length, ledgerWasmSha256: ledgerHash, ledgerWasmBytes: ledgerWasm.length, callerIsCanister: true, voteBytes: voteBytes.length, ballotVote: b.ballots[0][1].vote, alreadyVoted: true, checks }));
 }
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));

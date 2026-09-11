@@ -7,17 +7,17 @@
  *     are anonymous, so it returns none. Ballots come from `get_proposal`,
  *     which returns the complete map to anonymous callers.
  *  2. `list_neurons` clamps `limit` to 100 and, when `of_principal` is set,
- *     ignores `start_page_at` entirely — there is no way to reach neuron 101.
+ *     ignores `start_page_at` entirely. Exhaustive discovery therefore falls
+ *     back to public ordered pagination and filters permissions in the browser.
  */
 
 import { Principal } from "@dfinity/principal";
 import { actorFor, type AgentOptions } from "./agent";
-import { classifyError } from "./errors";
-import { toHex } from "./format";
+import { SnsError, classifyError } from "./errors";
+import { fromHex, toHex } from "./format";
 import { opt, variantKey } from "./opt";
 import { idlFactory as governanceIdl } from "../candid/sns_governance.did.js";
 import type {
-  Ballot,
   NervousSystemFunctionInfo,
   NeuronSummary,
   ProposalDetail,
@@ -32,109 +32,14 @@ export const MAX_NEURONS_PER_CALL = 100;
 /** The canister's own cap on a proposal page. */
 export const MAX_PROPOSALS_PER_CALL = 100;
 
+import type {
+  _SERVICE as GovernanceService, NervousSystemParameters as RawParameters,
+  ProposalData as RawProposalData, Neuron as RawNeuron,
+  NervousSystemFunction as RawFunction, Action,
+  GetRunningSnsVersionResponse, GetUpgradeJournalResponse, ListTopicsResponse,
+} from "../candid/sns_governance.did";
+import type { PartialResult, ProposalPayloadField } from "./types";
 type Opt<T> = [] | [T];
-
-interface GovernanceService {
-  get_metadata: (arg: Record<string, never>) => Promise<{
-    url: Opt<string>;
-    logo: Opt<string>;
-    name: Opt<string>;
-    description: Opt<string>;
-  }>;
-  get_mode: (arg: Record<string, never>) => Promise<{ mode: Opt<number> }>;
-  get_nervous_system_parameters: (arg: null) => Promise<RawParameters>;
-  list_proposals: (arg: RawListProposals) => Promise<{ proposals: RawProposalData[] }>;
-  get_proposal: (arg: { proposal_id: Opt<{ id: bigint }> }) => Promise<{
-    result: Opt<{ Proposal?: RawProposalData; Error?: unknown }>;
-  }>;
-  list_neurons: (arg: {
-    of_principal: Opt<Principal>;
-    limit: number;
-    start_page_at: Opt<{ id: Uint8Array | number[] }>;
-  }) => Promise<{ neurons: RawNeuron[] }>;
-  list_nervous_system_functions: () => Promise<{ functions: RawFunction[] }>;
-}
-
-interface RawParameters {
-  transaction_fee_e8s: Opt<bigint>;
-  reject_cost_e8s: Opt<bigint>;
-  neuron_minimum_stake_e8s: Opt<bigint>;
-  initial_voting_period_seconds: Opt<bigint>;
-  wait_for_quiet_deadline_increase_seconds: Opt<bigint>;
-  neuron_minimum_dissolve_delay_to_vote_seconds: Opt<bigint>;
-  max_dissolve_delay_seconds: Opt<bigint>;
-  max_dissolve_delay_bonus_percentage: Opt<bigint>;
-  max_neuron_age_for_age_bonus: Opt<bigint>;
-  max_age_bonus_percentage: Opt<bigint>;
-  max_number_of_neurons: Opt<bigint>;
-  max_number_of_principals_per_neuron: Opt<bigint>;
-  voting_rewards_parameters: Opt<{
-    initial_reward_rate_basis_points: Opt<bigint>;
-    final_reward_rate_basis_points: Opt<bigint>;
-    reward_rate_transition_duration_seconds: Opt<bigint>;
-    round_duration_seconds: Opt<bigint>;
-  }>;
-}
-
-interface RawListProposals {
-  include_reward_status: Int32Array | number[];
-  before_proposal: Opt<{ id: bigint }>;
-  limit: number;
-  exclude_type: BigUint64Array | bigint[];
-  include_topics: Opt<unknown[]>;
-  include_status: Int32Array | number[];
-}
-
-interface RawProposalData {
-  id: Opt<{ id: bigint }>;
-  payload_text_rendering: Opt<string>;
-  topic: Opt<object>;
-  action: bigint;
-  ballots: [string, { vote: number; voting_power: bigint; cast_timestamp_seconds: bigint }][];
-  reward_event_round: bigint;
-  failed_timestamp_seconds: bigint;
-  proposal_creation_timestamp_seconds: bigint;
-  initial_voting_period_seconds: bigint;
-  reject_cost_e8s: bigint;
-  latest_tally: Opt<{ yes: bigint; no: bigint; total: bigint; timestamp_seconds: bigint }>;
-  wait_for_quiet_deadline_increase_seconds: bigint;
-  decided_timestamp_seconds: bigint;
-  proposal: Opt<{ title: string; summary: string; url: string; action: Opt<object> }>;
-  proposer: Opt<{ id: Uint8Array | number[] }>;
-  wait_for_quiet_state: Opt<{ current_deadline_timestamp_seconds: bigint }>;
-  executed_timestamp_seconds: bigint;
-  minimum_yes_proportion_of_total: Opt<{ basis_points: Opt<bigint> }>;
-  minimum_yes_proportion_of_exercised: Opt<{ basis_points: Opt<bigint> }>;
-}
-
-interface RawNeuron {
-  id: Opt<{ id: Uint8Array | number[] }>;
-  permissions: { principal: Opt<Principal>; permission_type: Int32Array | number[] }[];
-  cached_neuron_stake_e8s: bigint;
-  maturity_e8s_equivalent: bigint;
-  staked_maturity_e8s_equivalent: Opt<bigint>;
-  voting_power_percentage_multiplier: bigint;
-  created_timestamp_seconds: bigint;
-  aging_since_timestamp_seconds: bigint;
-  dissolve_state: Opt<object>;
-  vesting_period_seconds: Opt<bigint>;
-}
-
-interface RawFunction {
-  id: bigint;
-  name: string;
-  description: Opt<string>;
-  function_type: Opt<{
-    NativeNervousSystemFunction?: object;
-    GenericNervousSystemFunction?: {
-      topic: Opt<object>;
-      target_canister_id: Opt<Principal>;
-      target_method_name: Opt<string>;
-      validator_canister_id: Opt<Principal>;
-      validator_method_name: Opt<string>;
-    };
-  }>;
-}
 
 async function governance(canisterId: string, options: AgentOptions) {
   return actorFor<GovernanceService>(governanceIdl, canisterId, options);
@@ -186,8 +91,19 @@ export async function readParameters(
     throw classifyError(error, { role: "governance" });
   }
 
+  return projectParameters(raw);
+}
+
+export function projectParameters(raw: RawParameters): SnsParameters {
   const rewardsRaw = opt(raw.voting_rewards_parameters);
-  const out: SnsParameters = {};
+  const out: SnsParameters = { raw };
+  const claimer = opt(raw.neuron_claimer_permissions);
+  const grantable = opt(raw.neuron_grantable_permissions);
+  if (claimer) out.neuronClaimerPermissions = Array.from(claimer.permissions, Number);
+  if (grantable) out.neuronGrantablePermissions = Array.from(grantable.permissions, Number);
+  assign(out, "maxFolloweesPerFunction", opt(raw.max_followees_per_function));
+  assign(out, "automaticallyAdvanceTargetVersion", opt(raw.automatically_advance_target_version));
+  assign(out, "maturityModulationDisabled", opt(raw.maturity_modulation_disabled));
   assign(out, "transactionFeeE8s", opt(raw.transaction_fee_e8s));
   assign(out, "rejectCostE8s", opt(raw.reject_cost_e8s));
   assign(out, "neuronMinimumStakeE8s", opt(raw.neuron_minimum_stake_e8s));
@@ -242,12 +158,12 @@ export async function listProposals(
   let raw: { proposals: RawProposalData[] };
   try {
     raw = await (await governance(governanceCanisterId, options)).list_proposals({
-      include_reward_status: [],
+      include_reward_status: new Int32Array(),
       before_proposal: params.beforeProposal === undefined ? [] : [{ id: params.beforeProposal }],
       limit,
-      exclude_type: [],
+      exclude_type: new BigUint64Array(),
       include_topics: [],
-      include_status: [],
+      include_status: new Int32Array(),
     });
   } catch (error) {
     throw classifyError(error, { role: "governance" });
@@ -272,7 +188,7 @@ export async function getProposal(
   proposalId: bigint,
   options: AgentOptions = {},
 ): Promise<ProposalDetail | undefined> {
-  let raw: { result: Opt<{ Proposal?: RawProposalData }> };
+  let raw: Awaited<ReturnType<GovernanceService["get_proposal"]>>;
   try {
     raw = await (await governance(governanceCanisterId, options)).get_proposal({
       proposal_id: [{ id: proposalId }],
@@ -281,12 +197,20 @@ export async function getProposal(
     throw classifyError(error, { role: "governance" });
   }
   const result = opt(raw.result);
-  const data = result?.Proposal;
-  if (!data) return undefined;
+  if (!result) return undefined;
+  if ("Error" in result) {
+    if (result.Error.error_type === 5) return undefined;
+    throw new SnsError("INVALID_REQUEST", result.Error.error_message);
+  }
+  return projectProposalDetail(result.Proposal);
+}
+
+export function projectProposalDetail(data: RawProposalData): ProposalDetail {
 
   const summary = toProposalSummary(data);
   const detail: ProposalDetail = {
     ...summary,
+    raw: data,
     ballots: data.ballots.map(([neuronId, ballot]) => ({
       neuronId,
       vote: Number(ballot.vote),
@@ -296,14 +220,21 @@ export async function getProposal(
   };
   const rendering = opt(data.payload_text_rendering);
   if (rendering !== undefined) detail.payloadTextRendering = rendering;
-  const total = opt(opt(data.minimum_yes_proportion_of_total)?.basis_points);
-  if (total !== undefined) detail.minimumYesProportionOfTotal = total;
-  const exercised = opt(opt(data.minimum_yes_proportion_of_exercised)?.basis_points);
-  if (exercised !== undefined) detail.minimumYesProportionOfExercised = exercised;
+  const action = opt(opt(data.proposal)?.action);
+  if (action) {
+    detail.action = action;
+    detail.payloadProvenance = proposalPayloadProvenance(action);
+    detail.actionReusable = detail.payloadProvenance.every((field) => field.reusable);
+  }
+  const failure = opt(data.failure_reason);
+  if (failure) detail.failureReason = { errorType: failure.error_type, message: failure.error_message };
+  detail.rewardEventRound = data.reward_event_round;
+  detail.isEligibleForRewards = data.is_eligible_for_rewards;
+  assign(detail, "rewardEventEndTimestampSeconds", opt(data.reward_event_end_timestamp_seconds));
   return detail;
 }
 
-function toProposalSummary(data: RawProposalData): ProposalSummary {
+export function toProposalSummary(data: RawProposalData): ProposalSummary {
   const proposal = opt(data.proposal);
   const tallyRaw = opt(data.latest_tally);
   const out: ProposalSummary = {
@@ -315,11 +246,13 @@ function toProposalSummary(data: RawProposalData): ProposalSummary {
     createdAtSeconds: data.proposal_creation_timestamp_seconds,
     actionKind: variantKey(opt(proposal?.action)) ?? "Unknown",
     rejectCostE8s: data.reject_cost_e8s,
+    ...proposalThresholds(data),
   };
 
   const proposer = opt(data.proposer);
   if (proposer) out.proposerNeuronId = toHex(normalizeBytes(proposer.id));
-  const deadline = opt(data.wait_for_quiet_state)?.current_deadline_timestamp_seconds;
+  const deadline = opt(data.wait_for_quiet_state)?.current_deadline_timestamp_seconds
+    ?? data.proposal_creation_timestamp_seconds + data.initial_voting_period_seconds;
   if (deadline !== undefined) out.deadlineSeconds = deadline;
   if (data.decided_timestamp_seconds > 0n) out.decidedAtSeconds = data.decided_timestamp_seconds;
   if (data.executed_timestamp_seconds > 0n) out.executedAtSeconds = data.executed_timestamp_seconds;
@@ -340,22 +273,55 @@ function toProposalSummary(data: RawProposalData): ProposalSummary {
   return out;
 }
 
-/**
- * Status is derived, not stored.
- *
- * Executed and failed are explicit timestamps. Otherwise a decided proposal is
- * adopted or rejected according to its final tally, and an undecided one is
- * open. The tally comparison is a simple majority check; the exact thresholds
- * are per-proposal (`minimum_yes_proportion_of_*`) and only matter while a vote
- * is still live, by which point the canister has already decided.
- */
-function deriveStatus(data: RawProposalData): ProposalStatus {
+/** Upstream distinguishes an absent Percentage from one with absent basis_points. */
+export function proposalThresholds(data: Pick<RawProposalData,
+  "minimum_yes_proportion_of_total" | "minimum_yes_proportion_of_exercised">) {
+  const total = opt(data.minimum_yes_proportion_of_total);
+  const exercised = opt(data.minimum_yes_proportion_of_exercised);
+  return {
+    minimumYesProportionOfTotal: total === undefined ? 300n : opt(total.basis_points) ?? 5000n,
+    minimumYesProportionOfExercised: exercised === undefined ? 5000n : opt(exercised.basis_points) ?? 5000n,
+  };
+}
+
+/** Compare with bigint: majority is strict, total voting-power quorum is inclusive. */
+export function deriveStatus(data: RawProposalData): ProposalStatus {
   if (data.executed_timestamp_seconds > 0n) return "executed";
   if (data.failed_timestamp_seconds > 0n) return "failed";
   if (data.decided_timestamp_seconds === 0n) return "open";
   const tally = opt(data.latest_tally);
   if (!tally) return "unknown";
-  return tally.yes > tally.no ? "adopted" : "rejected";
+  const thresholds = proposalThresholds(data);
+  return tally.yes * 10_000n > (tally.yes + tally.no) * thresholds.minimumYesProportionOfExercised
+    && tally.yes * 10_000n >= tally.total * thresholds.minimumYesProportionOfTotal
+    ? "adopted" : "rejected";
+}
+
+/** Decisions and eligibility for late reward votes are independent. */
+export function proposalAcceptsVotes(proposal: ProposalSummary, nowSeconds = BigInt(Math.floor(Date.now() / 1000))): boolean {
+  return proposal.deadlineSeconds !== undefined && nowSeconds < proposal.deadlineSeconds;
+}
+
+/** get_proposal replaces these fields above 64 bytes; list_proposals omits them. */
+export function proposalPayloadProvenance(action: Action): ProposalPayloadField[] {
+  const fields: { path: string; bytes: Uint8Array }[] = [];
+  if ("ExecuteGenericNervousSystemFunction" in action) {
+    fields.push({ path: "ExecuteGenericNervousSystemFunction.payload", bytes: action.ExecuteGenericNervousSystemFunction.payload });
+  }
+  if ("UpgradeSnsControlledCanister" in action) {
+    const upgrade = action.UpgradeSnsControlledCanister;
+    fields.push({ path: "UpgradeSnsControlledCanister.new_canister_wasm", bytes: upgrade.new_canister_wasm });
+    const arg = opt(upgrade.canister_upgrade_arg);
+    if (arg) fields.push({ path: "UpgradeSnsControlledCanister.canister_upgrade_arg", bytes: arg });
+  }
+  return fields.map(({ path, bytes }) => {
+    const summarized = bytes.length > 64;
+    return {
+      path, provenance: summarized ? "summarized" : "original", reusable: !summarized,
+      returnedBytes: bytes.length,
+      ...(summarized ? { summary: new TextDecoder().decode(normalizeBytes(bytes)) } : {}),
+    };
+  });
 }
 
 /**
@@ -364,16 +330,15 @@ function deriveStatus(data: RawProposalData): ProposalStatus {
  * `ofPrincipal` matches **any** principal in a neuron's permissions, not just
  * the controller — that is how we find the neurons this Neutron may vote with.
  *
- * Pagination caveat: when `ofPrincipal` is set the canister ignores
- * `startPageAt`, so at most 100 neurons are reachable for a principal. The
- * `truncated` flag says when that limit was hit; callers must surface it rather
- * than silently showing a partial set.
+ * A full page is potentially incomplete even when a requested limit is less
+ * than 100. Use listAllNeurons for exhaustive principal discovery; filtered
+ * queries ignore their cursor, so it falls back to public ordered pagination.
  */
 export async function listNeurons(
   governanceCanisterId: string,
   params: { ofPrincipal?: string | Principal; limit?: number; startPageAt?: Uint8Array } = {},
   options: AgentOptions = {},
-): Promise<{ neurons: NeuronSummary[]; truncated: boolean }> {
+): Promise<NeuronPage> {
   const limit = clamp(params.limit ?? MAX_NEURONS_PER_CALL, 1, MAX_NEURONS_PER_CALL);
   const principal =
     params.ofPrincipal === undefined
@@ -398,19 +363,118 @@ export async function listNeurons(
     throw classifyError(error, { role: "governance" });
   }
 
+  return projectNeuronPage(raw.neurons, limit, principal !== undefined);
+}
+
+export function projectNeuronPage(neurons: RawNeuron[], limit: number, principalFiltered: boolean): NeuronPage {
   return {
-    neurons: raw.neurons.map(toNeuronSummary),
-    truncated: principal !== undefined && raw.neurons.length >= MAX_NEURONS_PER_CALL,
+    neurons: neurons.map(toNeuronSummary),
+    truncated: neurons.length >= limit,
+    ...(!principalFiltered && neurons.length >= limit && opt(neurons.at(-1)?.id)
+      ? { nextStartPageAt: normalizeBytes(opt(neurons.at(-1)?.id)!.id) } : {}),
   };
 }
 
-function toNeuronSummary(neuron: RawNeuron): NeuronSummary {
+export interface NeuronPage {
+  neurons: NeuronSummary[];
+  /** True when another page may exist; never claim a full page is complete. */
+  truncated: boolean;
+  /** Public pagination cursor; SNS ignores cursors on principal-filtered reads. */
+  nextStartPageAt?: Uint8Array;
+}
+export interface NeuronDiscovery extends NeuronPage {
+  failures: PartialResult<never>["failures"];
+}
+
+/** Exhaustive public pagination is the upstream-supported way past filtered neuron 100. */
+export async function listAllNeurons(
+  governanceCanisterId: string,
+  params: { ofPrincipal?: string | Principal } = {},
+  options: AgentOptions = {},
+): Promise<NeuronDiscovery> {
+  return collectNeurons((page) => listNeurons(governanceCanisterId, page, options), params.ofPrincipal, governanceCanisterId);
+}
+
+/** Separate paginator permits protocol edge-case tests without mocking the global agent. */
+export async function collectNeurons(
+  readPage: (params: { ofPrincipal?: string | Principal; limit: number; startPageAt?: Uint8Array }) => Promise<NeuronPage>,
+  ofPrincipal?: string | Principal,
+  scope = "neurons",
+): Promise<NeuronDiscovery> {
+  const principal = typeof ofPrincipal === "string" ? Principal.fromText(ofPrincipal).toText() : ofPrincipal?.toText();
+  const neurons = new Map<string, NeuronSummary>();
+  let nextStartPageAt: Uint8Array | undefined;
+  const remember = (page: NeuronPage) => {
+    for (const neuron of page.neurons) {
+      if (principal === undefined || neuron.permissions.some((entry) => entry.principal === principal)) neurons.set(neuron.id, neuron);
+    }
+  };
+  try {
+    if (principal !== undefined) {
+      const filtered = await readPage({ ofPrincipal: principal, limit: MAX_NEURONS_PER_CALL });
+      remember(filtered);
+      if (!filtered.truncated) return { neurons: [...neurons.values()], truncated: false, failures: [] };
+    }
+    while (true) {
+      const page = await readPage({ limit: MAX_NEURONS_PER_CALL, ...(nextStartPageAt ? { startPageAt: nextStartPageAt } : {}) });
+      remember(page);
+      if (!page.truncated) return { neurons: [...neurons.values()], truncated: false, failures: [] };
+      const cursor = page.nextStartPageAt;
+      if (!cursor || (nextStartPageAt && toHex(cursor) <= toHex(nextStartPageAt))) {
+        throw new SnsError("INTERNAL", "SNS neuron pagination returned a full page without an advancing cursor.");
+      }
+      nextStartPageAt = cursor;
+    }
+  } catch (error) {
+    const failure = classifyError(error, { role: "governance" });
+    return { neurons: [...neurons.values()], truncated: true, ...(nextStartPageAt ? { nextStartPageAt } : {}),
+      failures: [{ scope, code: failure.code, message: failure.message }] };
+  }
+}
+
+export async function getNeuron(
+  governanceCanisterId: string,
+  neuronId: string,
+  options: AgentOptions = {},
+): Promise<NeuronSummary | undefined> {
+  const id = fromHex(neuronId);
+  if (id.length !== 32) throw new SnsError("INVALID_REQUEST", "A neuron ID must be 32 bytes of hexadecimal.");
+  try {
+    const result = opt((await (await governance(governanceCanisterId, options)).get_neuron({ neuron_id: [{ id }] })).result);
+    if (!result) return undefined;
+    if ("Error" in result) {
+      if (result.Error.error_type === 5) return undefined;
+      throw new SnsError("INVALID_REQUEST", result.Error.error_message);
+    }
+    return toNeuronSummary(result.Neuron);
+  } catch (error) { throw classifyError(error, { role: "governance" }); }
+}
+
+export function toNeuronSummary(neuron: RawNeuron): NeuronSummary {
   const dissolve = opt(neuron.dissolve_state) as
     | { DissolveDelaySeconds?: bigint; WhenDissolvedTimestampSeconds?: bigint }
     | undefined;
   const out: NeuronSummary = {
+    raw: neuron,
     id: toHex(normalizeBytes(opt(neuron.id)?.id ?? [])),
     stakeE8s: neuron.cached_neuron_stake_e8s,
+    feesE8s: neuron.neuron_fees_e8s ?? 0n,
+    effectiveStakeE8s: neuron.cached_neuron_stake_e8s > (neuron.neuron_fees_e8s ?? 0n)
+      ? neuron.cached_neuron_stake_e8s - (neuron.neuron_fees_e8s ?? 0n) : 0n,
+    followees: (neuron.followees ?? []).map(([functionId, follows]) => ({ functionId, neuronIds: follows.followees.map((id) => toHex(id.id)) })),
+    topicFollowees: (opt(neuron.topic_followees)?.topic_id_to_followees ?? []).map(([topicId, follows]) => ({
+      topicId, topic: variantKey(opt(follows.topic)),
+      neuronIds: follows.followees.flatMap((followee) => { const id = opt(followee.neuron_id); return id ? [toHex(id.id)] : []; }),
+      aliases: follows.followees.map((followee) => opt(followee.alias)),
+    })),
+    disburseMaturityInProgress: (neuron.disburse_maturity_in_progress ?? []).map((disbursement) => {
+      const account = opt(disbursement.account_to_disburse_to);
+      const subaccount = opt(account?.subaccount);
+      return { amountE8s: disbursement.amount_e8s, timestampSeconds: disbursement.timestamp_of_disbursement_seconds,
+        finalizeDisbursementTimestampSeconds: opt(disbursement.finalize_disbursement_timestamp_seconds),
+        ...(account ? { account: { owner: opt(account.owner)?.toText(), subaccountHex: subaccount ? toHex(subaccount.subaccount) : undefined } } : {}),
+      };
+    }),
     maturityE8s: neuron.maturity_e8s_equivalent,
     stakedMaturityE8s: opt(neuron.staked_maturity_e8s_equivalent) ?? 0n,
     votingPowerMultiplierPercent: neuron.voting_power_percentage_multiplier,
@@ -426,6 +490,8 @@ function toNeuronSummary(neuron: RawNeuron): NeuronSummary {
   } else if (dissolve?.WhenDissolvedTimestampSeconds !== undefined) {
     out.dissolveState = { kind: "dissolving", value: dissolve.WhenDissolvedTimestampSeconds };
   }
+  assign(out, "autoStakeMaturity", opt(neuron.auto_stake_maturity));
+  assign(out, "sourceNnsNeuronId", opt(neuron.source_nns_neuron_id));
   const vesting = opt(neuron.vesting_period_seconds);
   if (vesting !== undefined) out.vestingPeriodSeconds = vesting;
   return out;
@@ -452,7 +518,7 @@ export async function listNervousSystemFunctions(
 
   return raw.functions.map((fn) => {
     const kindRaw = opt(fn.function_type);
-    const generic = kindRaw?.GenericNervousSystemFunction;
+    const generic = kindRaw && "GenericNervousSystemFunction" in kindRaw ? kindRaw.GenericNervousSystemFunction : undefined;
     const out: NervousSystemFunctionInfo = {
       id: fn.id,
       name: fn.name,
@@ -474,6 +540,24 @@ export async function listNervousSystemFunctions(
     }
     return out;
   });
+}
+
+/** Browser-direct, typed protocol reads. Older deployments return SNS_UNSUPPORTED_METHOD. */
+export async function listTopics(governanceCanisterId: string, options: AgentOptions = {}): Promise<ListTopicsResponse> {
+  try { return await (await governance(governanceCanisterId, options)).list_topics({}); }
+  catch (error) { throw classifyError(error, { role: "governance" }); }
+}
+
+export async function readRunningSnsVersion(governanceCanisterId: string, options: AgentOptions = {}): Promise<GetRunningSnsVersionResponse> {
+  try { return await (await governance(governanceCanisterId, options)).get_running_sns_version({}); }
+  catch (error) { throw classifyError(error, { role: "governance" }); }
+}
+
+export async function readUpgradeJournal(governanceCanisterId: string, params: { offset?: bigint; limit?: bigint } = {}, options: AgentOptions = {}): Promise<GetUpgradeJournalResponse> {
+  try { return await (await governance(governanceCanisterId, options)).get_upgrade_journal({
+    offset: params.offset === undefined ? [] : [params.offset], limit: params.limit === undefined ? [] : [params.limit],
+  }); }
+  catch (error) { throw classifyError(error, { role: "governance" }); }
 }
 
 /**

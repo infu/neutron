@@ -1,211 +1,183 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { copyToClipboard } from "neutron-tools/app";
-import { SnsError } from "../data/errors";
-import { formatDuration, formatTimestamp, formatTokenAmount, shortenId } from "../data/format";
-import { listNeurons } from "../data/governance";
-import type { RegistryEntry } from "../data/registry";
+import { listAllNeurons, listNeurons } from "../data/governance";
+import { displayName, getRegistry, type RegistryEntry } from "../data/registry";
+import { readHotkey } from "../data/relay";
+import { pool } from "../data/pool";
+import { shortenId } from "../data/format";
 import type { NeuronSummary } from "../data/types";
-import { IconButton } from "./IconButton";
-import { BusyOr, Empty, Pending } from "./Status";
-import { CopyIcon, RefreshIcon, SearchIcon, WarnIcon } from "./Icons";
+import { Disclosure, ErrorNote, PageHeading } from "./Common";
+import { Empty, Pending } from "./Status";
+import { NeuronDetail, NeuronRow } from "./NeuronDetail";
+import { StakingDialog } from "./StakingDialog";
 
-/** SNS NeuronPermissionType values we care about naming. */
-const PERMISSION_NAMES: Record<number, string> = {
-  0: "Unspecified",
-  1: "ConfigureDissolveState",
-  2: "ManagePrincipals",
-  3: "SubmitProposal",
-  4: "Vote",
-  5: "Disburse",
-  6: "Split",
-  7: "MergeMaturity",
-  8: "DisburseMaturity",
-  9: "StakeMaturity",
-  10: "ManageVotingPermission",
-};
-
-type State =
-  | { phase: "loading" }
-  | { phase: "ready"; neurons: NeuronSummary[]; truncated: boolean }
-  | { phase: "error"; message: string };
-
-export function NeuronsView({ entry }: { entry: RegistryEntry }) {
-  const [state, setState] = useState<State>({ phase: "loading" });
-  // See Proposals: a refresh must not blank the table it is refreshing.
-  const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [appliedFilter, setAppliedFilter] = useState<string | undefined>();
-  // A filter can change before the preceding anonymous read returns. Only the
-  // latest request may replace the rows or their loading state.
-  const request = useRef(0);
-
-  const load = useCallback(
-    async (ofPrincipal?: string) => {
-      const current = ++request.current;
-      setBusy(true);
-      setAppliedFilter(ofPrincipal);
-      try {
-        const result = await listNeurons(entry.canisters.governance, {
-          ...(ofPrincipal ? { ofPrincipal } : {}),
-          limit: 100,
-        });
-        if (current !== request.current) return;
-        setState({ phase: "ready", neurons: result.neurons, truncated: result.truncated });
-      } catch (error) {
-        if (current !== request.current) return;
-        setState({
-          phase: "error",
-          message: error instanceof SnsError ? error.message : String(error),
-        });
-      } finally {
-        if (current === request.current) setBusy(false);
-      }
-    },
-    [entry.canisters.governance],
-  );
-
-  useEffect(() => {
-    void load();
-    return () => { request.current += 1; };
-  }, [load]);
-
-  return (
-    <section className="nt-section">
-      <header className="nt-section-header">
-        <h2 className="nt-section-heading">Neurons</h2>
-        {state.phase === "ready" && <span className="nt-section-count">{state.neurons.length}</span>}
-        <span className="snsgov-spacer" />
-        <IconButton disabled={busy} label="Refresh neurons" onClick={() => void load(appliedFilter)}>
-          <BusyOr busy={busy}>
-            <RefreshIcon />
-          </BusyOr>
-        </IconButton>
-      </header>
-
-      <div className="snsgov-filter">
-        <label className="nt-sr-only" htmlFor="snsgov-principal-filter">
-          Filter by principal
-        </label>
-        <input
-          className="nt-input"
-          id="snsgov-principal-filter"
-          onChange={(event) => setFilter(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void load(filter.trim() || undefined);
-          }}
-          placeholder="Filter by principal (matches any permission holder)"
-          value={filter}
-        />
-        <IconButton
-          label="Filter neurons by principal"
-          onClick={() => void load(filter.trim() || undefined)}
-        >
-          <SearchIcon />
-        </IconButton>
-      </div>
-
-      {state.phase === "loading" && <Pending label="Reading neurons" />}
-      {state.phase === "error" && (
-        <div className="nt-alert nt-alert--danger" role="alert">
-          {state.message}
-        </div>
-      )}
-      {state.phase === "ready" && state.neurons.length === 0 && (
-        <Empty
-          label={appliedFilter ? "No neuron grants that principal any permission." : "No neurons found."}
-        />
-      )}
-      {state.phase === "ready" && state.neurons.length > 0 && (
-        <>
-          {state.truncated && (
-            <div className="nt-alert nt-alert--warning snsgov-alert" role="status">
-              <WarnIcon />
-              <span>
-                Showing the first 100. When filtering by principal the SNS caps results at 100 and
-                ignores pagination, so any further neurons cannot be listed.
-              </span>
-            </div>
-          )}
-          <div className="nt-table-wrap">
-            <table className="nt-table snsgov-table snsgov-table--neurons">
-              <thead>
-                <tr>
-                  <th scope="col">Neuron</th>
-                  <th className="snsgov-num" scope="col">Stake</th>
-                  <th className="snsgov-nowrap" scope="col">Dissolve</th>
-                  <th scope="col">Principals</th>
-                  <th scope="col">
-                    <span className="nt-sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.neurons.map((neuron) => (
-                  <tr key={neuron.id}>
-                    <th scope="row">
-                      <code className="nt-code">{shortenId(neuron.id, 8, 6)}</code>
-                    </th>
-                    <td className="snsgov-num" data-label="Stake">
-                      {entry.token
-                        ? `${formatTokenAmount(neuron.stakeE8s, entry.token.decimals, { maxFractionDigits: 2 })} ${entry.token.symbol}`
-                        : `${neuron.stakeE8s} atoms`}
-                    </td>
-                    <td className="snsgov-nowrap" data-label="Dissolve">
-                      {neuron.dissolveState === undefined
-                        ? "—"
-                        : neuron.dissolveState.kind === "delay"
-                          ? formatDuration(neuron.dissolveState.value)
-                          : `dissolving → ${formatTimestamp(neuron.dissolveState.value).slice(0, 10)}`}
-                    </td>
-                    <td data-label="Principals">
-                      <ul className="snsgov-principals">
-                        {neuron.permissions.map((entryPermission, index) => (
-                          <li key={`${neuron.id}-${entryPermission.principal ?? index}`}>
-                            <code className="nt-code">
-                              {entryPermission.principal
-                                ? shortenId(entryPermission.principal, 5, 3)
-                                : "—"}
-                            </code>{" "}
-                            <span
-                              className="nt-meta"
-                              title={entryPermission.permissions
-                                .map((id) => PERMISSION_NAMES[id] ?? id)
-                                .join(", ")}
-                            >
-                              {describePermissions(entryPermission.permissions)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                    <td className="snsgov-row-actions">
-                      <IconButton
-                        label="Copy neuron id"
-                        onClick={() => void copyToClipboard(neuron.id)}
-                      >
-                        <CopyIcon />
-                      </IconButton>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-    </section>
-  );
+interface Source {
+  entry: RegistryEntry;
+  neurons?: NeuronSummary[];
+  error?: string | undefined;
+  incomplete?: boolean;
+  loading?: boolean;
 }
 
-/**
- * A short label for a permission set. `[3, 4]` — SubmitProposal and Vote — is
- * the exact grant this app asks for, and is worth calling out by name because
- * it is what a correctly configured hotkey looks like.
- */
-function describePermissions(permissions: number[]): string {
-  const set = new Set(permissions);
-  if (set.size === 2 && set.has(3) && set.has(4)) return "vote + propose";
-  if (set.size === 1 && set.has(4)) return "vote";
-  if (set.has(2) || set.size >= 10) return "full control";
-  return `${permissions.length} permission${permissions.length === 1 ? "" : "s"}`;
+export function MyNeuronsView({ onConnect, initialRootCanisterId, initialNeuronId, navigationKey = 0 }: {
+  onConnect?: () => void;
+  initialRootCanisterId?: string | undefined;
+  initialNeuronId?: string;
+  navigationKey?: number;
+}) {
+  const [sources, setSources] = useState<Source[]>([]);
+  const [entries, setEntries] = useState<RegistryEntry[]>([]);
+  const [principal, setPrincipal] = useState<string>();
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState<string>();
+  const [stake, setStake] = useState(false);
+  const [connect, setConnect] = useState(false);
+  const [selected, setSelected] = useState<{ root: string; id: string } | undefined>(() =>
+    initialRootCanisterId && initialNeuronId ? { root: initialRootCanisterId, id: initialNeuronId } : undefined);
+  const generation = useRef(0);
+  const listRoot = useRef<HTMLDivElement>(null);
+  const returnTo = useRef<{ id: string; y: number } | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!selected && returnTo.current) {
+      listRoot.current?.querySelector<HTMLButtonElement>(`[data-neuron-id="${returnTo.current.id}"]`)?.focus({ preventScroll: true });
+      window.scrollTo(0, returnTo.current.y);
+    }
+  }, [selected]);
+  const sourcesRef = useRef(sources);
+  sourcesRef.current = sources;
+
+  useEffect(() => {
+    setSelected(initialRootCanisterId && initialNeuronId
+      ? { root: initialRootCanisterId, id: initialNeuronId } : undefined);
+  }, [initialRootCanisterId, initialNeuronId, navigationKey]);
+
+  const scan = useCallback(async (failedOnly = false) => {
+    const current = ++generation.current;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const [registry, hotkey] = await Promise.all([getRegistry(), readHotkey()]);
+      if (current !== generation.current) return;
+      setPrincipal(hotkey.principal);
+      const available = registry.entries.filter(entry => registry.livenessKnown === false || entry.liveness.governance);
+      setEntries(available);
+      const previous = sourcesRef.current;
+      const targets = failedOnly ? available.filter(entry => previous.some(source =>
+        source.entry.canisters.root === entry.canisters.root && (source.error || source.incomplete))) : available;
+      const targetIds = new Set(targets.map(entry => entry.canisters.root));
+      setSources(available.map(entry => ({ ...previous.find(source => source.entry.canisters.root === entry.canisters.root),
+        entry, loading: targetIds.has(entry.canisters.root) })));
+      await pool(targets, 8, async entry => {
+        let replacement: Source;
+        try {
+          const result = await listAllNeurons(entry.canisters.governance, { ofPrincipal: hotkey.principal });
+          const details = result.failures.map(failure => failure.message).join("; ");
+          const old = previous.find(source => source.entry.canisters.root === entry.canisters.root)?.neurons ?? [];
+          const neurons = result.truncated || result.failures.length
+            ? [...new Map([...old, ...result.neurons].map(neuron => [neuron.id, neuron])).values()]
+            : result.neurons;
+          replacement = { entry, neurons, incomplete: result.truncated || result.failures.length > 0,
+            error: details || undefined, loading: false };
+        } catch (caught) {
+          replacement = { ...previous.find(source => source.entry.canisters.root === entry.canisters.root),
+            entry, error: String(caught), incomplete: true, loading: false };
+        }
+        if (current !== generation.current) return;
+        setSources(existing => existing.map(source => source.entry.canisters.root === entry.canisters.root ? replacement : source));
+      });
+    } catch (caught) {
+      if (current === generation.current) setError(String(caught));
+    } finally {
+      if (current === generation.current) setBusy(false);
+    }
+  }, []);
+  useEffect(() => { void scan(); return () => { generation.current += 1; }; }, [scan]);
+
+  const selectedEntry = selected && entries.find(entry => entry.canisters.root === selected.root);
+  if (selectedEntry && selected && principal) return <NeuronDetail key={`${selected.root}/${selected.id}`} entry={selectedEntry}
+    neuronId={selected.id} principal={principal} onBack={() => setSelected(undefined)} />;
+  const count = sources.reduce((total, source) => total + (source.neurons?.length ?? 0), 0);
+  const failures = sources.filter(source => source.error || source.incomplete);
+  const checked = sources.filter(source => !source.loading).length;
+  return <div className="nt-page snsgov-my-neurons" ref={listRoot}>
+    <PageHeading title="My neurons" description="Staked tokens and neurons that grant this Neutron access."
+      actions={<><button className="nt-button nt-button--primary" type="button" onClick={() => setStake(true)}>Stake tokens</button>
+        <button className="nt-button nt-button--secondary" type="button" onClick={() => { setConnect(value => !value); }}>Connect existing neurons</button>
+        <button className="nt-button nt-button--ghost" type="button" disabled={busy} onClick={() => void scan()}>Refresh neurons</button></>} />
+    <section className="nt-page-main">
+      {error && <ErrorNote message={error ?? null} />}
+      {connect && <section className="nt-section snsgov-connect">
+        <h2 className="nt-section-heading">Connect existing neurons</h2>
+        <p>Keep your neuron in its current wallet and grant this Neutron the access you want it to have.</p>
+        <ol><li>Copy this Neutron’s principal.</li><li>In the wallet that controls your neuron, add the principal with Vote permission (4). Add Submit proposals (3) only if desired.</li><li>Return here and check the connection.</li></ol>
+        {principal ? <div className="snsgov-neuron-copy"><code className="nt-code">{principal}</code><button className="nt-button nt-button--secondary" type="button" onClick={() => void copyToClipboard(principal)}>Copy Neutron principal</button></div> : <Pending label="Reading Neutron principal" />}
+        <p className="nt-meta">The access you select in the controlling wallet determines what this Neutron can do. Copying a principal does not grant any permissions.</p>
+        <div className="snsgov-neuron-actions"><button className="nt-button nt-button--secondary" type="button" disabled={busy} onClick={() => void scan()}>Check connection</button>
+          {onConnect && <button className="nt-button nt-button--ghost" type="button" onClick={onConnect}>Connection settings</button>}</div>
+      </section>}
+      {busy && <Pending label={sources.length ? `Checking communities: ${checked} of ${sources.length}` : "Finding your neurons"} />}
+      {failures.length > 0 && <div className="nt-alert nt-alert--warning" role="status">
+        <p>Neuron discovery is incomplete in {failures.length} {failures.length === 1 ? "community" : "communities"}. Previously read neurons remain visible.</p>
+        <button className="nt-button nt-button--secondary" type="button" disabled={busy} onClick={() => void scan(true)}>Retry unavailable communities</button>
+        <Disclosure title="Read details">{failures.map(source => <p key={source.entry.canisters.root}>{displayName(source.entry)}: {source.error || "Additional neurons could not be read."}</p>)}</Disclosure>
+      </div>}
+      {!busy && count === 0 && !error && <Empty label={failures.length ? "No connected neurons found in the communities checked successfully." : "No connected neurons yet. Stake tokens or connect an existing neuron to begin."} />}
+      {sources.filter(source => source.neurons?.length).map(source => <section className="nt-section" key={source.entry.canisters.root}>
+        <header className="nt-section-header"><h2 className="nt-section-heading">{displayName(source.entry)}</h2><span className="nt-section-count">{source.neurons!.length}</span></header>
+        <div className="snsgov-neuron-list">{source.neurons!.map(neuron => <NeuronRow key={neuron.id} neuron={neuron} entry={source.entry} principal={principal}
+          onOpen={() => { returnTo.current = { id: neuron.id, y: window.scrollY }; setSelected({ root: source.entry.canisters.root, id: neuron.id }); }} />)}</div>
+      </section>)}
+      {selected && !selectedEntry && !busy && <ErrorNote message="The requested neuron’s community could not be found in the registry." />}
+    </section>
+    {stake && <StakingDialog entries={entries} initialRootCanisterId={initialRootCanisterId} onClose={() => setStake(false)} onComplete={() => void scan()} />}
+  </div>;
+}
+
+/** Community explorer keeps explicit pagination and same-query rows after errors. */
+export function NeuronsView({ entry }: { entry: RegistryEntry }) {
+  const [neurons, setNeurons] = useState<NeuronSummary[]>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [applied, setApplied] = useState<string>();
+  const [next, setNext] = useState<Uint8Array>();
+  const [incomplete, setIncomplete] = useState(false);
+  const [principal, setPrincipal] = useState<string>();
+  const [selected, setSelected] = useState<string>();
+  const generation = useRef(0);
+  const queryKey = useRef<string | undefined>(undefined);
+  const load = useCallback(async (ofPrincipal?: string, startPageAt?: Uint8Array) => {
+    const current = ++generation.current;
+    const key = `${entry.canisters.governance}/${ofPrincipal ?? ""}`;
+    if (queryKey.current !== key) { setNeurons(undefined); setNext(undefined); setIncomplete(false); }
+    queryKey.current = key;
+    setApplied(ofPrincipal); setBusy(true); setError(undefined);
+    try {
+      const result = await listNeurons(entry.canisters.governance, { ...(ofPrincipal ? { ofPrincipal } : {}), ...(startPageAt ? { startPageAt } : {}), limit: 100 });
+      if (current !== generation.current) return;
+      setNeurons(old => startPageAt ? [...new Map([...(old ?? []), ...result.neurons].map(neuron => [neuron.id, neuron])).values()] : result.neurons);
+      setNext(result.nextStartPageAt);
+      setIncomplete(result.truncated && !result.nextStartPageAt);
+    } catch (caught) { if (current === generation.current) setError(String(caught)); }
+    finally { if (current === generation.current) setBusy(false); }
+  }, [entry.canisters.governance]);
+  useEffect(() => { void load(); void readHotkey().then(key => setPrincipal(key.principal), () => {});
+    return () => { generation.current += 1; }; }, [load]);
+  if (selected) return <NeuronDetail key={selected} entry={entry} neuronId={selected} principal={principal} onBack={() => setSelected(undefined)} />;
+  return <section className="nt-section">
+    <header className="nt-section-header"><h2 className="nt-section-heading">Neurons</h2><span className="snsgov-spacer" />
+      <button type="button" className="nt-button nt-button--secondary" disabled={busy} onClick={() => void load(applied)}>Refresh neurons</button></header>
+    <p className="nt-meta">Public neurons in this community. Filter by a principal to see the access it holds.</p>
+    <div className="snsgov-filter"><label className="nt-sr-only" htmlFor="snsgov-principal-filter">Filter by principal</label>
+      <input className="nt-input" id="snsgov-principal-filter" placeholder="Principal" value={filter} onChange={event => setFilter(event.target.value)}
+        onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing) void load(filter.trim() || undefined); }} />
+      <button className="nt-button nt-button--secondary" type="button" aria-label="Filter neurons by principal" onClick={() => void load(filter.trim() || undefined)}>Filter</button></div>
+    {busy && <Pending label="Reading neurons" />}
+    {error && <ErrorNote message={error ?? null} />}
+    {neurons?.length === 0 && <Empty label={applied ? "No neuron grants that principal any permission." : "No neurons found."} />}
+    <div className="snsgov-neuron-list">{neurons?.map(neuron => <div key={neuron.id}><NeuronRow entry={entry} neuron={neuron} principal={principal} onOpen={() => setSelected(neuron.id)} />
+      <button type="button" className="nt-button nt-button--ghost snsgov-neuron-copy-action" aria-label="Copy neuron id" onClick={() => void copyToClipboard(neuron.id)}>Copy {shortenId(neuron.id, 8, 6)}</button></div>)}</div>
+    {incomplete && <p role="status" className="nt-alert nt-alert--warning">This response may omit additional neurons; the community did not provide a usable continuation.</p>}
+    {next && <button className="nt-button nt-button--secondary" type="button" disabled={busy} onClick={() => void load(applied, next)}>Load more neurons</button>}
+  </section>;
 }
