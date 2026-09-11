@@ -104,7 +104,8 @@ import {
   mergeWalletAllowancesPages,
   parseFundingPrepareResult,
   parseWalletAllowancesPage,
-  prepareWalletFundingOperation,
+  previewWalletFundingOperation,
+  persistWalletFundingPreview,
   rejectWalletFundingOperation,
   resolveWalletFundingPreparation,
   walletAllowancesPageArgs,
@@ -238,6 +239,7 @@ type WalletFundingPrompt = {
   removeAbortListener: (() => void) | null;
   signal: AbortSignal | undefined;
   updateSelf: MsgBusToolContext["kernel"]["updateSelf"];
+  querySelf: MsgBusToolContext["kernel"]["querySelf"];
 };
 
 let walletFundingPrompt: WalletFundingPrompt | null = null;
@@ -381,6 +383,14 @@ async function executePresentedWalletFunding(
   prompt.error = null;
   notifyWalletFundingPrompt();
   try {
+    if (prompt.operation.durable === false) {
+      const saved = await persistWalletFundingPreview(prompt.operation, prompt.updateSelf);
+      prompt.operation = saved.operation;
+      if (saved.reviewChanged) {
+        restoreOrAbortWalletFundingPrompt(prompt, new Error("The ledger fee, metadata or allowance changed. Review the updated Wallet details before approving."));
+        return;
+      }
+    }
     const result = await executeWalletFundingOperation(
       prompt.operation,
       (args) =>
@@ -392,7 +402,8 @@ async function executePresentedWalletFunding(
     }
     finishWalletFundingPrompt(prompt, result);
   } catch (reason) {
-    markWalletFundingExecutionUncertain(prompt, reason);
+    if (prompt.operation.durable === false) restoreOrAbortWalletFundingPrompt(prompt, reason);
+    else markWalletFundingExecutionUncertain(prompt, reason);
   } finally {
     publishWalletInvalidation();
   }
@@ -422,6 +433,7 @@ async function rejectPresentedWalletFunding(
     const result = await rejectWalletFundingOperation(
       prompt.operation,
       (args) => prompt.updateSelf(WALLET_FUNDING_REJECT_METHOD, [args], 30),
+      prompt.querySelf,
     );
     finishWalletFundingPrompt(prompt, result);
   } catch (reason) {
@@ -434,15 +446,12 @@ async function rejectPresentedWalletFunding(
 export async function handleWalletFundingPresentation(
   args: JsonObject,
   context: MsgBusToolContext,
+  readFacts?: Parameters<typeof previewWalletFundingOperation>[2],
 ): Promise<JsonObject> {
   if (context.audience !== "foreground_tile") {
     throw new Error("Wallet funding UI requires foreground-tile attestation");
   }
-  const operation = await prepareWalletFundingOperation(
-    args,
-    context,
-    false,
-  );
+  const operation = await previewWalletFundingOperation(args, context, readFacts);
 
   // A pending command proves that Wallet already dispatched a previously
   // accepted operation. Reconcile it without asking the owner a second time.
@@ -483,6 +492,7 @@ export async function handleWalletFundingPresentation(
           [rejectArgs],
           30,
         ),
+      context.kernel.querySelf,
     )
       .catch(() => undefined)
       .finally(() => publishWalletInvalidation());
@@ -501,6 +511,7 @@ export async function handleWalletFundingPresentation(
       signal: context.signal,
       updateSelf: (method, selfArgs, timeout) =>
         context.kernel.updateSelf(method, selfArgs, timeout),
+      querySelf: (method, selfArgs, timeout) => context.kernel.querySelf(method, selfArgs, timeout),
     };
     const abort = () => {
       if (!removeWalletFundingPrompt(prompt)) return;

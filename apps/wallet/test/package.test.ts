@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.29.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.30.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 329,
+    version: 330,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: {
       path: "service.html",
@@ -305,6 +305,9 @@ test("generated API-1 ICRC Account inputs use the canonical string shorthand", a
   collectIcrcAccountSchemaPaths(artifact.methods, "", paths);
 
   expect(paths.sort()).toEqual([
+    "wallet_read_v1/input/prefixItems/0/oneOf/4/properties/funding_preview/properties/request/properties/intent/oneOf/0/properties/direct/properties/to",
+    "wallet_read_v1/input/prefixItems/0/oneOf/4/properties/funding_preview/properties/request/properties/intent/oneOf/1/properties/allowance/properties/spender",
+    "wallet_read_v1/input/prefixItems/0/oneOf/4/properties/funding_preview/properties/request/properties/intent/oneOf/2/properties/revoke/properties/spender/oneOf/0/properties/icrc",
     "wallet_transfer/input/prefixItems/0/properties/expected_destination/oneOf/0/properties/internet_computer",
     "wallet_transfer_v2/input/prefixItems/0/properties/transfer/properties/expected_destination/oneOf/0/properties/internet_computer",
     "wallet_transfer_prepare_v2/input/prefixItems/0/properties/transfer/properties/expected_destination/oneOf/0/properties/internet_computer",
@@ -507,7 +510,7 @@ test("Wallet tile and tray mount the same app and gate only focused capabilities
   expect(service).toContain("WALLET_PROJECTION_TOOLS.overview");
   expect(service).toContain("WALLET_PROJECTION_TOOLS.refresh");
   expect(service).toContain("WALLET_TOKEN_INFO_TOOL");
-  expect(service).toContain("WALLET_TOKEN_INFO_METHOD");
+  expect(service).toContain("handleWalletTokenInfo");
   expect(service).toContain('updateSelf("wallet_refresh_balances"');
   expect(service).toContain("setTrayState({ badge: null })");
   expect(service).toContain("publishAppStateChange(WALLET_PROJECTION_TOPIC");

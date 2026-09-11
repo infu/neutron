@@ -128,12 +128,21 @@ protocol; checking installation status uses the existing Kernel app list.
 For a new IC or Ethereum purchase, omitting `affiliateCode` uses this Neutron's
 remembered discount. An explicit empty string buys without a code for that
 purchase only; an explicit code overrides the preference without changing it.
-An invalid or temporarily unverifiable saved code blocks a defaulted quote until
-it is validated, changed or cleared. The owner changes the saved preference in
+The pricing query validates the saved code together with the purchase terms;
+an invalid code rejects the quote instead of silently removing the discount.
+The owner changes the saved preference in
 the app; agents can read it and still supply an explicit per-purchase code.
 Existing-ID quotes and recovery retain the original purchase's code when omitted,
 even after the preference changes. Explicitly changing an existing purchase's code
 is rejected; never use a new payment ID to recover an uncertain payment.
+
+Checkout pricing is a direct browser query. A warm storefront reuses presentation
+metadata only when its listing revision and publisher match the quote; prices,
+allocations, recipients and execution evidence always come from the fresh quote.
+Missing listing details are read concurrently. Paid storefront selections read
+the current Wallet balance alongside pricing, retaining insufficient-balance
+warnings without a serial backend round trip. Accepting a purchase still saves
+the exact recovery request before asking Wallet to authorize funding.
 
 Installation history retains the original selection and prepared installer URL.
 Its private draft also retains the exact source-access request for interrupted

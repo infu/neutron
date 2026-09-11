@@ -14,8 +14,8 @@ export const normalizeDiscountCode = (code: string): string => code.trim().toUpp
 /** Omission means preserve an existing purchase's terms, never substitute today's preference. */
 export const matchesSavedDiscount = (saved: string, requested: string | undefined): boolean => requested === undefined || normalizeDiscountCode(saved) === normalizeDiscountCode(requested);
 
-/** Cache only durable local state. Eligibility/terms are rechecked by direct query
- * on each refresh or new defaulted checkout; failed validation never clears it. */
+/** Cache only durable local state. Refresh validates activation; a checkout's
+ * canonical quote validates the selected code together with its prices. */
 export function createDiscountPreferences() {
   let stored: Promise<string | null> | null = null;
   let writes: Promise<unknown> = Promise.resolve();
@@ -75,9 +75,13 @@ export function createDiscountPreferences() {
   }
   async function purchaseCode(access: Access, explicit: string | undefined): Promise<string> {
     if (explicit !== undefined) return normalizeDiscountCode(explicit);
-    const saved = await discount(access);
-    if (saved.code && !saved.active) throw new Error(`The saved discount could not be activated: ${saved.error ?? "validation unavailable"}. Change or clear it before a new purchase.`);
-    return saved.active ? saved.code! : "";
+    await writes.catch(() => undefined);
+    access.checkCurrent();
+    const code = await read(access);
+    access.checkCurrent();
+    // Both purchase_quote and ethereum_quote resolve eligibility and self-referral
+    // against the same snapshot as prices. Never silently drop a rejected code.
+    return code ?? "";
   }
   return { discount, set, purchaseCode };
 }

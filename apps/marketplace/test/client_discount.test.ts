@@ -57,7 +57,7 @@ if (process.env.NEUTRON_MARKETPLACE_DISCOUNT_CLIENT_CHILD !== "1") {
     expect((await ethereumQuote(context, { appIds: [], ethereum: selection, affiliateCode: "" })).affiliateCode).toBe("");
     expect((await client.quotePurchase({ appIds: [], token: "ckUSDC", affiliateCode: " other " })).affiliateCode).toBe("OTHER");
     expect(selfReads).toBe(1);
-    expect(calls.filter(call => call.method === "referral_quote")).toHaveLength(2);
+    expect(calls.filter(call => call.method === "referral_quote")).toHaveLength(0);
     await client.setDiscountCode("second");
     expect((await client.quotePurchase({ appIds: [], token: "ckUSDC" })).affiliateCode).toBe("SECOND");
     clearClient();

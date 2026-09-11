@@ -41,7 +41,9 @@ test("failed or unavailable restoration retains code but never shows an active d
   const f = fixture("WELCOME"), client = createDiscountPreferences();
   f.unavailable(true);
   expect(await client.discount(f.access)).toEqual({ code: "WELCOME", active: false, discountBps: 0, affiliate: null, error: "Query unavailable" });
-  await expect(client.purchaseCode(f.access, undefined)).rejects.toThrow("saved discount could not be activated");
+  // Checkout carries the same code to the canonical pricing query, which
+  // validates eligibility without another separate activation query.
+  expect(await client.purchaseCode(f.access, undefined)).toBe("WELCOME");
   expect(f.calls.saves).toEqual([]);
   f.unavailable(false);
   expect(await client.discount(f.access)).toMatchObject({ active: true });
@@ -53,11 +55,11 @@ test("clearing stores null without querying and explicit purchase overrides leav
   expect(await client.purchaseCode(f.access, undefined)).toBe("WELCOME");
   expect(await client.purchaseCode(f.access, "")).toBe("");
   expect(await client.purchaseCode(f.access, " second ")).toBe("SECOND");
-  expect(f.calls.validations).toEqual(["WELCOME"]);
+  expect(f.calls.validations).toEqual([]);
   expect(await client.set(f.access, "  ")).toEqual({ code: null, active: false, discountBps: 0, affiliate: null, error: null });
   expect(f.calls.saves).toEqual([null]);
   expect(await client.discount(f.access)).toMatchObject({ code: null, active: false });
-  expect(f.calls.validations).toEqual(["WELCOME"]);
+  expect(f.calls.validations).toEqual([]);
 });
 
 test("a lost save reply is reconciled from durable storage before using the preference", async () => {

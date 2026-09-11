@@ -597,3 +597,72 @@ repeat returned receipt-v2 `batch_id: null`: all 27 packages and offered sources
 were `unchanged`, with matching versions, URLs, paths, sizes and SHA-256 digests
 across all 54 frozen artifacts. Install the updates through Settings.
 No Git push is included.
+
+
+## Faster Marketplace and Wallet purchase reviews
+
+Marketplace `0.1.18` and IC Wallet `0.3.30` were published together in catalog
+batch `12` on 2026-09-11. Only these two packages changed in the 27-package
+catalog. Kernel, Marketplace protocol, legacy source and Dispenser starter
+remain unchanged.
+
+| Package | Archive bytes | Archive SHA-256 | Offered-source bytes | Offered-source SHA-256 |
+| --- | ---: | --- | ---: | --- |
+| wallet 330 | 957,812 | `091af7f6bd5ef870e727db265bd549a2024a090c7dede70d6647d25709819e2b` | 860,694 | `58dcb999acc6cbe006669fd17c70843511eef44f2afd2c1b6255c1eaa539bb33` |
+| marketplace 118 | 489,788 | `54136d8bd22c9d682fc958c1eef7904816f34e599f6dd2daf503c10c554eec20` | 1,800,241 | `719795cb6852fd4141e21fd0b33ba4d6cb5eb43dc9181711cebf38c45779b73b` |
+
+The Marketplace pricing query was already browser-to-protocol, but checkout
+waited for separate discount validation, serial app-detail queries and an
+update-backed Wallet token read. New checkout sends the remembered code to the
+canonical pricing query, which validates it with prices and ownership. The
+activation dialog still validates separately. Catalog/detail presentation is
+reused only for a matching listing revision and publisher; payment amounts,
+allocations, recipients and opaque execution terms always come from the quote.
+Missing details run concurrently. Paid storefront selections overlap the live
+Wallet read with pricing, while free canonical quotes do not depend on it.
+
+Wallet now reads metadata, fee and allowance/balance directly from the browser
+in parallel, using its existing verified query transport. Additive variants of
+`wallet_read_v1` apply the existing selected-ledger, authority, formatting and
+original-command checks. The normal funding preview performs no update and
+creates no command. Acceptance runs the original durable prepare with fresh
+ledger reads before execution; changed review terms require another decision.
+Allowance preparation also combines the existing three backend reads into one
+batch. Root funding and exact ledger replay protections remain intact.
+
+Cancellation of an unsaved preview first checks its exact original command,
+preserving any concurrent pending or completed result. Expired or deselected
+previews can still close. Public-ledger outages do not hide existing Wallet
+commands. Failed status reads are not reported as definite rejection.
+Marketplace still saves its purchase/funding identity before invoking Wallet;
+this required update is not claimed to be query-only or guaranteed subsecond.
+
+All eight Wallet v1 roots, Marketplace v2 and its retained v1 migration, released
+schema files and locks remain unchanged. Wallet's existing 32 preapproved self
+methods are unchanged. Package validation initially rejected separate new query
+methods, so the final implementation reuses the existing read method. Two
+stale static-test expectations were updated for the additive Account schema
+paths and moved resident helper before the successful full run.
+
+Validation passed: Marketplace complete package, 153 outer unit tests (including
+14 isolated concurrency/quote regressions), memory program, TypeScript and six
+browser suites; Wallet complete package, 334 unit tests, 19 Motoko suites,
+clean/restored memory, predecessor checks including 329, TypeScript and five
+browser suites. The Marketplace test runner skipped 27 opt-in PocketIC cases;
+those cases are not claimed as coverage for this release.
+Independent review covered query routing, exact-term reapproval,
+original-command recovery and cancellation races. No production financial
+mutation was used for testing.
+
+Read-only public protocol queries measured 253-503 ms after the first measured
+query (992 ms). A parallel ckUSDC metadata/fee/balance read measured 151 ms warm
+and 932 ms on first use. These are component measurements from the development
+host, not authenticated checkout or owner-browser latency measurements. Initial
+verified reads can additionally fetch certified subnet keys; verification is
+retained. The release reduces sequential waits without a fixed one-second SLA.
+
+Publication request `822518850ad10b688fb39101ef9879e322e17fa202a9f690c3fc11147ed8884b` passed receipt-v2 verification.
+The identical-byte repeat returned `batch_id: null`, all 27 packages and offered
+sources `unchanged`, and matching versions, URLs, paths, sizes and SHA-256 digests
+for all 54 frozen artifacts. Update both apps through Settings. No Git push is
+included.

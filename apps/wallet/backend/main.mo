@@ -85,12 +85,14 @@ module {
     public type WalletRefillCursorV1 = { created_at : Int; id : Blob };
     public type WalletRefillPageRequestV1 = { before : ?WalletRefillCursorV1; limit : Nat; pending_only : Bool };
     public type WalletRefillPageV1 = { operations : [WalletRefillViewV1]; next_cursor : ?WalletRefillCursorV1 };
-    public type WalletReadRequestV1 = { #snapshot; #catalog; #refill_status : Blob; #refills : WalletRefillPageRequestV1 };
+    public type WalletReadRequestV1 = { #snapshot; #catalog; #refill_status : Blob; #refills : WalletRefillPageRequestV1; #funding_preview : WalletFundingPreviewRequestV1; #token_info_preview : WalletTokenInfoPreviewRequestV1 };
     public type WalletReadResultV1 = {
         #snapshot : WalletSnapshot;
         #catalog : [CatalogLedger];
         #refill_status : WalletRefillResultV1;
         #refills : WalletRefillPageV1;
+        #funding_preview : WalletFundingPreviewResultV1;
+        #token_info_preview : WalletTokenInfoResultV1;
     };
     public type WalletRefillActionV1 = { #prepare : WalletRefillRequestV1; #execute : Blob; #continue_ : Blob };
 
@@ -654,6 +656,33 @@ module {
         #err : Text;
     };
 
+    // Browser observations are only a review preview. Execute still prepares
+    // the original command with fresh ledger calls before any financial effect.
+    public type WalletPreviewMetadataV1 = [(Text, { #Nat : Nat; #Int : Int; #Text : Text; #Blob : Blob })];
+    public type WalletPreviewAllowanceV1 = { allowance : Nat; expires_at : ?Nat64 };
+    public type WalletFundingPreviewFactsV1 = {
+        owner : Principal;
+        metadata : WalletPreviewMetadataV1;
+        fee : Nat;
+        allowance : ?WalletPreviewAllowanceV1;
+    };
+    public type WalletFundingPreviewRequestV1 = {
+        request : WalletFundingPrepareRequestV1;
+        facts : ?WalletFundingPreviewFactsV1;
+        lookup_only : Bool;
+    };
+    public type WalletFundingPreviewResultV1 = {
+        #ok : { preparation : ?WalletFundingPrepareOutcomeV1; durable : Bool };
+        #err : Text;
+    };
+    public type WalletTokenInfoPreviewRequestV1 = {
+        ledger : Principal;
+        owner : Principal;
+        metadata : WalletPreviewMetadataV1;
+        fee : Nat;
+        balance : Nat;
+    };
+
     public type WalletFundingExecuteRequestV1 = {
         command_id : WalletFundingCommandIdV1;
     };
@@ -955,6 +984,8 @@ module {
                 case (#catalog) #catalog(wallet_catalog(()));
                 case (#refill_status(id)) #refill_status(refills.status(id));
                 case (#refills(request)) #refills(refills.page(request));
+                case (#funding_preview(value)) #funding_preview(fundingPreview(value));
+                case (#token_info_preview(value)) #token_info_preview(tokenInfoPreview(value));
             };
         };
         public func /*update*/wallet_refill_action_v1(request : WalletRefillActionV1) : async* WalletRefillResultV1 {
@@ -1827,6 +1858,66 @@ module {
         };
         public func /*update*/wallet_bridge_refresh_v1(request : WalletBridgeRefreshRequestV1) : async* WalletBridgeIntentResultV1 { await* bridge.refresh(request) };
 
+        func fundingPreview(
+            value : WalletFundingPreviewRequestV1,
+        ) : WalletFundingPreviewResultV1 {
+            let request = value.request;
+            let now = nowNanos();
+            switch (validateFundingKey(request)) { case (#err(error)) return #err(error); case (_) {} };
+            if ((to_candid(request)).size() > MAX_FUNDING_INTENT_BYTES) return #err("Funding request exceeds the Wallet size limit");
+            let key : CommandMemory.CommandKey = { caller_app_id = request.caller.app_id; request_id = request.request_id };
+            switch (existingFundingCommand(key, request, if (value.lookup_only) 0 else now)) {
+                case (#err(error)) return #err(error);
+                case (#ok(?outcome)) switch (if (value.lookup_only) #ok(outcome) else validateExistingFundingOutcome(request, outcome, now)) {
+                    case (#err(error)) return #err(error);
+                    case (#ok(preparation)) return #ok({ preparation = ?preparation; durable = true });
+                };
+                case (_) {};
+            };
+            // Read-only cancellation lookup validates the same durable intent,
+            // but expired or deselected unsigned reviews must still be closable.
+            if (value.lookup_only) return #ok({ preparation = null; durable = false });
+            switch (validateCurrentFundingAuthority(request, now)) { case (#err(error)) return #err(error); case (_) {} };
+            let ?facts = value.facts else return #ok({ preparation = null; durable = false });
+            if (facts.owner != calls.canister_principal) return #err("Wallet preview belongs to another account");
+            let metadata = switch (decodeFundingMetadata(#ok(to_candid(facts.metadata)), #ok(to_candid(facts.fee)))) {
+                case (#err(error)) return #err(error); case (#ok(result)) result;
+            };
+            let current = switch (facts.allowance) {
+                case null null;
+                case (?allowance) switch (decodeCurrentAllowance(#ok(to_candid(allowance)))) {
+                    case (#err(error)) return #err(error); case (#ok(result)) ?result;
+                };
+            };
+            let prepared = switch (prepareDirectFunding(request, metadata, current)) {
+                case (#err(error)) return #err(error); case (#ok(result)) result;
+            };
+            let command = newFundingCommand(request, prepared);
+            #ok({ durable = false; preparation = ?#prepared({ command_id = commandId(key); review = fundingReview(key, command) }) });
+        };
+
+        func newFundingCommand(request : WalletFundingPrepareRequestV1, prepared : PreparedFunding) : CommandMemory.Command {
+            {
+                caller = {
+                    endpoint = request.caller.endpoint;
+                    app_id = request.caller.app_id;
+                    role = request.caller.role;
+                    agent_mode = request.agent_mode;
+                };
+                ledger = request.ledger;
+                operation = prepared.operation;
+                intent = to_candid(request);
+                prepared_at = Time.now();
+                valid_until = request.valid_until_ns;
+                retain_until = Int.fromNat(Nat64.toNat(request.valid_until_ns)) +
+                    COMMAND_RETENTION_NS;
+                review = prepared.review;
+                var call_args : ?Blob = null;
+                var updated_at : Int = Time.now();
+                var status : CommandMemory.Status = #prepared;
+            };
+        };
+
         public func /*update*/wallet_funding_prepare_v1(
             request : WalletFundingPrepareRequestV1,
         ) : async* WalletFundingPrepareResultV1 {
@@ -1922,25 +2013,7 @@ module {
                 return #err("This app already has too many unresolved Wallet commands");
             };
 
-            let command : CommandMemory.Command = {
-                caller = {
-                    endpoint = request.caller.endpoint;
-                    app_id = request.caller.app_id;
-                    role = request.caller.role;
-                    agent_mode = request.agent_mode;
-                };
-                ledger = request.ledger;
-                operation = prepared.operation;
-                intent;
-                prepared_at = Time.now();
-                valid_until = request.valid_until_ns;
-                retain_until = Int.fromNat(Nat64.toNat(request.valid_until_ns)) +
-                    COMMAND_RETENTION_NS;
-                review = prepared.review;
-                var call_args : ?Blob = null;
-                var updated_at : Int = Time.now();
-                var status : CommandMemory.Status = #prepared;
-            };
+            let command = newFundingCommand(request, prepared);
             Map.add(commandMem.commands, commandKeyCompare, key, command);
             #ok(#prepared({
                 command_id = commandId(key);
@@ -2134,14 +2207,11 @@ module {
             #ok(());
         };
 
-        func prepareFundingOperation(
+        func prepareDirectFunding(
             request : WalletFundingPrepareRequestV1,
-            now : Nat64,
-        ) : async* IcrcTypes.Result<PreparedFunding> {
-            let metadata = switch (await* readFundingMetadata(request.ledger)) {
-                case (#err(error)) return #err(error);
-                case (#ok(value)) value;
-            };
+            metadata : FundingMetadata,
+            observedAllowance : ?CurrentApproval,
+        ) : IcrcTypes.Result<PreparedFunding> {
             switch (request.intent) {
                 case (#direct(value)) {
                     let destination = switch (canonicalFundingAccount(value.to)) {
@@ -2177,10 +2247,7 @@ module {
                         case (#err(error)) return #err(error);
                         case (#ok(account)) account;
                     };
-                    let current = switch (await* readIcrcAllowance(request.ledger, spender)) {
-                        case (#err(error)) return #err(error);
-                        case (#ok(allowance)) allowance;
-                    };
+                    let ?current = observedAllowance else return #err("Current allowance is unavailable");
                     let desired = value.amount_atoms + metadata.fee;
                     let totalDebit = desired + metadata.fee;
                     if (
@@ -2211,6 +2278,34 @@ module {
                         };
                     });
                 };
+                case (#revoke(_)) #err("Approval removal requires its existing Wallet review");
+            };
+        };
+
+        func prepareFundingOperation(
+            request : WalletFundingPrepareRequestV1,
+            now : Nat64,
+        ) : async* IcrcTypes.Result<PreparedFunding> {
+            let (metadata, current) = switch (request.intent) {
+                case (#allowance(value)) {
+                    let spender = switch (canonicalAllowanceSpender(value.spender)) { case (#err(error)) return #err(error); case (#ok(result)) result };
+                    let replies = await* calls.call_batch([
+                        Icrc.metadataRequest(request.ledger), Icrc.feeRequest(request.ledger),
+                        Icrc.allowanceRequest(request.ledger, { owner = calls.canister_principal; subaccount = null }, spender),
+                    ]);
+                    if (replies.size() != 3) return #err("Wallet backend returned an incomplete funding batch");
+                    let metadata = switch (decodeFundingMetadata(replies[0], replies[1])) { case (#err(error)) return #err(error); case (#ok(result)) result };
+                    let allowance = switch (decodeCurrentAllowance(replies[2])) { case (#err(error)) return #err(error); case (#ok(result)) result };
+                    (metadata, ?allowance);
+                };
+                case (_) {
+                    let metadata = switch (await* readFundingMetadata(request.ledger)) { case (#err(error)) return #err(error); case (#ok(result)) result };
+                    (metadata, null);
+                };
+            };
+            switch (request.intent) {
+                case (#direct(_)) prepareDirectFunding(request, metadata, null);
+                case (#allowance(_)) prepareDirectFunding(request, metadata, current);
                 case (#revoke(value)) {
                     switch (value.spender) {
                         case (#icrc(account)) {
@@ -2515,9 +2610,11 @@ module {
                 owner = calls.canister_principal;
                 subaccount = null;
             };
-            switch (Icrc.decodeAllowance(await* calls.call(
-                Icrc.allowanceRequest(ledger, source, spender),
-            ))) {
+            decodeCurrentAllowance(await* calls.call(Icrc.allowanceRequest(ledger, source, spender)));
+        };
+
+        func decodeCurrentAllowance(reply : Capabilities.CallResult) : IcrcTypes.Result<CurrentApproval> {
+            switch (Icrc.decodeAllowance(reply)) {
                 case (#err(error)) #err("Could not read the current allowance: " # error);
                 case (#ok(value)) {
                     if (not FundingDisplay.nat(value.allowance)) {
@@ -3477,6 +3574,26 @@ module {
             } else {
                 await* icrcAllowancesPage(request, metadata);
             };
+        };
+
+        func tokenInfoPreview(
+            request : WalletTokenInfoPreviewRequestV1,
+        ) : WalletTokenInfoResultV1 {
+            switch (selectedLedger(request.ledger)) { case (#err(error)) return #err(error); case (_) {} };
+            if (request.owner != calls.canister_principal) return #err("Wallet token information belongs to another account");
+            if (not calls.can_call(request.ledger, "icrc1_metadata") or not calls.can_call(request.ledger, "icrc1_fee") or not calls.can_call(request.ledger, "icrc1_balance_of")) {
+                return #err("Ledger token information is not reserved for Wallet");
+            };
+            let metadata = switch (decodeFundingMetadata(#ok(to_candid(request.metadata)), #ok(to_candid(request.fee)))) {
+                case (#err(error)) return #err(error); case (#ok(value)) value;
+            };
+            if (not FundingDisplay.nat(request.balance)) return #err("Wallet balance exceeds the Wallet protocol limit");
+            #ok({
+                ledger = request.ledger;
+                account = { owner = calls.canister_principal; subaccount = null };
+                token_name = metadata.name; token_symbol = metadata.symbol; decimals = metadata.decimals;
+                fee_atoms = metadata.fee; balance_atoms = request.balance; observed_at_ns = nowNanos();
+            });
         };
 
         public func /*update*/wallet_token_info_v1(

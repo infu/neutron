@@ -52,13 +52,10 @@ import {
   type WalletSnapshot,
 } from "./wallet_data.ts";
 import {
-  WALLET_TOKEN_INFO_METHOD,
   WALLET_TOKEN_INFO_TOOL,
-  parseWalletTokenInfo,
+  handleWalletTokenInfo,
   walletTokenInfoInputSchema,
-  walletTokenInfoJson,
   walletTokenInfoOutputSchema,
-  walletTokenInfoRequest,
 } from "./token_info.ts";
 
 registerOperatingCyclesTools();
@@ -126,19 +123,7 @@ exposeTool(
     outputSchema: walletTokenInfoOutputSchema,
     annotations: { "neutron:effects": ["read", "network"] },
   },
-  async (args, context) => {
-    const request = walletTokenInfoRequest(args);
-    return walletTokenInfoJson(
-      parseWalletTokenInfo(
-        await context.kernel.updateSelf(
-          WALLET_TOKEN_INFO_METHOD,
-          [request.wire],
-          60,
-        ),
-        request.ledger,
-      ),
-    );
-  },
+  handleWalletTokenInfo,
 );
 
 exposeTool(

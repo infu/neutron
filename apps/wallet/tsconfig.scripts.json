@@ -17,6 +17,7 @@
     "src/ethereum.ts",
     "src/format.ts",
     "src/funding.ts",
+    "src/funding_reads.ts",
     "src/history.ts",
     "src/history_icp.ts",
     "src/history_icrc.ts",

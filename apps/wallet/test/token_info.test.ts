@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { normalizeToolDescriptor } from "neutron-tools/src/app.ts";
+import type { MsgBusToolContext, SelfCallValue } from "neutron-tools/app";
 import {
   WALLET_TOKEN_INFO_TOOL,
+  handleWalletTokenInfo,
   parseWalletTokenInfo,
   walletTokenInfoInputSchema,
   walletTokenInfoOutputSchema,
@@ -27,6 +29,35 @@ test("Wallet token information has a closed versioned tool contract", () => {
   expect(walletTokenInfoOutputSchema).toMatchObject({
     additionalProperties: false,
   });
+});
+
+test("live token tool uses parallel direct observations followed by one policy query, never an update", async () => {
+  const calls: { method: string; args: SelfCallValue[] }[] = [];
+  const facts = { owner: account, metadata: [["icrc1:symbol", { Text: "ICP" }], ["icrc1:decimals", { Nat: "8" }]], fee: "10000", balance: "900719925474099312345" };
+  const context = { kernel: {
+    querySelf: async (method: string, args: SelfCallValue[]) => {
+      calls.push({ method, args });
+      return { token_info_preview: { ok: { ledger, account: { owner: account, subaccount: null }, token_name: "Internet Computer", token_symbol: "ICP", decimals: "8", fee_atoms: facts.fee, balance_atoms: facts.balance, observed_at_ns: "1800000000000000000" } } };
+    },
+    updateSelf: async () => { throw new Error("Token reads must not dispatch updates"); },
+  } } as unknown as MsgBusToolContext;
+  let reads = 0;
+  const result = await handleWalletTokenInfo({ ledger }, context, async (requestedLedger) => { reads++; expect(requestedLedger).toBe(ledger); return facts; });
+  expect(reads).toBe(1);
+  expect(calls).toEqual([{ method: "wallet_read_v1", args: [{ token_info_preview: { ledger, ...facts } }] }]);
+  expect(result).toMatchObject({ ledger, account, symbol: "ICP", decimals: 8, feeAtoms: "10000", balanceAtoms: facts.balance });
+});
+
+test("cancelled or failed direct token observations never enter the backend policy query", async () => {
+  let calls = 0;
+  const controller = new AbortController();
+  const context = { signal: controller.signal, kernel: { querySelf: async () => { calls++; return {}; } } } as unknown as MsgBusToolContext;
+  await expect(handleWalletTokenInfo({ ledger }, context, async () => { throw new Error("Ledger query unavailable"); })).rejects.toThrow("Ledger query unavailable");
+  await expect(handleWalletTokenInfo({ ledger }, context, async () => {
+    controller.abort(new Error("Cancelled"));
+    return { owner: account, metadata: [], fee: "10000", balance: "0" };
+  })).rejects.toThrow("Cancelled");
+  expect(calls).toBe(0);
 });
 
 test("Wallet token information accepts only an exact canonical ledger request", () => {

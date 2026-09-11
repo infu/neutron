@@ -19,7 +19,7 @@ owner-trusted apps and live agents, not a cold-storage boundary against the
 installed Wallet package. Installing or updating Wallet is therefore a
 consequential trust decision.
 
-Release 329 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
+Release 330 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
 All eight released version-1 roots and their lineage remain unchanged, including
 the `wallet_refills` journal added in release 326.
 
@@ -157,15 +157,20 @@ routes the opaque request only to Wallet's private
 `wallet_funding_present_v1` tool. That tool is annotated with
 `"neutron:visibility":"same_app"` and
 `"neutron:audience":"foreground_tile"`; it checks Kernel's audience
-attestation for the Kernel-selected Wallet tile, reads authoritative ledger
-metadata, decimals, current fees, and allowance state, freezes the command,
-and renders Wallet's modal. Later browser-focus or workspace-selection changes
+attestation for the Kernel-selected Wallet tile. For a new review it queries
+ledger metadata, current fee and allowance directly from the browser in parallel,
+then uses one query-only Wallet call to validate the selected ledger, authority,
+original command identity and exact review arithmetic. Opening the modal creates
+no durable command and performs no update. Later browser-focus or workspace-selection changes
 do not replace or cancel that exact endpoint-bound interaction; closing the
 Wallet tile before private dispatch does.
 
-The owner makes one decision in Wallet. The primary action executes the frozen
-command through Wallet's exact preapproved self call; Cancel records a definite
-rejection without a ledger call. Kernel displays no approval dialog and never
+The primary action prepares the original durable command using fresh backend
+ledger facts, compares every displayed term, and then executes it. If those terms
+changed, Wallet shows the updated review and requires another owner decision.
+Cancel checks the original command first: an unsaved preview creates no rejection
+record, while any already accepted or completed command keeps its real result.
+Saved commands remain recoverable when browser ledger reads are unavailable. Kernel displays no approval dialog and never
 interprets token semantics. The presentation capability is bound to the
 original caller, provider, and originating live public handler call and can be
 consumed only once. A calling app cannot invoke the private tile tool directly,
@@ -335,7 +340,8 @@ The non-persistent resident retains four released public tools:
 refreshes selected ledger balances, attempts one history synchronization and
 returns that same projection,
 `wallet_token_info_v1` reads live metadata, the authoritative current fee, and
-the Wallet default-account balance for one selected ICRC ledger, and
+the Wallet default-account balance for one selected ICRC ledger through parallel
+browser-to-ledger queries and one local policy/normalization query, and
 `wallet_fund_v1` performs the human funding flow above. The token-info fee is an
 advisory quote; funding reads it again before dispatch. The resident also
 declares the private, direct-root-only `wallet_fund_root_v1` automation tool.

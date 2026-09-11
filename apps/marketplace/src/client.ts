@@ -8,7 +8,7 @@ import { createDiscountPreferences, type ReferralQuote } from "./discount.ts";
 import { makeAgent, makeTransport } from "./transport.ts";
 import { readAccess } from "./read_access.ts";
 import { CONTRACT, first, some, encodeOpaque, checkoutType, withdrawalType, type Info, type WireApp, type WirePublisherProfile, type Fee, type Checkout, type WithdrawQuote, type WireResult, type Option, type Token } from "./protocol.ts";
-import { readWalletTokenInfo } from "./wallet.ts";
+import { readWalletTokenInfo, type WalletTokenInfo } from "./wallet.ts";
 import type { AppDetail, AppListing, Page, LibraryApp, PublishedApp, PublisherProfile, PublisherProfileInput, PublisherProfileQuote, Earnings, Session, Money, CycleEstimate, OperationResult, PurchaseQuote, WithdrawalQuote, PaymentToken, AppTier, RankingWindow } from "./view-types.ts";
 
 export class ProtocolError extends Error { constructor(public readonly code: string, message: string) { super(message); } }
@@ -60,6 +60,7 @@ let agentCache: { key: string; agent: Awaited<ReturnType<typeof makeAgent>> } | 
 let infoCache: { key: string; info: Promise<Info> } | null = null;
 let discountCache: { key: string; preference: ReturnType<typeof createDiscountPreferences> } | null = null;
 let installedAppsFlight: Promise<ReadonlySet<string>> | null = null;
+let listingCache: { key: string; apps: Map<string, WireApp> } | null = null;
 
 async function installedApps(context: MsgBusToolContext): Promise<ReadonlySet<string> | null> {
   context.signal?.throwIfAborted();
@@ -91,7 +92,7 @@ async function currentState(context: MsgBusToolContext): Promise<StoredState> {
   return stateFlight;
 }
 export function session(state: StoredState): Session { return { configured: state.canisterId !== null, canisterId: state.canisterId ?? "", host: state.host, account: state.owner, connected }; }
-export function clearClient(): void { clientGeneration++; savedState = null; stateFlight = null; connected = false; browserReadIdentity = null; connectionFlight = null; agentCache = null; infoCache = null; discountCache = null; installedAppsFlight = null; }
+export function clearClient(): void { clientGeneration++; savedState = null; stateFlight = null; connected = false; browserReadIdentity = null; connectionFlight = null; agentCache = null; infoCache = null; discountCache = null; installedAppsFlight = null; listingCache = null; }
 export async function configured(context: MsgBusToolContext, input: { canisterId: string; host: string }): Promise<Session> {
   const state = await configureState(context.kernel, input); clearClient(); savedState = state; return session(state);
 }
@@ -105,6 +106,9 @@ export async function protocolClient(context: MsgBusToolContext) {
   if (!infoCache || infoCache.key !== key) infoCache = { key, info: transport.query<Info>("marketplace_info").catch(error => { if (infoCache?.key === key) infoCache = null; throw error; }) };
   const info = await infoCache.info;
   if (info.canister.toText() !== state.canisterId) throw new Error("The marketplace returned a different canister identity.");
+  const listingKey = `${key}:${state.owner}:${generation}`;
+  if (listingCache?.key !== listingKey) listingCache = { key: listingKey, apps: new Map() };
+  const displayedListings = listingCache.apps;
   const token = (symbol: PaymentToken | string): Token => {
     const value = info.tokens.find(t => t.symbol === symbol);
     if (!value) throw new Error(`${symbol} is not accepted by this marketplace.`);
@@ -171,6 +175,7 @@ export async function protocolClient(context: MsgBusToolContext) {
     return url.toString();
   }
   function listing(value: WireApp, installed?: ReadonlySet<string> | null): AppListing {
+    displayedListings.set(value.appId, value);
     const icon = first(value.iconUrl);
     const counts = first(value.acquisitionCounts ?? []);
     const publisher = first(value.publisherProfile ?? []);
@@ -193,23 +198,35 @@ export async function protocolClient(context: MsgBusToolContext) {
     const review = first(value.audit), candidate = first(value.candidate), rating = first(value.rating);
     return { ...listing(value.app, installed), description: value.app.description, screenshots: value.app.screenshots.map(url => ({ url: artifactUrl(url) })), audit: review ? { auditor: review.auditor.toText(), verdict: Object.keys(review.decision)[0] as "approved" | "rejected" | "revoked", analysis: first(review.reason) ?? review.analysis, date: date(review.createdAtNs), packageHash: candidate ? hex(candidate.digest) : "" } : null, ownRating: rating ? { stars: Number(rating.stars), text: rating.review } : null };
   }
-  async function purchaseView(quote: Checkout, includeWallet = false): Promise<PurchaseQuote> {
+  async function purchaseView(quote: Checkout, includeWallet = false, observedWallet?: WalletTokenInfo | Promise<WalletTokenInfo> | null): Promise<PurchaseQuote> {
     const selected = info.tokens.find(t => t.ledger.toText() === quote.request.ledger.toText());
     if (!selected) throw new Error("The saved purchase names an unavailable payment token.");
-    const items: AppListing[] = [], warnings: string[] = [];
-      for (const item of quote.items) {
+    const warnings: string[] = [];
+    const [entries, wallet] = await Promise.all([
+      Promise.all(quote.items.map(async item => {
         try {
-          items.push({ ...listing((await detailWire(item.appId)).app), publisher: item.publisher.toText(), priceUsdMicros: String(item.priceUsdMicros) });
+          // Reuse storefront presentation only for this exact listing revision
+          // and publisher. Payment terms always come from the canonical quote.
+          const cached = displayedListings.get(item.appId);
+          const app = cached?.revision === item.listingRevision && cached.publisher.toText() === item.publisher.toText()
+            ? cached : (await detailWire(item.appId)).app;
+          const display = listing(app);
+          return { app: { ...display, publisher: item.publisher.toText(),
+            ...(app.publisher.toText() !== item.publisher.toText() ? { publisherId: null, publisherName: null } : {}),
+            priceUsdMicros: String(item.priceUsdMicros) } };
         } catch {
           context.signal?.throwIfAborted();
           // A revoked release or an unavailable catalog must not prevent the
           // original quote and ledger attempt from being recovered. The exact
           // release digest remains in opaque; no current version is inferred.
-          items.push({ id: item.appId, title: item.appId, summary: "Saved purchase", category: "Apps", publisher: item.publisher.toText(), priceUsdMicros: String(item.priceUsdMicros), version: "", rating: null, ratingCount: 0 });
-          warnings.push(`Current listing details for ${item.appId} are unavailable. This review uses the saved purchase; current release availability is not confirmed.`);
+          return { app: { id: item.appId, title: item.appId, summary: "Saved purchase", category: "Apps", publisher: item.publisher.toText(), priceUsdMicros: String(item.priceUsdMicros), version: "", rating: null, ratingCount: 0 },
+            warning: `Current listing details for ${item.appId} are unavailable. This review uses the saved purchase; current release availability is not confirmed.` };
         }
-      }
-      const wallet = includeWallet && quote.amount ? await readWalletTokenInfo(context.kernel, selected.ledger.toText(), state.owner) : null;
+      })),
+      includeWallet && quote.amount ? observedWallet ?? readWalletTokenInfo(context.kernel, selected.ledger.toText(), state.owner, context.signal) : null,
+    ]);
+      const items: AppListing[] = entries.map(entry => entry.app);
+      for (const entry of entries) if (entry.warning) warnings.push(entry.warning);
       const approvalFee = quote.amount ? quote.fee : 0n;
       const listUsd = quote.items.reduce((total, item) => total + item.priceUsdMicros, 0n);
       const affiliate = first(quote.affiliate);
@@ -320,8 +337,18 @@ export async function protocolClient(context: MsgBusToolContext) {
         }
       }
       const affiliateCode = await preference.purchaseCode(discountAccess, input.affiliateCode);
+      // On the normal storefront path, read the current Wallet balance alongside
+      // pricing. A zero-price canonical quote never depends on a Wallet result.
+      const expectsPayment = input.appIds.some(appId => (displayedListings.get(appId)?.priceUsdMicros ?? 0n) > 0n);
+      const walletRead = expectsPayment
+        ? readWalletTokenInfo(context.kernel, selected.ledger.toText(), state.owner, context.signal).then(value => ({ value }), error => ({ error }))
+        : null;
       const quote = await query<Checkout>("purchase_quote", [{ requestId: input.operationId ?? randomId(), appIds: input.appIds, ledger: selected.ledger, referralCode: some(affiliateCode || null) }]);
-      return purchaseView(quote, true);
+      const wallet = quote.amount && walletRead ? walletRead.then(result => {
+        if ("error" in result) throw result.error;
+        return result.value;
+      }) : null;
+      return purchaseView(quote, true, wallet);
     },
     async quoteWithdrawal(input: { token: PaymentToken; amountAtoms: string; destination: string; operationId?: string }): Promise<WithdrawalQuote> {
       const selected = token(input.token);
