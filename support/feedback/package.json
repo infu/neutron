@@ -1,0 +1,28 @@
+{
+  "name": "neutron-feedback-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private Neutron support tickets, feedback and suggestions",
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "deps:install": "mops install",
+    "build": "bun scripts/build.ts",
+    "build:wasm": "bun scripts/build.ts",
+    "test": "npm run test:unit && bun scripts/test-integration.ts",
+    "test:unit": "bun test test/operator.test.ts",
+    "test:integration": "bun scripts/test-integration.ts",
+    "operator": "bun scripts/operator.ts",
+    "icp:build": "icp build feedback",
+    "icp:status": "icp canister status feedback --json"
+  },
+  "dependencies": {
+    "neutron-scripts": "^1.1.0"
+  },
+  "devDependencies": {
+    "@dfinity/candid": "3.4.3",
+    "@dfinity/identity": "3.4.3",
+    "@dfinity/pic": "0.16.1",
+    "@dfinity/principal": "3.4.3"
+  }
+}
