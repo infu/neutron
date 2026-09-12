@@ -1,14 +1,18 @@
-# Neutron Documentation
+# Neutron Agent Reference
 
-This directory describes the current Neutron architecture. Source code is the
-final authority; these documents explain the contracts that the compiler,
-Kernel, app SDK, and provisioner enforce together.
+Use this directory to locate implementation owners, understand invariants, and
+choose the correct change and verification workflow. Source code is the final
+authority. Read repository `AGENTS.md` before acting on production state or
+release artifacts.
 
-General guides deliberately do not pin the active package filenames, app
-release numbers, or assembler generation. Commands use semantic placeholders
-or the selected manifest/configuration. Exact numbers remain only where they
-name a stable protocol, schema, API, fixed migration boundary, or immutable
-compatibility artifact.
+Keep these docs durable: cite source paths and symbols, not line numbers. Read
+active versions, package names, resource limits, deployment state, and script
+inventories from their owners instead of copying snapshots here. Retain exact
+identifiers where they define a stable protocol, schema, API, fixed migration
+boundary, or immutable compatibility artifact. Separate implemented behavior
+from planned work and record test results with their candidate evidence rather
+than maintaining passing-test counts in architecture docs. Put active plans
+and TODO files in gitignored `tmp/`.
 
 Neutron is a user-owned operating-system canister. The Kernel is its replaceable
 trust root. Ordinary apps are packages assembled into the same actor, but they
@@ -40,9 +44,9 @@ compiler, shared-tools, or provisioner source change.
 - App packages use manifest format 3. Apps may be tile-based, resident,
   backend-only, or otherwise headless. A tray is valid only with a resident
   background.
-- The supported inventory is 256 installed app instances including Kernel, at
-  most 64 app removals in one install commit, and at most 32 resident
-  backgrounds.
+- Installation and resident-resource bounds are validated by the shared
+  capability planner and runtime. Read their current limits from source before
+  changing admission or app declarations.
 - Public mutating HTTP routes use `http_routes` API 1 and bounded `POST`
   handlers. Certified read routes are synthesized from Certified Assets
   collections; apps do not author a second route protocol.
@@ -65,7 +69,7 @@ compiler, shared-tools, or provisioner source change.
 
 | Goal | Document |
 | --- | --- |
-| Understand the product | [Product Model And User Story](./product-model-and-user-story.md) |
+| Understand runtime ownership | [Product Model And Runtime Boundaries](./product-model-and-user-story.md) |
 | Understand the trust boundary | [Security Model](./security-model.md) |
 | Build an app | [App Developer Guide](./app-developer-guide.md) |
 | Understand the package | [App Package Format](./app-package-format.md) |
@@ -75,7 +79,7 @@ compiler, shared-tools, or provisioner source change.
 | Understand browser messaging | [Kernel-App Message Bus](./kernel-app-communication.md) |
 | Publish certified content | [Certified HTTP And Certified Assets](./kernel-http-v2-and-certified-assets.md) |
 | Release app updates | [App Package Updates](./package-updates.md#maintainer-release-workflow) |
-| Run or reinstall a Neutron | [Unified Provisioning System](./provisioning-system.md) |
+| Provision or recover deployment state | [Unified Provisioning System](./provisioning-system.md) |
 
 ## Architecture
 
@@ -93,13 +97,15 @@ compiler, shared-tools, or provisioner source change.
 - [Managed Memory Migrations And Uninstall](./memory-migrations-and-uninstall.md)
   describes schema locks, migration graphs, retirement, and deletion.
 - [License And Deployment Records](./license-and-deployment-records.md) records
-  the implemented package-information and deployment-record contracts and the
-  state-preserving v0.3.5/v0.3.6-to-v0.3.7 GPL bridge candidate checklist.
+  package-information and deployment-record contracts, source evidence, and
+  immutable predecessor compatibility.
 
 ## App Development
 
 - [App Developer Guide](./app-developer-guide.md) is the task-oriented entry
   point.
+- [Deprecated Compatibility Paths](./deprecated.md) records planned removals
+  and the replacements new and existing apps should adopt.
 - [App Package Format](./app-package-format.md) is the manifest and archive
   reference.
 - [App Development Workflow](./app-development-workflow.md) covers build,
@@ -139,7 +145,7 @@ compiler, shared-tools, or provisioner source change.
 - [Local Development And Deployment](./bootstrap-local-development-and-deployment.md)
   is the PocketIC workflow.
 - [Production Provisioning](./production-provisioning.md) covers IC creation,
-  adoption, destructive reinstall, and deployment evidence.
+  adoption, recovery boundaries, and deployment evidence.
 - [Dispenser And Provisioning](./dispenser-and-provisioning.md) describes the
   product bootstrap path.
 - [Repository Setup Manifests](./repository-setup-manifests.md) defines
@@ -148,36 +154,32 @@ compiler, shared-tools, or provisioner source change.
   and security gates.
 - [Playwright](./playwright.md) covers browser automation in local development.
 
-## Product And UI
+## Product And App Contracts
 
-- [Product Model And User Story](./product-model-and-user-story.md) explains
+- [Product Model And Runtime Boundaries](./product-model-and-user-story.md) explains
   the owner, apps, and lifecycle.
 - [Neutron Design System](./design-system.md) defines trusted-shell and app UI
   conventions.
-- [Developer Experience Roadmap](./developer-experience-roadmap.md) records
-  remaining workflow improvements.
+- [Developer Tooling Boundaries](./developer-experience-roadmap.md) maps workflow
+  ownership and source discovery.
 - [Open Questions And Design Gaps](./open-questions-and-design-gaps.md) records
   unresolved design work; it is not a description of current authority.
+- [Feedback Implementation Contract](./feedback-plan.md) covers private
+  submissions, scoped identities, moderator authority, discussions, unread
+  state, and agent tools.
 - [EVM Wallet And Consumer Apps](./evm-wallet.md) describes the separate wallet,
   custody lifecycle, shared client, IC bridge, Kitchen Sink and Uniswap flows.
-  [Wallet fresh start](./todo.wallet-fresh-start.md) tracks the Kernel 0.3.46
-  cutover to a new stable app-ID account and later reinstall recovery.
   [Transaction decoder packs](../apps/evm_wallet/src/decoders/README.md) explains
-  extensible protocol presentation, import provenance and readable Activity;
-  the [implementation checklist](./todo.evm-decoders.md) tracks qualification.
-  The [research](./evm-wallet-research.md) records design choices; the
-  [implementation checklist](./todo.evm-wallet.md) tracks qualification and release.
+  extensible protocol presentation, import provenance and readable Activity.
+  The [research](./evm-wallet-research.md) records design choices.
   [Uniswap V4 and liquidity](./uniswap-v4-liquidity.md) records contract research,
   browser position discovery and durable UI/Agent execution.
 - [Curve swaps and liquidity](../apps/curve/README.md) documents the Ethereum
   Wallet integration, supported pools, durable execution and qualification.
-  The [Curve implementation checklist](./todo.curve.md) tracks the release.
 - [Aave lending and borrowing](../apps/aave/README.md) documents market positions,
-  collateral and debt management through EVM Wallet. The
-  [Aave implementation checklist](./todo.aave.md) tracks qualification and release.
+  collateral and debt management through EVM Wallet.
 - [Hyperliquid perpetuals](../apps/hyperliquid/README.md) covers browser trading,
-  Agent chart/orderbook tools, and Ethereum/Arbitrum USDC transfers. The
-  [Hyperliquid checklist](../todo.hl.md) records implementation and qualification.
+  Agent chart/orderbook tools, and Ethereum/Arbitrum USDC transfers.
 
 ## Repository Map
 
@@ -195,6 +197,8 @@ packages/
 support/
   dispenser/              product bootstrap service
   update-source/          package publication infrastructure
+  marketplace/            catalog, repository access, and production publisher
+  feedback/               private support protocol
 doc/                      architecture and operational contracts
 ```
 

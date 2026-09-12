@@ -12,7 +12,9 @@ journal, and recovery contract.
 
 ## Quick Start
 
-Package the apps whose archives changed, then:
+Run the complete workspace package command for each changed app and make sure
+the selected config names the resulting archive paths. Provisioning does not
+build packages or select the latest archive automatically. Then:
 
 ```sh
 # Terminal 1
@@ -39,21 +41,24 @@ npm run provision -- CONFIG.ndeploy.json reinstall
 npm run provision -- CONFIG.ndeploy.json status
 ```
 
-The tracked three-node Wagyu example is
+The tracked multi-node example is
 [`wagyu-local.ndeploy.json`](../wagyu-local.ndeploy.json).
 
-## Current Config
+## Config Contract
 
 The only deployment config format is 3. A PocketIC config declares:
 
 - `target.kind: "pocketic"`;
 - one infrastructure profile;
-- gateway port `8000`;
+- the provisioner's fixed loopback gateway port;
 - a deterministic developer identity seed;
 - desired authorized principals;
-- one through sixteen ordered node labels; and
-- either one path-only inline kernel declaration plus up to 255 ordinary app
-  declarations, or one closed external artifact set with complete pins.
+- an ordered, nonempty list of node labels; and
+- either path-only inline Kernel/app declarations or an external artifact set
+  with complete pins.
+
+Use `packages/neutron-provision/src/config.ts` for exact fields and validation
+bounds; do not add build hooks or app-specific provisioning branches.
 
 Example:
 
@@ -142,7 +147,8 @@ The provisioner:
 4. allocates or reuses each labeled fleet canister;
 5. installs the same transport Wasm on every node;
 6. binds each node's runtime config;
-7. performs generic fresh-Kernel initialization and asset seeding;
+7. initializes publication entropy and seeds package assets, registry, origin
+   declarations when supported, and install provenance;
 8. authorizes the deterministic developer and configured principals;
 9. applies infrastructure fixtures selected by the profile; and
 10. verifies every deployed node before recording completion.
@@ -188,7 +194,9 @@ or fleet member. See [Playwright](./playwright.md).
 
 ## Safety Rules
 
-- Treat every local reinstall as application-data loss.
+- Treat every local reinstall as application-data loss. Never use this loop
+  to upgrade production Neutrons; production changes use the checked in-product
+  install transaction and preserve or explicitly migrate managed memory.
 - Keep the supervisor running while deploying or browsing.
 - Use one supervisor for the shared PocketIC state.
 - Obtain node IDs and URLs from `status` or the session resolver.

@@ -1,486 +1,279 @@
 # Dispenser And Provisioning
 
-[Back to the documentation index](./index.md).
+[Documentation index](./index.md).
 
-This page documents the hosted production dispenser. The dispenser creates a
-new Neutron without authenticating the user at the dispenser origin. It uses a
-browser-generated signing identity for payment/provisioning and a separate
-one-time activation code to authorize the Internet Identity principal that is
-later produced at the new Neutron origin.
+Use this reference when changing the hosted Dispenser, its starter payload, or
+ownership activation. The Dispenser creates new Neutrons; it does not upgrade
+existing installations. Existing registrations, paid operations, starter
+bindings, and installed Neutron state are durable production data.
 
-The product shown by this page is **SushiOS**, the developer-preview
-distribution assembled from the Kernel and a selected app set. **Neutron
-Kernel** is the lower-level operating kernel inside that distribution. The
-frontend deliberately presents those as separate title, kernel subtitle, and
-distribution label rather than treating SushiOS and the Kernel as synonyms.
+## Source Map
 
-The frontend, starter upload, and handoff surfaces also have an isolated
-deployment path against the repository's supervised PocketIC. Child placement
-is a trusted backend install argument: the production deployer supplies the
-reviewed production subnet, while the local deployer supplies the Application
-subnet recorded by the running PocketIC platform. See
-[Local Dispenser Test Deployment](#local-dispenser-test-deployment) below.
-
-Primary sources:
-
-- `support/dispenser/mo/main.mo`
-- `support/dispenser/mo/lib/{IC,ICPL,cmc,ledger,neutron}.mo`
-- `support/dispenser/src/index.tsx`
-- `support/dispenser/src/provisioning.ts`
-- `support/dispenser/test/`
-- `apps/kernel/backend/activation/Service.mo`
-- `apps/kernel/backend/memory/activation/v1.mo`
-- `apps/kernel/backend/main.mo`
-- `apps/kernel/src/activation_handoff.ts`
-- `apps/kernel/src/reducer/activation.ts`
-- `apps/kernel/src/reducer/auth.ts`
-
-## Current Production Deployment
-
-The split production deployment, last verified on 2026-07-30, is:
-
-| Component | Principal or value |
+| Contract | Authoritative source |
 | --- | --- |
-| Public SushiOS frontend | `2h7je-aiaaa-aaaay-aacra-cai` |
-| Public URL | `https://2h7je-aiaaa-aaaay-aacra-cai.icp0.io/` |
+| Paid provisioning and starter state | `support/dispenser/mo/main.mo` |
+| Browser credential persistence and account derivation | `support/dispenser/src/provisioning.ts` |
+| Payment polling and automatic resume | `support/dispenser/src/index.tsx` |
+| Ordered starter selection | `support/dispenser/starter-packages.json`, `support/dispenser/starter.ts` |
+| Atomic upload and file commitment | `support/dispenser/starter_payload.ts`, `support/dispenser/starter_file_commitment.ts` |
+| Production deployment and placement | `support/dispenser/production_deploy.ts`, `support/dispenser/deployment_target.ts` |
+| Local deployment and funding | `support/dispenser/local_deploy.ts`, `support/dispenser/local_fund.ts` |
+| Activation and controller checks | `apps/kernel/backend/activation/Service.mo`, `apps/kernel/backend/settings/Access.mo`, `apps/kernel/backend/main.mo` |
+| Activation handoff | `apps/kernel/src/bootstrap.ts`, `apps/kernel/src/activation_handoff.ts`, `apps/kernel/src/reducer/activation.ts` |
+
+Read current payment thresholds, polling intervals, upload bounds, archive
+versions, and deployment receipts from these sources instead of treating this
+page as a release inventory.
+
+## Production Deployment Boundary
+
+The public SushiOS frontend is a certified asset canister built against the
+Dispenser backend principal. The backend serves the protocol, not a second
+copy of the UI. The deployment mapping is
+`support/dispenser/.icp/data/mappings/ic.ids.json`; production deployment rejects
+extra, missing, malformed, or duplicate mappings and proves that the selected
+operator identity controls the mapped canisters.
+
+The established production service identities are:
+
+| Role | Principal |
+| --- | --- |
+| Public frontend | `2h7je-aiaaa-aaaay-aacra-cai` |
 | Dispenser backend | `2o4cy-waaaa-aaaay-aacqq-cai` |
-| Backend/frontend subnet | `re2t4-faa75-v3vhk-kdmdr-uyrkl-aik2l-ixd6u-p3fyr-zlfkc-6c5af-zae` |
-| New-Neutron target subnet | `re2t4-faa75-v3vhk-kdmdr-uyrkl-aik2l-ixd6u-p3fyr-zlfkc-6c5af-zae` |
-| Controller identity principal | `tvmgi-3iusw-snug4-h6pw4-et2k4-hiodt-xbqux-5wifj-ckxeb-fd76z-7qe` |
-| Current starter deployment | Read from the backend's certified `starter()` query |
-| Production update source | `233tv-xiaaa-aaaay-aacta-cai` |
+| Configured child target subnet | `re2t4-faa75-v3vhk-kdmdr-uyrkl-aik2l-ixd6u-p3fyr-zlfkc-6c5af-zae` |
 
-The frontend is a certified asset canister bound at build time to the backend
-principal. Users open the frontend; the backend has no user-facing HTML. The
-single deployment mapping source is the operator's
-`support/dispenser/.icp/data/mappings/ic.ids.json`; production deployment
-rejects extra, missing, malformed, or duplicate canister mappings.
+Verify them against the deployment mapping and target constant before an
+operation; obtain live controllers and module hashes through deployment
+preflight rather than from this document.
 
-The repository starter selection and current archive filenames live only in
-`support/dispenser/starter-packages.json`; changing release tables are not
-copied into this document. The live starter can intentionally trail the
-production update source, in which case a newly provisioned Neutron discovers
-the newer packages in Settings. When maintainers want new Neutrons to begin
-with the newer bytes, they use the single
-[package-update release workflow](./package-updates.md#maintainer-release-workflow)
-to publish and stage one coherent version/digest set.
-
-Production maintenance uses the `dispenser-mainnet` ICP CLI identity by
-default:
+The operator entrypoints are:
 
 ```sh
-# Initial empty-backend install, starter upload, and frontend deployment.
+# Initial empty-backend installation, starter upload, and frontend deployment.
 npm --workspace dispenser run production:deploy
 
-# Rebuild and deploy only the public frontend.
+# Frontend-only deployment.
 npm --workspace dispenser run production:frontend:deploy
 ```
 
-Both commands first prove that the selected identity controls the exact
-mapped canisters. The full deployment command refuses to replace a non-empty
-backend whose module hash differs; a backend upgrade therefore requires a
-separately reviewed explicit operation rather than an implicit install mode.
-The ignored mode-0600 receipt at `.neutron/dispenser-production.json` records
-canister/module hashes, controller, subnet label, starter identity, and exact
-package pins. Normal starter replacement and postflight commands are kept in
-the canonical package-update workflow linked above.
+The full command refuses an implicit replacement of a non-empty backend with
+different Wasm. Backend changes require a separately reviewed state-preserving
+upgrade and any necessary migration. Do not use reinstall or replacement state
+to bypass an incompatible production schema.
 
-## End-To-End Flow
+The ignored `.neutron/dispenser-production.json` receipt records the selected
+canisters, module hashes, controller, target subnet, starter identity, package
+pins, and file commitment. It is operational evidence, not configuration to
+copy into documentation. Child placement is an immutable constructor argument:
+production supplies the reviewed constant in `deployment_target.ts`; local
+deployment supplies the Application subnet from the verified PocketIC session.
+Both paths verify the installed target as well as the module hash. The backend
+has no user-selected placement or subnet failover.
 
-The normal hosted flow is:
+Starter publication and package publication are separate operations. The live
+starter may intentionally trail available updates. Follow
+[App Package Updates](./package-updates.md#maintainer-release-workflow) to
+publish and verify a coherent package/source set before staging it for future
+Neutrons. Do not infer the starter selection from all app directories or the
+update catalog.
 
-1. On first load, the dispenser frontend creates a random Ed25519 identity and
-   an independent random 32-byte activation code.
-2. It synchronously saves the private identity and activation code in
-   origin-scoped `localStorage` before displaying a payment address.
-3. It derives an ICP ledger account owned by the dispenser canister, using the
-   generated principal as the subaccount, and displays that same account in
-   canonical ICRC-1 text and legacy 64-hex formats.
-4. The frontend polls the ICP ledger every 10 seconds.
-5. Once the account holds at least `2 ICP`, the frontend automatically
-   calls `provision(SHA-256(activation_code))` as the saved Ed25519 identity.
-6. The dispenser transfers the account balance, less the current ledger fee,
-   to the CMC, creates the canister, installs Neutron, assigns temporary
-   controllers, seeds assets, initializes publication entropy, and arms the
-   activation hash.
-7. The dispenser removes its kernel authorization and IC controller authority.
-8. The frontend produces
-   `https://<neutron-id>.icp0.io/#activate=<activation-code>`, optionally with
-   the repository setup fields in the same fragment.
-9. Neutron removes and temporarily stores the fragment before starting
-   Internet Identity. After login, an otherwise-unauthorized principal submits
-   the code once.
-10. A successful `#use` atomically authorizes that Neutron-origin principal and
-    destroys the stored activation hash.
+## Credential And Ownership Flow
 
-The generated Ed25519 identity is only a provisioning credential. It is not
-authorized in the resulting Neutron and is not an IC controller. Internet
-Identity is used only after the user opens the newly created Neutron.
+1. The frontend generates an Ed25519 identity and an independent random
+   32-byte activation code. It persists both before exposing a deposit account.
+2. The ICP deposit account belongs to the Dispenser backend with a subaccount
+   derived from that identity's principal. The backend derives it independently
+   from the signed caller.
+3. The frontend observes the ledger balance and calls
+   `provision(SHA-256(activation_code))` when the configured minimum is met.
+4. The backend binds a starter revision and transfer intent, converts the
+   deposit through the CMC, creates a Neutron, installs the bound starter,
+   seeds assets and runtime configuration, and initializes publication entropy.
+5. The backend arms activation and retires both its Kernel authorization and
+   its IC controller authority.
+6. The frontend opens the created Neutron with the activation code in the URL
+   fragment. Internet Identity login happens at that Neutron's origin.
+7. A successful activation authorizes the actual authenticated caller and
+   atomically consumes the code.
 
-## Browser Provisioning Identity And Local Persistence
+The browser-generated identity authorizes provisioning only. It is not an
+owner or controller of the resulting Neutron. Do not reuse the Dispenser-origin
+principal as the Neutron-origin Internet Identity principal.
 
-`loadOrCreateProvisioningSecrets()` generates two independent 32-byte random
-values with Web Crypto:
-
-- an Ed25519 seed passed to `Ed25519KeyIdentity.generate`; and
-- a one-time activation value encoded as canonical unpadded base64url.
-
-The persisted record is versioned and namespaced by the runtime dispenser
-canister id (the production backend id on the hosted deployment):
+The browser record is versioned and namespaced by the backend canister:
 
 ```text
 neutron.dispenser.provisioning.v1:<dispenser-canister-id>
 ```
 
-It contains `identity.toJSON()` and `activationToken`. A reload reconstructs
-the exact private identity and exact activation code, so it derives the same
-ledger account, can resume the same backend registration, and reproduces the
-same activation link. If parsing or key reconstruction fails, the record is
-left untouched and provisioning stops; silently generating a replacement
-would make a funded account unreachable.
+Reload must recover the same private identity and activation code. Malformed
+stored credentials are left untouched and provisioning stops; silently
+replacing them could strand a funded account. The raw activation code is a
+bearer credential until consumed. Scripts at the Dispenser origin can read
+local storage, and loss of that browser profile can lose the provisioning
+credential. The backend receives only the activation hash.
 
-This persistence is intentional but is not a hardware-backed wallet:
+## Deposit Semantics
 
-- any script executing at the dispenser origin can read the record;
-- clearing site data, switching browser profiles, or losing that profile
-  before activation loses the provisioning credential and code; and
-- the activation link is a bearer credential until it is consumed.
+Canonical ICRC account text and the legacy ICP hex account identifier represent
+the same backend-owned, caller-derived account. Use the codecs in
+`provisioning.ts`; do not independently concatenate account strings.
 
-The dispenser backend receives only the SHA-256 activation hash. The raw code
-leaves the dispenser origin only in the activation link and, after
-authentication, in the one-time `#use` call to the new Neutron.
+The backend checks cumulative balance, so smaller earlier deposits count.
+Before the transfer, it queries the ledger fee and fixes `balance - fee` as the
+amount sent to the CMC. The entire selected amount funds creation; there is no
+change output, partial conversion, automatic overpayment refund, or later sweep
+of additional deposits after the transfer intent was fixed.
 
-## Deposit Address And Balance Polling
+Frontend polling and automatic resume are convenience behavior. The backend
+registration is authoritative after a refresh or ambiguous result. `status()`
+returns the caller's durable phase; `find()` returns a canister only after
+provisioning completes; `provision(hash)` advances that same caller's operation.
 
-The deposit account is derived from:
+## Durable State And Recovery
 
-- owner principal: the dispenser backend canister; and
-- subaccount: `SubAccount.fromPrincipal(generated_identity_principal)`.
+A paid registration binds the signed caller, activation hash, and exact
+committed starter. An unfunded call creates no durable registration. A retry
+with a different activation hash fails, and simultaneous executions for the
+same caller are rejected.
 
-This matches `support/dispenser/mo/main.mo`, which derives the same subaccount
-from `caller`. The browser queries the production ICP ledger's
-`account_balance` method with its saved signing identity. It never asks the
-dispenser to attest to a browser-provided address.
+| Phase | Durable fact |
+| --- | --- |
+| `awaiting_payment` | No transfer is prepared; may represent an unfunded caller or a retry after a definite ledger rejection. |
+| `transferring` | Amount, fee, and `created_at_time` are fixed. |
+| `notifying_cmc` | Successful ledger block index is fixed. |
+| `created` | Empty Neutron canister id is known. |
+| `installed` | Bound starter Wasm is installed. |
+| `controlled` | Temporary controllers are Dispenser and Neutron itself. |
+| `assets_seeded` | Assets, canister-bound runtime configuration, and publication entropy are ready. |
+| `activated` | Activation is armed and Dispenser Kernel authorization is retired. |
+| `complete` | Dispenser IC controller authority is retired. |
 
-The UI defaults to canonical ICRC-1 account text and provides a **Legacy**
-switch for the 64-character ICP account identifier. ICRC text represents an
-account as its owner principal plus a non-default subaccount; the canonical
-codec collapses a missing or all-zero subaccount to the owner principal alone.
-The principal-derived dispenser subaccount is passed through DFINITY's official
-ICRC account codec. Both displayed strings identify the same ledger account,
-so a user chooses the format their wallet accepts rather than funding both.
+Preserve these recovery properties when changing the state machine:
 
-Both frontend and backend enforce `200_000_000 e8s`. Provisioning starts
-automatically when that threshold is observed. If a durable phase already
-exists after a refresh, the frontend automatically attempts to resume it once;
-the Resume button remains available after a transient error.
+- Capture the starter before the first balance `await` and persist the binding
+  with the transfer intent before sending ICP. Later phases must not reread the
+  mutable active starter.
+- Reuse the prepared ledger timestamp and accept `TxDuplicate` through its
+  original block index. A CMC `Processing` response retains that index.
+- Reconcile an ambiguous install against the bound Wasm digest before issuing
+  another install. Reject a created canister whose principal conflicts with a
+  fixed backend-call reservation in the starter.
+- Asset seeding can replay from first chunks. Retain the bound payload until
+  assets, runtime configuration, and entropy are ready; then retain its revision
+  while releasing the heavy payload reference.
+- Activation `set` is idempotent for the same setter and hash.
+- Reconcile final controller removal with `canister_info`: a committed removal
+  can leave the Dispenser unable to repeat `update_settings`. Unexpected
+  controller lists stop the handoff rather than being overwritten.
 
-The UI asks for one transfer of any amount at or above 2 ICP. The protocol
-actually checks the account's cumulative balance, so an earlier smaller
-deposit is not ignored. Once provisioning begins, the amount is fixed: the
-backend queries the ledger's current transfer fee and sends `balance - fee` to
-the
-[official Cycles Minting Canister](https://docs.internetcomputer.org/references/system-canisters/#cycles-minting-canister-cmc).
-The CMC burns the ICP, converts its value at the protocol exchange rate, and
-uses the resulting cycles to create and fund the Neutron. There is no change
-output, partial conversion, refund of an intentional overpayment, or later
-sweep of ICP sent after the transfer amount was fixed.
+A non-retriable CMC refund or invalid transaction requires reconciliation;
+restarting with a new registration is not a way to recreate consumed payment.
 
-## Dispenser API And Durable State Machine
+## Activation Contract
 
-The browser-facing backend surface is deliberately small:
+The backend installs the starter with `install`. The generated Kernel initially
+authorizes the installer. During seeding, controllers are `[dispenser, neutron]`.
+After seeding, `kernel_activation(#set(hash))` retires the setter's Kernel
+authorization, and the Dispenser changes controllers to `[neutron]`.
+The shared service and its caller-to-registration record remain available for
+recovering the created Neutron URL.
 
-```motoko
-status() : async ProvisioningStatus
-find() : async ?Principal
-provision(activationHash : Blob) : async Result<Principal, Text>
-```
+`kernel_activation` is an entrypoint callable without existing Kernel
+authorization, with separate authorization rules for its variants:
 
-All three calls are keyed by the actual signed caller. `find()` returns a
-canister only after provisioning is complete. `status()` exposes the durable
-phase and the canister id when one is known.
+- `set` requires a non-anonymous actual IC controller, checked synchronously
+  with `Principal.isController`. It accepts a 32-byte hash, arms a fresh
+  activation once, and allows only an identical setter/hash retry.
+- `use` requires a non-anonymous signed caller and a 32-byte code whose SHA-256
+  matches the armed hash. It adds that caller to Kernel authorization, clears
+  the hash and setter, and marks activation consumed without an `await`.
 
-After a caller's deposit is observed, the durable registration binds that
-caller to its 32-byte activation hash and to the exact committed starter
-revision captured before the balance query. A retry with another hash fails.
-An unfunded call creates no durable registration. Only one transient
-`provision` execution may run for a caller at a time.
+There is no partial commit between authorization and token consumption. A
+consumed activation cannot be reused by another caller; an already-authorized
+caller can receive the idempotent `already_authorized` result. Activation has
+its own managed-memory root, `kernel_activation`; preserve its released schema
+and migration lineage separately from the main Kernel root.
 
-The durable phases are:
+## Frontend Handoff
 
-| Phase              | Durable fact                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| `awaiting_payment` | No ledger transfer is prepared; this can be the implicit status of an unfunded caller or a bound retry after a definite transfer rejection. |
-| `transferring`     | Amount, current fee, and `created_at_time` are fixed.                               |
-| `notifying_cmc`    | The successful ledger block index is fixed.                                         |
-| `created`          | The empty Neutron canister id is known.                                             |
-| `installed`        | Starter Wasm is installed.                                                          |
-| `controlled`       | Temporary controllers are dispenser plus Neutron itself.                            |
-| `assets_seeded`    | Starter assets, `/pkg/id.json`, and the canister-bound runtime config were written, and publication entropy is ready. |
-| `activated`        | The activation hash is armed and the dispenser is no longer kernel-authorized.      |
-| `complete`         | The dispenser is no longer an IC controller.                                        |
+The activation code travels only in a URL fragment, optionally alongside the
+repository setup fields. Reserved handoff fields in the query string are
+rejected and removed. Before starting the authenticated application, bootstrap
+validates the handoff, stores the activation in same-tab session storage, and
+removes the fragment with `history.replaceState`. Storage or cleanup failures
+stop startup and retire retained handoffs. A malformed fragment that was
+successfully removed need not prevent ordinary login.
 
-Each completed external effect advances the registration before the next
-effect. The important retry cases are:
+After login, the frontend checks authorization. For an unauthorized caller
+with pending activation, it removes the session copy and submits `use` once.
+An ambiguous update is reconciled by querying authorization rather than
+blindly replaying the bearer. The original Dispenser tab can reconstruct the
+activation link from its saved record.
 
-- the ledger transfer stores `created_at_time`, accepts `#TxDuplicate`, and
-  resumes from `duplicate_of`, preventing a second transfer;
-- `#Processing` from the CMC retains the block index for later notification;
-- a lost install reply is accepted only when the new canister's `module_hash`
-  equals the bound starter Wasm digest;
-- starter asset writes can be replayed from their first chunks;
-- `#set` is idempotent for the same controller and hash; and
-- before final self-removal, the dispenser reads `canister_info`. If an earlier
-  `update_settings` committed but its response was lost, the observed
-  controller list lets the dispenser mark the registration complete without
-  attempting an update it is no longer authorized to make.
+Repository setup remains browser-only: its optional `repo`, `manifest`, and
+`digest` fields neither enter the Dispenser backend nor change provisioning
+authority. See [Repository Setup Manifests](./repository-setup-manifests.md).
 
-The atomic starter record also carries the compiler-derived, deduplicated set
-of fixed principals named by backend-call install reservations. Method-only
-reservations carry no target. After the CMC creates the paid canister and before
-the first raw install call, the dispenser rejects a created principal in that
-set; otherwise the Kernel constructor would reject an impossible self-target
-reservation.
+## Atomic Starter Administration
 
-Every commit allocates a monotonic starter revision and freezes the Wasm,
-runtime-config template, file records, chunks, and metadata into one immutable
-value. Provisioning captures that value before its first balance `await`,
-stores it together with `#transferring` before sending ICP, and never rereads
-the controller's current starter during later phases. A controller can
-therefore publish the next starter without making an in-flight registration
-install one revision and seed files from another. Once bound assets, runtime
-configuration, and publication entropy have been seeded, the registration
-keeps the revision but releases the heavy payload reference.
+The starter is a controller-managed complete actor and asset set. Apps in that
+set are already installed at first boot, independently of later owner-reviewed
+repository setup.
 
-## Creation, Installation, And Authority Retirement
+`starter-packages.json` declares one Kernel and an ordered app list. The loader
+requires unique ids and repository-contained archive paths, checks each id
+against the archive manifest, derives byte/digest pins, and validates the whole
+dependency graph before contacting the backend.
 
-The backend uses:
+Use the uploader in `starter_payload.ts`. `begin_starter_upload` returns a
+monotonic epoch required by every Wasm/file/chunk write and final commit.
+Delayed messages from an abandoned upload cannot mutate its successor.
+`commit_starter_upload` verifies completeness, Wasm size and digest, and the
+commitment covering file metadata and reconstructed contents before publishing
+one immutable payload. A failed or interrupted upload leaves the old starter
+active. The public `starter()` readback includes the revision, deployment id,
+package ids, Wasm identity, asset counts, file commitment, and fixed
+backend-call targets for postflight comparison.
 
-- ICP ledger `ryjl3-tyaaa-aaaaa-aaaba-cai`;
-- CMC `rkp4c-7iaaa-aaaaa-aaaca-cai`; and
-- management canister `aaaaa-aa`.
+Every maintenance method checks the actual IC controller list with
+`canister_info`. There are no direct active-payload mutators. Keep controller
+checks separate from the caller-keyed public provisioning API.
 
-It transfers ICP with memo `1_095_062_083` and asks
-`notify_create_canister` to create a canister initially controlled by the
-dispenser. The request uses `subnet_type = null`,
-`subnet_selection = ?#Subnet({ subnet = targetSubnet })`, and
-`settings = null`. `targetSubnet` is fixed when the backend is installed.
-The production deployment command supplies the reviewed `re2t4…-zae`
-principal recorded above, so every production child Neutron is explicitly
-requested on the same subnet as the dispenser deployment. This is one
-operator-reviewed global placement policy, not a user-selectable target or a
-multi-subnet/failover strategy.
-See the ICP documentation's
-[subnet-selection guide](https://docs.internetcomputer.org/guides/canister-management/subnet-selection/)
-for the platform-level request this backend uses.
-
-The dispenser installs the configured starter Wasm with `#install`. The
-generated kernel initially authorizes the installer, which is the dispenser in
-this path. The dispenser then sets controllers to:
-
-```text
-[dispenser, neutron]
-```
-
-This allows asset seeding and gives Neutron the self-controller authority
-required by its upgrade model. After all starter files, `/pkg/id.json`, and
-`/system/runtime-config.json` are written, the dispenser calls
-`kernel_activation(#set(hash))`. Successful `#set` removes the setter from the
-kernel authorization set in that same Neutron message. The dispenser then
-changes controllers to:
-
-```text
-[neutron]
-```
-
-Thus “the dispenser deletes itself” means it removes both forms of authority
-from the new Neutron. The shared dispenser service is not deleted, and its
-caller-to-registration record is retained so the saved browser identity can
-recover the completed Neutron URL.
-
-## The One Activation Endpoint
-
-The kernel exposes one reviewed unauthenticated update entrypoint:
-
-```motoko
-kernel_activation({
-  #set : Blob;
-  #use : Blob;
-})
-```
-
-`#set(hash)`:
-
-- requires a non-anonymous caller that is currently an actual IC controller;
-- accepts exactly 32 bytes;
-- can arm a fresh Neutron only once;
-- is idempotent only for the same setter and hash; and
-- removes that setter from kernel authorization when the hash is stored.
-
-Controller verification is performed inside the kernel after a management
-canister status call. It is not delegated to the public wrapper or to a
-caller-supplied principal.
-
-`#use(code)`:
-
-- is available to a non-anonymous caller even when not yet authorized;
-- accepts exactly 32 bytes and compares `SHA-256(code)` with the stored hash;
-- derives the principal only from the authenticated message caller;
-- adds that caller to the normal kernel authorization set; and
-- clears the hash and setter and marks activation consumed.
-
-The successful `#use` branch has no `await`. Authorization and activation
-deletion therefore commit atomically or roll back together. Later callers
-cannot reuse the code; the already-authorized successful caller receives only
-an idempotent `#already_authorized` result.
-
-Activation state is a separate managed-memory root,
-`kernel_activation` version 1. Keeping it outside kernel memory v3 avoids
-silently changing the established kernel stable signature.
-
-## Neutron Frontend Handoff
-
-The activation code is placed only in a URL fragment. Query-string fields named
-`repo`, `manifest`, `digest`, or `activate`, including case variants, are
-removed and rejected.
-
-Before importing Internet Identity, agents, or React, the kernel bootstrap:
-
-1. validates that the fragment has exactly one canonical 32-byte `activate`
-   value and either all or none of the repository fields;
-2. writes the activation value to same-tab `sessionStorage`;
-3. removes the fragment with `history.replaceState`; and
-4. fails closed and rolls back retained handoffs if storage or address-bar
-   cleanup fails.
-
-After Internet Identity login, the frontend first checks
-`kernel_check_authorized`. If unauthorized and a pending activation exists, it
-deletes the session copy and submits `#use` exactly once. If the update response
-is ambiguous, it queries authorization rather than replaying the bearer. The
-original dispenser tab can reproduce the link from local storage if the first
-attempt definitely did not activate the Neutron.
-
-Repository selection remains browser-only. An optional `repo`, `manifest`, and
-`digest` travel in the same fragment, but none enters the dispenser backend or
-changes the provisioning authority. See
-[Repository Setup Manifests](./repository-setup-manifests.md).
-
-## Starter Payload Administration
-
-The current committed starter is one controller-managed dispenser value. A
-SushiOS starter may contain the Kernel plus a preassembled set of application
-packages. Those applications are already present in the installed actor and
-registry when the new canister first boots; this is separate from the
-owner-reviewed repository setup flow.
-
-The ordered package selection lives in
-`support/dispenser/starter-packages.json`. Each entry binds an expected package
-id to one repository-contained `.neutron` archive. The first entry must be the
-Kernel, package ids and paths must be unique, and the compiler validates the
-complete dependency graph before any dispenser state changes.
-
-The local and production staging commands, required ordering with source
-publication, and postflight are maintained only in
-[App Package Updates: Maintainer Release Workflow](./package-updates.md#maintainer-release-workflow).
-Staging changes only future canisters created by the Dispenser; it does not
-reinstall or modify existing Neutrons. The starter loader checks each
-configured ID against the authoritative manifest inside its archive, derives
-exact byte length and SHA-256 pins, compiles the complete ordered set once, and
-refuses dependency or role mismatches before contacting the Dispenser.
-
-The controller uploader splits a large compiled Wasm across bounded ingress
-messages and stages all Wasm chunks, files, file chunks, and the runtime
-template separately from the active payload. `commit_starter_upload` verifies
-the expected counts, byte length, and Wasm SHA-256 before publishing the whole
-payload together. An interrupted or invalid upload therefore leaves the
-previous starter active. The public `starter()` query exposes the committed
-revision, deployment id, ordered package ids, Wasm digest and size, and asset
-counts for postflight verification.
-
-`begin_starter_upload` returns a monotonic upload epoch. Every chunk/file add
-and the final commit must present that epoch, so a delayed message from an
-abandoned upload cannot mutate a later staging session.
-
-The atomic maintenance methods are:
-
-- `begin_starter_upload`
-- `add_starter_wasm_chunk`
-- `add_starter_file`
-- `add_starter_file_chunk`
-- `commit_starter_upload`
-
-The runtime-config template contains text segments rather than a
-browser-supplied principal. During provisioning the dispenser inserts the
-created canister's actual principal between those segments, producing every
-canister-bound field in `/system/runtime-config.json`.
-
-Production intentionally records `update_source_origin: null`: on the IC the
-Kernel derives the verified `https://<source-principal>.icp0.io` origin from
-each package manifest. This does not disable the source. The local dispenser
-instead binds the provision-owned PocketIC fixture origin because a loopback
-origin cannot be derived from IC mainnet policy.
-
-Each staged maintenance method checks the caller against the dispenser's actual
-IC controller list using `canister_info`. There are no direct Wasm,
-runtime-template, file, or chunk mutators. The public `canister_info` method is
-used instead of `canister_status`, because the latter would require the
-dispenser canister itself to be one of its own controllers.
-
-The current Core `Map`/`List` registration and payload state is a fresh
-deployment schema. It is not an in-place stable upgrade from the retired
-legacy B-tree/vector dispenser. A production rollout must use an explicit
-migration or an explicitly approved reinstall that accepts loss of the old
-registry and staged payload.
+The runtime template is trusted deployment input. The backend inserts the
+actual created principal into its text segments to bind
+`/system/runtime-config.json`. Production uses `update_source_origin: null`,
+which tells Kernel to derive the source origin from each manifest principal;
+it does not disable updates. Local staging supplies the supervised fixture's
+origin. Use the shared runtime-config helpers instead of constructing an
+independent origin policy.
 
 ## Local Dispenser Test Deployment
 
-With the repository's supervised PocketIC already running, build and deploy
-the isolated local dispenser surfaces with:
+Start the repository's supervised PocketIC through the root local provisioning
+workflow, then run:
 
 ```sh
 npm --workspace dispenser run local:deploy
 ```
 
-The command compiles and installs the backend, stages the Kernel and every app
-in `starter-packages.json`, builds a frontend bound to the local backend, and prints its
-`http://<canister>.localhost:8000/` URL. Its canister ids are retained in the
-ignored `.neutron/dispenser-local.json` state file while that PocketIC process
-remains current.
+This command reads `local.ndeploy.session.json`, verifies the runtime, deploys
+or reuses an attested local backend, stages the configured starter, and builds
+a frontend bound to it. The ignored `.neutron/dispenser-local.json` records
+canisters for that runtime. Incompatible or unattested local state is not a
+reason to reuse an old backend.
 
-Real ICP must not be sent to a local address. To simulate the payment, copy the
-deposit account shown by the local UI and transfer at least two PocketIC test
-ICP:
+To simulate payment, select the legacy hex account display in the local UI:
 
 ```sh
-npm --workspace dispenser run local:fund -- <account>
+npm --workspace dispenser run local:fund -- <64-character-ICP-account>
 ```
 
-The browser's normal ledger polling then sees the balance and follows the same
-ledger path. The header reads **PocketIC test network** in this build; the
-production build derives **Internet Computer** from its compile-time target.
+The helper accepts the legacy account identifier, not ICRC account text, and
+uses test ICP in the verified local runtime. Do not send production ICP to a
+local test account.
 
-`local_deploy.ts` installs the same backend Wasm with
-`runtime.topology.subnetIds.Application` as its constructor argument. The CMC
-therefore requests the Application subnet created by that exact supervised
-PocketIC process rather than carrying a copied production or local subnet
-principal. Both deployment paths query the installed backend's immutable
-target and require it to match the expected subnet in addition to checking the
-module hash. Old schema-1 local Dispenser state is ignored; the local command
-creates and records a current backend rather than reusing an unattested one.
-
-## Remaining Operational Limits
-
-- There is no backup/export UI for the local provisioning private key or
-  activation code.
-- There is no registry removal, canister deletion, or ownership-transfer API.
-- Every production creation is pinned to one reviewed production subnet.
-  There is no user-selectable target, fallback, or multi-subnet routing policy.
-- The starter uploader does not cross-check the live update source. The
-  canonical [package-update workflow](./package-updates.md#maintainer-release-workflow)
-  owns the required publish-before-stage ordering.
-- A non-retriable CMC refund or invalid-transaction result needs operator/user
-  handling; it cannot recreate the consumed payment.
-- The source tests cover persistence, handoff validation, activation
-  atomicity, generated authorization boundaries, compilation, and retry
-  structure. A mainnet end-to-end payment/create/activate qualification remains
-  a release requirement.
+Tests live in `support/dispenser/test/` and Kernel activation/handoff suites.
+Choose tests for the changed boundary; source-level retry tests do not prove a
+live paid creation and activation flow. No local test or starter staging step
+installs an update into an existing production Neutron.

@@ -2,16 +2,25 @@
 
 [Back to the documentation index](./index.md)
 
-This guide is the app-author workflow for persistent Motoko data. It explains
-what belongs in `neutron.json`, what each schema and migration module must
-export, how a package supports skipped releases, and how Neutron removes data.
+Use this contract when changing persistent Motoko state, package lineage, or
+uninstall behavior. Managed memory supports initialization, forward migration,
+same-app consolidation, explicit retirement, and uninstall with live roots.
+Production changes must preserve installed data through the checked install
+transaction; destructive provisioning is not an upgrade or recovery path.
 
-> **Current V1 behavior:** initialization, forward migration, same-app
-> consolidation, explicit retirement, and uninstall with live managed roots
-> are supported. Destructive changes use staged retirement: actor activation
-> first preserves the old value in an inaccessible optional field, the checked
-> install commit clears that field in the same update that promotes metadata,
-> and a later upgrade physically removes the proven-null field.
+## Source Map
+
+| Concern | Source entry point |
+| --- | --- |
+| Source/package manifest validation and immutable lock lineage | `packages/neutron-tools/src/memory.ts`: `assertNeutronManifest`, `createMemoryLock`, `mergeMemoryLock` |
+| Schema isolation and packaged source closures | `packages/neutron-scripts/src/mopack.ts`: `packageMotoko`, `assertPackageOnlySchemaImports` |
+| Installed-to-target migration planning | `packages/neutron-compiler/src/memory_migrations.ts`: `planMemoryMigrations` |
+| Generated fields, migration expressions, and retirement callback | `packages/neutron-compiler/src/assemble.ts`; physical naming helpers in `memory_physical_names.ts` beside it |
+| Retirement metadata validation | `packages/neutron-compiler/src/memory_retirements.ts` |
+| Install/uninstall orchestration | `packages/neutron-compiler/src/install.ts`; `apps/kernel/backend/install/Service.mo`: `commit` |
+
+Read the validators for current graph and source-path bounds. The examples
+below describe the contract; their app IDs and release numbers are illustrative.
 
 ## Mental Model
 
@@ -42,39 +51,38 @@ Neutron handles a memory root differently in each situation:
 
 ### Commit-atomic retirement
 
-Neutron never omits a live stable field during the one-way `install_code`
-step. For each newly retiring root, the migration renames
-`NeutronMemoryStore_<scope>` to an inaccessible
-`NeutronRetiredMemoryStore_<scope> : ?OldStore` and initializes it with the old
-value. `<scope>` is
-`a<app-id-length>_<app-id>_r<memory-id-length>_<memory-id>`.
-The compiler records one bounded, canonical retirement descriptor in the
-stable signature so finalization still knows the exact old schema after an app
-has been uninstalled.
+Neutron never discards a live root during the one-way `install_code` step.
+The generated migration moves each retiring value into an inaccessible
+optional field. The compiler records its owner, local memory ID, schema version,
+and packaged schema entry in the stable signature, allowing later finalization
+even after the app has been uninstalled. Generated field names are compiler
+internals; use `memory_physical_names.ts` to interpret diagnostics.
 
-The current development baseline writes the owner-scoped
-`@neutron-managed-memory-retirements-v2` marker. Development canisters with
-another marker shape must be reinstalled.
+The retirement metadata protocol uses
+`@neutron-managed-memory-retirements-v2`. A missing, malformed, or unsupported
+marker fails validation. Do not bypass that failure by resetting production
+state or rewriting the marker; a compatible upgrade/recovery path must preserve
+the recorded roots.
 
 After `kernel_runtime_info` verifies the activated actor, the generated
-compiler callback sets each staged optional to `null` synchronously inside
+callback clears each staged optional synchronously inside
 `kernel_install_commit`. A trap rolls back both the clears and journal
-promotion. The next successful compile imports the recorded old schema and
-omits only that proven-null retired field. Newly retiring roots receive a new
-descriptor; if there are none, the canonical marker records an empty list.
+promotion. A subsequent upgrade imports the recorded schema, checks that the
+retired field is null, and removes it. Actor activation and checked commit are
+separate steps: a successfully activated but uncommitted target is not evidence
+that retirement completed.
 
-An app uninstall releases its manifest ownership after commit. A later install
-may therefore immediately use the same memory id and version, even with a new
-schema: the fresh `NeutronMemoryStore_<scope>` and old
-`NeutronRetiredMemoryStore_<scope>` use distinct compiler import aliases while the old
-null field is finalized. An explicit in-app `retired: true` declaration remains
-an ownership tombstone and cannot be restored or reused by that app.
+Memory IDs are app-local, so different owners can independently use the same
+ID at any time. Following successful uninstall, reinstalling the same app ID
+initializes fresh roots; the compiler can finalize old null retired fields
+while creating those roots. An explicit in-app `retired: true` declaration
+remains a tombstone and cannot be restored or reused while retained in that
+app's installed history.
 
 ## Start With Memory V1
 
-Use canonical manifest format 3 for every new app with persistent backend data.
-The generated `neutron.lock.json` has its own format and remains format 2. A minimal
-layout is:
+Use manifest format 3 for new apps with persistent backend data. The generated
+`neutron.lock.json` uses its independent format 2. A minimal layout is:
 
 ```text
 apps/notes/
@@ -109,11 +117,8 @@ module {
 }
 ```
 
-The schema may import declared Motoko packages such as `mo:core/Map`, `Set`,
-`List`, or `Queue`. Use `Map` for keyed records, `Set` for membership, `List`
-for growable random-access sequences, and `Queue` for FIFO state. Immutable
-arrays remain appropriate for fixed snapshots and Candid vectors. A schema may
-not import a relative app module. Do not place `Mem` in a shared
+The schema may import declared Motoko packages such as `mo:core/Map`. A schema
+may not import a relative app module. Do not place `Mem` in a shared
 app-local `Types.mo` and alias it here: changing that file would silently change
 every schema that references it. Put app-owned records and variants directly in
 each version file, use pinned package collection types where appropriate, then
@@ -276,42 +281,8 @@ A user may install the v3 package directly over v1. The v3 package must carry
 all schemas and migration edges needed to reach v3 without installing the v2
 package first.
 
-For a normal linear history, add `v3.mo` and `v2_to_v3.mo`:
-
-```motoko
-// backend/memory/notes/v3.mo
-module {
-  public type Mem = {
-    var title : Text;
-    var body : Text;
-    var tags : [Text];
-  };
-
-  public func init() : Mem {
-    {
-      var title = "Untitled";
-      var body = "";
-      var tags = [];
-    };
-  };
-}
-```
-
-```motoko
-// backend/memory/notes/v2_to_v3.mo
-import V2 "./v2";
-import V3 "./v3";
-
-module {
-  public func migrate(old : V2.Mem) : V3.Mem {
-    {
-      var title = old.title;
-      var body = old.body;
-      var tags = [];
-    };
-  };
-}
-```
+For a linear history, add immutable `v3.mo` and `v2_to_v3.mo` modules using
+the same `Mem`/`init()` and `migrate()` contracts. Preserve the older modules.
 
 The v3 memory declaration contains the complete linear path:
 
@@ -393,8 +364,8 @@ Neutron rejects it instead of silently choosing one route.
 
 Schemas do not need to be contiguous, but every edge's `from` and `to` version
 must exist in `schemas`, every edge must move forward, and no edge may end above
-the declared target version. One memory graph is limited to 64 schemas and 128
-edges.
+the declared target version. Graph-size limits are validated in
+`packages/neutron-tools/src/memory.ts`.
 
 ## Migration Function Rules
 
@@ -426,8 +397,8 @@ source and target schemas. For example, a migration can iterate a v1
 converted values with `Map.add`; no copied internal map representation is
 needed in either schema.
 
-Schema `Mem` types must be stable Motoko data. Do not put functions, actors, or
-transient runtime objects in persistent memory.
+Schema `Mem` types must pass Motoko stable-type checking. Runtime capability
+handles and callbacks belong in transient backend state, outside managed roots.
 
 ### Consolidate Same-App Roots
 
@@ -469,41 +440,9 @@ declarations remain ownership tombstones.
 ## Code-Only Releases
 
 Do not increase a memory version for an ordinary frontend or backend code
-release. Leave the memory declaration and current schema source unchanged:
-
-```json
-{
-  "format": 3,
-  "id": "notes",
-  "name": "Notes",
-  "version": 102,
-  "src": "main.mo",
-  "memory": {
-    "notes": {
-      "version": 2,
-      "schemas": {
-        "1": {
-          "src": "memory/notes/v1.mo"
-        },
-        "2": {
-          "src": "memory/notes/v2.mo"
-        }
-      },
-      "migrations": [
-        {
-          "from": 1,
-          "to": 2,
-          "src": "memory/notes/v1_to_v2.mo"
-        }
-      ]
-    }
-  }
-}
-```
-
-Compared with the schema-upgrade example, only the app release changed from
-`0.1.1` (`101`) to `0.1.2` (`102`). The memory version, schemas, and migrations
-stayed byte-for-byte identical.
+release. Increase the app release version while retaining the memory version,
+schemas, and migrations byte-for-byte. Verify that the existing root is
+restored and no initializer or migration runs.
 
 A managed schema hash is immutable at a given memory version. Editing `v2.mo`
 or changing `v2.init()` while still declaring memory version 2 is rejected. The
@@ -513,11 +452,14 @@ still subject to Motoko type checking and stable-signature compatibility.
 
 ## Packaging And `neutron.lock.json`
 
-Run the app's normal package command:
+Run the app's complete workspace package command from the repository root:
 
 ```sh
-npm run package
+npm --workspace <app-workspace-name> run package
 ```
+
+Follow [Package Updates](./package-updates.md) for release versioning, publication,
+and postflight verification.
 
 For managed memory, `mopack`:
 
@@ -627,12 +569,11 @@ never interpreted as permission to discard data.
 
 ## Uninstall The App
 
-Full uninstall is not a manifest edit. In Settings, select one or more app rows
-and use the reviewed **Delete selected** action when testing the product
-workflow. The launcher does not delete apps. For the normal local development
-loop, remove the app archive's path declaration from the format-3 PocketIC
-artifact set and run the provisioner's destructive whole-canister reinstall;
-there is no package-level uninstall CLI.
+Full uninstall uses the reviewed installed-app removal flow, not a manifest
+edit. Kernel and compiler orchestrate removal through the same checked install
+journal used by upgrades. For disposable local test canisters only, the
+provisioner's whole-canister reinstall can initialize a new baseline; it cannot
+test or replace state-preserving uninstall.
 
 Neutron compiles one target actor without the selected apps, verifies the new
 runtime, and removes their registry entries, web/package assets, connection
@@ -651,9 +592,10 @@ commit rather than deleting it, and re-adding it requires explicit enable.
 Uninstall is blocked while another installed app declares a backend function
 dependency on the app. The kernel app cannot be uninstalled.
 
-After successful uninstall commit, the removed app no longer owns its memory
-ids. A replacement app can claim one immediately; the compiler finalizes the
-old null retired field independently from the replacement's fresh active root.
+After successful uninstall commit, a later installation of the same app ID can
+create fresh roots. The compiler finalizes the old null retired fields
+independently from the new active roots. Another app's same-named roots always
+belong to that other app and are unaffected.
 
 Neither memory retirement nor vetKeys retirement is cryptographic erasure. An
 active controller can restore an earlier snapshot or replace code, and a key
@@ -687,24 +629,22 @@ npm --workspace neutron-compiler test
 
 Those tests cover multi-edge migration planning, uninstall retirement, staged
 retirement metadata, and null-checked finalization without mutating a running
-local Neutron. Local baselines must be emitted by a trusted package workflow,
-pinned in a format-3 provision artifact set, and installed through the
-provisioner's whole-canister reinstall. Exercise an actual app update through
-the Kernel's product update UI; do not use a test-only incremental deploy
-command. Retain the exact released v1 and v2 packages used by app-specific
-tests. Rebuilding an old package from current source is not a historical
-compatibility test.
+local Neutron. Create disposable test baselines from trusted package artifacts
+pinned in a format-3 provision artifact set. Exercise the actual checked app
+update/uninstall flow against those baselines; never use a whole-canister
+reinstall as evidence that an upgrade preserved data. Retain the exact released
+packages used by app-specific tests. Rebuilding an old package from current
+source is not a historical compatibility test.
 
 ## Common Errors
 
 | Error                                      | Cause and correction                                                                                             |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `schema hash changed`                      | A released schema file changed. Restore it and add a new package-only schema version instead.                    |
+| `schema hash changed`                      | A released schema file changed. Restore it; add a new schema version and explicit migration.                    |
 | `no migration path`                        | The target package omitted a schema or edge needed by the installed version. Include one complete path.          |
 | `ambiguous migration paths`                | More than one route reaches the target. Remove obsolete edges from the active graph or publish one direct route. |
 | `removed memory without declaring retired` | Put the declaration back and publish it with `retired: true`; omission alone never authorizes data destruction. |
 | `cannot downgrade`                         | Memory versions only move forward. Publish a newer corrective schema.                                            |
-| `requires a different schema hash`         | Update the foreign consumer requirement together with the owner package.                                         |
 | lock verification failure                  | A locked schema source or migration closure changed. Do not overwrite released history.                          |
 
 ## What Neutron Verifies

@@ -1,493 +1,202 @@
-# Evolving Candid Interfaces Across Versions
+# Candid Interface Evolution
 
-[Back to the documentation index](./index.md)
+[Documentation index](./index.md)
 
-This guide defines how Neutron apps evolve Candid service methods and Candid
-packages exchanged between independently upgraded canisters and clients. The
-goal is rolling interoperability: an old caller can talk to a new canister, and
-a new caller can still talk to an old canister, for every method and package
-declared rolling-compatible.
+Use this contract when changing a Candid interface used by independently
+upgraded clients or canisters. It defines rolling compatibility, including
+Candid values nested inside blobs. Persistent Motoko memory follows the
+separate [memory migration contract](./memory-migrations-and-uninstall.md).
 
-This is an interface guide. It does not define Motoko stable-memory evolution,
-app memory schema versions, or data migration. Those rules are covered by
-[Managed Memory Migrations And Uninstall](./memory-migrations-and-uninstall.md).
+## Compatibility Contract
 
-## The Two Compatibility Directions
+For each supported release pair, verify both old caller → new callee and new
+caller → old callee. A normal service-upgrade subtype check covers only the
+first direction. For example, adding a required result works for an old client
+that ignores it, but a new client cannot obtain that result from an old service.
 
-Candid's normal service-upgrade check asks one directional question:
+Apply these rules to every existing rolling-compatible method and nested type:
 
-> Can a client compiled against the old interface continue to call the newly
-> upgraded service?
+- Preserve field labels, variant tags, positional meanings, and existing types.
+  Record labels and variant tags are wire identifiers; declaration order and
+  named type aliases are not version markers. Never reuse a retired label.
+- Add record fields as `opt T`, and keep populating old required fields while
+  supported receivers still require them. Prefer one named request record and
+  one named response record for new methods.
+- Append only optional method arguments, results, or tuple-record elements.
+  Never insert or remove a positional element in the middle, even when the
+  affected types happen to match.
+- Wrap variants expected to gain tags in `opt` from their first release. Handle
+  unsupported values explicitly; do not translate them into a default mutation.
+- Keep authorization, actor and target selection, charging, deduplication,
+  idempotency, retention, and query/update semantics unchanged. Successful
+  decoding does not establish semantic compatibility.
+- An optional extension must be safe for old code to ignore. A field required
+  for a security decision or correct mutation needs a new method or protocol
+  major version, even if Candid accepts it.
+- Validate recognized values under the protocol's existing rules. Introducing
+  or changing bounds requires the approval described in [AGENTS.md](../AGENTS.md).
 
-That is necessary, but a peer-to-peer Neutron protocol has a stronger
-requirement. Different Neutron canisters may run different app releases for a
-long time, so both directions matter:
+Do not add a schema-version field merely to permit optional additions. Use a
+version discriminator only for incompatible semantic encodings that require
+decoder branching. Major changes may require a new method, route, certified
+path, or hash domain; a renamed source type alias does not change the wire type.
 
-1. old caller or frontend → new callee;
-2. new caller or frontend → old callee.
-
-Some Candid changes are safe for a single upgraded service but are not
-bidirectionally safe. For example, a new service may append a required return
-value because an old client ignores extra results. A new client expecting that
-required result cannot decode a response from an old service that never sends
-it. A rolling protocol therefore appends an optional result instead.
-
-The project policy is:
-
-- run the ordinary old-client/new-service subtype check;
-- separately test new-client/old-service decoding for every shared method;
-- do not call a change rolling-compatible merely because one direction passes.
-
-## The Useful Candid Properties
-
-Candid values carry their wire types. A receiver decodes those values against
-its own expected types using structural subtyping.
-
-The properties that make interface evolution possible are:
-
-- Record fields are identified by labels, not declaration order. Extra fields
-  are ignored by a receiver that does not know them.
-- A missing record field decodes as `null` when the receiver expects
-  `opt T`, `null`, or `reserved`.
-- Candid tuples are records with consecutive numeric labels starting at zero.
-- A method's argument and result lists may contain multiple Candid values.
-  Extra values are ignored by a receiver expecting fewer values.
-- A missing trailing method argument or result can decode as `null` when the
-  receiver expects an `opt T`.
-- A variant may gain tags in an input type accepted by a newer service, but an
-  old decoder cannot decode a new tag in a plain variant.
-- When an extensible variant is wrapped in `opt`, Candid's special option rule
-  lets an old decoder receive an unknown tag as `null`.
-- Method argument types are contravariant: an upgraded service may accept a
-  supertype of the old argument.
-- Method result types are covariant: an upgraded service may return a subtype
-  of the old result.
-- New service methods do not affect clients that use only existing methods.
-
-Candid labels are hashed to 32-bit field identifiers. Renaming a field or
-variant tag changes its identity; declaration order does not. Never reuse a
-retired label for another meaning, and let the Candid tooling reject label-hash
-collisions.
-
-Names attached to method parameters and results are only documentation; their
-positions carry the wire meaning. Record field labels are different: they are
-hashed wire identifiers and are part of the contract.
-
-## Neutron's Rolling-Compatibility Rules
-
-For an existing rolling-compatible method or nested package:
-
-1. Do not rename an existing record field or variant tag.
-2. Do not change an existing field's type merely because the source-language
-   types look convertible.
-3. Add record fields as `opt T`. An old sender omits the field and a new
-   receiver gets `null`; an old receiver ignores the extra field from a new
-   sender.
-4. Keep old required fields on the wire. A new receiver may stop using one,
-   but a new sender must still populate it while old receivers exist.
-5. Wrap any variant that may gain tags in `opt` from its first release.
-6. Treat `null` for an extensible variant as `unsupported`, not as one of the
-   known cases and not as permission to apply a default mutation.
-7. Append only optional method arguments when retaining the same method.
-8. Append optional method results when a new client may call an old service.
-9. Append only optional tuple-record elements. Never insert an element into
-   the middle of a published tuple, because that changes the numeric labels of
-   later elements.
-10. Do not remove a method, change query/update behavior, or change the
-    authorization, payment, idempotency, or retention meaning of an existing
-    method under the label of interface compatibility.
-11. An added optional field must be safe for an old implementation to ignore.
-    If ignoring it would change authorization, identity, charging, dedupe,
-    target selection, or a security decision, the change needs a new method or
-    protocol major version.
-12. Bound and validate every newly recognized value. Successful Candid
-    decoding is not application-level validation.
-
-These rules deliberately leave some legal one-way Candid upgrades unused. The
-cost is a few `opt` wrappers; the benefit is that old and new Neutron nodes can
-continue talking directly.
+New methods require support discovery or a safe method-not-found path when
+calling old peers. A failed mutation or lost response is not evidence that a
+method is absent. Any fallback must preserve the operation's semantics and
+follow the [deprecation policy](./deprecated.md).
 
 ## Change Matrix
 
-| Change | Old client → new service | New client → old service | Rolling policy |
+These are wire-level outcomes. Every apparently safe entry still requires the
+semantic checks above and tests through the bindings actually used by the app.
+
+| Change | Old caller → new service | New caller → old service | Rolling rule |
 | --- | --- | --- | --- |
-| Add a method | Existing calls work | New method is absent | Add only when callers feature-detect or tolerate method-not-found |
-| Add required input record field | Fails when old client omits it | Old service ignores the extra field | Do not do this |
-| Add `opt T` input record field | Missing field becomes `null` | Old service ignores it | Safe |
-| Remove an input record field | New service ignores old extra field | Old service may require the omitted field | Keep sending the old field |
-| Add required output record field | Old client ignores it | New client cannot decode an old response missing it | Add it as `opt T` for rolling use |
-| Add `opt T` output record field | Old client ignores it | Missing field becomes `null` | Safe |
-| Remove a required output field | Old client cannot decode the response | New client no longer needs it | Do not do this |
-| Add a plain input-variant tag | New service accepts old tags | Old service fails on the new tag | Use `opt variant` if new senders may call old services |
-| Add a plain output-variant tag | Old client can fail on the new tag | Old response has only known tags | Do not do this |
-| Add a tag to `opt variant` | Old side receives an unknown tag as `null` | Known old tags still decode | Safe only with explicit `null = unsupported` handling |
-| Append required method argument | Old caller omits it and decoding fails | Old callee ignores the extra value | Do not do this |
-| Append `opt T` method argument | Missing value becomes `null` | Old callee ignores the extra value | Safe |
-| Remove trailing method argument | Old caller's extra value is ignored | New caller omits a value the old callee may require | Avoid on a rolling method |
-| Append method result | Old client ignores it | New client needs an old response fallback | Append `opt T` for rolling use |
-| Append required tuple-record element | Old tuple cannot satisfy new decoder | Old decoder ignores the extra field | Do not do this |
-| Append `opt T` tuple-record element | Missing element becomes `null` | Old decoder ignores it | Safe |
+| Add a method | Existing methods remain available | Added method is absent | Discover support before depending on it |
+| Add required input record field | Missing field fails decoding | Extra field is ignored | Use an optional field or a new method |
+| Add optional input record field | Missing field becomes absent | Extra field is ignored | Safe only if ignoring it is safe |
+| Remove required input record field | Old extra field is ignored | Old service requires the missing field | Keep sending it |
+| Add required output record field | Extra field is ignored | Missing field fails decoding | Make rolling output additions optional |
+| Add optional output record field | Extra field is ignored | Missing field becomes absent | Handle absence explicitly |
+| Remove required output record field | Old client requires the missing field | New client ignores it | Keep returning it |
+| Add plain input-variant tag | Old tags remain accepted | New tag fails decoding | Use an optional variant boundary |
+| Add plain output-variant tag | New tag can fail decoding | Old tags remain accepted | Use an optional variant boundary |
+| Add tag inside `opt variant` | Unknown tags can become absent | Unknown tags can become absent | Preserve known tags and handle unsupported values |
+| Append required argument | Old caller omits a required value | Extra value is ignored | Do not use for rolling methods |
+| Append optional argument | Missing value becomes absent | Extra value is ignored | Preserve all earlier positions |
+| Append optional result | Extra value is ignored | Missing value becomes absent | Preserve all earlier positions |
+| Append optional tuple-record element | Missing element becomes absent | Extra element is ignored | Preserve all earlier numeric labels |
 
-Changing a parameter from `nat` to `int`, for example, can be a legal
-one-directional widening. Neutron still prefers a new optional field or a new
-method over scalar type changes in a rolling protocol. Language bindings,
-bounds, hashes, and application semantics can make an apparently legal
-subtyping change surprising.
+The normal upgrade relation allows some scalar widenings, such as accepting
+`int` where an old service accepted `nat`. Do not infer bidirectional safety
+from those one-way changes. Test the exact old and new types and their value
+ranges, or use a new field/method.
 
-Adding a method does not give Candid callers a built-in feature-negotiation
-mechanism. A new peer must discover support through a trusted capability
-document or an explicitly safe probe, and must retain a fallback for an old
-peer. Do not learn support by periodically polling every peer.
+## Optional Variants And Boundary Representations
 
-## Prefer One Request Record And One Response Record
-
-A single named request record gives future releases room to add optional
-fields without changing positional arguments:
+Candid's special option rule lets an unknown variant tag decode as an empty
+option. Known tags must retain their meaning. Place the option at the smallest
+boundary allowed to become unsupported:
 
 ```candid
-type SendRequest = record {
-  operation_id : blob;
-  body : blob;
-};
+// Only status is lost when it contains an unknown tag.
+record { status : opt variant { active; paused }; name : text }
 
-type SendResponse = record {
-  outcome : opt variant {
-    accepted;
-    duplicate;
-    rejected : record {
-      reason : opt variant {
-        invalid;
-        blocked;
-      };
-    };
-  };
-};
-
-service : {
-  send : (SendRequest) -> (SendResponse);
-};
+// An unknown status can discard the entire optional record.
+opt record { status : variant { active; paused }; name : text }
 ```
 
-A later rolling-compatible release can add:
+Likewise, `vec opt variant { ... }` can preserve known elements when another
+element is unsupported; `opt vec variant { ... }` can discard the entire vector.
+The special rule also permits other type mismatches to become absent. Do not
+use `opt` to conceal arbitrary schema changes.
 
-```candid
-type SendRequest = record {
-  operation_id : blob;
-  body : blob;
-  client_context : opt record {
-    trace_id : blob;
-  };
-};
+An empty option does not identify why data is absent: the sender may have
+omitted it, sent an unknown tag, or encountered another permitted mismatch.
+For a required operation selector, treat absence as incompatible and reject
+before business mutation. For a response, retain an unsupported or uncertain
+outcome rather than retrying a mutation blindly. Presentation-only fragments
+may be omitted when the protocol permits that behavior.
 
-type SendResponse = record {
-  outcome : opt variant {
-    accepted;
-    duplicate;
-    rejected : record {
-      reason : opt variant {
-        invalid;
-        blocked;
-        busy;
-      };
-    };
-  };
-  server_revision : opt nat64;
-};
-```
+Do not assume a Candid empty option is a JavaScript `null` at every boundary.
+Raw JavaScript Candid bindings use `[]` for an empty option and `[value]` for a
+present option. The Kernel's API-1 self-call projection omits absent optional
+record fields, while absent top-level values and tuple/vector slots become
+`null`. Inspect `normalizeCandidBoundaryValue` and its projector in
+[self_calls.ts](../apps/kernel/src/self_calls.ts), and test the app's parser
+after projection as well as raw Candid decoding. The
+[Files method compatibility tests](../apps/vfs/test/abi/files_v2_method_compat.test.ts)
+exercise this complete boundary.
 
-The old service ignores `client_context`. The new service receives `null` from
-an old caller. An old client ignores `server_revision`. A new client receives
-`null` when calling an old service. If either optional variant contains a tag
-unknown to the receiver, the receiver gets `null` for that variant and handles
-it as unsupported.
+## Deprecation And Exact Bytes
 
-A plain top-level result variant does not provide this fallback. Put an
-extensible outcome variant in an optional record field instead.
+For field deprecation, keep the published label and type, send valid values
+to supported old peers, and let newer receivers stop using the field. Remove
+it only after a deliberate protocol transition excludes those peers.
+`reserved` and `opt empty` can express retirement in Candid, but do not prove
+the opposite rolling direction or preserve application meaning automatically.
 
-## Method Argument Lists And Tuples
+For nested Candid inside `blob`, the outer interface check sees only bytes.
+Maintain explicit inner types and old/new encode-decode fixtures. Apply the
+protocol's byte/allocation checks before decoding, and retain the received
+bytes when they define identity, certification, storage, forwarding, or retry.
+Never decode and re-encode to reconstruct a digest or signed/certified preimage.
+Compatible optional additions can change exact bytes and therefore change a
+byte-derived identifier even when an old decoder ignores them.
 
-There are two related but distinct positional forms.
+[Wagyu codecs](../apps/wagyu/src/protocol/codecs.ts) preserve and hash received
+bytes before decoding; their
+[golden protocol tests](../apps/wagyu/test/protocol_golden.test.ts) verify that
+an extended encoding remains decodable while retaining a distinct digest.
 
-### Multiple method arguments or results
+## Release Evidence And Existing Automation
 
-This change is compatible:
+The following checks are release work for the changed protocol; do not assume
+packaging or the root test command creates a compatibility corpus for it.
+Preserve released `.did` files and message fixtures without rewriting history.
+Select the supported release pairs explicitly.
 
-```candid
-// Initial
-submit : (nat64, blob) -> (bool);
+Run the ordinary service-upgrade check:
 
-// Later
-submit : (nat64, blob, opt text) -> (bool, opt nat64);
-```
-
-An old caller omits the third argument and the new callee receives `null`. A new
-caller sends a third value that an old callee ignores. An old client ignores
-the additional result, while a new client receives `null` for that result from
-an old callee.
-
-The new argument must be trailing and optional. This is not compatible:
-
-```candid
-submit : (nat64, blob, text) -> (bool);
-```
-
-An old caller has no third value, so a new callee expecting required `text`
-cannot decode the call.
-
-### Tuple records
-
-The Candid tuple type:
-
-```candid
-record { nat64; blob }
-```
-
-is shorthand for:
-
-```candid
-record { 0 : nat64; 1 : blob }
-```
-
-It may evolve to:
-
-```candid
-record { nat64; blob; opt text }
-```
-
-because the new numeric field `2` is optional. A new tuple value's field `2`
-is ignored by an old decoder, and a new decoder gets `null` for field `2` in an
-old tuple.
-
-Only append tuple elements. Inserting a field changes the numeric identity and
-type of every later position. Prefer a named record when fields have meaning,
-are likely to be deprecated independently, or are expected to grow more than
-once.
-
-## Extensible Variants
-
-Start an expected-to-grow variant as optional:
-
-```candid
-type DeliveryKind = opt variant {
-  post;
-  share;
-};
-```
-
-A later release may add:
-
-```candid
-type DeliveryKind = opt variant {
-  post;
-  share;
-  tombstone;
-};
-```
-
-An old decoder receiving `tombstone` sees `null`, while values using `post` or
-`share` retain their known tags. Application code must distinguish:
-
-- `null`: unsupported by this decoder;
-- `opt variant { post }`: a known post;
-- `opt variant { share }`: a known share.
-
-Do not map `null` to a mutating default. For an ingress request, reject it as
-`incompatible` without business mutation. For a response, mark the outcome
-unsupported or uncertain and do not blindly retry. For presentation data,
-omit only the unsupported presentation fragment.
-
-Put `opt` at the exact extensibility boundary. These types have different
-fallback scopes:
-
-```candid
-opt record {
-  status : variant { active; paused };
-}
-
-record {
-  status : opt variant { active; paused };
-}
-```
-
-With the first shape, a future unknown `status` can make the whole record
-decode as `null`. With the second, only `status` becomes `null` and the rest of
-the record remains available. The same rule applies to containers: prefer
-`vec opt variant { ... }` when one unknown element should become null, rather
-than `opt vec variant { ... }`, which can discard the whole vector.
-
-Candid's special option rule is intentionally permissive and can turn other
-type mismatches into `null`, not only future variant tags. Treat the rule as a
-designed compatibility boundary, keep the nested schema frozen, and test the
-exact expected unknown-tag cases. Do not use `opt` to hide arbitrary type
-changes.
-
-## Deprecating Fields
-
-The safest rolling deprecation is semantic:
-
-- keep the published label and type;
-- keep sending a valid value to old peers;
-- let new receivers ignore it;
-- remove it only in a new protocol major version after old peers are outside
-  the supported compatibility window.
-
-Candid also provides `reserved` and `opt empty` for explicit deprecation.
-`reserved` accepts and discards any value and protects the label from reuse.
-These are useful in a one-directional canister upgrade, but they do not
-automatically make the opposite rolling direction safe. Use them only after
-the compatibility matrix and generated bindings have been tested, and never
-reuse the field label for another meaning.
-
-## Do Not Add A Schema Version Field By Habit
-
-A record such as:
-
-```candid
-record {
-  a : nat64;
-  b : text;
-  c : blob;
-}
-```
-
-does not need a `version` field merely so that a later release can add data.
-Add `d : opt T`, preserve the old fields, and let Candid perform structural
-decoding.
-
-A version discriminator is justified only when the value can represent
-multiple incompatible semantic encodings and a decoder must branch between
-them. It is not a substitute for Candid-compatible evolution. Neutron protocol
-major versions belong in method names, route identifiers, fixed paths, or
-domain separators when those semantics genuinely change.
-
-Named Candid type aliases are also not nominal wire versions. Candid is
-structurally typed, so a source name such as `RequestV1` is documentation for a
-major contract line; the name is not serialized.
-
-## Candid Nested Inside `blob`
-
-Some protocols place exact Candid bytes inside an outer Candid `blob` so they
-can hash, certify, store, retry, or forward the original bytes.
-
-That outer service interface sees only `blob`. `didc subtype` cannot inspect
-the nested package, and an outer interface check cannot prove that inner
-records evolved compatibly. Such a protocol must:
-
-- publish the exact inner Candid type definitions;
-- decode the blob with explicit byte and allocation bounds;
-- preserve and hash the received bytes before decoding;
-- never decode and re-encode to reconstruct a digest or certified preimage;
-- apply the same optional-field and optional-variant rules to the inner types;
-- keep old-encoder/new-decoder and new-encoder/old-decoder fixtures for every
-  inner package.
-
-Adding an optional inner field changes the exact encoded bytes and therefore
-may change a content digest or action id derived from those bytes. That is
-valid when identity is deliberately byte-based. An old verifier must hash the
-received bytes directly and ignore only extension fields that are explicitly
-safe to ignore.
-
-## Semantic Compatibility Is Stricter Than Decoding
-
-A Candid message can decode successfully and still be protocol-incompatible.
-An old implementation ignores an unknown optional field, so that field cannot
-be required to:
-
-- identify the actor or target;
-- authorize a call;
-- select who pays or how many cycles are required;
-- change a deduplication key;
-- weaken a size, retention, or rate bound;
-- reinterpret an existing variant tag;
-- make an otherwise invalid mutation valid.
-
-Compatible extensions may add advisory metadata, optional presentation data,
-new hints that receivers may ignore, or bounded features whose absence
-preserves the old behavior. A change to core meaning requires a new method,
-route, certified path, hash domain, or protocol major version.
-
-## CI And Release Checks
-
-Keep the last released `.did` file as a fixture. For the normal canister-upgrade
-direction, run:
-
-```bash
+```sh
 didc check current.did previous.did
 ```
 
-`didc check current.did previous.did` checks that the new service is a safe
-replacement for clients compiled against the old service.
-Use `didc check` for `.did` files; `didc subtype` below accepts inline Candid
-type expressions, not file paths.
+For rolling methods, also check both directions using interfaces containing
+only their common methods. Whole-service reverse subtyping can fail solely
+because a newer service adds methods:
 
-For rolling peer methods, also test the opposite communication direction.
-Whole-service reverse subtyping may fail merely because the new service added
-a method, so check a fixture containing only common methods in both directions,
-then test the individual common method types and real messages:
-
-```bash
+```sh
 didc check current-common.did previous-common.did
 didc check previous-common.did current-common.did
+```
 
+Use `didc check` for files. `didc subtype` accepts inline types; this pair checks
+the optional positional-extension pattern:
+
+```sh
 didc subtype \
   'func (nat64, blob, opt text) -> (bool, opt nat64)' \
   'func (nat64, blob) -> (bool)'
-
 didc subtype \
   'func (nat64, blob) -> (bool)' \
   'func (nat64, blob, opt text) -> (bool, opt nat64)'
-
-didc subtype \
-  'record { nat64; blob }' \
-  'record { nat64; blob; opt text }'
-
-didc subtype \
-  'record { nat64; blob; opt text }' \
-  'record { nat64; blob }'
 ```
 
-The release corpus must include:
+Keep message-level evidence for the changed shapes, not only subtype results:
 
-- every previous supported client encoding decoded by the current types;
-- current base-feature encodings decoded by every supported old type;
-- a new optional record field ignored by an old decoder;
-- a missing optional field decoded as `null`;
-- a new optional trailing method argument and result;
-- a new optional tuple-record tail;
-- a new tag in `opt variant` decoded by an old type as `null`;
-- the same tag in a plain variant failing, proving the test can catch the
-  unsafe shape;
-- renamed labels, changed scalar types, missing required fields, and inserted
-  tuple elements failing;
-- nested-Candid-in-blob compatibility and exact-byte hash fixtures;
-- generated Motoko, Rust, and TypeScript bindings handling every `null` path.
+- Supported old encodings decode with current types; current base-feature
+  encodings decode with supported old types.
+- Missing optional fields/tails and unknown optional-variant tags reach the
+  intended absent/unsupported state through each binding and app parser used.
+- Known tags and all required identity/security fields survive decoding.
+- Negative fixtures demonstrate rejection of incompatible required fields,
+  plain unknown variants, and unsafe positional or scalar changes. Do not
+  expect every semantic incompatibility to fail Candid decoding.
+- Nested blobs retain exact-byte hashes and have separate inner compatibility
+  fixtures.
 
-Warnings from `didc` about the special `opt` rule are design-review inputs, not
-noise. CI should reject them by default and allowlist only a reviewed
-optional-variant extension or field retirement with an exact null-fallback
-fixture.
+Review special-option subtype warnings against explicit fallback fixtures.
+There is no repository-wide warning-rejection/allowlist gate in the root
+scripts. The Files compatibility tests deliberately accept these warnings for
+reviewed optional-variant extensions. Use those tests as examples, not as proof
+that another app's interface has been checked:
 
-## Review Checklist
+- [Files optional-field/tag fixtures](../apps/vfs/test/abi/files_v2_compat.test.ts)
+  test known-tag preservation, unknown-tag fallback, missing optional fields,
+  and a plain-variant negative control.
+- [Files method fixtures](../apps/vfs/test/abi/files_v2_method_compat.test.ts)
+  check both service directions, generated JavaScript bindings, Kernel
+  projection, and app response parsers.
+- [Wagyu protocol fixtures](../apps/wagyu/test/protocol_golden.test.ts) cover
+  nested exact-byte identity and optional extension decoding.
 
-Before releasing a shared interface change:
-
-- Is this an interface change rather than a stable-memory migration?
-- Does the existing method keep one compatible meaning?
-- Are all added request and rolling-response fields optional?
-- Are all potentially extensible variants wrapped in `opt`?
-- Does every unknown variant become an explicit unsupported state?
-- Are positional additions trailing and optional?
-- Are old required fields still sent to old peers?
-- Can both old→new and new→old messages be decoded?
-- Is every optional extension safe for old code to ignore?
-- Are opaque nested Candid packages checked separately?
-- Do exact-byte hashes use received bytes without re-encoding?
-- Does `didc` pass, and are generated bindings tested?
-- If any answer is no, does the change use a new method or protocol major
-  version?
+Read each workspace's `package.json` and test runner for its actual coverage.
+Add the applicable missing fixtures to that workspace's release tests when
+changing a protocol; do not infer cross-language coverage from one binding.
 
 ## Primary References
 
-- [Candid interface guide and safe interface upgrades](https://docs.internetcomputer.org/guides/canister-calls/candid/)
-- [Candid type reference: `opt`, records, variants, functions, and services](https://docs.internetcomputer.org/references/candid-spec/)
-- [Candid language repository and specification](https://github.com/dfinity/candid)
+- [Candid specification](https://github.com/dfinity/candid/blob/master/spec/Candid.md)
+- [Candid type and upgrade reference](https://docs.internetcomputer.org/references/candid-spec/)

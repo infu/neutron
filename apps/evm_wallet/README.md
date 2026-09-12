@@ -230,7 +230,7 @@ different key scope; copying Wallet data or a frontend draft to it does not
 recover this account. Changing the slot, algorithm or threshold master-key
 configuration also changes its key. Destructive reinstallation of the entire
 Neutron is outside this app-reinstall contract. See the
-[fresh-start checklist](../../doc/todo.wallet-fresh-start.md).
+[signing lifecycle](../../doc/app-isolated-chain-key-signing.md#wallet-custody-signing-v1).
 
 ## Consumer tools
 

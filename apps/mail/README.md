@@ -1,11 +1,9 @@
 # Neutron Mail
 
 Mail is a ciphertext-only, one-recipient messaging app for Neutron canisters.
-The product and security contract is in [todo.mail.md](todo.mail.md); the
-generic app-isolated key subsystem is in
-[the platform documentation](../../doc/app-isolated-vetkeys.md), with its
-implementation checklist in
-[../kernel/todo.vetkeys.md](../kernel/todo.vetkeys.md).
+The product and security contract is documented below; the generic app-isolated
+key subsystem is in
+[the platform documentation](../../doc/app-isolated-vetkeys.md).
 
 ## Implemented foundation
 

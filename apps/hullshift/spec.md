@@ -33,8 +33,8 @@ If a requested band has no certified entry, generation fails explicitly and
 the previous saved mission remains intact.
 
 > Section 10 preserves the retired in-browser `g2` design as historical
-> reference. The authoritative `g4` implementation and release checklist live
-> in [`../../todo.hullshiftbrain.md`](../../todo.hullshiftbrain.md).
+> reference. See [HullshiftBrain](./tools/hullshiftbrain/README.md) for the
+> current offline pipeline and certification workflow.
 
 ## Checklist rules
 

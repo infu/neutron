@@ -9,13 +9,20 @@ install, signature, authorization, and generic canister-call approval UI. An
 exact provider app may own a domain-specific decision in its authenticated
 foreground tile; that modal remains provider UI, not Kernel UI.
 
-Source package:
+## Source map
 
-- `packages/neutron-design-system/`
+| Concern | Authoritative source |
+| --- | --- |
+| Public imports and commands | `packages/neutron-design-system/package.json` |
+| Cascade, tokens and helpers | `packages/neutron-design-system/src/styles.scss`, `src/_tokens.scss`, `src/classes.ts` |
+| Layout and component selectors | `packages/neutron-design-system/src/_layout.scss`, `src/components/` |
+| Enforced visual and accessibility-related CSS contracts | `packages/neutron-design-system/test/policy.test.ts` |
+| Rendered examples and app packaging | `apps/kitchensink/src/`, `apps/kitchensink/build.ts`, `apps/kitchensink/test/` |
+| Trusted call routing and provider callbacks | `packages/neutron-tools/src/app.ts`, `packages/neutron-tools/src/protocol.ts`, `apps/kernel/src/expose.ts` |
 
-Live reference:
-
-- `apps/kitchensink/`
+Read those files for the complete class/token inventory, exact values and
+available scripts. This document records integration and interaction contracts
+that are not supplied by CSS alone.
 
 ## Usage
 
@@ -74,16 +81,8 @@ The app HTML links the generated CSS with a package-local relative path:
 The design system is bundled into app assets. It is not a kernel extension, a
 separate installed app, or a trusted approval surface.
 
-## Public Entrypoints
-
-- `neutron-design-system/styles.scss` - complete style entrypoint.
-- `neutron-design-system/tokens.scss` - token declarations only.
-- `neutron-design-system/base.scss` - scoped base rules only.
-- `neutron-design-system/layout.scss` - layout primitives only.
-- `neutron-design-system/components.scss` - component classes only.
-- `neutron-design-system` - tiny TypeScript class-name helpers.
-
-The package has no runtime dependencies on React, `neutron-tools`, icblast,
+The root TypeScript import supplies class-name helpers; styles enter through
+the exported SCSS paths. The package has no runtime dependencies on React, `neutron-tools`, icblast,
 DFINITY packages, identity libraries, or kernel source.
 
 ## Visual Policy
@@ -95,10 +94,10 @@ DFINITY packages, identity libraries, or kernel source.
   little lighter, and cards, controls, rows, and state blocks are lighter again.
 - Operational pages should follow the Settings pattern: let the page background
   carry the layout, keep headings compact, group dense rows and metrics with
-  inset hairlines, and reserve panels for genuinely framed tools. Do not wrap
+  inset hairlines, and reserve panels for framed tools. Do not wrap
   every section in a card.
-- Spacing follows a 4/8/12/16/20/24/32px rhythm. Prefer the public gap and
-  padding tokens instead of one-off values so edges and baselines stay aligned.
+- Use the public gap and padding tokens so edges and baselines stay aligned.
+  Read their scale from the token source rather than copying numeric values.
 - Routine surfaces, controls, inputs, table rows, tags, badges, and status
   blocks do not use visible borders for separation.
 - Structural separation uses one-pixel hairlines, usually inset shadows so
@@ -109,7 +108,7 @@ DFINITY packages, identity libraries, or kernel source.
   scrollbars, and the single visible focus outline. Do not add component
   borders just to frame a card, button, input, or panel.
 - No gradients, remote fonts, decorative blobs, or page-art backgrounds.
-- Border radius is capped at `5px`.
+- Use the radius tokens and preserve the small-radius policy enforced by tests.
 - Letter spacing stays `0`.
 - Type does not scale with viewport units.
 - Components keep stable dimensions across hover, focus, loading, and disabled
@@ -133,108 +132,37 @@ layers:
 App CSS should load after the shared entrypoint. Apps may add a later `app`
 layer and override documented CSS variables on `.nt-app.<app-class>`.
 
-## Public Tokens
+## Component selection
 
-Core public semantic tokens:
-
-- `--nt-bg`, `--nt-bg-panel`, `--nt-bg-elevated`, `--nt-bg-control`
-- `--nt-line`, `--nt-line-subtle`, `--nt-line-strong`, `--nt-line-focus`
-- `--nt-text`, `--nt-text-strong`, `--nt-text-muted`, `--nt-text-faint`
-- `--nt-accent`, `--nt-info`, `--nt-success`, `--nt-warning`, `--nt-danger`
-- `--nt-radius-1`, `--nt-radius-2`, `--nt-radius-3`
-- `--nt-control-sm`, `--nt-control-md`, `--nt-control-lg`
-- `--nt-gap-*`, `--nt-pad-*`
-- `--nt-shadow-hairline`, `--nt-shadow-raised`
-
-Core public component alias tokens:
-
-- `--nt-panel-bg`
-- `--nt-card-bg`
-- `--nt-button-bg`
-- `--nt-button-fg`
-- `--nt-input-bg`
-- `--nt-input-fg`
-- `--nt-alert-info-bg`
-- `--nt-alert-warning-bg`
-- `--nt-alert-danger-bg`
-- `--nt-alert-success-bg`
-
-Apps can override these on their `.nt-app` root as long as the visual policy is
-preserved.
-
-## V1 Class Surface
-
-Layout:
-
-- `nt-app`, `nt-app--fill`
-- `nt-page`, `nt-page-header`, `nt-page-main`, `nt-page-footer`
-- `nt-command-bar`
-- `nt-pane`, `nt-pane-header`, `nt-pane-body`, `nt-pane-footer`
-- `nt-stack`, `nt-cluster`, `nt-toolbar`, `nt-grid`, `nt-split`
-- `nt-scroll`, `nt-scroll-x`, `nt-table-wrap`, `nt-divider`
-- `nt-section`, `nt-section-header`, `nt-section-heading`, `nt-section-count`
-
-Typography and utilities:
-
-- `nt-title`, `nt-subtitle`, `nt-section-title`, `nt-eyebrow`
-- `nt-text`, `nt-muted`, `nt-meta`
-- `nt-code`, `nt-pre`, `nt-pre--wrap`, `nt-sr-only`
-
-Surfaces and controls:
-
-- `nt-panel`, `nt-card`, `nt-metric`, `nt-result`, `nt-callout`,
-  `nt-dialog`
-- `nt-metric-label`, `nt-metric-value`, `nt-metric-detail`
-- `nt-detail-grid`, `nt-detail`, `nt-detail-label`, `nt-detail-value`
-- `nt-settings-list`, `nt-settings-row`, `nt-settings-icon`, `nt-settings-main`
-- `nt-settings-title`, `nt-settings-description`, `nt-settings-meta`,
-  `nt-settings-actions`
-- `nt-disclosure`, `nt-disclosure-trigger`, `nt-disclosure-icon`,
-  `nt-disclosure-copy`, `nt-disclosure-title`, `nt-disclosure-description`,
-  `nt-disclosure-chevron`, `nt-disclosure-content`
-- `nt-button`, `nt-icon-button`, `nt-button-group`
-- `nt-segmented`, `nt-tabs`, `nt-tab-list`, `nt-tab`
-
-Forms:
-
-- `nt-form`, `nt-form-grid`, `nt-form-grid--two`
-- `nt-field`, `nt-label`, `nt-help`, `nt-error`, `nt-required`
-- `nt-fieldset`, `nt-input`, `nt-textarea`, `nt-select`
-- `nt-checkbox`, `nt-radio`
-- `nt-input-group`, `nt-input-prefix`, `nt-input-suffix`
-
-Feedback and data:
-
-- `nt-alert`, `nt-badge`, `nt-state`
-- `nt-tag-list`, `nt-tag`
-- `nt-state--empty`, `nt-state--loading`, `nt-state--error`,
-  `nt-state--partial`, `nt-state--success`
-- `nt-spinner`, `nt-progress`, `nt-status-dot`
-- `nt-table`, `nt-kv`, `nt-copy-field`, `nt-list`, `nt-json`
+Choose exported classes and semantic tokens from the source map. Override
+semantic variables on the app-prefixed `.nt-app` root instead of copying shared
+component rules. Use the layout primitives for tile composition and the
+component selectors for individual controls; neither provides application state
+or JavaScript behavior.
 
 ## Accessibility Matrix
 
-| Class or pattern             | Element / role                         | Name source                         | State attributes                                           | Keyboard / focus                                                  | Kitchen Sink fixture        |
-| ---------------------------- | -------------------------------------- | ----------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------- |
-| `nt-button`                  | Native `button`                        | Visible text                        | `disabled`, `aria-busy` on related region                  | Enter and Space are native; `:focus-visible` ring                 | `design`, `form`, `calls`   |
-| `nt-icon-button`             | Native `button`                        | `aria-label` or hidden text         | `disabled`                                                 | Stable square target, visible focus ring                          | `design`                    |
-| `nt-metric`                  | `article`, `section`, or `div`         | Visible label/value text            | None                                                       | Non-interactive summary surface                                   | `hello`, `design`           |
-| `nt-field` + `nt-input`      | `label` + native input                 | Visible label                       | `aria-invalid`, `aria-describedby`, `readonly`, `disabled` | Native text-field behavior                                        | `form`, `design`            |
-| `nt-form-grid`               | Grid wrapper around fields             | Field labels inside children        | None                                                       | Native field behavior; layout preserves compact rows              | `form`, `calls`, `design`   |
-| `nt-checkbox` / `nt-radio`   | Native input                           | Associated visible label            | `checked`, `disabled`                                      | Space toggles through native input                                | `form`, `design`            |
-| `nt-segmented` / `nt-tab`    | Button group or ARIA tablist           | Visible button text and group label | `aria-selected` or `aria-pressed`                          | App code owns arrow-key behavior when using ARIA tabs             | `design`                    |
-| `nt-copy-field`              | Readonly input + copy button           | Visible label and button text       | `readonly`, polite status text                             | Input remains focusable/selectable; button uses native activation | `data`                      |
-| `nt-table`                   | Native table                           | Caption or surrounding heading      | `aria-sort` only when app code sorts                       | Native table navigation; sortable headers use buttons             | `data`, `design`            |
-| `nt-alert`                   | Section or `div`                       | Visible title/text                  | `role="alert"` only for newly inserted urgent errors       | Not focusable by default                                          | `design`, runtime error     |
-| `nt-state--loading` + `nt-spinner` | Status `div` + decorative `span` | `aria-label` on the status region | `role="status"`; `aria-busy` on the region being updated | Not focusable; animation stops with reduced motion | `design`, tray |
-| `nt-result`                  | `output` or status region              | Surrounding heading or context      | `aria-live`, `aria-busy`                                   | Result text remains selectable                                    | `overview`, `form`, `calls` |
-| `nt-dialog`                  | Native `dialog` or named grouped panel | `aria-labelledby`                   | `aria-modal` only for real modal behavior                  | App code owns Escape, trapping, and focus restore                 | `design`                    |
-| `nt-progress`                | Native `progress`                      | Visible label or adjacent text      | `value`, `max`                                             | Native progress semantics                                         | `design`                    |
-| `nt-disclosure`              | Section + native `button`              | Visible title and description       | `aria-expanded`, `aria-controls`                           | Enter and Space toggle; visible focus; app owns open state         | `design`                    |
-| `nt-detail-grid`             | `dl` with grouped `dt` / `dd`          | Visible term and value              | None                                                       | Non-interactive summary; values remain selectable                  | `design`                    |
-| `nt-settings-row`            | Row inside a named section             | Visible title and description       | Native state on any row actions                            | Row is not clickable by default; actions are separate controls     | `design`                    |
-| `nt-status-dot` / `nt-badge` | Decorative span plus text              | Visible or hidden text              | Severity class only                                        | Not interactive unless wrapped in a control                       | `design`, `data`            |
-| `nt-tag`                     | Non-interactive `span`                 | Visible text                        | Tone and selected classes only                             | Not interactive unless wrapped in a native control                | `form`, `design`            |
+| Class or pattern             | Element / role                         | Name source                         | State attributes                                           | Keyboard / focus                                                  |
+| ---------------------------- | -------------------------------------- | ----------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| `nt-button`                  | Native `button`                        | Visible text                        | `disabled`, `aria-busy` on related region                  | Enter and Space are native; `:focus-visible` ring                 |
+| `nt-icon-button`             | Native `button`                        | `aria-label` or hidden text         | `disabled`                                                 | Stable square target, visible focus ring                          |
+| `nt-metric`                  | `article`, `section`, or `div`         | Visible label/value text            | None                                                       | Non-interactive summary surface                                   |
+| `nt-field` + `nt-input`      | `label` + native input                 | Visible label                       | `aria-invalid`, `aria-describedby`, `readonly`, `disabled` | Native text-field behavior                                        |
+| `nt-form-grid`               | Grid wrapper around fields             | Field labels inside children        | None                                                       | Native field behavior; layout preserves compact rows              |
+| `nt-checkbox` / `nt-radio`   | Native input                           | Associated visible label            | `checked`, `disabled`                                      | Space toggles through native input                                |
+| `nt-segmented` / `nt-tab`    | Button group or ARIA tablist           | Visible button text and group label | `aria-selected` or `aria-pressed`                          | App code owns arrow-key behavior when using ARIA tabs             |
+| `nt-copy-field`              | Readonly input + copy button           | Visible label and button text       | `readonly`, polite status text                             | Input remains focusable/selectable; button uses native activation |
+| `nt-table`                   | Native table                           | Caption or surrounding heading      | `aria-sort` only when app code sorts                       | Native table navigation; sortable headers use buttons             |
+| `nt-alert`                   | Section or `div`                       | Visible title/text                  | `role="alert"` only for newly inserted urgent errors       | Not focusable by default                                          |
+| `nt-state--loading` + `nt-spinner` | Status `div` + decorative `span` | `aria-label` on the status region | `role="status"`; `aria-busy` on the region being updated | Not focusable; animation stops with reduced motion |
+| `nt-result`                  | `output` or status region              | Surrounding heading or context      | `aria-live`, `aria-busy`                                   | Result text remains selectable                                    |
+| `nt-dialog`                  | Native `dialog` or named grouped panel | `aria-labelledby`                   | `aria-modal` only for real modal behavior                  | App code owns Escape, trapping, and focus restore                 |
+| `nt-progress`                | Native `progress`                      | Visible label or adjacent text      | `value`, `max`                                             | Native progress semantics                                         |
+| `nt-disclosure`              | Section + native `button`              | Visible title and description       | `aria-expanded`, `aria-controls`                           | Enter and Space toggle; visible focus; app owns open state         |
+| `nt-detail-grid`             | `dl` with grouped `dt` / `dd`          | Visible term and value              | None                                                       | Non-interactive summary; values remain selectable                  |
+| `nt-settings-row`            | Row inside a named section             | Visible title and description       | Native state on any row actions                            | Row is not clickable by default; actions are separate controls     |
+| `nt-status-dot` / `nt-badge` | Decorative span plus text              | Visible or hidden text              | Severity class only                                        | Not interactive unless wrapped in a control                       |
+| `nt-tag`                     | Non-interactive `span`                 | Visible text                        | Tone and selected classes only                             | Not interactive unless wrapped in a native control                |
 
 Tooltip text is never the accessible name. App-owned modal behavior is a
 JavaScript contract inside the iframe; the CSS package only styles the surface.
@@ -354,7 +282,7 @@ An app may still use a concrete domain verb such as **Send**, **Approve
 allowance**, or **Revoke** for an operation which its own trusted UI fully
 reviews and then performs through an exact preapproved self call. It must not
 imitate Kernel chrome or imply that another app or Kernel verified its domain
-facts. On the current provider-UI lane, a cross-app `provider_once` resident
+facts. On the provider-UI lane, a cross-app `provider_once` resident
 first calls
 `context.presentUserInterface()` without preparing an effect. Kernel then
 opens or focuses the exact provider tile and routes a bounded opaque request to
@@ -409,7 +337,7 @@ The design system must not:
 - style kernel install, authorization, dangerous-code, or signature dialogs;
 - present app-side previews as trusted kernel approval UI.
 
-Kernel does not render provider-authored review content on the new path. It
+On the provider-owned UI path, Kernel does not render the modal. It
 authenticates and focuses the exact provider tile, while the owner chooses to
 trust that installed provider's UI and domain checks. The design system does
 not define provider policy or token fields and does not make the modal a Kernel
@@ -420,29 +348,13 @@ Apps may use `neutron-tools/app` for approved calls. On the generic
 and owns that approval dialog; the provider-owned path above is deliberately
 separate.
 
-## Kitchen Sink Reference
+## Kitchen Sink reference
 
-Kitchen Sink demonstrates the expected app-developer shape:
-
-- one navigable workbench plus a compact companion tile from one app package;
-- shared styles imported from `neutron-design-system/styles.scss`;
-- app-local composition in `apps/kitchensink/src/style.scss`;
-- responsive left navigation and independently scrolling demo content;
-- forms and validation;
-- JSON argument arrays sent through `neutron-tools/app`;
-- kernel-mediated call wording such as `Review save in kernel`;
-- kernel-derived method schemas displayed in a focused schema view;
-- live endpoint discovery and same-app frontend tool calls;
-- shared durable state presented by two independent tile frames;
-- warning, danger, and critical states with visible explanatory text;
-- compact settings sections, responsive detail grids, dense rows, and
-  accessible disclosures;
-- copy fields, nested JSON, dense text, and tables for iframe resize checks.
-
-The app package test builds the frontend, writes the manifest-derived Kitchen
-Sink archive, verifies `web/main.css` is included, checks package paths against
-an allowlist, and scans packaged text assets for remote or unsafe resource
-references.
+Use Kitchen Sink for working examples of shared styles, app-local composition,
+multiple tiles, resident tools and tray integration. Read its source and browser
+fixtures for current examples rather than copying a snapshot of its navigation
+or demo inventory. Its package test verifies bundled styles and assets and
+checks resource references; it does not make app UI a trusted Kernel surface.
 
 ## Testing
 
@@ -452,30 +364,15 @@ Run the design-system tests:
 npm --workspace neutron-design-system test
 ```
 
-Run the Kitchen Sink reference checks:
+When changing shared selectors or recipes, inspect the affected Kitchen Sink
+fixtures and scripts in `apps/kitchensink/package.json`. Its full app test command
+runs packaging as well as checks; do not rebuild production archives merely to
+validate prose. For a documentation-only change, the design-system suite checks
+its documentation contract and compiles the public styles without packaging an
+app.
 
-```sh
-npm --workspace neutron-kitchensink test
-```
-
-Run the root fast suite:
-
-```sh
-npm test
-```
-
-Run the installed Kitchen Sink browser contract inside the Nix shell:
-
-```sh
-nix develop -c npm run test:e2e:kitchensink:fresh
-```
-
-The design-system tests assert:
-
-- helper exports are compiled and importable;
-- public SCSS entrypoints compile;
-- no gradients, remote fonts, unsupported radius values, viewport-scaled type,
-  or `!important` are introduced;
-- public selectors stay scoped under `.nt-app`;
-- helper source has no browser, kernel, identity, icblast, or canister-client
-  coupling.
+The policy tests cover SCSS scoping, responsive layouts, stable interaction
+styles, contrast pairs, dependency isolation and recipe/accessibility guidance.
+CSS checks cannot establish keyboard behavior, focus restoration, duplicate
+submission prevention or correct consent routing; test those in the owning app
+when changing behavior.

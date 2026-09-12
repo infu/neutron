@@ -13,8 +13,7 @@ releases, and public catalog queries confirm their approved free listings. Its
 exact-byte repeat returned the required no-op. The old-source transition is in
 place, and both its first publication and exact-byte no-op repeat are verified. The
 [production release record](spec/production-release.md) separates deployment from
-publication and installation. Remaining work is tracked in
-[todo.marketplace.md](../../todo.marketplace.md).
+publication and installation.
 
 ## Implemented behavior
 

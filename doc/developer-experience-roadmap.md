@@ -1,146 +1,76 @@
-# Developer Experience Roadmap
+# Developer Tooling Boundaries
 
 [Back to the documentation index](./index.md)
 
-Neutron serves three developer groups:
+Use this reference when changing the authoring, packaging, compiler, or
+provisioning workflow. The historical filename is retained for links; active
+plans and TODO files belong in gitignored `tmp/`, not in this document.
 
-- Kernel developers maintain the canister, browser shell, installer, and
-  compiler integration.
-- App developers build target-neutral `.neutron` packages.
-- Integration developers operate PocketIC and browser suites.
+## Responsibilities
 
-The current workflow is intentionally narrow: package first, select archives
-with a format-3 config, and use `neutron-provision` for the complete
-deployment.
+| Owner | Contract |
+| --- | --- |
+| App workspace `package.json` | Complete app build, package, and release-test commands |
+| `packages/neutron-scripts` | Shared annotation generation, validation, module packaging, legal/source records, and archives |
+| `packages/neutron-compiler` | Package preparation, supported assembler selection, checked installation, and combined actor compilation |
+| `packages/neutron-cli` | Filesystem adapter for production-context compilation |
+| `packages/neutron-provision` | Deployment config/journal, trusted local context, IC operations, and supervised PocketIC fleet |
+| Root `package.json` | Selected workspace fan-out, repository generation, local aliases, and production publisher entrypoint |
 
-## Current Commands
+Packages are target-neutral. Deployment identity and trusted network context
+belong to compilation/provisioning, not to an app-specific local archive.
+The provisioner consumes declared archives; it does not discover app workspaces
+or run their package commands.
 
-Repository build phases:
+The local config owns its session journal. Browser tests and local tools should
+resolve the gateway and fleet from that state rather than duplicate canister
+IDs, ports, or another deployment journal. Production declarations use exact
+pinned artifacts; local path declarations support rebuilding before a new
+disposable deployment.
 
-```sh
-npm run build
-npm run package
-npm run repository:generate
+## Discover Commands From Their Owners
 
-# Complete ordered pipeline
-npm run build:all
-```
-
-The repository generator consumes packaged Hello and Kitchen Sink archives, so
-it is not part of the independent workspace `build` fan-out. App `package`
-scripts run their app-local build again as part of producing authoritative
-archives.
-
-Fast repository checks:
-
-```sh
-npm test
-npm run typecheck
-```
-
-Local deployment:
+Read the root and selected workspace manifests before choosing a command:
 
 ```sh
-# Terminal 1
-npm run local:start
-
-# Terminal 2
-npm run local:deploy
-npm run local:status
+node -p 'JSON.stringify(require("./package.json").scripts, null, 2)'
+node -p 'JSON.stringify(require("./apps/<app>/package.json").scripts, null, 2)'
 ```
 
-Another local config or fleet:
+The root ordered build pipeline builds workspaces, packages apps, then generates
+repository artifacts. Repository generation consumes archives. A frontend
+watcher or a workspace build alone is not a package release.
 
-```sh
-# Terminal 1
-npm run provision -- CONFIG.ndeploy.json serve
+Some test commands build packages, start replica fixtures, or reinstall a local
+fleet. Inspect their script bodies and configuration before running them.
+The `local:deploy` alias is destructive whole-canister provisioning; production
+app upgrades use the reviewed, state-preserving product transaction.
 
-# Terminal 2
-npm run provision -- CONFIG.ndeploy.json reinstall
-npm run provision -- CONFIG.ndeploy.json authorize PRINCIPAL
-npm run provision -- CONFIG.ndeploy.json status
-```
+Read environment requirements from `flake.nix`, tool manifests, and the root
+lockfile. Use `nix develop` for the repository's declared shell. Do not mirror
+dependency versions, current Chromium paths, or compiler generation numbers in
+this guide.
 
-Browser tests:
+## Change Guidance
 
-```sh
-npm run test:e2e:local
-npm run test:e2e:local:ii
-```
+- Keep package generation deterministic and make ownership of generated files
+  explicit. Fix the owning generator rather than adding app-specific repair
+  scripts.
+- Diagnose compile caching using the package/compiler identity and journal
+  already carried by the operation. Avoid inventing a parallel state format.
+- Preserve the split between building an archive, compiling an actor,
+  provisioning a disposable environment, and reviewing an installed app
+  upgrade. These operations have different state and authorization effects.
+- Use the shared app contract for new examples. Do not add app-ID branches to
+  generic compiler or provisioning code to support an ordinary app.
+- Test interrupted operations and realistic retained state when changing
+  install/provisioning orchestration. Compilation and happy-path smoke tests
+  do not prove recovery.
+- Keep documentation as source navigation and stable contracts. Record active
+  task plans, test logs, release receipts, and live deployment observations in
+  their designated scratch/evidence locations.
 
-Production-context offline compile:
-
-```sh
-bun packages/neutron-cli/src/index.ts compile \
-  --package path/to/kernel.neutron \
-  --package path/to/app.neutron \
-  --wasm-out /tmp/neutron.wasm \
-  --candid-out /tmp/neutron.did
-```
-
-There is no developer CLI for per-app local install, uninstall, or bootstrap.
-Those are reviewed product flows in the browser. Local provisioning always
-installs the complete configured actor.
-
-## Current Boundaries
-
-- `packages/neutron-scripts` validates, builds, packs, and archives apps.
-- `packages/neutron-compiler` prepares packages, selects the supported
-  assembler contract, compiles the complete actor, and plans checked browser
-  installs.
-- `packages/neutron-provision` owns format-3 deployment config, schema-3
-  journals, IC create/adopt/reinstall, the supervised PocketIC environment,
-  fleet reinstall, authorization, fixtures, and verification.
-- `packages/neutron-cli` is a filesystem adapter for production-context
-  compilation only.
-
-Provisioning consumes archives. It never discovers workspaces, runs package
-scripts, or branches on app IDs. PocketIC path-only declarations make archive
-rebuilds cheap; production declarations remain exactly pinned.
-
-Each config owns one `CONFIG.ndeploy.session.json`. Local tools resolve the
-gateway and ordered fleet from that journal. Package and compiler hashes bind
-operations and cache entries, but are derived rather than hand-maintained for
-the local path.
-
-## Tooling
-
-The repository keeps npm workspaces and the root lockfile as dependency truth.
-Bun runs TypeScript scripts and unit tests. Browser bundles use the established
-esbuild paths, and Playwright validates installed behavior.
-
-On NixOS:
-
-```sh
-nix develop
-```
-
-Use Bun tests for pure package/compiler/state behavior and Playwright for real
-browser behavior.
-
-## Near-Term Priorities
-
-1. Make package-to-declared-path plus one local reinstall the complete
-   documented first-run path for an external app repository.
-2. Improve package and compile-cache diagnostics without adding another
-   deployment state format.
-3. Add disposable format-3 test configs that attach to the shared PocketIC
-   supervisor.
-4. Expand browser coverage for install review, authorization, and interrupted
-   reinstall recovery.
-5. Publish the app template, manifest tooling, design system, and compiler
-   helpers without repository-relative assumptions.
-6. Keep packages target-neutral and installation identity explicit in compile
-   and deployment receipts.
-
-## Non-Goals
-
-- Per-app developer deployment commands.
-- icp-cli mappings as deployment state.
-- Separate local and production package archives.
-- App-specific provisioner hooks or profiles.
-- More than one journal for a config.
-
-See [Local Development And Deployment](./bootstrap-local-development-and-deployment.md),
+See [App Development Workflow](./app-development-workflow.md),
+[Local Development And Deployment](./bootstrap-local-development-and-deployment.md),
 [Provisioning System](./provisioning-system.md), and
 [Testing And Verification](./testing-and-verification.md).

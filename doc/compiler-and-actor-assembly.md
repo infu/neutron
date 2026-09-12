@@ -1,8 +1,12 @@
 # Compiler And Actor Assembly
 
-The Neutron compiler turns one Kernel package plus ordinary app packages into
-one Motoko actor and one install plan. It is both a build system and a security
-boundary.
+Use this reference when changing compilation, generated authority, or checked
+installation. The Neutron compiler turns one Kernel package plus ordinary app
+packages into one Motoko actor and one install plan. Changes must preserve both
+the security boundary and every supported production predecessor's state.
+
+Use the source entry points below for current identifiers, limits, and result
+fields. Do not treat documentation examples as a generated-source fixture.
 
 ```text
 bounded packages + prior runtime/stable state + trusted installation context
@@ -32,7 +36,7 @@ production Neutron destructively.
 Assembly consumes:
 
 - the Kernel package;
-- zero to 255 ordinary app packages;
+- zero or more ordinary app packages;
 - each package's format-3 manifest, Motoko source, and static assets;
 - prior manifests, stable signature, managed-memory inventory, and module paths
   for an update;
@@ -41,9 +45,9 @@ Assembly consumes:
 - trusted installation identity for a fresh actor; and
 - compiler and package decoder limits.
 
-The total target is at most 256 app instances including Kernel. At most 32 may
-declare resident backgrounds and at most 64 scheduled tasks may exist
-actor-wide.
+Assembly bounds app instances, resident backgrounds, and scheduled tasks
+actor-wide. Read the `NEUTRON_*_LIMIT` constants in `assemble.ts` when diagnosing
+admission; frontend and backend admission must agree with them.
 
 Missing `tiles` normalizes to `[]`. A package may be headless; the compiler does
 not synthesize `main/index.html` or any other frontend endpoint.
@@ -70,12 +74,14 @@ network ID is public identity, not authorization. A state-preserving update
 reads the committed installation identity from the prior actor rather than
 accepting a new caller-supplied value.
 
-An actor without the current installation-identity and assembler contract is
-not a valid update predecessor for this compiler. That rule applies to
-explicitly unsupported development state; it is not permission to replace a
-supported production Neutron through a destructive reinstall. Before releasing
-a changed contract, the release must retain or add a state-preserving path from
-every production predecessor it continues to support.
+An update predecessor must pass the installation-identity checks and match an
+assembler generation explicitly supported by the installer, including its
+named predecessor bridge. An unknown generation cannot be treated as
+compatible merely because it reports a similar runtime shape. Rejection of
+unsupported development state is not permission to replace a supported
+production Neutron through a destructive reinstall. Before releasing a changed
+contract, retain or add a state-preserving path from every production
+predecessor the release continues to support.
 
 ## Package Preparation
 
@@ -115,18 +121,10 @@ file installs.
 
 ## One Generated Actor
 
-The generated actor contains:
-
-- the Kernel backend services;
-- every target app backend module;
-- compiler-created app scopes and runtime inventory;
-- versioned backend environments;
-- typed app-dependency handles;
-- physical public and app-call dispatchers;
-- managed-memory modules and migrations;
-- capability registrations and compiled declarations;
-- install and runtime identity methods; and
-- one stable-signature declaration.
+The actor combines the Kernel and target app modules with compiler-created
+scopes, attenuated environments, dispatchers, managed-memory wrappers, and
+runtime declarations. Its stable signature and install identity describe the
+whole actor; an app is not a separately installed Wasm module.
 
 Ordinary app modules never receive a Kernel service object. The assembler
 creates attenuated values and passes them only to the app/configuration point
@@ -163,30 +161,24 @@ aggregate-admission pass.
 
 ## Backend Environment
 
-The backend environment is one typed record generated for the exact app. It may
-contain selected interfaces such as:
+When an app declares managed memory, dependencies, or selected backend
+capability interfaces, its `Init` receives one generated environment record.
+The groups are `stable_memory`, `app_calls`, and `capabilities`; empty groups
+are omitted. Every generated environment also includes `installation`. An app
+with none of these groups receives `Init()` rather than an empty environment.
 
-- `deferred_timers`;
-- `backend_calls`;
-- `randomness`;
-- `chain_key_signing`;
-- `wallet_custody_signing`;
-- `stable_store`;
-- `https_outcalls`;
-- `vetkeys_public`; and
-- `certified_assets`.
-
-Each field captures the app's `AppScope` and closed declaration. A backend
-cannot ask for an interface it did not select or construct one for another
-scope.
+Capability handles capture the app's `AppScope` and closed declaration. A
+backend cannot ask for an interface it did not select or construct one for
+another scope. Use `backend.capabilities` and the capability catalog for the
+available interfaces rather than copying a list into an app.
 
 Install-reviewed backend-call reservation defaults are part of the
 `backend_calls` declaration. A pristine actor can materialize all compiled
 defaults synchronously. An incremental update prepares changed claims through
-the predecessor before installing the target. Target assembly admits at most
-64 defaults per app and 2,048 actor-wide, and rejects the same exact default
-scope claimed across apps. It also admits at most 128 declared vetKey slots
-actor-wide.
+the predecessor before installing the target. Target assembly enforces
+per-app and aggregate capability bounds and rejects the same exact default
+scope claimed across apps. Current bounds are owned by the capability catalog
+and assembly admission checks.
 
 ## Function Mapping
 
@@ -293,8 +285,8 @@ tile ID, tray, and ordinary background becomes a separate installation-derived
 surface. No app ID or release-version exception participates in that decision.
 
 It derives frontend runtime admission counts and injects them into the actor.
-The backend and trusted frontend independently enforce 256 total app instances
-and 32 resident frames before activation/mounting.
+The backend and trusted frontend independently enforce the declared admission
+bounds before activation or mounting.
 
 Static assets are copied only for declared package paths. A headless backend
 does not need `web/index.html`, an icon fetch, or a synthetic tile.
@@ -325,9 +317,8 @@ is retained only for older assets that lack the pattern facts.
 Neutron retains classical persistence with compacting GC as its default.
 Compiler throughput and stack-safety improvements do not switch existing
 canisters to enhanced persistence or change their managed-memory schemas.
-The browser scale fixture selects classical mode explicitly and can compare
-15, 30, or 50 substantial synthetic apps against a pinned compiler baseline;
-app counts alone are not a capacity guarantee for arbitrary source code.
+Use the compiler scale fixtures for performance investigations; a fixture's app
+count is not a capacity guarantee for arbitrary source code.
 
 The compiler artifact must expose:
 
@@ -341,30 +332,23 @@ bounded initialization failure. There is no polling initialization path.
 
 ## Compile Output
 
-A successful compile returns:
-
-- raw actor Wasm;
-- generated Candid;
-- stable signature;
-- diagnostics and compatibility diagnostics;
-- dependency and migration plans;
-- managed-memory retirement and inventory;
-- canonical capability plans and fingerprints;
-- app-instance inventory;
-- deployment, assembler, and compiler IDs;
-- the exact browser-surface-origin app set;
-- retained module paths; and
-- optional generated actor source for diagnostics/evidence.
+A successful compile returns the actor bytes and interfaces together with the
+plans, inventories, diagnostics, and identities needed to verify installation.
+`CompileResult` in `compile.ts` owns the exact result shape. Request generated
+source when an investigation needs assembly evidence; do not maintain a second
+generated-source inventory in documentation.
 
 The deployment ID binds the target manifests, migrations, retirements,
 capabilities, inventories, compiler, environment, installation identity, and
 deployment nonce.
 
-`compiled.wasm` is the raw actor output. The shared transport helper gzip
-compresses it as `fflate@0.8.3:default-level:mtime=0` and returns the exact
-bytes that the installer sends through either the inline or chunked management
-path. Raw and transport hashes are different byte-domain facts. Install and
-provisioning verification compares the live canister module hash with SHA-256
+`compiled.wasm` is the raw actor output. Use
+`prepareDeterministicWasmTransport` from `deployment_record.ts` for the exact
+gzip bytes sent through either the inline or chunked management path. Its
+encoder identifier and parameters are part of the build-record contract; do
+not substitute ad hoc compression. Raw and transport hashes are different
+byte-domain facts. Install and provisioning verification compare the live
+canister module hash with SHA-256
 of that deterministic gzip transport, while retaining the raw output identity
 separately.
 
@@ -407,13 +391,15 @@ The journal binds the target deployment, asset copies, clear prefixes, and
 target app inventory. Exact replay is idempotent and is the causal recovery path
 after a lost reply.
 
-The deploy boundary checks the installed Kernel registry before any upload or
-staging. A predecessor at version 307 or later requires an exact complete
-deployment build record. Only a pre-v307 bridge predecessor or a fresh
-provisioner path with no installed Kernel may omit it.
+The deploy boundary checks the supplied predecessor inventory and requires an
+exact complete deployment build record for record-capable predecessors before
+upload or staging. `requiresCompleteDeploymentBuildRecord` in `install.ts`
+defines the supported older bridge exception; a fresh provisioner path has no
+installed predecessor. Do not use that compatibility exception for a new
+installation workflow.
 
-One journal admits at most 4,000 asset copies and 128 clear prefixes. One commit
-may remove at most 64 apps.
+Journals bound asset copies, clear prefixes, and app removals. Use the
+`KERNEL_INSTALL_MAX_*` constants in `install.ts` when planning a transaction.
 
 ### Reservations
 
@@ -490,6 +476,7 @@ declarations. The provisioner does not interpret app IDs or private methods.
 - `packages/neutron-compiler/src/compile.ts`
 - `packages/neutron-compiler/src/assemble.ts`
 - `packages/neutron-compiler/src/install.ts`
+- `packages/neutron-compiler/src/deployment_record.ts`
 - `packages/neutron-compiler/src/package_decoder.ts`
 - `packages/neutron-compiler/src/installation_context.ts`
 - `packages/neutron-motoko-wasm/src/index.ts`
@@ -497,3 +484,10 @@ declarations. The provisioner does not interpret app IDs or private methods.
 - `packages/neutron-tools/src/schema.ts`
 - `packages/neutron-tools/src/capabilities/`
 - `apps/kernel/backend/install/`
+
+For changes to these contracts, inspect the corresponding compiler tests for
+assembly, dependencies, installation identity, package decoding, deployment
+records, checked install/recovery, and predecessor compatibility. Run the
+relevant suites through the workspace test runner; production memory changes
+also require the migration evidence in
+[Memory Migrations And Uninstall](./memory-migrations-and-uninstall.md).

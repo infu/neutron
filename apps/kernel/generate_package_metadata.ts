@@ -299,7 +299,6 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/test/repository_access_client.test.ts",
   "apps/kernel/test/repository_access_cost.test.tsx",
   "packages/neutron-tools/src/repository_access.ts",
-  "doc/todo.wallet-fresh-start.md",
   "packages/neutron-compiler/test/fresh_custody_cutover.pocketic.test.ts",
   // Custody signing, its migration, shared wallet tools and checked-upgrade fixtures.
   "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
@@ -311,7 +310,6 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
   "apps/kernel/test/wallet_custody_signing.test.ts",
   "doc/evm-wallet-research.md",
   "doc/evm-wallet.md",
-  "doc/todo.evm-wallet.md",
   "packages/neutron-compiler/test/evm_wallet_upgrade.pocketic.test.ts",
   "packages/neutron-compiler/test/evm_wallet_upgrade/archives.ts",
   "packages/neutron-compiler/test/evm_wallet_upgrade/existing_apps.ts",

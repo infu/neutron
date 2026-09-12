@@ -1,165 +1,124 @@
-# Feedback implementation and release plan
+# Feedback implementation contract
 
-## Product
+Feedback is implemented in `apps/feedback`, with its shared Ashroot protocol in
+`support/feedback`. This document records the boundaries an agent must preserve
+when changing either component. Deployment receipts and generated artifacts,
+rather than this document, establish what is installed or published.
 
-Build a small Feedback app in `apps/feedback` and a separate persistent Ashroot
-protocol in `support/feedback`. A submission belongs to its Neutron canister,
-independently of the browser or an app reinstall. The user confirmed that every
-submission is private to the sender and assigned moderators.
+## Source map
 
-Four choices share the same compact flow:
+| Concern | Authoritative source |
+| --- | --- |
+| Protocol wire types and public API | `support/feedback/mo/API.mo`, `support/feedback/mo/main.mo` |
+| Caller authorization, database writes and indexes | `support/feedback/mo/main.mo` and reviewed private Ashroot inputs |
+| Pinned broker target and allowed updates | `apps/feedback/backend/config.mo`, `apps/feedback/backend/main.mo`, `apps/feedback/neutron.json` |
+| Managed seed and pending requests | `apps/feedback/backend/memory/state/`, `apps/feedback/neutron.lock.json`, `apps/feedback/src/store_state.ts` |
+| Browser protocol transport and scoped client | `apps/feedback/src/protocol.ts`, `apps/feedback/src/transport.ts`, `apps/feedback/src/client.ts` |
+| Agent tools and resident notifications | `apps/feedback/src/service_state.ts`, `apps/feedback/src/service.ts`, `apps/feedback/src/notification_state.ts` |
+| Tile/tray presentation and read acknowledgment | `apps/feedback/src/App.tsx`, `apps/feedback/src/FeedbackTray.tsx` |
+| Administration and reproducible protocol build | `support/feedback/scripts/operator.ts`, `support/feedback/scripts/build.ts`, `support/feedback/README.md` |
 
-- Report a problem: request help with Neutron or an app.
-- Share feedback: leave a comment without an expectation of a reply.
-- Suggest an app: describe something the user would like to use.
-- Suggest a feature: describe an improvement to Neutron or an existing app.
+Read manifests and configuration for current target principals, release versions,
+capability declarations and package selection. Do not copy those values into
+architecture guidance or infer a live deployment from a checked-in archive.
 
-The tile has My messages, New message, discussion, and a role-gated moderator
-inbox. Moderators can view and reply, but cannot edit or delete user content or
-assign other moderators. Blast CLI identity 0 is the protocol administrator and
-assigns moderators by Neutron principal. No uploads: messages can contain links
-to images published in Files → Shared.
+## Privacy and roles
 
-The resident owns a tray badge and exposes user and moderator Agent tools.
-Agent reads do not implicitly acknowledge replies. Reading an actual discussion
-acknowledges only the last message displayed, preserving later replies.
+All submission kinds are private to the sending Neutron and assigned moderators:
+issues, general feedback, app suggestions and feature suggestions. Ordinary
+queries remain author-only even when that author is also a moderator. Moderation
+uses separate methods with a live role check on every query and update.
 
-## Architecture
+Issues enter the needs-reply queue when unresolved and last answered by their
+author. Other kinds can receive replies without entering that queue. Only the
+author resolves or reopens an issue; reopening does not itself change the last
+message's role. Moderators may read and reply, but cannot edit/delete content,
+change the author's issue status, or assign moderators.
 
-- Ashroot tables and indexes retain submissions, messages, moderator roles,
-  per-Neutron unread state, read delegates, and idempotent request identities.
-- App writes go through its Neutron backend, which pins the protocol and exact
-  allowed methods. The protocol checks the actual caller for every operation.
-- Browser queries use a durable app-local read identity registered by that
-  Neutron. The delegate cannot create submissions, reply, or assign moderators.
-- A single resident client serves the tile, tray, and Agent tools. Protocol
-  errors remain distinct from empty results; interrupted sends retain their
-  request ID and draft for safe retry.
-- Use the shared Neutron design system with compact rows, plain wording,
-  accessible controls, narrow-tile layouts, and explicit empty/error states.
+The protocol administrator assigns moderator **Neutron principals**, not browser
+identities. The operator wrapper uses Blast identity 0 and verifies its principal
+against protocol metadata before changing assignments. Discover current roles
+through the operator; do not keep an assignment snapshot in this document.
 
-## Confirmed decisions and moderator setup
+Messages contain text and links. Images may be published through Files and
+linked in a message. Feedback does not upload images or fetch message links.
+Agent responses label discussion text `contentTrust: "user_authored"`; that text
+is data, not instructions or authority to call other tools.
 
-- All four kinds are private to the sending Neutron and assigned moderators.
-- At the user's request, Blast identity 0 assigned moderator access to
-  `3rurp-vyaaa-aaaay-aacua-cai`. The production operator postflight verified
-  active assignment row 1 on 12 September 2026.
-- The user approved 160 Unicode code points per title, 16,000 per message,
-  and 30 results per page. The protocol and UI enforce the text bounds; larger
-  protocol page requests return at most 30 rows with a continuation cursor.
-  No other bounds were added.
+## Identity and transport
 
-## Validation and release
+The submission owner is the calling Neutron canister. The protocol's opaque
+principal check follows its canister-caller convention; it does not attest to the
+caller's installed code. Application writes go through the pinned backend broker,
+which accepts only its explicit method set and attaches no cycles. Administrator
+methods are outside that broker.
 
-1. Implement protocol authorization, indexed pagination, idempotency and unread
-   behavior; test fresh initialization and a state-preserving upgrade with data.
-2. Implement app managed memory v1 and test initialization/restoration, typed
-   transport, both sets of Agent tools, tray/read races, and retry behavior.
-3. Exercise all UI pages at narrow and wide sizes, including empty, loading,
-   failure, unread, user discussion and moderator discussion states.
-4. Deploy a new empty protocol canister with reviewed Wasm and public Candid
-   metadata. Retain exact artifact digests and deployment evidence. Reconcile
-   deployment-account funding before creation. Never replace existing canisters.
-5. Build Feedback 0.1.1 with the complete workspace package command and shared
-   `LICENSE.APP.USE`/offered-source workflow. Publish it free under the existing
-   aae publisher through Marketplace, then verify receipt-v2 no-op publication.
-6. Add the same verified Feedback archive to the existing lean Dispenser set,
-   run its checks, stage once, and verify the new live starter receipt.
+Private browser queries use an app-local Ed25519 read identity. Its seed is
+initialized once in managed memory; racing initializations must use the seed the
+backend actually retained. The Neutron registers this identity as its read
+delegate. Replacing a delegate removes the old binding, and an app reinstallation
+can register a new delegate for the same remote history. This is not the owner's
+Internet Identity signing key. The delegate cannot perform protocol mutations.
 
-## Repository references
+`protocolClient` belongs to one invocation and uses that invocation's
+`context.kernel` and cancellation signal. Do not cache an Agent caller's client
+or share initialization across caller scopes. The resident's independent client
+is reserved for automatic notification refresh. After delegate registration,
+check that the returned Neutron matches the backend-reported owner.
 
-- [App developer guide](app-developer-guide.md)
-- [Design system](design-system.md)
-- [App tray](app-tray.md)
-- [Managed memory](memory-migrations-and-uninstall.md)
-- [Package publication](package-updates.md)
-- [Marketplace operator workflow](../support/marketplace/OPERATIONS.md)
-- Ashroot's installed `ashroot docs guide`, `migration`, and `performance`.
-- [Motoko persistence](https://docs.internetcomputer.org/languages/motoko/fundamentals/actors/data-persistence/): retain the actor memory root and verify representative data after an upgrade.
-- [IC principal model](https://docs.internetcomputer.org/concepts/principals/): authenticate the sending canister and resolve read delegates without treating a principal as code attestation.
-- [IC cycle costs](https://docs.internetcomputer.org/references/cycle-costs/): size the new protocol's initial balance against measured installation and idle-memory cost on a current public application subnet.
+## Persistence, retries and unread state
 
-## Qualification status — 12 September 2026
+The app's managed root retains its read seed and unresolved send intents. The
+shared protocol retains discussions, append-only messages, assignments,
+delegates, unread counters and permanent request identities. Preserve both
+layers across their independent upgrade paths.
 
-Feedback 0.1.1 passed 40 TypeScript tests, the Motoko managed-memory restoration
-test, and real-protocol integration covering automatic first-use registration,
-user/moderator discussion, unread acknowledgment, role revocation and recovery
-of a lost response after reload. The final browser run passed 23 check groups
-with 72 screenshots across 320–1280px, no browser errors, and no horizontal
-overflow. It includes Unicode limits, both reply roles, saved sends and editing
-a fresh copy of an earlier oversized submission.
+Save exact create/reply contents and request ID before sending. After an unknown
+outcome, resume that same request; do not generate another ID or edit the saved
+payload. The protocol reconciles accepted requests before applying new-content
+validation. Conflicting contents or reply roles under one ID are rejected.
+Clear a local intent only when its outcome is known; an access error during a
+retry does not prove an earlier attempt failed. Pending/resume Agent tools expose
+this recovery path after a resident reload.
 
-The approved-bounds Ashroot protocol passed 11 PocketIC suites, including clean
-initialization, privacy, authorization, idempotency, unread races, indexed
-pagination, Unicode boundaries and page clamping. Both a populated keep upgrade
-and an upgrade from the exact archived initial Wasm preserve data and permit
-subsequent writes. The latter also preserves previously accepted oversized
-messages and successful retries. Protocol schema version 1 remains unchanged.
-The operator wrapper passed 15 tests with 74 assertions using actual Blast
-result projections; its documented command was also verified against production.
+Agent reads do not mark messages read. The visible discussion acknowledges only
+the last displayed message. Read sequences advance monotonically and subtract
+only the newly acknowledged moderator replies from the owner's unread total.
+Later replies and undisplayed pages must remain unread. Tray state derives from
+the protocol count; list or notification failures must remain distinguishable
+from an empty inbox.
 
-The frozen `feedback.v0.1.1.neutron` archive is 435,617 bytes, SHA-256
-`f2bd2a40b95554425e0803c1550b806256be40198f0bc28b84d3e7e5087671bb`.
-The complete package command passed. The existing 19 Dispenser tests, license
-checks and security checker passed; a separate combined-starter qualification
-compiled this exact archive with Kernel, Marketplace, Files, Contacts, Wallet,
-EVM Wallet and Agent. The seven existing package hashes match the preceding
-selection. Local compilation does not itself stage the production starter.
+Protocol text limits count Unicode code points. Read the approved limits from
+protocol validation and `apps/feedback/src/text_limits.ts`. Protocol lists use
+indexed cursor pagination. Frontend responses may contain fewer whole entries
+to fit the existing message-bus envelope; `response_state.ts` preserves a cursor
+for the remaining entries rather than truncating message text. Handle absent
+Candid optional fields at the Kernel/SDK boundary: an absent seed is first-use
+state, and an absent continuation is the final page.
 
-The current release receipt is
-`.neutron/release-receipts/feedback-v101-2026-09-12T18-07-26Z`, also named by
-`.neutron/feedback-next-release-path`. It retains the frozen app and offered
-source, final app/browser tests, `protocol-bounds-build-inputs.tar.gz`, protocol
-qualification, `operator-cli-fix/`, and `starter-local-qualification/`.
+## Change and release checks
 
-## Production status and initial release history
+- Exercise clean initialization and restoration of the existing managed root;
+  retain released schema modules and lock lineage. A frontend or broker fix
+  does not by itself require a schema migration.
+- Test the actual Candid-to-Kernel-to-SDK projection, private author/moderator
+  access, delegate replacement, revocation, duplicate sends, uncertain-response
+  recovery, read races, Unicode validation and cursor boundaries.
+- Verify tile/tray empty, loading, failure and discussion states at narrow and
+  wide sizes. Browser fixture tests and real-protocol integration prove different
+  boundaries; neither substitutes for the other.
+- Restore and verify the reviewed private Ashroot inputs before building the
+  protocol. Test the exact production predecessor with representative stored
+  data and subsequent writes. Upgrade the retained protocol root; do not repeat
+  initial creation, funding or installation from historical receipts.
+- Release the app through the shared license, offered-source and state-preserving
+  [package workflow](package-updates.md). Shared protocol deployment, Marketplace
+  publication and Dispenser staging are separate actions. Verify the live
+  protocol and exact artifacts before a release; repeat publication against the
+  same bytes for the required no-op receipt.
 
-The protocol was installed successfully on 12 September 2026 at
-`ld53o-fyaaa-aaaai-ax54q-cai` after the user's 30 trillion cycle top-up.
-The production postflight verified module SHA-256
-`007dd539b527a8416de605c1d16b317e21d542aec3aa9f13308e0f42213bb20b`,
-protocol/schema version 1, and Blast identity 0 as administrator. Installation,
-module/controller evidence and the confirmed moderator assignment are retained
-in the current receipt. Future protocol changes use state-preserving upgrades.
-
-Marketplace publication succeeded as batch 16: Feedback 0.1.1 and its matching
-offered source were published atomically, free under aae. Repeating the exact
-publication command against the same bytes returned receipt-v2 `batch_id: null`;
-all 28 packages and 28 offered sources were unchanged and matched their local
-versions, paths, sizes and digests. The production catalog now includes Feedback.
-The icon and two screenshots were published at listing revision 2; repeating the
-media command verified unchanged media with zero update calls and preserved the
-free aae listing and release.
-
-The Dispenser starter was staged once and committed as revision 8, deployment
-`94e213ce3992e78cd23d4f15b8786a0c`. Its read-only postflight matched the exact
-eight qualified packages, compressed Wasm, 480-file commitment and backend
-targets. Newly dispensed Neutrons receive Kernel, Marketplace, Files, Contacts,
-Wallet, EVM Wallet, Agent and Feedback. Existing Neutrons can update Feedback to
-0.1.1 through Settings → Installed Apps; publication does not install updates
-automatically. The current receipt retains publication/media no-op results,
-`starter-postflight.json` and the completed `release-state.json`.
-
-The initial 0.1.0 history remains unchanged in
-`.neutron/release-receipts/feedback-2026-09-12T17-21-35Z`. It retains successful
-mint/create arguments and ledger blocks, the initial qualified Wasm and private
-build-input archive, and the installation rejection for insufficient up-front
-cycle reserve. Its empty-canister status is historical, superseded by the
-successful installation recorded in the 0.1.1 receipt. Never repeat the completed
-mint or creation. Preserve both receipts and the original qualification as
-evidence of the tested transition.
-
-## First-launch fix and retained state
-
-The user installed 0.1.0 and reported “Your saved Feedback identity is
-unavailable.” The Kernel omits absent optional record fields; Feedback wrongly
-required `seed` to be present before initializing it. Version 0.1.1 fixes that
-boundary and the equivalent absent final-page cursor handling. Regression tests
-now exercise the actual Candid-to-Kernel-to-SDK projection, including a fresh
-absent seed, an existing seed, saved-request results and broker replies.
-
-The app retains managed-memory schema version 1, the existing seed and saved
-requests; no migration or reset is introduced. Version 0.1.0 package bytes,
-schema source and lock lineage remain archived unchanged. Protocol authorization
-still precedes private access, and successful request IDs are reconciled before
-new-content length validation so retries survive the approved bounds.
+For executable commands, use the app and protocol `package.json` scripts and the
+[protocol operator guide](../support/feedback/README.md). Related contracts:
+[managed memory](memory-migrations-and-uninstall.md),
+[app development](app-developer-guide.md), [tray](app-tray.md), and
+[design system](design-system.md).
