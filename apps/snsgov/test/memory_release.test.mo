@@ -4,6 +4,7 @@ import Principal "mo:core/Principal";
 import NeutronCapabilities "mo:neutron-capabilities";
 import SnsGov "../backend/main";
 import Memory "../backend/memory/snsgov/v1";
+import OperationsMemory "../backend/memory/snsgov_operations/v1";
 
 // A stub broker. The relay is never dispatched here — an `async*` call needs an
 // async context a Motoko program does not have — but constructing it type-checks
@@ -24,13 +25,14 @@ let stubBroker : NeutronCapabilities.BackendCallsV1 = {
 // the type check for the whole backend as well as a behavioural test.
 
 let mem = Memory.init();
+let operationMem = OperationsMemory.init();
 assert (Map.size(mem.snses) == 0);
 assert (Map.size(mem.audit) == 0);
 assert (Map.size(mem.drafts) == 0);
 assert (mem.max_audit_rows == 1_000);
 
 let app = SnsGov.Init({
-    stable_memory = { snsgov = mem };
+    stable_memory = { snsgov = mem; snsgov_operations = operationMem };
     capabilities = { backend_calls = stubBroker };
 });
 
@@ -221,7 +223,7 @@ assert (app.snsgov_drafts(())[0].sns == neutrinite);
 assert (app.snsgov_drafts(())[0].title == "Adopt the other thing");
 
 // Reopening over the same managed root retains a populated draft and counters.
-let withDraft = SnsGov.Init({ stable_memory = { snsgov = mem }; capabilities = { backend_calls = stubBroker } });
+let withDraft = SnsGov.Init({ stable_memory = { snsgov = mem; snsgov_operations = operationMem }; capabilities = { backend_calls = stubBroker } });
 assert (withDraft.snsgov_drafts(())[0].id == draftId);
 assert (withDraft.snsgov_drafts(())[0].title == "Adopt the other thing");
 assert (withDraft.snsgov_config(()).max_audit_rows == 3);
@@ -286,7 +288,7 @@ assert (
     }) == #ok
 );
 let restored = SnsGov.Init({
-    stable_memory = { snsgov = mem };
+    stable_memory = { snsgov = mem; snsgov_operations = operationMem };
     capabilities = { backend_calls = stubBroker };
 });
 assert (restored.snsgov_allowed(neutrinite, false) == ?governance);
@@ -325,3 +327,117 @@ assert (restored.snsgov_allowed(neutrinite, true) == ?governance);
 let stranger = Principal.fromText("2jvtu-yqaaa-aaaaq-aaama-cai");
 assert (restored.snsgov_allowed(stranger, false) == null);
 assert (restored.snsgov_allowed(stranger, true) == null);
+
+// ---- Independent durable operation root ----------------------------------
+
+assert (restored.snsgov_operation_get("missing") == null);
+assert (restored.snsgov_operation_list({ before = null; limit = 10 }).total == 0);
+let prepared : SnsGov.OperationPrepare = {
+    operation_id = "stake-001";
+    kind = ?"stake";
+    title = ?"Stake \"SNS\" tokens";
+    sns = neutrinite;
+    governance;
+    input_json = "{\"kind\":\"stake\",\"nonce\":\"12\"}";
+    review_json = "{\"title\":\"Stake \\\"SNS\\\" tokens\",\"amount\":\"100000000\"}";
+    initiator = "user";
+    state_json = "{}";
+    steps = [{ step_id = "claim"; method = null; args = "DIDL\00\00" }];
+};
+switch (restored.snsgov_operation_prepare(prepared)) {
+    case (#ok(operation)) {
+        assert (operation.revision == 0);
+        assert (operation.seq == 0);
+        assert (operation.steps[0].status == "prepared");
+        assert (operation.steps[0].method == "manage_neuron");
+        assert (operation.steps[0].reply == null);
+    };
+    case (#err(_)) assert false;
+};
+switch (restored.snsgov_operation_update({ operation_id = "stake-001"; expected_revision = 0; state_json = "{\"fundedBlock\":\"345\"}" })) {
+    case (#ok(operation)) assert (operation.revision == 1);
+    case (#err(_)) assert false;
+};
+// Duplicate preparation matches the ORIGINAL state; it cannot erase the
+// receipt or return an obsolete version of the record.
+switch (restored.snsgov_operation_prepare(prepared)) {
+    case (#ok(operation)) {
+        assert (operation.revision == 1);
+        assert (operation.state_json == "{\"fundedBlock\":\"345\"}");
+    };
+    case (#err(_)) assert false;
+};
+switch (restored.snsgov_operation_update({ operation_id = "stake-001"; expected_revision = 0; state_json = "{}" })) {
+    case (#err(_)) {};
+    case (#ok(_)) assert false;
+};
+switch (restored.snsgov_operation_prepare({ prepared with steps = [{ step_id = "claim"; method = null; args = "different bytes" }] })) {
+    case (#err(_)) {};
+    case (#ok(_)) assert false;
+};
+switch (restored.snsgov_operation_prepare({ prepared with operation_id = "second"; steps = [{ step_id = "claim"; method = null; args = "one" }, { step_id = "claim"; method = null; args = "two" }] })) {
+    case (#err(_)) {};
+    case (#ok(_)) assert false;
+};
+ignore restored.snsgov_operation_prepare({ prepared with operation_id = "second" });
+let recentOperations = restored.snsgov_operation_list({ before = null; limit = 1 });
+assert (recentOperations.total == 2);
+assert (recentOperations.rows[0].operation_id == "second");
+assert (recentOperations.rows[0].kind == "stake");
+assert (recentOperations.rows[0].title == "Stake \"SNS\" tokens");
+assert (recentOperations.next_before == ?1);
+let olderOperations = restored.snsgov_operation_list({ before = recentOperations.next_before; limit = 1 });
+assert (olderOperations.rows[0].operation_id == "stake-001");
+assert (olderOperations.next_before == null);
+
+// Readable labels are immutable typed metadata. Opaque JSON is retained and
+// never parsed while listing history, including unsupported/malformed values.
+for ((kind, title) in [(null, null), (?"", ?"")].vals()) {
+    let id = if (kind == null) "summary-missing" else "summary-empty";
+    ignore restored.snsgov_operation_prepare({ prepared with operation_id = id; kind; title; input_json = "not json"; review_json = "\\ud83d" });
+    let row = restored.snsgov_operation_list({ before = null; limit = 1 }).rows[0];
+    assert (row.operation_id == id);
+    assert (row.kind == "operation");
+    assert (row.title == "SNS operation");
+};
+switch (restored.snsgov_operation_prepare({ prepared with kind = ?"topup" })) {
+    case (#err(_)) {}; case (#ok(_)) assert false;
+};
+switch (restored.snsgov_operation_prepare({ prepared with title = ?"Changed review label" })) {
+    case (#err(_)) {}; case (#ok(_)) assert false;
+};
+
+let restoredJournal = SnsGov.Init({
+    stable_memory = { snsgov = mem; snsgov_operations = operationMem };
+    capabilities = { backend_calls = stubBroker };
+});
+switch (restoredJournal.snsgov_operation_get("stake-001")) {
+    case (?operation) {
+        assert (operation.state_json == "{\"fundedBlock\":\"345\"}");
+        assert (operation.input_json == prepared.input_json);
+        assert (operation.review_json == prepared.review_json);
+        assert (operation.steps[0].args == prepared.steps[0].args);
+        assert (operation.revision == 1);
+    };
+    case null assert false;
+};
+assert (restoredJournal.snsgov_config(()).audit_rows == 3);
+assert (restoredJournal.snsgov_allowed(neutrinite, true) == ?governance);
+
+// Optional method retains compatibility for manage_neuron callers while the
+// other public SNS governance operations retain their exact reviewed method.
+for (method in ["fail_stuck_upgrade_in_progress", "reset_timers", "get_maturity_modulation"].vals()) {
+    let request : SnsGov.OperationPrepare = { prepared with operation_id = method; steps = [{ step_id = "governance"; method = ?method; args = "DIDL\00\00" }] };
+    switch (restoredJournal.snsgov_operation_prepare(request)) {
+        case (#ok(operation)) assert (operation.steps[0].method == method);
+        case (#err(_)) assert false;
+    };
+    switch (restoredJournal.snsgov_operation_prepare({ request with steps = [{ step_id = "governance"; method = null; args = "DIDL\00\00" }] })) {
+        case (#err(_)) {};
+        case (#ok(_)) assert false;
+    };
+};
+switch (restoredJournal.snsgov_operation_prepare({ prepared with operation_id = "unsupported"; steps = [{ step_id = "call"; method = ?"unrelated_method"; args = "DIDL\00\00" }] })) {
+    case (#err(_)) {};
+    case (#ok(_)) assert false;
+};

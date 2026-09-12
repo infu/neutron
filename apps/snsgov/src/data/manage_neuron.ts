@@ -21,8 +21,11 @@
 
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
-import { idlFactory as governanceIdl } from "../candid/sns_governance.did.js";
-import { fromHex } from "./format";
+import type { Action, Command, ManageNeuron, ManageNeuronResponse } from "../candid/sns_governance.did";
+import { fromHex, toHex } from "./format";
+import { candidTypeSchema, candidValueFromJson, candidValueToJson } from "./candid_codec";
+import { candidFieldType, candidVariantFields, governanceCommandType, governanceMethodTypes } from "./governance_codec";
+import { validateProposalAction, validateProposalText } from "./proposal_actions";
 
 /** SNS `Vote`: 0 unspecified, 1 yes, 2 no. */
 export const VOTE_YES = 1;
@@ -70,25 +73,71 @@ export function encodeRegisterVote(
 
 // --- Full generated types ---------------------------------------------------
 
-let cachedTypes: { arg: IDL.Type; ret: IDL.Type } | undefined;
-
 function manageNeuronTypes(): { arg: IDL.Type; ret: IDL.Type } {
-  if (cachedTypes) return cachedTypes;
-  const service = governanceIdl({ IDL }) as unknown as {
-    _fields: [string, { argTypes: IDL.Type[]; retTypes: IDL.Type[] }][];
-  };
-  const found = service._fields.find(([name]) => name === "manage_neuron");
-  if (!found) throw new Error("manage_neuron is absent from the generated interface");
-  const arg = found[1].argTypes[0];
-  const ret = found[1].retTypes[0];
+  const method = governanceMethodTypes("manage_neuron");
+  const arg = method.argTypes[0];
+  const ret = method.retTypes[0];
   if (!arg || !ret) throw new Error("manage_neuron has an unexpected shape");
-  cachedTypes = { arg, ret };
-  return cachedTypes;
+  return { arg, ret };
 }
 
 /** Encode an arbitrary `ManageNeuron` value using the generated interface. */
 export function encodeManageNeuron(value: unknown): Uint8Array {
   return new Uint8Array(IDL.encode([manageNeuronTypes().arg], [value]));
+}
+
+/** Decode preserved request bytes without discarding any command fields. */
+export function decodeManageNeuronRequest(args: Uint8Array): ManageNeuron {
+  return IDL.decode([manageNeuronTypes().arg], args)[0] as unknown as ManageNeuron;
+}
+
+export function manageNeuronCommandSchema(kind: string): Record<string, unknown> {
+  return candidTypeSchema(candidFieldType(governanceCommandType(), kind));
+}
+
+export function manageNeuronCommandCatalog(): {
+  kind: string;
+  commandKind: string;
+  name: string;
+  schema: Record<string, unknown>;
+  availabilityNote?: string;
+}[] {
+  return candidVariantFields(governanceCommandType()).map(([commandKind, type]) => ({
+    kind: commandKind,
+    commandKind,
+    name: commandKind.replace(/([a-z])([A-Z])/g, "$1 $2"),
+    schema: candidTypeSchema(type),
+    ...(commandKind === "MergeMaturity"
+      ? { availabilityNote: "Legacy interface command rejected by current SNS Governance; use StakeMaturity or DisburseMaturity." }
+      : {}),
+  }));
+}
+
+/** Natural JSON conversion is separate from the generated-value encoder. */
+export function buildManageNeuronCommand(commandKind: string, input: unknown): Command {
+  const command = candidValueFromJson(governanceCommandType(), { [commandKind]: input }) as Command;
+  if ("MakeProposal" in command) {
+    validateProposalText(command.MakeProposal);
+    const action = command.MakeProposal.action[0];
+    if (!action) throw new TypeError("A proposal action is required.");
+    validateProposalAction(action);
+  }
+  return command;
+}
+
+export function encodeManageNeuronCommand(
+  neuronId: string | Uint8Array,
+  commandKind: string,
+  input: unknown,
+): Uint8Array {
+  return encodeManageNeuron({
+    subaccount: normalizeNeuronId(neuronId),
+    command: [buildManageNeuronCommand(commandKind, input)],
+  });
+}
+
+export function manageNeuronRequestToJson(request: ManageNeuron): unknown {
+  return candidValueToJson(manageNeuronTypes().arg, request);
 }
 
 /**
@@ -104,6 +153,8 @@ export function encodeMakeProposal(params: {
   url: string;
   action: unknown;
 }): Uint8Array {
+  validateProposalText(params);
+  validateProposalAction(params.action as Action);
   return encodeManageNeuron({
     subaccount: normalizeNeuronId(params.neuronId),
     command: [
@@ -177,6 +228,21 @@ export interface ManageNeuronOutcome {
   command?: string;
   /** The new proposal's id, when the command was `MakeProposal`. */
   proposalId?: bigint;
+  /** Exact typed reply, including command-specific accounting and receipts. */
+  response?: ManageNeuronResponse;
+  /** Lossless natural JSON; all integers are decimal strings. */
+  responseJson?: unknown;
+  commandData?: unknown;
+  rawReplyHex?: string;
+  /** Split child or ClaimOrRefresh neuron identifier, as 64 hex characters. */
+  neuronId?: string;
+  transferBlockHeight?: bigint;
+  maturityE8s?: bigint;
+  stakedMaturityE8s?: bigint;
+  amountDisbursedE8s?: bigint;
+  amountDeductedE8s?: bigint;
+  mergedMaturityE8s?: bigint;
+  newStakeE8s?: bigint;
 }
 
 /**
@@ -187,20 +253,25 @@ export interface ManageNeuronOutcome {
  * need it to recognise the double-vote case.
  */
 export function decodeManageNeuronResponse(reply: Uint8Array): ManageNeuronOutcome {
-  const decoded = IDL.decode([manageNeuronTypes().ret], reply)[0] as {
-    command?: [] | [Record<string, unknown>];
+  const decoded = IDL.decode([manageNeuronTypes().ret], reply)[0] as unknown as ManageNeuronResponse;
+  const evidence = {
+    response: decoded,
+    responseJson: candidValueToJson(manageNeuronTypes().ret, decoded),
+    rawReplyHex: toHex(reply),
   };
-  const command = decoded.command?.[0];
-  if (!command) return { ok: false, errorMessage: "empty response" };
+  const command = decoded.command?.[0] as Record<string, unknown> | undefined;
+  if (!command) return { ok: false, errorMessage: "empty response", ...evidence };
   const key = Object.keys(command)[0];
   if (key === "Error") {
     const error = command.Error as { error_type?: number; error_message?: string };
-    const out: ManageNeuronOutcome = { ok: false };
+    const out: ManageNeuronOutcome = { ok: false, ...evidence, commandData: command.Error };
     if (error.error_type !== undefined) out.errorType = Number(error.error_type);
     if (error.error_message !== undefined) out.errorMessage = error.error_message;
     return out;
   }
-  const out: ManageNeuronOutcome = { ok: true, ...(key === undefined ? {} : { command: key }) };
+  if (key === undefined) return { ok: false, errorMessage: "empty command", ...evidence };
+  const data = command[key] as Record<string, unknown>;
+  const out: ManageNeuronOutcome = { ok: true, command: key, commandData: data, ...evidence };
   // A submission's whole point is the id it produced, and it is the only place
   // the caller can learn it.
   if (key === "MakeProposal") {
@@ -208,6 +279,23 @@ export function decodeManageNeuronResponse(reply: Uint8Array): ManageNeuronOutco
     const id = made?.proposal_id?.[0]?.id;
     if (id !== undefined) out.proposalId = id;
   }
+  if (key === "Split" || key === "ClaimOrRefresh") {
+    const id = data[key === "Split" ? "created_neuron_id" : "refreshed_neuron_id"] as [] | [{ id: Uint8Array | number[] }] | undefined;
+    if (id?.[0]) out.neuronId = toHex(id[0].id);
+  }
+  const accountFields = {
+    transfer_block_height: "transferBlockHeight",
+    maturity_e8s: "maturityE8s",
+    staked_maturity_e8s: "stakedMaturityE8s",
+    amount_disbursed_e8s: "amountDisbursedE8s",
+    merged_maturity_e8s: "mergedMaturityE8s",
+    new_stake_e8s: "newStakeE8s",
+  } as const;
+  for (const [field, property] of Object.entries(accountFields)) {
+    if (typeof data[field] === "bigint") out[property] = data[field];
+  }
+  const deducted = data.amount_deducted_e8s as [] | [bigint] | undefined;
+  if (deducted?.[0] !== undefined) out.amountDeductedE8s = deducted[0];
   return out;
 }
 

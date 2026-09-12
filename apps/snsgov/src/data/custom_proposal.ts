@@ -5,7 +5,7 @@
  * Neutrinite has 18 — whose payload is an opaque Candid blob. A client that
  * only supports the built-in actions is not really an SNS governance client.
  *
- * The pipeline, all anonymous and free until the moment of submission:
+ * Interface discovery and validator previews use anonymous queries:
  *
  *   list_nervous_system_functions  -> target + validator
  *   candid:service metadata        -> the target's interface
@@ -19,13 +19,19 @@
 
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
-import { callRaw, getAgent, type AgentOptions } from "./agent";
+import { callRawQuery, getAgent, QueryMethodUnavailableError, type AgentOptions } from "./agent";
 import { decodeIcrcAccount, encodeIcrcAccount, toCandidAccount } from "./accounts";
 import { SnsError } from "./errors";
+import { candidArgsFromJson, candidArgsToJson, candidTypeSchema, candidValueFromJson } from "./candid_codec";
+import { toHex } from "./format";
 
 /** Result of a validator pre-flight. */
 export interface ValidationResult {
   ok: boolean;
+  status?: "accepted" | "rejected" | "update_required" | "unavailable" | "invalid_reply" | "not_configured";
+  updateRequired?: boolean;
+  /** Exact response evidence; validator acceptance is advisory preflight. */
+  rawReplyHex?: string;
   /**
    * On success, the DAO's own rendering of the payload.
    *
@@ -68,13 +74,42 @@ export async function methodArgumentType(
   did: string,
   methodName: string,
 ): Promise<IDL.Type | null> {
+  return (await methodArgumentTypes(did, methodName))?.[0] ?? null;
+}
+
+export interface CustomMethodSignature {
+  argTypes: IDL.Type[];
+  retTypes: IDL.Type[];
+  annotations: string[];
+}
+
+async function methodSignature(did: string, methodName: string): Promise<CustomMethodSignature | null> {
   const { idlFactoryFromCandid } = await import("icblast");
   const factory = (await idlFactoryFromCandid(did)) as IDL.InterfaceFactory;
   const service = factory({ IDL }) as unknown as {
-    _fields: [string, { argTypes: IDL.Type[] }][];
+    _fields: [string, CustomMethodSignature][];
   };
   const found = service._fields.find(([name]) => name === methodName);
-  return found?.[1].argTypes[0] ?? null;
+  return found?.[1] ?? null;
+}
+
+/** null means no such method; [] is a valid zero-argument method. */
+export async function methodArgumentTypes(did: string, methodName: string): Promise<IDL.Type[] | null> {
+  return (await methodSignature(did, methodName))?.argTypes ?? null;
+}
+
+export async function inspectCustomMethod(did: string, methodName: string): Promise<{
+  argumentSchemas: Record<string, unknown>[];
+  resultSchemas: Record<string, unknown>[];
+  mode: "query" | "composite_query" | "update";
+} | null> {
+  const method = await methodSignature(did, methodName);
+  if (!method) return null;
+  return {
+    argumentSchemas: method.argTypes.map(candidTypeSchema),
+    resultSchemas: method.retTypes.map(candidTypeSchema),
+    mode: method.annotations.includes("composite_query") ? "composite_query" : method.annotations.includes("query") ? "query" : "update",
+  };
 }
 
 /** Encode a payload from a plain JS value against the target's argument type. */
@@ -82,12 +117,24 @@ export function encodePayload(argType: IDL.Type, value: unknown): Uint8Array {
   return new Uint8Array(IDL.encode([argType], [value]));
 }
 
+/** Encode the complete Candid argument tuple using lossless natural JSON. */
+export function encodePayloadArguments(argTypes: IDL.Type[], values: unknown[]): Uint8Array {
+  return new Uint8Array(IDL.encode(argTypes, candidArgsFromJson(argTypes, values)));
+}
+
+export function decodePayloadArguments(argTypes: IDL.Type[], payload: Uint8Array): unknown[] {
+  return candidArgsToJson(argTypes, IDL.decode(argTypes, payload));
+}
+
 /**
  * Run the DAO's own validator over the exact payload bytes.
  *
  * Governance passes the payload through verbatim and decodes the reply as
- * `Result<String, String>`, so this reproduces what it will do at submission.
- * A validator may legally be a query or an update; `callRaw` tries query first.
+ * `Result<String, String>`. This uses the same byte convention; caller identity
+ * and changing remote state make the preview advisory.
+ * A validator may be query or update. Preview stays query-only; update-only
+ * methods require a separately routed write. The caller here is anonymous,
+ * whereas authoritative submission calls the validator as SNS Governance.
  *
  * Note this does not save the reject fee — a failed submission costs nothing,
  * because governance validates before it charges. It is worth doing anyway: it
@@ -100,24 +147,27 @@ export async function validatePayload(
 ): Promise<ValidationResult> {
   let reply: Uint8Array;
   try {
-    reply = await callRaw(
+    reply = await callRawQuery(
       params.validatorCanisterId,
       params.validatorMethodName,
       params.payload,
       options,
     );
   } catch (error) {
-    return { ok: false, error: `validator unreachable: ${describe(error)}` };
+    if (error instanceof QueryMethodUnavailableError) {
+      return { ok: false, status: "update_required", updateRequired: true, error: "The validator has no query method. An explicit update validation is required; no update was sent." };
+    }
+    return { ok: false, status: "unavailable", error: `validator query unavailable: ${describe(error)}` };
   }
 
   try {
     const [decoded] = IDL.decode([IDL.Variant({ Ok: IDL.Text, Err: IDL.Text })], reply) as [
       { Ok?: string; Err?: string },
     ];
-    if (decoded.Ok !== undefined) return { ok: true, rendering: decoded.Ok };
-    return { ok: false, error: decoded.Err ?? "rejected" };
+    if (decoded.Ok !== undefined) return { ok: true, status: "accepted", rendering: decoded.Ok, rawReplyHex: toHex(reply) };
+    return { ok: false, status: "rejected", error: decoded.Err ?? "rejected", rawReplyHex: toHex(reply) };
   } catch (error) {
-    return { ok: false, error: `undecodable validator reply: ${describe(error)}` };
+    return { ok: false, status: "invalid_reply", error: `undecodable validator reply: ${describe(error)}`, rawReplyHex: toHex(reply) };
   }
 }
 
@@ -136,7 +186,11 @@ export function isIcrcAccountType(type: IDL.Type): boolean {
   if (names.length !== 2) return false;
   if (!names.includes("owner") || !names.includes("subaccount")) return false;
   const owner = record._fields.find(([name]) => name === "owner")?.[1];
-  return owner?.name === "principal";
+  const subaccount = record._fields.find(([name]) => name === "subaccount")?.[1];
+  return owner?.name === "principal"
+    && subaccount instanceof IDL.OptClass
+    && subaccount._type instanceof IDL.VecClass
+    && subaccount._type._type.name === "nat8";
 }
 
 /**
@@ -167,41 +221,35 @@ export interface CustomProposalDraft {
   targetMethodName: string;
   validatorCanisterId?: string;
   validatorMethodName?: string;
-  /** Absent means the function is untopicked and cannot be submitted at all. */
+  /** Older governance versions permit custom functions without a topic. */
   topic?: string;
+  /** Explicit interface supplied with provenance when metadata is unavailable. */
+  candidInterface?: string;
 }
 
 /**
  * Build and validate a payload end to end.
  *
- * Refuses an untopicked function up front: `make_proposal` hard-fails on those
- * regardless of payload quality, and failing at send time after a clean preview
- * is a confusing way to learn that.
+ * Topic requirements depend on the deployed governance version. An absent
+ * topic does not prevent a read-only validator preview; Governance decides
+ * whether the proposal is eligible when it receives the submission.
  */
 export async function buildAndValidate(
   draft: CustomProposalDraft,
   value: unknown,
   options: AgentOptions = {},
 ): Promise<{ payload: Uint8Array; validation: ValidationResult }> {
-  if (draft.topic === undefined) {
-    throw new SnsError(
-      "INVALID_REQUEST",
-      "This proposal type has no topic assigned, so the SNS rejects every submission of it. The DAO must submit SetTopicsForCustomProposals first.",
-      { retryable: false },
-    );
-  }
-
-  const did = await discoverInterface(draft.targetCanisterId, options);
+  const did = draft.candidInterface ?? await discoverInterface(draft.targetCanisterId, options);
   if (!did) {
     throw new SnsError(
       "SNS_UNSUPPORTED_METHOD",
-      `${draft.targetCanisterId} does not publish a Candid interface, so its payload cannot be built automatically. Reuse a previous proposal of this type as a template instead.`,
+      `${draft.targetCanisterId} does not publish a Candid interface. Supply an interface or original payload bytes. Historical proposal payloads over 64 bytes are summaries and cannot be reused as original bytes.`,
       { retryable: false },
     );
   }
 
-  const argType = await methodArgumentType(did, draft.targetMethodName);
-  if (!argType) {
+  const argTypes = await methodArgumentTypes(did, draft.targetMethodName);
+  if (argTypes === null) {
     throw new SnsError(
       "INVALID_REQUEST",
       `${draft.targetMethodName} is not present on ${draft.targetCanisterId}`,
@@ -209,7 +257,25 @@ export async function buildAndValidate(
     );
   }
 
-  const payload = encodePayload(argType, value);
+  let values: unknown[];
+  if (argTypes.length === 0) {
+    if (value !== undefined && value !== null && (!Array.isArray(value) || value.length !== 0)) {
+      throw new SnsError("INVALID_REQUEST", "This method takes no arguments; provide an empty argument list.");
+    }
+    values = [];
+  } else if (argTypes.length === 1) {
+    // Keep the existing single-argument API, including vector-valued arguments.
+    values = [value];
+  } else {
+    if (!Array.isArray(value)) throw new SnsError("INVALID_REQUEST", `This method takes ${argTypes.length} arguments; provide their array in declaration order.`);
+    values = value;
+  }
+  if (values.length !== argTypes.length) throw new SnsError("INVALID_REQUEST", `Expected ${argTypes.length} method arguments, got ${values.length}.`);
+  const payload = new Uint8Array(IDL.encode(argTypes, values.map((argument, index) => {
+    const type = argTypes[index];
+    if (!type) throw new SnsError("INVALID_REQUEST", `Missing argument type at position ${index}.`);
+    return candidValueFromJson(type, accountInput(type, argument));
+  })));
 
   if (draft.validatorCanisterId && draft.validatorMethodName) {
     const validation = await validatePayload(
@@ -222,7 +288,37 @@ export async function buildAndValidate(
     );
     return { payload, validation };
   }
-  return { payload, validation: { ok: true } };
+  return { payload, validation: { ok: false, status: "not_configured", error: "The function's validator metadata is incomplete; no validation was performed." } };
+}
+
+/** Account strings are a convenience for exact ICRC account-shaped records. */
+function accountInput(type: IDL.Type, value: unknown): unknown {
+  if (isIcrcAccountType(type) && typeof value === "string") {
+    const account = decodeIcrcAccount(value);
+    return { owner: account.owner.toText(), subaccount: account.subaccount ? { hex: toHex(account.subaccount) } : null };
+  }
+  // Walk the target schema so nested destination/recipient accounts work too.
+  const fields = (type as unknown as { _fields?: [string, IDL.Type][] })._fields;
+  if (type instanceof IDL.RecordClass && fields && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return Object.fromEntries(Object.entries(value).map(([name, child]) => {
+      const childType = fields.find(([field]) => field === name)?.[1];
+      return [name, childType ? accountInput(childType, child) : child];
+    }));
+  }
+  if (type instanceof IDL.OptClass && value !== null && value !== undefined) {
+    if (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && "$some" in value) {
+      return { $some: accountInput(type._type, (value as { $some: unknown }).$some) };
+    }
+    return accountInput(type._type, value);
+  }
+  if (type instanceof IDL.VecClass && Array.isArray(value)) return value.map(item => accountInput(type._type, item));
+  if (type instanceof IDL.VariantClass && fields && typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([name, child]) => {
+      const childType = fields.find(([field]) => field === name)?.[1];
+      return [name, childType ? accountInput(childType, child) : child];
+    }));
+  }
+  return value;
 }
 
 function describe(error: unknown): string {

@@ -12,13 +12,14 @@
  *             a separate Setup screen.
  *
  * There is also a middle case worth catching: a neuron that granted us
- * `ManageVotingPermission` but not the voting permissions themselves. That one
- * we *can* finish, because a grant consisting only of voting permissions is
- * authorised by `ManageVotingPermission` alone.
+ * `ManagePrincipals` or `ManageVotingPermission` but not the voting permissions
+ * themselves. Either permits repair when the requested permissions are in the
+ * SNS's current grantable permission list.
  */
 
-import { listNeurons } from "./governance";
-import type { NeuronSummary } from "./types";
+import { listAllNeurons, readParameters } from "./governance";
+import { classifyError } from "./errors";
+import type { NeuronSummary, PartialResult } from "./types";
 import {
   PERMISSION_MANAGE_VOTING,
   PERMISSION_SUBMIT_PROPOSAL,
@@ -29,7 +30,7 @@ import type { AgentOptions } from "./agent";
 export type NeuronReadiness =
   /** Holds `Vote` and `SubmitProposal`. Nothing to do. */
   | "ready"
-  /** Holds `ManageVotingPermission`, so we can grant ourselves the rest. */
+  /** Can grant the missing voting permissions under the SNS's current rules. */
   | "repairable"
   /** Holds something, but not enough, and not enough to fix. Owner must act. */
   | "partial";
@@ -39,6 +40,8 @@ export interface NeuronRegistration {
   readiness: NeuronReadiness;
   /** Which of the two required permissions are missing. */
   missing: number[];
+  held?: number[];
+  grantableMissing?: number[];
 }
 
 export interface RegistrationStatus {
@@ -49,8 +52,9 @@ export interface RegistrationStatus {
   repairable: NeuronRegistration[];
   /** Neurons only the owner can fix, in a wallet that controls them. */
   blocked: NeuronRegistration[];
-  /** True when 100 neurons were returned and more may exist. */
+  /** True when exhaustive discovery failed before all neurons could be read. */
   truncated: boolean;
+  failures?: PartialResult<never>["failures"];
 }
 
 function permissionsFor(neuron: NeuronSummary, principal: string): number[] {
@@ -63,14 +67,16 @@ function permissionsFor(neuron: NeuronSummary, principal: string): number[] {
 }
 
 /** Classify one neuron from the permissions it grants our principal. */
-export function classify(neuron: NeuronSummary, principal: string): NeuronRegistration {
+export function classify(neuron: NeuronSummary, principal: string, grantablePermissions?: readonly number[]): NeuronRegistration {
   const held = new Set(permissionsFor(neuron, principal));
   const missing = [PERMISSION_SUBMIT_PROPOSAL, PERMISSION_VOTE].filter(
     (value) => !held.has(value),
   );
-  const readiness: NeuronReadiness =
-    missing.length === 0 ? "ready" : held.has(PERMISSION_MANAGE_VOTING) ? "repairable" : "partial";
-  return { neuronId: neuron.id, readiness, missing };
+  const grantableMissing = missing.filter((permission) => grantablePermissions === undefined || grantablePermissions.includes(permission));
+  const canManage = held.has(2) || held.has(PERMISSION_MANAGE_VOTING);
+  const readiness: NeuronReadiness = missing.length === 0 ? "ready"
+    : canManage && grantableMissing.length === missing.length ? "repairable" : "partial";
+  return { neuronId: neuron.id, readiness, missing, held: [...held], grantableMissing };
 }
 
 /**
@@ -85,18 +91,21 @@ export async function readRegistration(
   hotkeyPrincipal: string,
   options: AgentOptions = {},
 ): Promise<RegistrationStatus> {
-  const { neurons, truncated } = await listNeurons(
-    governanceCanisterId,
-    { ofPrincipal: hotkeyPrincipal, limit: 100 },
-    options,
-  );
-  const found = neurons.map((neuron) => classify(neuron, hotkeyPrincipal));
+  const [discovery, parameters] = await Promise.all([
+    listAllNeurons(governanceCanisterId, { ofPrincipal: hotkeyPrincipal }, options),
+    readParameters(governanceCanisterId, options).then((value) => ({ value, failure: null }), (error: unknown) => ({ value: null, failure: classifyError(error) })),
+  ]);
+  const failures = [...discovery.failures];
+  if (parameters.failure) failures.push({ scope: governanceCanisterId, code: parameters.failure.code, message: `Permission parameters: ${parameters.failure.message}` });
+  else if (parameters.value?.neuronGrantablePermissions === undefined) failures.push({ scope: governanceCanisterId, code: "INTERNAL", message: "SNS did not return its grantable permissions; permission repair cannot be confirmed." });
+  const found = discovery.neurons.map((neuron) => classify(neuron, hotkeyPrincipal, parameters.value?.neuronGrantablePermissions ?? []));
   return {
     found,
     ready: found.filter((entry) => entry.readiness === "ready").length,
     repairable: found.filter((entry) => entry.readiness === "repairable"),
     blocked: found.filter((entry) => entry.readiness === "partial"),
-    truncated,
+    truncated: discovery.truncated,
+    failures,
   };
 }
 
@@ -108,10 +117,12 @@ export function describeRegistration(
   if (!status) return "Checking your neurons…";
   const found = status.found.length;
   if (found === 0) {
-    return "No neurons here name your voting principal yet — add it as a hotkey to get started.";
+    return status.truncated || status.failures?.length
+      ? "Neuron discovery is incomplete. Retry the failed reads before concluding there are no neurons."
+      : "No neurons here name your voting principal yet — add it as a hotkey to get started.";
   }
   const noun = found === 1 ? "neuron" : "neurons";
-  const head = `${found} ${noun} found · ${status.ready} ready`;
+  const head = `${found} ${noun} found${status.truncated ? " (incomplete scan)" : ""} · ${status.ready} ready`;
   if (!allowlisted) return `${head} · click to allow voting for this SNS`;
   if (status.repairable.length > 0) {
     return `${head} · click to finish ${status.repairable.length} partial grant${
@@ -141,29 +152,44 @@ export interface DiscoveredSns {
  * governance canisters already know, and asking all of them costs one anonymous
  * query each.
  *
- * A dead or unreachable governance canister is skipped rather than failing the
- * scan — one bad SNS must not hide the other fifty.
+ * Partial source failures are returned alongside discoveries so unavailable
+ * communities are not mistaken for communities without any matching neurons.
  */
+export type NeuronScan = DiscoveredSns[] & { failures: PartialResult<never>["failures"] };
+
+/** Legacy array shape with visible partial failure evidence. Prefer the detailed envelope for tools. */
 export async function scanForNeurons(
   snses: { rootCanisterId: string; governanceCanisterId: string; label: string }[],
   hotkeyPrincipal: string,
   options: AgentOptions = {},
-): Promise<DiscoveredSns[]> {
+): Promise<NeuronScan> {
+  const result = await scanForNeuronsDetailed(snses, hotkeyPrincipal, options);
+  return Object.assign(result.value, { failures: result.failures });
+}
+
+export async function scanForNeuronsDetailed(
+  snses: { rootCanisterId: string; governanceCanisterId: string; label: string }[],
+  hotkeyPrincipal: string,
+  options: AgentOptions = {},
+): Promise<PartialResult<DiscoveredSns[]>> {
   const found: DiscoveredSns[] = [];
+  const failures: PartialResult<never>["failures"] = [];
   const concurrency = 8;
   for (let index = 0; index < snses.length; index += concurrency) {
     const slice = snses.slice(index, index + concurrency);
-    const settled = await Promise.all(
-      slice.map(async (sns) => {
-        try {
-          const status = await readRegistration(sns.governanceCanisterId, hotkeyPrincipal, options);
-          return status.found.length > 0 ? { ...sns, status } : null;
-        } catch {
-          return null;
-        }
-      }),
-    );
-    for (const entry of settled) if (entry) found.push(entry);
+    const settled = await Promise.allSettled(slice.map(async (sns) => ({
+      ...sns, status: await readRegistration(sns.governanceCanisterId, hotkeyPrincipal, options),
+    })));
+    settled.forEach((result, index) => {
+      const sns = slice[index]!;
+      if (result.status === "rejected") {
+        const error = classifyError(result.reason);
+        failures.push({ scope: sns.rootCanisterId, code: error.code, message: error.message });
+        return;
+      }
+      for (const failure of result.value.status.failures ?? []) failures.push({ ...failure, scope: sns.rootCanisterId });
+      if (result.value.status.found.length > 0) found.push(result.value);
+    });
   }
-  return found;
+  return { value: found, failures };
 }

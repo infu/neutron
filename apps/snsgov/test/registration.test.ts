@@ -127,3 +127,20 @@ test("the permission grant is accepted by the SNS's own decoder", () => {
     PERMISSION_VOTE,
   ]);
 });
+
+test("ManagePrincipals can repair voting permissions when the SNS permits granting them", () => {
+  const controlled = neuron([{ principal: US, permissions: [2] }]);
+  expect(classify(controlled, US, [3, 4]).readiness).toBe("repairable");
+  expect(classify(controlled, US, [4])).toMatchObject({ readiness: "partial", missing: [3, 4], grantableMissing: [4] });
+});
+
+test("ManageVotingPermission also respects the SNS grantable permission list", () => {
+  const shared = neuron([{ principal: US, permissions: [PERMISSION_MANAGE_VOTING, 4] }]);
+  expect(classify(shared, US, [3, 4]).readiness).toBe("repairable");
+  expect(classify(shared, US, [4])).toMatchObject({ readiness: "partial", missing: [3], grantableMissing: [] });
+});
+
+test("an incomplete scan never presents no neurons as a completed discovery", () => {
+  expect(describeRegistration({ found: [], ready: 0, repairable: [], blocked: [], truncated: true }, true)).toContain("incomplete");
+  expect(describeRegistration({ found: [], ready: 0, repairable: [], blocked: [], truncated: false, failures: [{ scope: "sns", code: "UPSTREAM_UNAVAILABLE", message: "network" }] }, true)).toContain("incomplete");
+});

@@ -1,814 +1,353 @@
 @use "neutron-design-system/styles.scss";
-
+@use "./ui/feed.scss";
 @layer nt.tokens, nt.base, nt.layout, nt.components, nt.utilities, app;
 
 @layer app {
   .nt-app.snsgov-app {
     --nt-accent: #8adf9d;
-
-    // The tile is the whole viewport, so the app owns its own gutter. Without
-    // this, everything sits flush against the frame edge.
     --snsgov-gutter: 16px;
-  }
-
-  // ---- Page frame ---------------------------------------------------------
-
-  .snsgov-app .nt-page {
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    min-height: 100dvh;
     min-width: 0;
-  }
-
-  .snsgov-app .nt-page-header {
-    box-sizing: border-box;
-    flex: 0 0 auto;
-    padding: var(--snsgov-gutter) var(--snsgov-gutter) 12px;
-  }
-
-  .snsgov-app .nt-page-main {
-    box-sizing: border-box;
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 0 var(--snsgov-gutter) var(--snsgov-gutter);
-    // This is a grid, and `normal` resolves to `stretch`: with few rows — which
-    // is exactly the loading state — the spare height is shared out between
-    // them, so the tab strip drifts to the middle of the tile and snaps back up
-    // when the content arrives. Pack the rows to the top instead.
-    align-content: start;
-  }
-
-  // ---- Toolbar ------------------------------------------------------------
-
-  .snsgov-toolbar {
-    align-items: center;
-    display: flex;
-    gap: 12px;
-    justify-content: space-between;
-  }
-
-  .snsgov-toolbar-actions {
-    flex: 0 0 auto;
-    gap: 4px;
-  }
-
-  .snsgov-search {
-    align-items: center;
-    display: flex;
-    flex: 1 1 auto;
-    gap: 8px;
-    max-width: 22rem;
-    min-width: 0;
-    position: relative;
-
-    .nt-input {
-      padding-left: 2rem;
-      width: 100%;
-    }
-  }
-
-  .snsgov-search-icon {
-    color: var(--nt-text-faint, #6d7d8c);
-    left: 0.6rem;
-    pointer-events: none;
-    position: absolute;
-  }
-
-  .snsgov-icon-button {
-    align-items: center;
-    display: inline-flex;
-    justify-content: center;
-  }
-
-  .snsgov-detail-title {
-    font-size: 1rem;
-    margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .snsgov-spacer {
-    flex: 1 1 auto;
-  }
-
-  // ---- Tables -------------------------------------------------------------
-  //
-  // The wrapper scrolls horizontally ONLY, and only when the table genuinely
-  // overflows. A wrapper with `overflow: auto` on both axes swallows the wheel,
-  // so the page cannot be scrolled while the pointer is over the table — which
-  // is most of the page.
-
-  .snsgov-app .nt-table-wrap {
-    max-width: 100%;
-    // No scroll container on either axis. A horizontal one is enough to break
-    // vertical scrolling on a trackpad: a two-finger gesture carries both a
-    // deltaX and a deltaY, and the browser latches the whole gesture to the
-    // horizontal scroller under the pointer, so the page never moves. A mouse
-    // wheel sends deltaY only, which is why this survived a wheel-only test.
-    // Columns compress and ellipsize instead — see the width modifiers below.
-    overflow: visible;
-  }
-
-  .snsgov-table {
-    border-collapse: collapse;
-    table-layout: fixed;
-    width: 100%;
-
-    th,
-    td {
-      // The cell must not paint its own background: the design system gives
-      // `td` one, which sits on top of the row's hover colour and leaves a
-      // visible seam where the first cell ends.
-      background: transparent;
-      overflow: hidden;
-      padding: 8px 10px;
-      text-overflow: ellipsis;
-      vertical-align: middle;
-      // Cells wrap by default; columns that must stay on one line opt in below.
-      // Blanket nowrap is what made text spill across its neighbours.
-      white-space: normal;
-      word-break: normal;
-    }
-
-    // Column labels are scaffolding, not content: quiet, small, and clearly
-    // separated from the first row so the eye starts on the data.
-    thead th {
-      color: var(--nt-text-faint, #6d7d8c);
-      font-size: 0.68rem;
-      font-weight: 500;
-      letter-spacing: 0.07em;
-      padding-bottom: 6px;
-      padding-top: 0;
-      text-transform: uppercase;
-    }
-
-    thead tr {
-      box-shadow: inset 0 -1px 0 var(--nt-line, #25313d);
-    }
-
-    tbody tr {
-      // One hairline, drawn as an inset shadow so row height never shifts.
-      box-shadow: inset 0 -1px 0 var(--nt-line-subtle, #18222b);
-    }
-
-    // The last hairline sits directly above the footnote and reads as a stray
-    // rule under the table.
-    tbody tr:last-child {
-      box-shadow: none;
-    }
-
-    // The design system renders a row header as a small monospace label, which
-    // suits an identifier but not a name: our row header is the SNS name, the
-    // proposal title, the draft title — the most important text in the row, and
-    // it was rendering as the smallest and oddest. One font, two sizes.
-    th[scope="row"] {
-      color: var(--nt-text-strong, #e6edf3);
-      font-family: var(--nt-font-ui, Inter, system-ui, sans-serif);
-      font-size: var(--nt-font-size-body, 0.8125rem);
-      font-weight: 500;
-      // The design system uppercases every `th`, which is right for a column
-      // label and wrong for a row header: these carry names — "Cecil The Lion
-      // DAO", "Manage nervous system parameters" — and hex neuron ids, which
-      // were being shown uppercase while `toHex` emits lowercase, so what was
-      // on screen did not match what copied.
-      text-transform: none;
-    }
-
-    // Column labels share the UI font too; uppercase and letter-spacing carry
-    // the "this is a label" signal without a second typeface.
-    thead th {
-      font-family: var(--nt-font-ui, Inter, system-ui, sans-serif);
-    }
-  }
-
-  // ---- Logos --------------------------------------------------------------
-  //
-  // Every SNS ships one in its governance metadata as an inline data URI, so
-  // these cost no network request. A DAO with none gets its initials rather
-  // than a gap, so the name column stays aligned.
-
-  .snsgov-logo {
-    border-radius: var(--nt-radius-1, 4px);
-    flex: 0 0 auto;
-    object-fit: contain;
-  }
-
-  .snsgov-logo--fallback {
-    align-items: center;
-    background: var(--nt-bg-control, #131a21);
-    color: var(--nt-text-faint, #6d7d8c);
-    display: inline-flex;
-    font-weight: 600;
-    justify-content: center;
-    letter-spacing: 0.02em;
-  }
-
-  .snsgov-name {
-    align-items: center;
-    display: flex;
-    gap: 8px;
-    min-width: 0;
-
-    .snsgov-link {
-      min-width: 0;
-    }
-  }
-
-  // ---- Clickable rows -----------------------------------------------------
-  //
-  // The row is the target, not the 14px of text in its first cell. The name
-  // keeps its own button for keyboard and screen-reader users; this is the
-  // mouse affordance the row already looked like it had.
-
-  .snsgov-table .snsgov-row {
-    cursor: pointer;
-    transition:
-      background-color var(--nt-duration-fast, 120ms) var(--nt-ease-standard, ease),
-      box-shadow var(--nt-duration-fast, 120ms) var(--nt-ease-standard, ease);
-  }
-
-  .snsgov-table .snsgov-row:hover {
-    background: var(--nt-bg-control-hover, #151d25);
-  }
-
-  .snsgov-table .snsgov-row:active {
-    background: var(--nt-bg-control-active, #1a242e);
-  }
-
-  // The whole row lights up when the control inside it takes keyboard focus,
-  // so tabbing through shows the same target the mouse gets.
-  .snsgov-table .snsgov-row:has(:focus-visible) {
-    background: var(--nt-bg-control-hover, #151d25);
-    box-shadow:
-      inset 2px 0 0 var(--nt-accent, #8adf9d),
-      inset 0 -1px 0 var(--nt-line-subtle, #18222b);
-  }
-
-  .snsgov-table .snsgov-row:hover .snsgov-link {
-    color: var(--nt-accent, #8adf9d);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .snsgov-table .snsgov-row {
-      transition: none;
-    }
-  }
-
-  // These must out-specify `.snsgov-table th, td { white-space: normal }` above,
-  // which is (0,2,1) — an unscoped `.snsgov-num` (0,1,0) silently loses to it and
-  // the numbers wrap mid-value ("150.55" / "ALICE" on two lines).
-  .snsgov-table .snsgov-num {
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    white-space: nowrap;
-  }
-
-  .snsgov-table .snsgov-nowrap {
-    white-space: nowrap;
-  }
-
-  .snsgov-table .snsgov-row-actions {
-    padding-right: 0;
-    text-align: right;
-    white-space: nowrap;
-    width: 1%;
-  }
-
-  // ---- Column widths ------------------------------------------------------
-  //
-  // `table-layout: fixed` needs explicit widths, otherwise one long name steals
-  // the row and the numeric columns collapse into each other.
-
-  // Name first and widest — it is what the eye scans for. Every cell is a
-  // single line: a wrapped description turns a 40-row list into a wall.
-  .snsgov-table--snses {
-    th:nth-child(1) { width: 34%; }
-    th:nth-child(2) { width: 12%; }
-    th:nth-child(3) { width: 54%; }
-
-    th,
-    td {
-      white-space: nowrap;
-    }
-  }
-
-  .snsgov-desc {
-    color: var(--nt-text-muted, #9fb0bf);
-  }
-
-  .snsgov-table--proposals {
-    th:nth-child(1) { width: 8%; }
-    th:nth-child(2) { width: 42%; }
-    th:nth-child(3) { width: 22%; }
-    th:nth-child(4) { width: 14%; }
-    th:nth-child(5) { width: 14%; }
-  }
-
-  .snsgov-table--neurons {
-    th:nth-child(1) { width: 24%; }
-    th:nth-child(2) { width: 18%; }
-    th:nth-child(3) { width: 18%; }
-    th:nth-child(4) { width: 32%; }
-    th:nth-child(5) { width: 8%; }
-  }
-
-  .snsgov-table--allowlist {
-
-    th:nth-child(1) { width: 48%; }
-    th:nth-child(2) { width: 18%; }
-    th:nth-child(3) { width: 22%; }
-    th:nth-child(4) { width: 12%; }
-  }
-
-  .snsgov-table--canisters {
-    th:nth-child(1) { width: 38%; }
-    th:nth-child(2) { width: 14%; }
-    th:nth-child(3) { width: 18%; }
-    th:nth-child(4) { width: 16%; }
-    th:nth-child(5) { width: 14%; }
-  }
-
-  .snsgov-table--scan {
-
-    th:nth-child(1) { width: 42%; }
-    th:nth-child(2) { width: 16%; }
-    th:nth-child(3) { width: 14%; }
-    th:nth-child(4) { width: 28%; }
-  }
-
-  .snsgov-table--functions {
-    th:nth-child(1) { width: 34%; }
-    th:nth-child(2) { width: 12%; }
-    th:nth-child(3) { width: 34%; }
-    th:nth-child(4) { width: 20%; }
-  }
-
-  // ---- States -------------------------------------------------------------
-  //
-  // A loading placeholder is a quiet line, not a large filled panel. The stock
-  // state block painted a big tinted box that dominated the tile.
-
-  // No content yet: one spinner, out of flow, so the content that replaces it
-  // is not pushed down and snapped back.
-  .snsgov-pending {
-    align-items: flex-start;
-    display: flex;
-    justify-content: center;
-    left: 0;
-    padding-top: 28px;
-    pointer-events: none;
-    position: absolute;
-    right: 0;
-    top: 0;
-  }
-
-  .snsgov-empty {
-    color: var(--nt-text-faint, #6d7d8c);
-    font-size: 0.8rem;
-    margin: 0;
-    padding: 6px 0;
-  }
-
-  // Anything that hosts a `.snsgov-pending` has to be its positioning context.
-  .snsgov-app .nt-page-main,
-  .snsgov-app .nt-section,
-  .snsgov-panel {
-    position: relative;
-  }
-
-  .snsgov-spinner {
-    animation: snsgov-spin 800ms linear infinite;
-    border: 1.5px solid var(--nt-line, #25313d);
-    border-radius: 50%;
-    border-top-color: var(--nt-accent, #8adf9d);
-    display: inline-block;
-    flex: 0 0 auto;
-    height: 14px;
-    width: 14px;
-  }
-
-  @keyframes snsgov-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .snsgov-spinner {
-      animation-duration: 3s;
-    }
-  }
-
-  .snsgov-app .nt-alert {
-    padding: 10px 12px;
-  }
-
-  .snsgov-alert {
-    align-items: flex-start;
-    display: flex;
-    gap: 8px;
-
-    svg {
-      flex: 0 0 auto;
-      margin-top: 0.15rem;
-    }
-  }
-
-  // ---- Content ------------------------------------------------------------
-
-  .snsgov-link {
-    background: none;
-    border: 0;
-    color: var(--nt-text-strong, #e6edf3);
-    cursor: pointer;
-    display: block;
-    font: inherit;
-    max-width: 100%;
-    overflow: hidden;
-    padding: 0;
-    text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
-    &:hover {
-      color: var(--nt-accent, #8adf9d);
-    }
-  }
-
-  .snsgov-badge {
-    margin-left: 8px;
-  }
-
-  .snsgov-description {
-    color: var(--nt-text-muted, #9fb0bf);
-    margin: 0 0 16px;
-    max-width: 68ch;
-  }
-
-  .snsgov-canister {
-    align-items: center;
-    display: flex;
-    gap: 4px;
-    justify-content: space-between;
-    min-width: 0;
-
-    code {
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-  }
-
-  .snsgov-footnote {
-    align-items: center;
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-  }
-
-  .snsgov-tabs {
-    margin-bottom: 16px;
-  }
-
-  .snsgov-filter {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
-
-    .nt-input,
-    .nt-select {
-      // `flex-basis: 16rem` with room to grow, but capped: a select that eats
-      // the whole row leaves its own button one character wide, which then
-      // wraps its label onto three lines.
-      flex: 1 1 16rem;
-      max-width: 26rem;
-      min-width: 0;
-    }
-
-    // Controls beside a field never shrink. This is the actual fix for the
-    // three-line "Add" button.
-    .nt-button,
-    .nt-icon-button,
-    .snsgov-icon-button {
-      flex: 0 0 auto;
-      white-space: nowrap;
-    }
-  }
-
-  // ---- Sections -----------------------------------------------------------
-  //
-  // The stock section rhythm leaves ~70px between blocks, which reads as three
-  // unrelated screens rather than one. Tighter, and the header's action sits at
-  // the right edge where every other action in the app lives.
-
-  .snsgov-app .nt-section {
-    // `.nt-page-main` is a grid with its own 20px gap; a margin here is added to
-    // that gap, not merged with it, which is what made the screen read as three
-    // unrelated pages.
-    margin: 0;
-    // The section is itself a grid, and the page stretches it to fill the tile.
-    // With the default `align-content: stretch` that slack is shared out across
-    // every row, so a one-line heading rendered 83px tall. Pack the rows.
-    align-content: start;
-  }
-
-  .snsgov-app .nt-section-header {
-    align-items: center;
-    display: flex;
-    gap: 8px;
-    justify-content: space-between;
-    // `.nt-section` is itself a grid with an 8px row gap — a margin here is
-    // added to it rather than merged.
-    margin-bottom: 0;
-  }
-
-  .snsgov-app .nt-section-heading {
-    margin: 0;
-  }
-
-  .snsgov-app .nt-section-count {
-    // Sits with the heading, not pushed to the far edge by the flex row.
-    margin-right: auto;
-  }
-
-  // Same reasoning: the section grid already separates rows, so a trailing
-  // margin here only pads the bottom of the section.
-  .snsgov-app .snsgov-description {
-    margin: 0;
-  }
-
-  // ---- Registration -------------------------------------------------------
-
-  .snsgov-count {
-    align-items: center;
-    display: inline-flex;
-    gap: 5px;
-  }
-
-  .snsgov-count-text {
-    font-size: 0.72rem;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-  }
-
-  // A count on the header icon is the only thing that tells the owner an agent
-  // left work for them, so it must read at a glance without shouting.
-  .snsgov-badge-count {
-    background: var(--nt-accent, #8adf9d);
-    border-radius: 999px;
-    color: #04120a;
-    font-size: 0.62rem;
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    line-height: 1;
-    padding: 2px 4px;
-    text-align: center;
-  }
-
-  // ---- Draft review -------------------------------------------------------
-
-  .snsgov-table--drafts {
-
-    th:nth-child(1) { width: 44%; }
-    th:nth-child(2) { width: 20%; }
-    th:nth-child(3) { width: 12%; }
-    th:nth-child(4) { width: 16%; }
-    th:nth-child(5) { width: 8%; }
-  }
-
-  .snsgov-proposal {
-    border: 1px solid var(--nt-line, #25313d);
-    border-radius: 6px;
-    margin-bottom: 16px;
-    max-width: 72ch;
-    padding: 16px;
-  }
-
-  .snsgov-proposal-title {
-    font-size: 1.05rem;
-    margin: 0 0 12px;
-  }
-
-  .snsgov-proposal-body {
-    margin: 0 0 12px;
-    // Agent prose arrives with real newlines; collapsing them loses the shape
-    // the reviewer is meant to read.
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .snsgov-review .nt-pre {
-    max-height: 18rem;
-    overflow: auto;
-    overscroll-behavior: contain;
-  }
-
-  .snsgov-anchor {
-    display: inline-flex;
-    position: relative;
-  }
-
-  .snsgov-panel {
-    background: var(--nt-bg-elevated, #10171e);
-    border: 1px solid var(--nt-line, #25313d);
-    border-radius: var(--nt-radius-2, 6px);
-    box-shadow: var(--nt-shadow-raised, 0 8px 24px rgb(0 0 0 / 45%));
-    margin-bottom: 0;
-    padding: 12px;
-    position: absolute;
-    right: 0;
-    text-align: left;
-    top: calc(100% + 8px);
-    // Wide enough to read, never wider than the tile.
-    width: min(28rem, calc(100vw - 2 * var(--snsgov-gutter)));
-    z-index: 20;
-
-    p {
-      margin: 0 0 8px;
-    }
-  }
-
-  .snsgov-panel-head {
-    align-items: center;
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
-  }
-
-  // A definition-style pair used by the Setup summary rows.
-  .snsgov-facts {
-    display: grid;
-    gap: 4px 16px;
-    grid-template-columns: auto 1fr;
-    margin: 0 0 16px;
-
-    dt {
-      color: var(--nt-text-muted, #9fb0bf);
-    }
-
-    dd {
-      margin: 0;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-  }
-
-  .snsgov-principals {
+    font-family: var(--nt-font-ui);
+    font-size: var(--nt-font-size-body);
+  }
+  .snsgov-app *, .snsgov-dialog * { box-sizing: border-box; }
+  .snsgov-app [hidden] { display: none !important; }
+  .snsgov-shell { margin-inline: auto; max-width: 1280px; min-width: 0; padding: 0 var(--snsgov-gutter) 24px; }
+  .snsgov-app .nt-page { display: grid; align-content: start; gap: 16px; min-width: 0; min-height: 0; }
+  .snsgov-app .nt-page-main { display: grid; align-content: start; gap: 18px; min-width: 0; padding: 0; }
+  .snsgov-app .nt-page-header { align-items: center; flex-wrap: wrap; gap: 10px; padding: 0; }
+  .snsgov-app-header { padding-block: 10px; }
+  .snsgov-brand { color: var(--nt-accent); background: var(--nt-bg-control); }
+  .snsgov-navigation, .snsgov-context-navigation { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--nt-line-subtle); min-width: 0; }
+  .snsgov-navigation { margin-bottom: 20px; }
+  .snsgov-navigation .nt-tab { flex: 1 1 auto; font-size: 13px; padding: 10px 8px; text-align: center; white-space: nowrap; min-width: 0; }
+  .snsgov-context-navigation .nt-tab { flex: 1 1 auto; padding: 8px 7px; font-size: 12px; min-width: 0; }
+  .snsgov-app .nt-tab[data-active="true"] { color: var(--nt-text-strong); box-shadow: inset 0 -1px var(--nt-accent); }
+  .snsgov-content, .snsgov-content > div { min-width: 0; }
+  .snsgov-content > div > .nt-page { max-width: 980px; margin-inline: auto; }
+  .snsgov-count-badge { font-size: 11px; padding: 0 5px; color: var(--nt-accent); }
+  .snsgov-page-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; min-width: 0; }
+  .snsgov-heading-copy { display: flex; gap: 8px; align-items: flex-start; flex: 1 1 180px; min-width: 0; }
+  .snsgov-heading-copy > div { min-width: 0; }
+  .snsgov-page-heading .nt-title { margin: 0; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+  .snsgov-heading-copy p { margin: 5px 0 0; max-width: 64ch; }
+  .snsgov-heading-actions { flex: 0 1 auto; gap: 6px; max-width: 100%; }
+  .snsgov-heading-actions .nt-button { white-space: normal; }
+  .snsgov-app .nt-section { align-content: start; gap: 10px; margin: 0; min-width: 0; }
+  .snsgov-app .nt-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 0; }
+  .snsgov-app .nt-section-heading { margin: 0; }
+  .snsgov-app .nt-section-count { margin-right: auto; }
+  .snsgov-muted, .snsgov-description { color: var(--nt-text-muted); }
+  .snsgov-grow, .snsgov-spacer { flex: 1 1 auto; }
+  .snsgov-app .nt-text { line-height: 1.55; overflow-wrap: anywhere; }
+  .snsgov-app .nt-meta { line-height: 1.5; overflow-wrap: anywhere; }
+  .snsgov-app p { margin: 0; }
+  .snsgov-app h2[tabindex="-1"]:focus { outline: none; }
+  .snsgov-app .nt-detail-value { font-family: var(--nt-font-ui); white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .snsgov-app .nt-detail-label { display: flex; align-items: center; gap: 3px; line-height: 1.4; }
+  .snsgov-app .nt-detail { padding: 12px 10px; }
+  .snsgov-app .nt-pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font-size: 12px; line-height: 1.5; }
+
+  .snsgov-app .nt-code, .snsgov-app code { overflow-wrap: anywhere; }
+  .snsgov-app .nt-button { min-height: 32px; max-width: 100%; }
+  .snsgov-app :is(button, a, input, select, textarea, summary):focus-visible { outline: 1px solid var(--nt-line-focus); outline-offset: 2px; }
+  .snsgov-app :is(.nt-input, .nt-select, .nt-textarea) { min-width: 0; max-width: 100%; }
+  .snsgov-app :is(.nt-input, .nt-select):not([type="checkbox"]):not([type="radio"]) { width: 100%; }
+  .snsgov-icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+  .snsgov-toolbar, .snsgov-filter, .snsgov-explore-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .snsgov-toolbar-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .snsgov-filter > :is(.nt-input, .nt-select) { flex: 1 1 200px; }
+  .snsgov-filter > :is(.nt-button, .nt-icon-button) { flex: 0 0 auto; }
+  .snsgov-search { display: flex; align-items: center; flex: 1 1 200px; position: relative; min-width: 0; }
+  .snsgov-search > svg { position: absolute; left: 10px; color: var(--nt-text-faint); pointer-events: none; }
+  .snsgov-search .nt-input { padding-left: 32px; }
+  .snsgov-logo { flex: 0 0 auto; border-radius: var(--nt-radius-control); object-fit: contain; }
+  .snsgov-logo--fallback { display: inline-flex; align-items: center; justify-content: center; background: var(--nt-bg-control); color: var(--nt-text-muted); font-size: 10px; font-weight: 600; }
+  .snsgov-community-list { display: grid; min-width: 0; }
+  .snsgov-community-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 12px; gap: 12px; align-items: start; padding: 16px 0; border: 0; border-bottom: 1px solid var(--nt-line-subtle); background: transparent; color: var(--nt-text); text-align: left; cursor: pointer; width: 100%; }
+  .snsgov-community-row:hover, .snsgov-activity-row:hover { background: var(--nt-bg-control-hover); }
+  .snsgov-community-copy { min-width: 0; display: grid; gap: 5px; }
+  .snsgov-community-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; overflow-wrap: anywhere; }
+  .snsgov-community-name strong { font-weight: 600; color: var(--nt-text-strong); }
+  .snsgov-token-symbol { font-size: 11px; color: var(--nt-text-faint); }
+  .snsgov-community-description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--nt-text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+  .snsgov-chevron { color: var(--nt-text-faint); padding-top: 2px; }
+  .snsgov-community-intro { font-size: 14px; line-height: 1.65; color: var(--nt-text-muted); max-width: 72ch; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .snsgov-community-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .snsgov-community-site { width: fit-content; font-size: 12px; }
+  .snsgov-disclosure { margin: 0 !important; min-width: 0; }
+  .snsgov-disclosure-summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 42px; padding: 10px 0; cursor: pointer; list-style: none; color: var(--nt-text); font-size: 13px; font-weight: 500; }
+  .snsgov-disclosure-summary::-webkit-details-marker { display: none; }
+  .snsgov-disclosure-summary small { display: block; color: var(--nt-text-muted); font-size: 11px; margin-top: 3px; font-weight: 400; }
+  .snsgov-disclosure-summary > span:last-child { flex: 0 0 auto; transition: transform 120ms; }
+  .snsgov-disclosure[open] > .snsgov-disclosure-summary > span:last-child { transform: rotate(180deg); }
+  .snsgov-disclosure-body { display: grid; gap: 12px; min-width: 0; padding: 2px 0 14px; }
+  .snsgov-disclosure-body > :last-child { margin-bottom: 0; }
+  .snsgov-function-list { display: grid; }
+  .snsgov-function-list .snsgov-disclosure-summary { padding-inline: 8px; }
+  .snsgov-facts { display: grid; gap: 8px 14px; grid-template-columns: minmax(70px, .5fr) minmax(0, 1fr); margin: 0; }
+  .snsgov-facts dt { color: var(--nt-text-muted); font-size: 12px; }
+  .snsgov-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+  .snsgov-addresses { display: grid; gap: 12px; margin: 0; }
+  .snsgov-addresses dt { text-transform: capitalize; font-size: 12px; color: var(--nt-text-muted); }
+  .snsgov-addresses dd { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 0 0; min-width: 0; }
+  .snsgov-addresses code { font-size: 11px; min-width: 0; }
+  .snsgov-help { display: inline-flex; vertical-align: middle; }
+  .snsgov-help-button { display: inline-flex; justify-content: center; align-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--nt-radius-control); color: var(--nt-text-faint); background: transparent; cursor: pointer; font-size: 11px; font-weight: 600; }
+  .snsgov-help-button:hover, .snsgov-help-button[aria-expanded="true"] { background: var(--nt-bg-control-hover); color: var(--nt-text-strong); }
+  .snsgov-help-content { position: fixed; z-index: 120; width: min(300px, calc(100vw - 24px)); padding: 12px; background: var(--nt-bg-elevated, #11191f); box-shadow: var(--nt-shadow-raised); border: 1px solid var(--nt-line); border-radius: var(--nt-radius-control); color: var(--nt-text); font: 12px/1.6 var(--nt-font-ui); text-align: left; overflow-wrap: anywhere; white-space: normal; }
+  .snsgov-dialog { color: var(--nt-text); background: var(--nt-bg, #080b0d); border: 1px solid var(--nt-line); border-radius: var(--nt-radius-control); padding: 0; margin: auto; width: min(620px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); }
+  .snsgov-dialog::backdrop { background: rgb(0 0 0 / 65%); }
+  .snsgov-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+  .snsgov-dialog-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: inherit; border-bottom: 1px solid var(--nt-line-subtle); }
+  .snsgov-dialog-header .nt-title { margin: 0; font-size: 16px; min-width: 0; overflow-wrap: anywhere; }
+  .snsgov-dialog-header > .nt-button { flex: 0 0 auto; white-space: nowrap; }
+  .snsgov-dialog-body { display: grid; gap: 16px; padding: 16px; min-width: 0; min-height: 0; overflow-y: auto; }
+  .snsgov-dialog-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--nt-line-subtle); }
+  .snsgov-pending { display: flex; gap: 9px; align-items: center; color: var(--nt-text-muted); font-size: 12px; min-width: 0; padding: 12px 0; }
+  .snsgov-spinner { animation: snsgov-spin 800ms linear infinite; border: 1.5px solid var(--nt-line); border-top-color: var(--nt-accent); border-radius: 50%; display: inline-block; width: 14px; height: 14px; flex: 0 0 auto; }
+  @keyframes snsgov-spin { to { transform: rotate(360deg); } }
+  .snsgov-empty { margin: 0; padding: 12px 0; font-size: 13px; line-height: 1.6; color: var(--nt-text-muted); }
+  .snsgov-app .nt-alert { min-width: 0; padding: 10px 12px; overflow-wrap: anywhere; }
+  .snsgov-error { margin: 0; }
+  .snsgov-alert { display: flex; align-items: flex-start; gap: 8px; }
+  .snsgov-alert svg { margin-top: 3px; }
+  .snsgov-copyfield { display: flex; gap: 8px; align-items: center; min-width: 0; }
+  .snsgov-copyfield .nt-input { flex: 1 1 auto; min-width: 0; font-family: var(--nt-font-mono); font-size: 11px; }
+  .snsgov-detail-title { min-width: 0; font-size: 16px; overflow-wrap: anywhere; }
+  .snsgov-activity-list { display: grid; }
+  .snsgov-activity-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 12px; gap: 10px; align-items: center; width: 100%; padding: 14px 0; background: transparent; border: 0; border-bottom: 1px solid var(--nt-line-subtle); text-align: left; color: var(--nt-text); cursor: pointer; }
+  .snsgov-activity-row > span:first-child { display: grid; gap: 4px; overflow-wrap: anywhere; }
+  .snsgov-activity-row small { font-size: 11px; color: var(--nt-text-faint); }
+  .snsgov-activity-row strong { font-weight: 500; text-transform: capitalize; }
+  .snsgov-operation-status { font-weight: 600; text-transform: capitalize; }
+  .snsgov-operation-steps { display: grid; gap: 14px; padding-left: 20px; }
+  .snsgov-operation-steps li strong { font-size: 13px; }
+  .snsgov-operation-steps li > span { display: block; margin-top: 4px; font-size: 12px; color: var(--nt-text-muted); }
+  // Retained for specialist tables and legacy detail content. Lists for people use rows above.
+  .snsgov-app .nt-table-wrap { max-width: 100%; overflow: visible; }
+  .snsgov-table { border-collapse: collapse; table-layout: fixed; width: 100%; }
+  .snsgov-table :is(th, td) { background: transparent; padding: 8px; vertical-align: top; overflow-wrap: anywhere; white-space: normal; }
+  .snsgov-table th[scope="row"] { font: inherit; text-transform: none; }
+  .snsgov-table thead th { font-size: 10px; font-family: var(--nt-font-ui); font-weight: 500; color: var(--nt-text-faint); }
+  .snsgov-table tr { border-bottom: 1px solid var(--nt-line-subtle); }
+  .snsgov-row { cursor: pointer; }
+  .snsgov-row:hover { background: var(--nt-bg-control-hover); }
+  .snsgov-link { display: inline; border: 0; padding: 0; background: transparent; font: inherit; color: var(--nt-text-strong); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+  .snsgov-num { font-variant-numeric: tabular-nums; }
+  .snsgov-principals { list-style: none; padding: 0; margin: 0; }
+  .snsgov-principals li { overflow-wrap: anywhere; }
+  .snsgov-footnote { margin: 0; font-size: 11px; color: var(--nt-text-muted); }
+  .snsgov-count { display: inline-flex; gap: 5px; align-items: center; }
+  .snsgov-count-text { font-size: 11px; }
+  .snsgov-more { justify-self: start; }
+  @media (max-width: 480px) {
+    .snsgov-shell { --snsgov-gutter: 12px; }
+    .snsgov-app-header { gap: 5px; }
+    .snsgov-app-header .nt-app-header-main { flex: 1 1 110px; }
+    .snsgov-app-header .nt-app-header-subtitle { display: none; }
+    .snsgov-app-header .nt-app-header-actions { gap: 0; }
+    .snsgov-app-header .nt-app-header-control { padding-inline: 6px; }
+    .snsgov-navigation .nt-tab { padding-inline: 5px; font-size: 12px; }
+    .snsgov-community-row { gap: 9px; }
+    .snsgov-page-heading { gap: 8px; }
+    .snsgov-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    .snsgov-summary-grid .nt-detail:first-child { grid-column: 1 / -1; }
+  }
+  @media (pointer: coarse) { .snsgov-help-button { width: 32px; height: 32px; } }
+  @media (prefers-reduced-motion: reduce) { .snsgov-spinner { animation-duration: 3s; } .snsgov-disclosure-summary > span:last-child { transition: none; } }
+}
+@layer app {
+  .snsgov-settings-list {
     list-style: none;
     margin: 0;
     padding: 0;
-
-    li {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    li + li {
-      margin-top: 2px;
-    }
+    min-width: 0;
   }
 
-  .snsgov-more {
-    margin-top: 12px;
+  .snsgov-settings-row {
+    display: grid;
+    gap: var(--nt-space-2, 8px);
+    padding: var(--nt-space-3, 12px) 0;
+    border-bottom: 1px solid var(--nt-line);
+    min-width: 0;
+    overflow-wrap: anywhere;
+
+    &:last-child { border-bottom: 0; }
+    > .nt-button, > .nt-link { justify-self: start; }
+    > p { margin: 0; }
   }
 
-  .snsgov-prose {
-    margin-top: 16px;
-    max-width: 72ch;
-
-    .nt-pre {
-      max-height: 22rem;
-      overflow: auto;
-      overscroll-behavior: contain;
-    }
-  }
-
-  .snsgov-tally {
-    margin: 12px 0;
-    max-width: 30rem;
-  }
-
-  .snsgov-tally-bar {
-    background: var(--nt-bg-control, #131a21);
-    border-radius: 2px;
+  .snsgov-settings-heading,
+  .snsgov-settings-row-head,
+  .snsgov-settings-actions,
+  .snsgov-principal-row,
+  .snsgov-preference-row {
     display: flex;
-    height: 6px;
-    overflow: hidden;
-  }
-
-  .snsgov-tally-yes {
-    background: var(--nt-success, #8adf9d);
-  }
-
-  .snsgov-tally-no {
-    background: var(--nt-danger, #e08a8a);
-  }
-
-  .snsgov-copyfield {
     align-items: center;
-    display: flex;
-    gap: 8px;
-    max-width: 34rem;
-
-    .nt-input {
-      flex: 1 1 auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      min-width: 0;
-    }
+    flex-wrap: wrap;
+    gap: var(--nt-space-2, 8px);
+    min-width: 0;
   }
 
-  .snsgov-recipe {
-    margin-top: 16px;
-    max-width: 72ch;
-
-    ol {
-      margin: 8px 0;
-      padding-left: 1.2rem;
-    }
-
-    li + li {
-      margin-top: 8px;
-    }
-
-    code {
-      overflow-wrap: anywhere;
-    }
+  .snsgov-settings-row-head { justify-content: space-between; }
+  .snsgov-settings-name { overflow-wrap: anywhere; }
+  .snsgov-settings-heading > .nt-button { margin-left: auto; }
+  .snsgov-settings .nt-button,
+  .snsgov-voting-access .nt-button,
+  .snsgov-canisters .nt-button {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    height: auto;
   }
 
-  .snsgov-toggle {
+  .snsgov-principal-row > .nt-button { flex: 0 0 auto; }
+  .snsgov-principal-row > .snsgov-principal-text { flex: 1 1 14rem; }
+  .snsgov-principal-text {
+    display: inline-block;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .snsgov-setting-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--nt-space-2, 8px);
+    cursor: pointer;
+    min-height: 32px;
     margin: 0;
   }
 
-  // These tables have no row detail screen. In a narrow tile, ellipsizing a
-  // stake or cycle balance makes the data inaccessible, so each row becomes a
-  // compact labelled group while the copy control stays beside its identifier.
-  @media (max-width: 480px) {
-    .snsgov-app .snsgov-table--neurons,
-    .snsgov-app .snsgov-table--canisters {
-      display: block;
+  .snsgov-settings-values {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: var(--nt-space-2, 8px);
+    margin: 0;
+    min-width: 0;
+    dt { color: var(--nt-text-muted); }
+    dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  }
 
-      thead {
-        clip-path: inset(50%);
-        height: 1px;
-        overflow: hidden;
-        position: absolute;
-        width: 1px;
-      }
-
-      tbody {
-        display: block;
-      }
-
-      tbody tr {
-        display: grid;
-        gap: 6px 12px;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-        padding: 10px 0;
-      }
-
-      tbody th,
-      tbody td {
-        border-bottom: 0;
-        min-width: 0;
-        overflow: visible;
-        padding: 0;
-        text-align: left;
-        white-space: normal;
-        width: auto;
-        overflow-wrap: anywhere;
-      }
-
-      tbody th[scope="row"] {
-        grid-column: 1 / 3;
-        grid-row: 1;
-      }
-
-      .snsgov-row-actions {
-        grid-column: 3;
-        grid-row: 1;
-        text-align: right;
-      }
-
-      td[data-label]::before {
-        color: var(--nt-text-muted, #9fb0bf);
-        content: attr(data-label);
-        display: block;
-        font-size: 0.7rem;
-        margin-bottom: 2px;
-      }
-
-      .snsgov-principals li {
-        white-space: normal;
-      }
-
-      td:nth-child(4) {
-        grid-column: 1 / -1;
-      }
-    }
+  .snsgov-permission-outcome {
+    display: grid;
+    gap: var(--nt-space-2, 8px);
+    min-width: 0;
+    > p { margin: 0; }
+    > .nt-button { justify-self: start; }
   }
 }
+.snsgov-neuron-list { display: grid; gap: 0; min-width: 0; }
+.snsgov-neuron-row { border-bottom: 1px solid var(--nt-line-subtle); min-width: 0; }
+.snsgov-neuron-open { width: 100%; border: 0; border-radius: 0; padding: 14px 0; display: grid; gap: 7px; text-align: left; background: transparent; color: inherit; cursor: pointer; font: inherit; overflow-wrap: anywhere; }
+.snsgov-neuron-open:hover { background: var(--nt-bg-control-hover); }
+.snsgov-neuron-open:focus-visible { outline: 1px solid var(--nt-line-focus); outline-offset: 3px; }
+.snsgov-neuron-row-top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.snsgov-neuron-amount { font-size: 1.05em; overflow-wrap: anywhere; }
+.snsgov-neuron-balance { font-size: 1.65em; line-height: 1.25; margin: 0; overflow-wrap: anywhere; }
+.snsgov-neuron-summary { display: grid; gap: 8px; }
+.snsgov-neuron-summary p { margin: 0; }
+.snsgov-neuron-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.snsgov-neuron-actions .nt-button { white-space: normal; text-align: center; }
+.snsgov-neuron-copy { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.snsgov-neuron-copy code { overflow-wrap: anywhere; min-width: 0; }
+.snsgov-neuron-copy-action { margin: 4px 0 8px; }
+.snsgov-neuron-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 12px; }
+.snsgov-neuron-values > div { min-width: 0; }
+.snsgov-neuron-values dd, .snsgov-neuron-values dt { margin-inline: 0; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; overflow: visible; }
+.snsgov-neuron-values dt { font-size: .85em; opacity: .75; }
+.snsgov-neuron-values dd { margin-top: 5px; }
+.snsgov-neuron-field { display: grid; gap: 6px; margin: 12px 0; min-width: 0; }
+.snsgov-neuron-field .nt-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.snsgov-neuron-field textarea { resize: vertical; min-height: 8rem; font-family: var(--nt-font-mono, monospace); }
+.snsgov-neuron-duration { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; }
+.snsgov-neuron-permissions { border: 0; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+.snsgov-check-label { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; }
+.snsgov-check-label input { flex: 0 0 auto; margin-top: 3px; }
+.snsgov-neuron-review, .snsgov-operation-result { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--nt-line-subtle); }
+.snsgov-access-list { padding-left: 18px; }
+.snsgov-access-list code { overflow-wrap: anywhere; }
+.snsgov-access-list p { margin-top: 4px; }
+.snsgov-connect ol { padding-left: 24px; }
+.snsgov-connect li { margin: 8px 0; }
+.snsgov-neuron-detail .snsgov-disclosure-body { overflow-wrap: anywhere; }
+.snsgov-neuron-management .snsgov-neuron-actions { min-width: 0; }
+.snsgov-neuron-dialog-footer { display: grid; gap: 8px; width: 100%; min-width: 0; overflow-wrap: anywhere; }
+@container (max-width: 440px) {
+  .snsgov-neuron-actions > .nt-button { flex: 1 1 130px; }
+  .snsgov-neuron-row-top { align-items: flex-start; }
+}
+.snsgov-feed, .snsgov-proposals, .snsgov-proposal-detail, .snsgov-draft-list, .snsgov-review { min-width: 0; width: 100%; max-width: 48rem; margin-inline: auto; }
+.snsgov-feed [hidden], .snsgov-proposals [hidden] { display: none !important; }
+.snsgov-feed-posts { display: grid; gap: 14px; margin-block: 14px; min-width: 0; }
+.snsgov-post { padding: 16px; border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-panel); background: var(--nt-bg-panel); min-width: 0; }
+.snsgov-post-byline, .snsgov-post-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .6rem; min-width: 0; }
+.snsgov-post-byline .snsgov-logo { flex-shrink: 0; }
+.snsgov-post-community { font-weight: 600; overflow-wrap: anywhere; text-align: left; min-width: 0; max-width: 100%; }
+.snsgov-post-title { margin: .65rem 0 .5rem; font-size: 16px; line-height: 1.4; }
+.snsgov-post-title .snsgov-link { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; width: 100%; max-width: 100%; font: inherit; font-weight: 600; text-align: left; white-space: normal; overflow: hidden; overflow-wrap: anywhere; text-overflow: clip; }
+.snsgov-post .snsgov-proposal-body, .snsgov-proposal-detail .snsgov-proposal-body, .snsgov-review .snsgov-proposal-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; margin: .65rem 0; max-height: none; }
+.snsgov-proposal-title { white-space: normal; overflow-wrap: anywhere; margin: .7rem 0; font-size: 20px; line-height: 1.4; }
+.snsgov-proposal-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .75rem; }
+.snsgov-field { display: flex; flex-direction: column; gap: .35rem; min-width: 0; width: 100%; }
+.snsgov-field > span:first-child { font-weight: 600; }
+.snsgov-field .nt-input, .snsgov-field .nt-select, .snsgov-field textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.snsgov-field textarea { resize: vertical; min-height: 5rem; }
+.snsgov-proposal-fields > .snsgov-disclosure, .snsgov-proposal-fields > p { grid-column: 1 / -1; }
+.snsgov-proposal-composer { display: grid; gap: 1rem; }
+.snsgov-proposal-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; }
+.snsgov-proposal-toolbar .nt-cluster, .snsgov-composer-actions { flex-wrap: wrap; }
+.snsgov-vote { margin-top: .8rem; min-width: 0; }
+.snsgov-vote-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .5rem; }
+.snsgov-vote-buttons > button { min-width: 4.5rem; min-height: 2.5rem; }
+.snsgov-vote > .snsgov-disclosure { margin-block: .4rem; }
+.snsgov-neuron-selection { border: 0; padding: 0; margin: .5rem 0; display: grid; gap: .3rem; min-width: 0; }
+.snsgov-neuron-selection label { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .6rem; padding: .5rem 0; min-height: 2rem; }
+.snsgov-neuron-selection input { width: 1.15rem; height: 1.15rem; flex-shrink: 0; }
+.snsgov-ballot-list { list-style: none; padding: 0; margin: .5rem 0; }
+.snsgov-ballot-list li { display: flex; flex-wrap: wrap; gap: .25rem .65rem; padding: .5rem 0; border-bottom: 1px solid var(--nt-line-subtle); overflow-wrap: anywhere; }
+.snsgov-ballot-list li small { flex-basis: 100%; }
+.snsgov-vote-result { margin-top: .7rem; }
+.snsgov-wrap-anywhere { overflow-wrap: anywhere; min-width: 0; }
+.snsgov-new-proposals { width: 100%; margin-top: .75rem; }
+.snsgov-proposal-detail .snsgov-prose, .snsgov-readable-payload { max-height: none; overflow: visible; }
+.snsgov-readable-payload { white-space: pre-wrap; overflow-wrap: anywhere; }
+.snsgov-detail-voting { padding-block: .25rem .65rem; }
+.snsgov-tally { margin-top: .6rem; }
+.snsgov-tally-bar { display: flex; overflow: hidden; height: .3rem; background: var(--nt-line-subtle); }
+.snsgov-tally-yes { display: block; background: var(--nt-success, #2c9a6b); }
+.snsgov-tally-no { display: block; background: var(--nt-danger, #cc5c56); }
+.snsgov-checkbox { display: flex; align-items: center; gap: .5rem; }
+@media (max-width: 480px) {
+  .snsgov-post { padding-block: 1rem; }
+  .snsgov-post-byline .nt-meta { flex-basis: 100%; }
+  .snsgov-proposal-toolbar .nt-cluster { width: 100%; }
+  .snsgov-vote-buttons .nt-meta { flex-basis: 100%; }
+  .snsgov-proposal-title { font-size: 1.2rem; }
+}
+
+/* Markdown is constrained by the tile, independent of author heading sizes. */
+.snsgov-proposal-body.snsgov-post-excerpt { max-height: 9.6rem; overflow: hidden; }
+.snsgov-post-excerpt--clipped { mask-image: linear-gradient(to bottom, black calc(100% - 1rem), transparent); }
+.snsgov-markdown { min-width: 0; max-width: 100%; white-space: normal; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.snsgov-markdown > :first-child { margin-top: 0; }
+.snsgov-markdown > :last-child { margin-bottom: 0; }
+.snsgov-markdown p, .snsgov-markdown :is(ul, ol, blockquote, pre, table) { margin-block: .65em; }
+.snsgov-markdown h4 { font-size: 14px; line-height: 1.5; font-weight: 600; margin: .9em 0 .35em; }
+.snsgov-markdown :is(ul, ol) { padding-left: 1.5em; }
+.snsgov-markdown li { margin-block: .2em; }
+.snsgov-markdown li > p { margin-block: .2em; }
+.snsgov-markdown blockquote { border-left: 2px solid var(--nt-line-strong); padding-left: .85em; margin-inline: 0; color: var(--nt-text-muted); }
+.snsgov-markdown a { color: var(--nt-accent); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.snsgov-markdown :not(pre) > code { font-size: .95em; padding: .1em .3em; border-radius: 3px; background: var(--nt-bg-control); }
+.snsgov-markdown pre { max-width: 100%; padding: .75em; overflow-x: auto; border: 1px solid var(--nt-line-subtle); border-radius: var(--nt-radius-control); background: var(--nt-bg-control); white-space: pre; font-size: 12px; }
+.snsgov-markdown pre code { overflow-wrap: normal; }
+.snsgov-markdown img { display: block; max-width: 100%; max-height: 24rem; height: auto; object-fit: contain; border-radius: var(--nt-radius-control); }
+.snsgov-markdown-table { max-width: 100%; overflow-x: auto; }
+.snsgov-markdown table { border-collapse: collapse; font-size: 12px; color: var(--nt-text); }
+.snsgov-markdown :is(th, td) { padding: .4em .7em; border: 1px solid var(--nt-line-subtle); text-align: left; }
+.snsgov-markdown input[type="checkbox"] { width: auto; vertical-align: middle; margin-right: .4em; }
+.snsgov-markdown .task-list-item { list-style: none; }

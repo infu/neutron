@@ -81,23 +81,37 @@ describe.if(ENABLED)("mainnet read path", () => {
     expect(treasury.tokenE8s).toBeGreaterThan(0n);
   }, 120_000);
 
-  test("ballots come from get_proposal, not list_proposals", async () => {
+  test("get_proposal exposes retained ballots or reward-settlement evidence", async () => {
     const sns = await findSns(NEUTRINITE_ROOT, options);
     const page = await listProposals(sns.governance, { limit: 3 }, options);
     expect(page.proposals.length).toBe(3);
 
     const first = page.proposals[0]!;
     const detail = await getProposal(sns.governance, first.id, options);
-    // list_proposals scopes ballots to the caller; anonymously that is none.
-    // get_proposal returns the complete map.
-    expect(detail?.ballots.length ?? 0).toBeGreaterThan(100);
+    expect(detail).toBeDefined();
+    expect(detail!.id).toBe(first.id);
+    // get_proposal returns all retained ballots. Governance clears them when
+    // rewards settle, so an executed proposal need not still have a ballot map.
+    expect(detail!.ballots.length).toBe(detail!.raw!.ballots.length);
+    const settled = (detail!.rewardEventRound ?? 0n) > 0n
+      || detail!.rewardEventEndTimestampSeconds !== undefined;
+    if (settled) expect(detail!.ballots).toHaveLength(0);
+    else expect(detail!.ballots.length).toBeGreaterThan(0);
   }, 120_000);
 
   test("of_principal matches any permission holder, and truncation is reported", async () => {
     const sns = await findSns(NEUTRINITE_ROOT, options);
-    const { neurons, truncated } = await listNeurons(sns.governance, { limit: 100 }, options);
+    const limit = 100;
+    const { neurons, truncated, nextStartPageAt } = await listNeurons(sns.governance, { limit }, options);
     expect(neurons.length).toBeGreaterThan(0);
-    expect(truncated).toBe(false); // unfiltered form reports no truncation
+    expect(truncated).toBe(neurons.length === limit);
+    if (truncated) {
+      expect(nextStartPageAt).toBeDefined();
+      const next = await listNeurons(sns.governance, { limit, startPageAt: nextStartPageAt! }, options);
+      const lastId = neurons.at(-1)!.id;
+      expect(next.neurons.every((neuron) => neuron.id > lastId)).toBe(true);
+      expect(next.truncated).toBe(next.neurons.length === limit);
+    } else expect(nextStartPageAt).toBeUndefined();
 
     // A real production hotkey holds exactly [SubmitProposal, Vote].
     const hotkeyed = neurons.find((neuron) =>
@@ -113,6 +127,10 @@ describe.if(ENABLED)("mainnet read path", () => {
         options,
       );
       expect(found.neurons.some((neuron) => neuron.id === hotkeyed.id)).toBe(true);
+      expect(found.truncated).toBe(found.neurons.length === limit);
+      // Principal-filtered requests ignore the cursor; exhaustive discovery
+      // uses public pagination instead of advertising a nonworking cursor.
+      expect(found.nextStartPageAt).toBeUndefined();
     }
   }, 120_000);
 
@@ -122,7 +140,7 @@ describe.if(ENABLED)("mainnet read path", () => {
     expect(functions.length).toBeGreaterThan(20);
     const generic = functions.filter((fn) => fn.kind === "generic");
     expect(generic.length).toBeGreaterThan(0);
-    // Neutrinite has 10 untopicked custom functions that cannot be proposed.
+    // Topic requirements depend on the deployed governance version.
     expect(uncategorizedFunctions(functions).length).toBeGreaterThan(0);
     // Generic functions carry a target we can introspect.
     expect(generic.some((fn) => fn.targetCanisterId && fn.targetMethodName)).toBe(true);
@@ -177,26 +195,18 @@ describe.if(ENABLED)("custom proposal pipeline", () => {
     expect(validation.rendering).toContain("100_000");
   }, 120_000);
 
-  test("an untopicked custom function is refused before any encoding", async () => {
-    const { buildAndValidate } = await import("../src/data/custom_proposal");
+  test("an untopicked custom function leaves submission eligibility to Governance", async () => {
+    const { functionRow } = await import("../src/tools/projections");
     const { listNervousSystemFunctions, uncategorizedFunctions } = await import(
       "../src/data/governance"
     );
     const sns = await findSns(NEUTRINITE_ROOT, options);
-    const blocked = uncategorizedFunctions(await listNervousSystemFunctions(sns.governance, options));
-    expect(blocked.length).toBeGreaterThan(0);
+    const uncategorized = uncategorizedFunctions(await listNervousSystemFunctions(sns.governance, options));
+    expect(uncategorized.length).toBeGreaterThan(0);
 
-    const fn = blocked[0]!;
-    await expect(
-      buildAndValidate(
-        {
-          functionId: fn.id,
-          targetCanisterId: fn.targetCanisterId ?? "aaaaa-aa",
-          targetMethodName: fn.targetMethodName ?? "noop",
-        },
-        {},
-        options,
-      ),
-    ).rejects.toThrow(/no topic assigned/i);
+    const row = functionRow(uncategorized[0]!);
+    expect(row.proposable).toBeNull();
+    expect(row.blockedReason).toBeUndefined();
+    expect(row.eligibilityNote).toContain("deployed Governance canister decides");
   }, 120_000);
 });

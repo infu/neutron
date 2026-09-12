@@ -10,9 +10,9 @@
 export type SnsErrorCode =
   /** The root canister id is not in SNS-W's registry. */
   | "SNS_NOT_FOUND"
-  /** Governance has no Wasm module installed (IC0537). 16 of 54 today. */
+  /** Governance is absent, stopped, out of cycles, or has no Wasm installed. */
   | "SNS_GOVERNANCE_INACTIVE"
-  /** The ledger has no Wasm module installed. 9 of 54 today. */
+  /** The ledger is absent, stopped, out of cycles, or has no Wasm installed. */
   | "SNS_LEDGER_INACTIVE"
   /** A canister rejected the call because the method does not exist on its version. */
   | "SNS_UNSUPPORTED_METHOD"
@@ -54,16 +54,18 @@ export class SnsError extends Error {
 const RETRYABLE = new Set<SnsErrorCode>(["UPSTREAM_UNAVAILABLE"]);
 
 /**
- * `IC0537` is the replica's "canister contains no Wasm module" error. It is how
- * a dead SNS presents: the canister id resolves, but nothing is installed.
+ * Replica ErrorCode values, not the broader reject codes. In particular,
+ * IC0207 (out of cycles) shares reject code 2 with transient replica failures.
+ * IC0536 means a missing method and is deliberately excluded.
  */
-const NO_WASM_MODULE = /IC0537|contains no Wasm module/i;
+const INACTIVE_CANISTER =
+  /\bIC(?:0207|0301|0508|0509|0537)\b|\bcontains no Wasm module\b|\bCanister(?: [a-z0-9-]+)? (?:not found|is stopped|is stopping|is not running|(?:is|ran) out of cycles)\b|\bCanister [a-z0-9-]+ is unable to process query calls because it's frozen\b/i;
 
 /** A method the deployed version does not implement. */
 const NO_SUCH_METHOD = /has no (?:query |update )?method|method .* not found|Canister has no update method/i;
 
 const TRANSIENT =
-  /Reject code: 2|SysTransient|timed out|timeout|network|fetch failed|Failed to fetch|ECONNRESET|503|502|504/i;
+  /Reject code:\s*2\b|query rejected \(2\)|\bSysTransient\b|timed out|timeout|network|fetch failed|Failed to fetch|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|\b(?:429|502|503|504)\b/i;
 
 /**
  * Classify a raw agent/replica failure into our taxonomy.
@@ -79,10 +81,10 @@ export function classifyError(
   if (error instanceof SnsError) return error;
   const message = errorText(error);
 
-  if (NO_WASM_MODULE.test(message)) {
+  if (INACTIVE_CANISTER.test(message)) {
     const code: SnsErrorCode =
       context.role === "ledger" ? "SNS_LEDGER_INACTIVE" : "SNS_GOVERNANCE_INACTIVE";
-    return new SnsError(code, `${context.role ?? "canister"} has no Wasm module installed`, {
+    return new SnsError(code, truncate(message), {
       ...(context.sns === undefined ? {} : { sns: context.sns }),
       retryable: false,
       cause: error,
@@ -111,7 +113,7 @@ export function classifyError(
   });
 }
 
-/** True when the SNS is structurally unavailable rather than momentarily failing. */
+/** True for confirmed canister unavailability, distinct from a transport failure. */
 export function isInactive(error: unknown): boolean {
   return (
     error instanceof SnsError &&
@@ -120,10 +122,33 @@ export function isInactive(error: unknown): boolean {
 }
 
 function errorText(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
+  const texts: string[] = [];
+  const seen = new Set<object>();
+  const pending: unknown[] = [error];
+  const add = (text: string) => {
+    if (text && !texts.some((existing) => existing.includes(text))) texts.push(text);
+  };
+
+  // Agent 3.x stores replica fields in cause.code; transport wrappers store
+  // their original exception in cause.code.error. Follow only error fields so
+  // request IDs, method names, and payloads cannot supply classification codes.
+  while (pending.length) {
+    const value = pending.shift();
+    if (typeof value === "string") { add(value); continue; }
+    if (value === null || typeof value !== "object" || seen.has(value)) continue;
+    seen.add(value);
+    const record = value as Record<string, unknown>;
+    for (const key of ["message", "rejectMessage", "reject_message", "rejectErrorCode", "error_code", "bodyText"]) {
+      if (typeof record[key] === "string") add(record[key]);
+    }
+    const rejectCode = record.rejectCode ?? record.reject_code;
+    if (typeof rejectCode === "number") add(`Reject code: ${rejectCode}`);
+    if (typeof record.status === "number") add(`HTTP status: ${record.status}`);
+    pending.push(record.cause, record.code, record.error);
+  }
+  if (texts.length) return texts.join("; ");
   try {
-    return JSON.stringify(error);
+    return JSON.stringify(error) ?? String(error);
   } catch {
     return String(error);
   }

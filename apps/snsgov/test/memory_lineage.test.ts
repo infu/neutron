@@ -44,13 +44,22 @@ async function successor() {
   return { files, manifest };
 }
 
-test("SNS Governance keeps the imported v1 schema, lock, and complete Map dependency closure", async () => {
+test("SNS Governance keeps the imported v1 schema, lock lineage, and complete Map dependency closure", async () => {
   const previous = await predecessor();
   const { files, manifest } = await successor();
-  expect(manifest.memory).toEqual(previous.manifest.memory);
-  expect(files["neutron.lock.json"]).toEqual(new Uint8Array(previous.lockBytes));
-  expect(await readFile(new URL("neutron.lock.json", app))).toEqual(previous.lockBytes);
-  expect(createMemoryLock(manifest)).toEqual(JSON.parse(decode(previous.lockBytes)));
+  expect(manifest.memory?.snsgov).toEqual(previous.manifest.memory?.snsgov);
+  const currentLock = createMemoryLock(manifest);
+  expect(currentLock.memory.snsgov).toEqual(JSON.parse(decode(previous.lockBytes)).memory.snsgov);
+  const lockBytes = await readFile(new URL("neutron.lock.json", app));
+  expect(files["neutron.lock.json"]).toEqual(new Uint8Array(lockBytes));
+  expect(currentLock).toEqual(JSON.parse(decode(lockBytes)));
+  expect(Object.keys(manifest.memory ?? {}).sort()).toEqual(["snsgov", "snsgov_operations"]);
+  expect(manifest.memory?.snsgov_operations).toMatchObject({
+    version: 1,
+    schemas: { "1": { src: "memory/snsgov_operations/v1.mo" } },
+    migrations: [],
+  });
+  expect(Object.keys(manifest.memory?.snsgov_operations?.schemas ?? {})).toEqual(["1"]);
 
   const moduleNames = (await readdir(new URL("mo/", history))).sort();
   const visited = new Set<string>();
@@ -81,17 +90,48 @@ test("SNS Governance keeps the imported v1 schema, lock, and complete Map depend
   expect(visited.size).toBe(15);
 });
 
-test("SNS Governance initializes cleanly and keeps the existing v1 root on import and restoration", async () => {
+test("SNS Governance initializes its journal independently and keeps both roots on restoration", async () => {
   const { manifest: previous } = await predecessor();
   const { manifest } = await successor();
   expect(planMemoryMigrations({ kernel }, { kernel, snsgov: manifest })).toEqual({
-    upgrades: [{ kind: "initialize", owner: "snsgov", memoryId: "snsgov", to: 1 }],
+    upgrades: [
+      { kind: "initialize", owner: "snsgov", memoryId: "snsgov", to: 1 },
+      { kind: "initialize", owner: "snsgov", memoryId: "snsgov_operations", to: 1 },
+    ],
     removedApps: [],
     destructiveMemoryRoots: [],
   });
-  for (const installed of [previous, manifest]) {
-    expect(planMemoryMigrations({ kernel, snsgov: installed }, { kernel, snsgov: manifest })).toEqual({
-      upgrades: [{ kind: "keep", owner: "snsgov", memoryId: "snsgov", version: 1 }],
+  expect(planMemoryMigrations({ kernel, snsgov: previous }, { kernel, snsgov: manifest })).toEqual({
+    upgrades: [
+      { kind: "keep", owner: "snsgov", memoryId: "snsgov", version: 1 },
+      { kind: "initialize", owner: "snsgov", memoryId: "snsgov_operations", to: 1 },
+    ],
+    removedApps: [],
+    destructiveMemoryRoots: [],
+  });
+  expect(planMemoryMigrations({ kernel, snsgov: manifest }, { kernel, snsgov: manifest })).toEqual({
+    upgrades: [
+      { kind: "keep", owner: "snsgov", memoryId: "snsgov", version: 1 },
+      { kind: "keep", owner: "snsgov", memoryId: "snsgov_operations", version: 1 },
+    ],
+    removedApps: [],
+    destructiveMemoryRoots: [],
+  });
+});
+
+test("every checked-in production predecessor keeps its v1 root and initializes only the journal", async () => {
+  const { manifest } = await successor();
+  const { manifest: imported } = await predecessor();
+  for (const version of [111, 112, 113, 114]) {
+    const files = unpackNeutronPackage(await readFile(new URL(packageArchiveFilename("snsgov", version), app)));
+    const previous = JSON.parse(decode(files["neutron.json"]!)) as PackagedNeutronManifest;
+    expect(previous.version).toBe(version);
+    expect(previous.memory).toEqual(imported.memory);
+    expect(planMemoryMigrations({ kernel, snsgov: previous }, { kernel, snsgov: manifest })).toEqual({
+      upgrades: [
+        { kind: "keep", owner: "snsgov", memoryId: "snsgov", version: 1 },
+        { kind: "initialize", owner: "snsgov", memoryId: "snsgov_operations", to: 1 },
+      ],
       removedApps: [],
       destructiveMemoryRoots: [],
     });

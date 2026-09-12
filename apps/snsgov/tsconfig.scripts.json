@@ -15,6 +15,8 @@
     "src/data/**/*.ts",
     "src/tools/**/*.ts",
     "src/service.ts",
+    "src/action_tools.ts",
+    "src/provider.ts",
     "src/candid/**/*.d.ts",
     "test/**/*.ts",
     "types/**/*.d.ts"

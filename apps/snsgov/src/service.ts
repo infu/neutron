@@ -5,11 +5,8 @@
  * to research SNS governance without the user opening a window. The tile calls
  * these same tools, so the UI and an agent can never disagree.
  *
- * What is deliberately NOT registered here: any tool that submits a proposal or
- * grants a neuron permission. A tool that does not exist on the bus cannot be
- * invoked by any prompt, any injected instruction inside a proposal summary, or
- * any delegated child invocation. That is a stronger guarantee than a review
- * step, and it costs nothing.
+ * Management, voting and proposals share the durable operation layer. Reads
+ * remain direct browser queries; signed operations use scoped owner review.
  */
 
 import { exposeTool, type JsonObject, type JsonValue, type ScopedKernelClient } from "neutron-tools/app";
@@ -19,6 +16,7 @@ import {
   getProposal,
   listNervousSystemFunctions,
   listNeurons,
+  listAllNeurons,
   listProposals,
   readMode,
   readParameters,
@@ -32,7 +30,9 @@ import {
   readCanistersCycles,
   type CanisterCycles,
 } from "./data/root";
-import { readHotkey, voteWithNeurons } from "./data/relay";
+import { readHotkey } from "./data/relay";
+import "./action_tools";
+import { draftOperationId, encodeNativeDraft, decodeNativeDraft } from "./action_tools";
 import { buildAndValidate, discoverInterface } from "./data/custom_proposal";
 import { displayName, getRegistry, requireEntry, type RegistryEntry } from "./data/registry";
 import {
@@ -269,7 +269,7 @@ exposeTool(
   {
     title: "List proposal types",
     description:
-      "The proposal types this SNS accepts. Native types are fixed; custom ones are registered by the DAO and change at runtime, so never assume a fixed list. A custom type with no topic cannot be proposed at all.",
+      "The proposal types this SNS accepts. Native types are fixed; custom ones are registered by the DAO and change at runtime, so never assume a fixed list. Topic requirements depend on the deployed SNS governance version; a missing topic is disclosed, while the live protocol decides whether submission is accepted.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -290,10 +290,10 @@ exposeTool(
     const blocked = uncategorizedFunctions(all);
     return {
       functions: filtered.map(functionRow) as unknown as JsonValue,
-      unproposableCount: blocked.length,
+      uncategorizedCount: blocked.length,
       ...(blocked.length > 0
         ? {
-            unproposableNote: `${blocked.length} custom proposal type(s) have no topic assigned and cannot be submitted. The DAO must submit SetTopicsForCustomProposals.`,
+            topicCompatibilityNote: `${blocked.length} custom proposal type(s) have no topic assigned. Some governance versions require topic assignment; older SNSes may accept them. Live governance validation is authoritative.`,
           }
         : {}),
     } as JsonObject;
@@ -309,7 +309,7 @@ exposeTool(
   {
     title: "List neurons",
     description:
-      "Neurons for one SNS. With ofPrincipal set, returns neurons where that principal holds ANY permission, which is how you find the neurons a hotkey can act with. Capped at 100 and NOT paginable in that mode.",
+      "Read neurons for one SNS. With ofPrincipal, discovers every public page and filters any permission held by that principal. Without a principal, follow nextStartPageAt for public pagination. Partial discovery is explicit.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -317,30 +317,30 @@ exposeTool(
       properties: {
         rootCanisterId: rootArg,
         ofPrincipal: { type: "string", description: "Match neurons where this principal holds any permission." },
+        startPageAt: { type: "string", pattern: "^[0-9a-fA-F]{64}$", description: "Public-page cursor. Omit when using ofPrincipal, which performs complete filtered discovery." },
         limit: { type: "integer", minimum: 1, maximum: 100, default: DEFAULT_NEURON_LIMIT },
       },
     },
     annotations: readOnly(),
   },
   async (args) => {
-    const input = args as { rootCanisterId: string; ofPrincipal?: string; limit?: number };
+    const input = args as { rootCanisterId: string; ofPrincipal?: string; limit?: number; startPageAt?: string };
     const entry = await requireEntry(input.rootCanisterId);
     requireGovernance(entry);
-    const { neurons, truncated } = await listNeurons(entry.canisters.governance, {
-      ...(input.ofPrincipal === undefined ? {} : { ofPrincipal: input.ofPrincipal }),
-      limit: clamp(input.limit ?? DEFAULT_NEURON_LIMIT, 1, 100),
-    });
+    if (input.ofPrincipal && input.startPageAt) throw new SnsError("INVALID_REQUEST", "Use public startPageAt pagination or complete ofPrincipal discovery, not both.");
+    const page = input.ofPrincipal
+      ? await listAllNeurons(entry.canisters.governance, { ofPrincipal: input.ofPrincipal })
+      : await listNeurons(entry.canisters.governance, { limit: clamp(input.limit ?? DEFAULT_NEURON_LIMIT, 1, 100), ...(input.startPageAt ? { startPageAt: fromHex(input.startPageAt) } : {}) });
+    const { neurons, truncated } = page;
     const decimals = entry.token?.decimals ?? 8;
     const symbol = entry.token?.symbol ?? "";
     return {
       neurons: neurons.map((neuron) => neuronRow(neuron, decimals, symbol)) as unknown as JsonValue,
       truncated,
-      ...(truncated
-        ? {
-            truncationNote:
-              "The SNS caps this to 100 neurons and ignores pagination when filtering by principal, so results beyond 100 are unreachable.",
-          }
-        : {}),
+      complete: !truncated,
+      nextStartPageAt: page.nextStartPageAt ? toHex(page.nextStartPageAt) : null,
+      failures: "failures" in page ? page.failures as unknown as JsonValue : [],
+      ...(truncated ? { truncationNote: "Additional neurons may exist. Follow the public cursor or retry the reported failed discovery reads." } : {}),
     } as JsonObject;
   },
 );
@@ -419,20 +419,19 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Voting — real, on-chain, no dialog
+// Neutron access and voting history
 // ---------------------------------------------------------------------------
 //
-// Agent voting is bounded by four things, none of them a prompt: the permission
-// grant itself (Vote + SubmitProposal cannot move value), the owner's SNS
-// allowlist, a per-SNS agent opt-in that defaults to off, and an audit trail.
-// Enforcement lives in the backend, not here — this is only the tool surface.
+// Existing preferences remain readable. Actual actions use their protocol
+// permissions and exact provider review rather than treating a preference as
+// signed authority. The operation tools below retain every dispatched reply.
 
 exposeTool(
   "sns_my_neurons",
   {
     title: "My neurons",
     description:
-      "Neurons this Neutron is authorised to vote with, for one SNS or all allowlisted ones. Empty means the voting principal has not been registered on any neuron yet.",
+      "Neurons granting this Neutron any permission, for an explicit SNS or every configured SNS. Reads actual permissions and full discovery, independently of saved voting opt-in. Empty with complete=true means no matching neuron was found.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -445,23 +444,23 @@ exposeTool(
     const hotkey = await readHotkey(context.kernel);
     const config = await readConfig(context.kernel);
     const targets = rootCanisterId
-      ? config.filter((row) => row.sns === rootCanisterId)
-      : config.filter((row) => row.votingEnabled);
+      ? [{ sns: rootCanisterId, agentVotingEnabled: config.find(row => row.sns === rootCanisterId)?.agentVotingEnabled ?? false }]
+      : config;
 
     const groups = await Promise.all(
       targets.map(async (row) => {
         try {
           const entry = await requireEntry(row.sns);
-          const { neurons, truncated } = await listNeurons(
-            entry.canisters.governance,
-            { ofPrincipal: hotkey.principal, limit: 100 },
-          );
+          const { neurons, truncated, failures } = await listAllNeurons(entry.canisters.governance, { ofPrincipal: hotkey.principal });
+          const { neuronCapabilities } = await import("./data/neuron_actions");
           return {
             rootCanisterId: row.sns,
             name: displayName(entry),
             agentVotingEnabled: row.agentVotingEnabled,
-            truncated,
+            truncated, complete: !truncated && failures.length === 0, failures,
             neurons: neurons.map((neuron) => ({
+              ...neuronRow(neuron, entry.token?.decimals ?? 8, entry.token?.symbol ?? ""),
+              ...neuronCapabilities(neuron, hotkey.principal),
               id: neuron.id,
               stake: neuron.stakeE8s.toString(),
               canVote: neuron.permissions.some(
@@ -490,96 +489,10 @@ exposeTool(
 );
 
 exposeTool(
-  "sns_vote_plan",
-  {
-    title: "Plan a vote (dry run)",
-    description:
-      "Show exactly what sns_vote would do for a proposal: which neurons are eligible, which already voted, and whether agent voting is permitted for this SNS. Makes no changes.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["rootCanisterId", "proposalId"],
-      properties: { rootCanisterId: rootArg, proposalId: { type: "string" } },
-    },
-    annotations: readOnly(),
-  },
-  async (args, context) => {
-    const { rootCanisterId, proposalId } = args as { rootCanisterId: string; proposalId: string };
-    const plan = await buildVotePlan(rootCanisterId, BigInt(proposalId), context.kernel);
-    return plan as unknown as JsonObject;
-  },
-);
-
-exposeTool(
-  "sns_vote",
-  {
-    title: "Vote on a proposal",
-    description:
-      "Cast a vote on-chain with every eligible neuron, or a named subset. This is a real signed write. It is refused unless the owner has allowlisted the SNS and enabled agent voting for it. Run sns_vote_plan first.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["rootCanisterId", "proposalId", "vote"],
-      properties: {
-        rootCanisterId: rootArg,
-        proposalId: { type: "string" },
-        vote: { enum: ["adopt", "reject"] },
-        neuronIds: {
-          type: "array",
-          items: { type: "string" },
-          description: "Optional subset; omit to use every eligible neuron.",
-        },
-      },
-    },
-    annotations: { "neutron:effects": ["read", "network", "write"] },
-  },
-  async (args, context) => {
-    const input = args as {
-      rootCanisterId: string;
-      proposalId: string;
-      vote: "adopt" | "reject";
-      neuronIds?: string[];
-    };
-    const proposalId = BigInt(input.proposalId);
-    const plan = await buildVotePlan(input.rootCanisterId, proposalId, context.kernel);
-    if (!plan.agentVotingEnabled) {
-      throw new SnsError(
-        "SNS_NOT_ALLOWED",
-        "Agent voting is not enabled for this SNS. The owner must turn it on in the app.",
-        { sns: input.rootCanisterId, retryable: false },
-      );
-    }
-    const eligible = input.neuronIds ?? plan.eligibleNeuronIds;
-    if (eligible.length === 0) {
-      return { attempted: 0, succeeded: 0, note: "No eligible neuron to vote with." } as JsonObject;
-    }
-
-    const report = await voteWithNeurons({
-      snsRootCanisterId: input.rootCanisterId,
-      proposalId,
-      neuronIds: eligible,
-      adopt: input.vote === "adopt",
-      initiator: "agent",
-    }, context.kernel);
-    return {
-      attempted: report.attempted,
-      succeeded: report.succeeded,
-      ...(report.error ? { error: report.error, retrySafe: false } : {}),
-      // A neuron that had already voted counts as success: follow cascades
-      // routinely fill a ballot before our call lands.
-      alreadyVoted: report.outcomes.filter((o) => o.alreadyVoted).length,
-      failures: report.outcomes
-        .filter((o) => !o.ok)
-        .map((o) => ({ neuronId: o.neuronId, error: o.error ?? "rejected", ...(o.outcomeUnknown ? { outcomeUnknown: true } : {}) })) as unknown as JsonValue,
-    } as JsonObject;
-  },
-);
-
-exposeTool(
   "sns_vote_history",
   {
     title: "Voting history",
-    description: "This app's own audit trail of signed governance actions, newest first.",
+    description: "Legacy signed-relay audit trail, newest first. New reviewed votes, proposals, neuron actions and funding are retained in sns_operation_history_v1 and sns_operation_status_v1.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -819,15 +732,15 @@ exposeTool(
 // Drafting — off-chain only
 // ---------------------------------------------------------------------------
 //
-// There is deliberately no submit tool. A human sends a draft from the tile;
-// no agent invocation can put a proposal on-chain.
+// Drafts remain off-chain. Submitting uses sns_submit_draft_v1 and the same
+// exact review and durable operation identity as other proposal operations.
 
 exposeTool(
   "sns_draft_proposal",
   {
     title: "Draft a proposal",
     description:
-      "Create a reviewable proposal draft. This NEVER submits anything on-chain — a human must review and send it from the app.",
+      "Create an off-chain proposal draft. Submit its retained operationId with sns_submit_draft_v1 after exact review. Native actions use the explicit action variant; legacy Motion/custom inputs retain their original meaning.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -838,6 +751,7 @@ exposeTool(
         summary: { type: "string", maxLength: 30000 },
         url: { type: "string", maxLength: 2048 },
         actionKind: { type: "string", default: "Motion" },
+        action: { type: "object", additionalProperties: true, description: "Explicit native proposal variant, for example {Motion:{motion_text:'...'}}. Inspect sns_proposal_schema_v1. Omit legacy actionKind/motionText/functionId/payloadHex when using this field." },
         motionText: {
           type: "string",
           maxLength: 30000,
@@ -858,15 +772,18 @@ exposeTool(
       summary: string;
       url?: string;
       actionKind?: string;
+      action?: JsonObject;
       motionText?: string;
       functionId?: string;
       payloadHex?: string;
     };
     const entry = await requireEntry(input.rootCanisterId);
     requireGovernance(entry);
-    const actionKind = input.actionKind ?? "Motion";
+    if (input.action !== undefined && [input.actionKind, input.motionText, input.functionId, input.payloadHex].some(value => value !== undefined)) throw new SnsError("INVALID_REQUEST", "Use the explicit action variant or legacy draft fields, not both.");
+    const actionKind = input.action !== undefined ? "NativeActionV1" : input.actionKind ?? "Motion";
     let payload: Uint8Array | undefined;
-    if (actionKind !== "Motion") {
+    if (input.action !== undefined) payload = await encodeNativeDraft(input.action);
+    else if (actionKind !== "Motion") {
       if (input.functionId === undefined || !input.payloadHex || !/^(?:[0-9a-fA-F]{2})+$/.test(input.payloadHex)) {
         throw new SnsError("INVALID_REQUEST", "A custom proposal requires functionId and an exact, even-length payloadHex from sns_validate_payload or an existing proposal.", { retryable: false });
       }
@@ -886,19 +803,12 @@ exposeTool(
       );
     }
 
-    // A custom proposal type with no topic cannot be submitted at all, so a
-    // draft against one is dead on arrival. Catch it now, not at send time.
-    if (actionKind !== "Motion" && input.functionId !== undefined) {
+    // A missing topic is version-dependent. Keep the original custom function
+    // identity, and let the deployed Governance validate proposal eligibility.
+    if (actionKind !== "Motion" && actionKind !== "NativeActionV1" && input.functionId !== undefined) {
       const functions = await listNervousSystemFunctions(entry.canisters.governance);
       const fn = functions.find((candidate) => candidate.id.toString() === input.functionId);
       if (!fn || fn.kind !== "generic") throw new SnsError("INVALID_REQUEST", `unknown custom function id ${input.functionId}`);
-      if (fn.kind === "generic" && fn.topic === undefined) {
-        throw new SnsError(
-          "INVALID_REQUEST",
-          `Proposal type "${fn.name}" has no topic assigned, so this SNS rejects every submission of it. The DAO must submit SetTopicsForCustomProposals first.`,
-          { sns: input.rootCanisterId, retryable: false },
-        );
-      }
     }
 
     // Absent options are omitted keys, and `function_id` is a Nat64, so it
@@ -949,11 +859,11 @@ exposeTool(
 
     return {
       draftId: String(draftId),
-      status: "awaiting human review",
+      status: "draft",
       shownToOwner: shown,
       note: shown
-        ? "Opened in the app for review. Only a person can send it — no tool can."
-        : "Waiting in Drafts for review. Only a person can send it — no tool can.",
+        ? "Opened for review. sns_submit_draft_v1 submits this exact saved draft with approval."
+        : "Saved in Drafts. sns_submit_draft_v1 submits this exact saved draft with approval.",
     } as JsonObject;
   },
 );
@@ -962,7 +872,7 @@ exposeTool(
   "sns_drafts",
   {
     title: "List drafts",
-    description: "Proposal drafts awaiting human review.",
+    description: "Saved off-chain proposal drafts with their stable submission operation IDs.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
     annotations: readOnly(),
   },
@@ -972,7 +882,7 @@ exposeTool(
       unknown
     >[];
     return {
-      drafts: drafts.map(withDecodedAction) as unknown as JsonValue,
+      drafts: await Promise.all(drafts.map(async draft => ({ ...await withDecodedAction(draft), operationId: await draftOperationId(draft) }))) as unknown as JsonValue,
     } as JsonObject;
   },
 );
@@ -1002,69 +912,6 @@ function principalText(value: unknown): string {
   if (typeof value === "string") return value;
   const maybe = value as { toText?: () => string };
   return typeof maybe?.toText === "function" ? maybe.toText() : String(value);
-}
-
-interface VotePlan {
-  rootCanisterId: string;
-  proposalId: string;
-  proposalTitle: string;
-  proposalStatus: string;
-  agentVotingEnabled: boolean;
-  votingPrincipal: string;
-  canSign: boolean;
-  eligibleNeuronIds: string[];
-  alreadyVotedNeuronIds: string[];
-  note?: string;
-}
-
-async function buildVotePlan(rootCanisterId: string, proposalId: bigint, kernel: ScopedKernelClient): Promise<VotePlan> {
-  const entry = await requireEntry(rootCanisterId);
-  requireGovernance(entry);
-  const hotkeyRequest = readHotkey(kernel);
-  const [hotkey, config, detail, mine] = await Promise.all([
-    hotkeyRequest,
-    readConfig(kernel),
-    getProposal(entry.canisters.governance, proposalId),
-    (async () => {
-      const key = await hotkeyRequest;
-      return listNeurons(entry.canisters.governance, {
-        ofPrincipal: key.principal,
-        limit: 100,
-      });
-    })(),
-  ]);
-  if (!detail) throw new SnsError("INVALID_REQUEST", `proposal ${proposalId} not found`);
-
-  const row = config.find((candidate) => candidate.sns === rootCanisterId);
-  const ballots = new Map(detail.ballots.map((ballot) => [ballot.neuronId, ballot]));
-  const eligible: string[] = [];
-  const already: string[] = [];
-  for (const neuron of mine.neurons) {
-    const canVote = neuron.permissions.some(
-      (p) => p.principal === hotkey.principal && p.permissions.includes(4),
-    );
-    if (!canVote) continue;
-    const ballot = ballots.get(neuron.id);
-    if (ballot === undefined) continue; // not in the electoral roll for this proposal
-    if (ballot.vote !== 0) already.push(neuron.id);
-    else eligible.push(neuron.id);
-  }
-
-  const plan: VotePlan = {
-    rootCanisterId,
-    proposalId: proposalId.toString(),
-    proposalTitle: detail.title,
-    proposalStatus: detail.status,
-    agentVotingEnabled: Boolean(row?.votingEnabled && row?.agentVotingEnabled),
-    votingPrincipal: hotkey.principal,
-    canSign: hotkey.canManageNeuron,
-    eligibleNeuronIds: eligible,
-    alreadyVotedNeuronIds: already,
-  };
-  if (detail.status !== "open") plan.note = "This proposal is no longer open; voting will fail.";
-  else if (!row) plan.note = "This SNS is not on the owner's allowlist.";
-  else if (!plan.agentVotingEnabled) plan.note = "Agent voting is not enabled for this SNS.";
-  return plan;
 }
 
 // ---------------------------------------------------------------------------
@@ -1101,7 +948,7 @@ exposeTool(
       ...(did === null && fn.kind === "generic"
         ? {
             interfaceNote:
-              "This target does not publish candid:service. Reuse a previous proposal of the same function id as a template instead of building the payload from scratch.",
+              "This target does not publish candid:service. Provide the target Candid interface or original executable payload bytes. Summarized on-chain proposal blobs must not be reused as executable input.",
           }
         : {}),
     } as unknown as JsonObject;
@@ -1113,7 +960,7 @@ exposeTool(
   {
     title: "Validate a custom proposal payload",
     description:
-      "Encode a payload for a custom proposal type and run the DAO's own validator over it. Returns the exact rendering voters will see. Makes no changes and costs nothing.",
+      "Encode exact Candid arguments for a custom proposal and run only a query validator when available. Update-only validators are reported as requiring authoritative SNS submission; this preview makes no updates.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -1122,9 +969,7 @@ exposeTool(
         rootCanisterId: rootArg,
         functionId: { type: "string" },
         value: {
-          type: "object",
-          description:
-            "The method argument as a plain object. ICRC-1 accounts may be given as textual accounts.",
+          description: "Natural JSON Candid argument: decimal strings for large integers, principal text, null/omitted optional values, single-key variants and byte arrays or {hex:...} blobs. Use an array for multiple method arguments and [] for a zero-argument method.",
         },
       },
     },
@@ -1165,6 +1010,7 @@ exposeTool(
       // see, not the whole payload_text_rendering field.
       rendering: validation.rendering ?? null,
       error: validation.error ?? null,
+      validation: validation as unknown as JsonValue,
       targetCanisterId: fn.targetCanisterId,
       targetMethodName: fn.targetMethodName,
     } as JsonObject;
@@ -1177,7 +1023,7 @@ exposeTool(
  * A Motion's payload is its text; a custom function's is opaque Candid, which
  * stays hex so it can be round-tripped exactly.
  */
-function withDecodedAction(draft: Record<string, unknown>): Record<string, unknown> {
+async function withDecodedAction(draft: Record<string, unknown>): Promise<Record<string, unknown>> {
   const payload = draft.payload;
   if (payload === undefined || payload === null) return draft;
   const bytes =
@@ -1187,6 +1033,10 @@ function withDecodedAction(draft: Record<string, unknown>): Record<string, unkno
         ? Uint8Array.from(payload as number[])
         : undefined;
   if (!bytes) return draft;
+  if (draft.action_kind === "NativeActionV1") {
+    const { payload: _dropped, ...rest } = draft;
+    return { ...rest, action: await decodeNativeDraft(bytes), payloadProvenance: "original_saved_action" };
+  }
   if (draft.action_kind === "Motion") {
     const { payload: _dropped, ...rest } = draft;
     return { ...rest, motionText: new TextDecoder().decode(bytes) };

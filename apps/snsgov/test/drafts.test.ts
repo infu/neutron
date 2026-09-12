@@ -12,6 +12,7 @@ import { IDL } from "@dfinity/candid";
 import { idlFactory as governanceIdl } from "../src/candid/sns_governance.did.js";
 import { buildProposalArgs, type DraftRow } from "../src/data/drafts";
 import { decodeManageNeuronResponse } from "../src/data/manage_neuron";
+import { encodeProposalAction } from "../src/data/proposal_actions";
 
 const NEURON = "00".repeat(31) + "07";
 
@@ -91,6 +92,16 @@ test("a custom-function draft carries its function id and exact payload", () => 
   const action = decoded.command[0].MakeProposal.action[0].ExecuteGenericNervousSystemFunction;
   expect(action.function_id).toBe(1107n);
   expect([...action.payload]).toEqual([...payload]);
+});
+
+test("an explicit native draft preserves its action and large integer through submission", () => {
+  const payload = encodeProposalAction("RemoveGenericNervousSystemFunction", "9007199254740993");
+  const bytes = buildProposalArgs(motionDraft({ actionKind: "NativeActionV1", motionText: undefined, payload }), NEURON);
+  const [decoded] = IDL.decode([manageNeuronArgType()], bytes) as unknown as [{
+    command: [{ MakeProposal: { action: [unknown] } }];
+  }];
+  expect(decoded.command[0].MakeProposal.action[0]).toEqual({ RemoveGenericNervousSystemFunction: 9007199254740993n });
+  expect(() => buildProposalArgs(motionDraft({ actionKind: "NativeActionV1", payload: new Uint8Array([1]), functionId: 1107n }), NEURON)).toThrow();
 });
 
 // A Motion is only its text. Encoding an empty one would spend the reject fee

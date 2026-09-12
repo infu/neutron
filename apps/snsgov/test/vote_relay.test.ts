@@ -80,3 +80,32 @@ test("an invalid neuron in a later chunk fails before any signed vote", async ()
   await expect(voteWithNeurons({ ...input, neuronIds: [...neuronIds.slice(0, 20), "bad"] }, client(async () => { calls++; return success(20); }))).rejects.toThrow();
   expect(calls).toBe(0);
 });
+
+test("already-voted responses never count as a new success and expose actual same/opposite ballots", async () => {
+  const already = new Uint8Array(IDL.encode([ret], [{ command: [{ Error: { error_type: 10, error_message: "Neuron already voted on proposal" } }] }]));
+  for (const actualVote of [1, 2]) {
+    const report = await voteWithNeurons({ ...input, neuronIds: [neuronIds[0]!], readBallots: async () => [{ neuronId: neuronIds[0]!, vote: actualVote, votingPower: 100n, castAtSeconds: 5n }] }, client(async () => ({ results: [{ ok: already }], attempted: "1", succeeded: "1" })));
+    expect(report.succeeded).toBe(0);
+    expect(report.outcomes[0]).toMatchObject({ ok: false, alreadyVoted: true, actualVote, matchesRequestedVote: actualVote === 1 });
+    expect(report.unattemptedNeuronIds).toEqual([]);
+  }
+});
+
+test("refused and interrupted chunks identify every neuron never attempted", async () => {
+  let calls = 0;
+  const refused = await voteWithNeurons(input, client(async () => ++calls === 1 ? success(20) : { results: [], attempted: "0", succeeded: "0", error: "disabled" }));
+  expect(refused.unattemptedNeuronIds).toEqual(neuronIds.slice(20));
+  calls = 0;
+  const interrupted = await voteWithNeurons(input, client(async () => { calls++; throw new Error("lost"); }));
+  expect(interrupted.outcomeUnknownNeuronIds).toEqual(neuronIds.slice(0, 20));
+  expect(interrupted.unattemptedNeuronIds).toEqual(neuronIds.slice(20));
+  expect(calls).toBe(1);
+});
+
+test("unavailable ballot reconciliation preserves unknown direction without inventing success", async () => {
+  const already = new Uint8Array(IDL.encode([ret], [{ command: [{ Error: { error_type: 10, error_message: "already voted" } }] }]));
+  const report = await voteWithNeurons({ ...input, neuronIds: [neuronIds[0]!], readBallots: async () => { throw new Error("offline"); } }, client(async () => ({ results: [{ ok: already }], attempted: "1", succeeded: "1" })));
+  expect(report.succeeded).toBe(0);
+  expect(report.outcomes[0]?.actualVote).toBeUndefined();
+  expect(report.outcomes[0]?.ballotReadError).toBe("offline");
+});

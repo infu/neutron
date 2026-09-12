@@ -14,6 +14,8 @@
 
 import { querySelf, updateSelf, type ScopedKernelClient } from "neutron-tools/app";
 import { SnsError } from "./errors";
+import { getProposal } from "./governance";
+import type { Ballot } from "./types";
 import {
   decodeManageNeuronResponse,
   encodeRegisterVote,
@@ -50,8 +52,11 @@ export async function readHotkey(kernel: Pick<ScopedKernelClient, "querySelf"> =
 export interface VoteOutcome {
   neuronId: string;
   ok: boolean;
-  /** True when the neuron had already voted — counted as success. */
+  /** An existing ballot is not a newly accepted vote. */
   alreadyVoted: boolean;
+  actualVote?: number;
+  matchesRequestedVote?: boolean;
+  ballotReadError?: string;
   error?: string;
   /** The relay may have committed; read the proposal ballots before retrying. */
   outcomeUnknown?: boolean;
@@ -61,6 +66,8 @@ export interface VoteReport {
   attempted: number;
   succeeded: number;
   outcomes: VoteOutcome[];
+  unattemptedNeuronIds: string[];
+  outcomeUnknownNeuronIds: string[];
   /** Set when the batch was refused outright, e.g. the SNS is not allowlisted. */
   error?: string;
 }
@@ -78,18 +85,52 @@ export async function voteWithNeurons(params: {
   neuronIds: string[];
   adopt: boolean;
   initiator?: Initiator;
+  governanceCanisterId?: string;
+  /** Optional browser reader for an authoritative ballot check after a race. */
+  readBallots?: () => Promise<Ballot[]>;
 }, kernel: Pick<ScopedKernelClient, "updateSelf"> = { updateSelf }): Promise<VoteReport> {
   const { snsRootCanisterId, proposalId, neuronIds, adopt } = params;
   const initiator = params.initiator ?? "user";
   if (neuronIds.length === 0) {
-    return { attempted: 0, succeeded: 0, outcomes: [] };
+    return { attempted: 0, succeeded: 0, outcomes: [], unattemptedNeuronIds: [], outcomeUnknownNeuronIds: [] };
   }
 
   // Validate and encode the whole request before the first signed chunk.
+  if (new Set(neuronIds.map((id) => id.toLowerCase())).size !== neuronIds.length) {
+    throw new SnsError("INVALID_REQUEST", "Duplicate neuron IDs in the vote request.");
+  }
   const encodedVotes = neuronIds.map((neuronId) => encodeRegisterVote(neuronId, proposalId, adopt));
   const outcomes: VoteOutcome[] = [];
   let succeeded = 0;
   const CHUNK = 20;
+  const finish = async (error?: string): Promise<VoteReport> => {
+    const needsBallots = outcomes.filter((outcome) => outcome.alreadyVoted || outcome.outcomeUnknown);
+    const readBallots = params.readBallots ?? (params.governanceCanisterId ? async () => {
+      const proposal = await getProposal(params.governanceCanisterId!, proposalId);
+      if (!proposal) throw new Error("Proposal ballots were unavailable.");
+      return proposal.ballots;
+    } : undefined);
+    if (needsBallots.length > 0 && readBallots) {
+      try {
+        const ballots = new Map((await readBallots()).map((ballot) => [ballot.neuronId.toLowerCase(), ballot]));
+        for (const outcome of needsBallots) {
+          const ballot = ballots.get(outcome.neuronId.toLowerCase());
+          if (ballot) {
+            outcome.actualVote = ballot.vote;
+            outcome.matchesRequestedVote = ballot.vote === (adopt ? 1 : 2);
+          }
+        }
+      } catch (failure) {
+        for (const outcome of needsBallots) outcome.ballotReadError = describeRelayFailure(failure);
+      }
+    }
+    const attempted = new Set(outcomes.map((outcome) => outcome.neuronId));
+    return { attempted: outcomes.length, succeeded, outcomes,
+      unattemptedNeuronIds: neuronIds.filter((id) => !attempted.has(id)),
+      outcomeUnknownNeuronIds: outcomes.filter((outcome) => outcome.outcomeUnknown).map((outcome) => outcome.neuronId),
+      ...(error ? { error } : {}),
+    };
+  };
 
   for (let index = 0; index < neuronIds.length; index += CHUNK) {
     const chunk = neuronIds.slice(index, index + CHUNK);
@@ -119,18 +160,18 @@ export async function voteWithNeurons(params: {
     } catch (error) {
       const message = `Vote reply interrupted: ${describeRelayFailure(error)}. Read proposal ballots before retrying.`;
       outcomes.push(...chunk.map((neuronId) => ({ neuronId, ok: false, alreadyVoted: false, outcomeUnknown: true, error: message })));
-      return { attempted: outcomes.length, succeeded, outcomes, error: message };
+      return finish(message);
     }
 
     const refusal = reply?.error ?? undefined;
     if (refusal) {
-      return { attempted: outcomes.length, succeeded, outcomes, error: refusal };
+      return finish(refusal);
     }
 
     if (!reply || !Array.isArray(reply.results)) {
       const error = "The vote relay returned no batch results. Read proposal ballots before retrying.";
       outcomes.push(...chunk.map((neuronId) => ({ neuronId, ok: false, alreadyVoted: false, outcomeUnknown: true, error })));
-      return { attempted: outcomes.length, succeeded, outcomes, error };
+      return finish(error);
     }
     chunk.forEach((neuronId, offset) => {
       const result = reply.results[offset];
@@ -142,12 +183,16 @@ export async function voteWithNeurons(params: {
           return;
         }
         const already = isAlreadyVoted(outcome);
-        if (outcome.ok || already) succeeded += 1;
+        const accepted = outcome.ok && outcome.command === "RegisterVote";
+        if (accepted) succeeded += 1;
         outcomes.push({
           neuronId,
-          ok: outcome.ok || already,
+          ok: accepted,
           alreadyVoted: already,
-          ...(outcome.ok || already ? {} : { error: outcome.errorMessage ?? "rejected" }),
+          ...(accepted ? { actualVote: adopt ? 1 : 2, matchesRequestedVote: true } : {
+            error: outcome.errorMessage ?? "The SNS returned an unexpected vote command response.",
+            ...(outcome.ok ? { outcomeUnknown: true } : {}),
+          }),
         });
       } else if (result && "err" in result) {
         outcomes.push({ neuronId, ok: false, alreadyVoted: false, error: result.err });
@@ -156,11 +201,11 @@ export async function voteWithNeurons(params: {
       }
     });
     if (outcomes.some((outcome) => outcome.outcomeUnknown)) {
-      return { attempted: outcomes.length, succeeded, outcomes, error: "Some vote outcomes are unknown. Read proposal ballots before retrying." };
+      return finish("Some vote outcomes are unknown. Read proposal ballots before retrying.");
     }
   }
 
-  return { attempted: neuronIds.length, succeeded, outcomes };
+  return finish();
 }
 
 /** Submit one pre-encoded `manage_neuron` payload, e.g. a proposal. */

@@ -10,6 +10,15 @@
         }
       },
       "migrations": {}
+    },
+    "snsgov_operations": {
+      "schemas": {
+        "1": {
+          "hash": "20dabc88a3541c1b1f6257812da892d463263dfd6118bb92008a6f06a0fd9e2b",
+          "entry": "ef9e243fc692105b2190a093e52338e60bea030b915109d101d4b5b7d613b33a"
+        }
+      },
+      "migrations": {}
     }
   }
 }

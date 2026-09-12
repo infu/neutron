@@ -1,3 +1,5 @@
+import type { Action, Neuron, NervousSystemParameters, ProposalData } from "../candid/sns_governance.did";
+
 /**
  * Projections the app works with.
  *
@@ -54,6 +56,13 @@ export interface TokenInfo {
 
 /** Everything the SNS detail page shows from `get_nervous_system_parameters`. */
 export interface SnsParameters {
+  /** Complete decoded response, including optional fields from newer SNS releases. */
+  raw?: NervousSystemParameters;
+  neuronClaimerPermissions?: number[];
+  neuronGrantablePermissions?: number[];
+  maxFolloweesPerFunction?: bigint;
+  automaticallyAdvanceTargetVersion?: boolean;
+  maturityModulationDisabled?: boolean;
   transactionFeeE8s?: bigint;
   rejectCostE8s?: bigint;
   neuronMinimumStakeE8s?: bigint;
@@ -146,9 +155,29 @@ export interface ProposalSummary {
   functionId?: bigint;
   topic?: string;
   rejectCostE8s?: bigint;
+  /** Effective thresholds, including governance's legacy defaults. */
+  minimumYesProportionOfTotal?: bigint;
+  minimumYesProportionOfExercised?: bigint;
+}
+
+export interface ProposalPayloadField {
+  path: string;
+  provenance: "original" | "summarized";
+  reusable: boolean;
+  returnedBytes: number;
+  summary?: string;
 }
 
 export interface ProposalDetail extends ProposalSummary {
+  /** Typed action returned by get_proposal; inspect payloadProvenance before reusing bytes. */
+  action?: Action;
+  raw?: ProposalData;
+  payloadProvenance?: ProposalPayloadField[];
+  actionReusable?: boolean;
+  failureReason?: { errorType: number; message: string };
+  rewardEventRound?: bigint;
+  rewardEventEndTimestampSeconds?: bigint;
+  isEligibleForRewards?: boolean;
   /**
    * The complete ballot map. Present only via `get_proposal`: `list_proposals`
    * filters ballots to the calling principal, and our calls are anonymous, so
@@ -157,8 +186,6 @@ export interface ProposalDetail extends ProposalSummary {
   ballots: Ballot[];
   /** Canister-rendered payload text. Includes a wrapper around the validator string. */
   payloadTextRendering?: string;
-  minimumYesProportionOfTotal?: bigint;
-  minimumYesProportionOfExercised?: bigint;
 }
 
 export interface Ballot {
@@ -170,8 +197,12 @@ export interface Ballot {
 }
 
 export interface NeuronSummary {
+  raw?: Neuron;
   id: string;
   stakeE8s: bigint;
+  feesE8s?: bigint;
+  /** Cached stake less neuron fees, clamped at zero as governance does. */
+  effectiveStakeE8s?: bigint;
   maturityE8s: bigint;
   stakedMaturityE8s: bigint;
   votingPowerMultiplierPercent: bigint;
@@ -181,6 +212,16 @@ export interface NeuronSummary {
   /** principal -> permission ids. 3 = SubmitProposal, 4 = Vote. */
   permissions: { principal: string | null; permissions: number[] }[];
   vestingPeriodSeconds?: bigint;
+  autoStakeMaturity?: boolean;
+  sourceNnsNeuronId?: bigint;
+  followees?: { functionId: bigint; neuronIds: string[] }[];
+  topicFollowees?: { topicId: number; topic?: string | undefined; neuronIds: string[]; aliases?: (string | undefined)[] }[];
+  disburseMaturityInProgress?: {
+    amountE8s: bigint;
+    timestampSeconds: bigint;
+    finalizeDisbursementTimestampSeconds?: bigint | undefined;
+    account?: { owner?: string | undefined; subaccountHex?: string | undefined };
+  }[];
 }
 
 /** A registered proposal type. Custom ones are per-SNS and change at runtime. */

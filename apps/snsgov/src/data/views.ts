@@ -21,6 +21,9 @@ export const SNS_TABS = ["overview", "proposals", "neurons", "types", "canisters
 export type SnsTab = (typeof SNS_TABS)[number];
 
 export type TileView =
+  | { kind: "feed" }
+  | { kind: "neurons"; rootCanisterId?: string; neuronId?: string }
+  | { kind: "activity"; operationId?: string }
   | { kind: "list" }
   | { kind: "sns"; rootCanisterId: string; tab: SnsTab; proposalId?: bigint }
   | { kind: "drafts" }
@@ -38,6 +41,16 @@ const PRINCIPAL = /^[a-z0-9]{5}(-[a-z0-9]{3,5})+$/;
  */
 export function formatView(view: TileView): string {
   switch (view.kind) {
+    case "feed":
+      return "feed";
+    case "activity":
+      if (view.operationId !== undefined && !/^[a-zA-Z0-9_-]+$/.test(view.operationId)) throw new Error("not an operation id");
+      return view.operationId === undefined ? "activity" : `activity/${view.operationId}`;
+    case "neurons": {
+      if (view.rootCanisterId !== undefined && !PRINCIPAL.test(view.rootCanisterId)) throw new Error(`not a canister id: ${view.rootCanisterId}`);
+      if (view.neuronId !== undefined && (!view.rootCanisterId || !/^[a-f0-9]{64}$/i.test(view.neuronId))) throw new Error("not a neuron id");
+      return view.rootCanisterId === undefined ? "neurons" : `neurons/${view.rootCanisterId}${view.neuronId === undefined ? "" : `/${view.neuronId}`}`;
+    }
     case "list":
       return "list";
     case "drafts":
@@ -63,6 +76,15 @@ export function formatView(view: TileView): string {
 
 /** Read a view string. Returns undefined for anything unrecognised. */
 export function parseView(value: string): TileView | undefined {
+  if (value === "feed") return { kind: "feed" };
+  if (value === "neurons") return { kind: "neurons" };
+  if (value === "activity") return { kind: "activity" };
+  if (value === "explore") return { kind: "list" };
+  if (value === "settings" || value === "connections") return { kind: "setup" };
+  const activity = /^activity\/([a-zA-Z0-9_-]+)$/.exec(value);
+  if (activity) return { kind: "activity", operationId: activity[1]! };
+  const neuron = /^neurons\/([^/]+)(?:\/([a-f0-9]{64}))?$/i.exec(value);
+  if (neuron && PRINCIPAL.test(neuron[1]!)) return { kind: "neurons", rootCanisterId: neuron[1]!, ...(neuron[2] ? { neuronId: neuron[2].toLowerCase() } : {}) };
   if (value === "list") return { kind: "list" };
   if (value === "drafts") return { kind: "drafts" };
   if (value === "setup") return { kind: "setup" };

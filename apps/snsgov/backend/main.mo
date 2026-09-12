@@ -4,17 +4,19 @@
 // (listing SNSes, reading parameters, proposals, neurons, ledgers) happens in
 // the browser over free anonymous queries, so none of it is here.
 //
-// The backend owns exactly three things:
+// The backend owns four things:
 //   1. The owner's SNS allowlist and per-SNS agent-voting policy — the state
 //      that authorizes a signed write.
 //   2. An append-only, bounded audit trail of signed governance actions.
 //   3. Proposal drafts awaiting human review.
+//   4. Durable operation intents, exact signed step bytes, and their replies.
 //
 // The signing path is a byte relay: pre-encoded Candid in, raw reply out. The
 // browser decodes SNS command outcomes; broker success only means a reply was
 // received, not that governance accepted a vote or proposal.
 import NeutronCapabilities "mo:neutron-capabilities";
 import Array "mo:core/Array";
+import Error "mo:core/Error";
 import List "mo:core/List";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
@@ -23,6 +25,7 @@ import Principal "mo:core/Principal";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Memory "./memory/snsgov/v1";
+import OperationsMemory "./memory/snsgov_operations/v1";
 
 module {
 
@@ -148,6 +151,66 @@ module {
     public type Outcome = { #ok; #err : Text };
     public type DraftOutcome = { #ok : Nat; #err : Text };
 
+    // An operation retains the exact reviewed input and request bytes. State
+    // JSON is orchestration evidence (for example a Wallet funding receipt);
+    // changing it cannot change or reset a signed step.
+    public type OperationPrepare = {
+        operation_id : Text;
+        kind : ?Text;
+        title : ?Text;
+        sns : Principal;
+        governance : Principal;
+        input_json : Text;
+        review_json : Text;
+        initiator : Text;
+        state_json : Text;
+        steps : [{ step_id : Text; method : ?Text; args : Blob }];
+    };
+    public type OperationStep = {
+        step_id : Text;
+        method : Text;
+        args : Blob;
+        status : Text;
+        reply : ?Blob;
+        error : ?Text;
+        attempted_at_seconds : ?Nat64;
+        finished_at_seconds : ?Nat64;
+    };
+    public type OperationDetail = {
+        operation_id : Text;
+        kind : Text;
+        title : Text;
+        seq : Nat;
+        sns : Principal;
+        governance : Principal;
+        input_json : Text;
+        review_json : Text;
+        initiator : Text;
+        state_json : Text;
+        revision : Nat;
+        steps : [OperationStep];
+        created_at_seconds : Nat64;
+        updated_at_seconds : Nat64;
+    };
+    public type OperationSummary = {
+        operation_id : Text;
+        kind : Text;
+        title : Text;
+        seq : Nat;
+        sns : Principal;
+        governance : Principal;
+        initiator : Text;
+        revision : Nat;
+        steps : [{ step_id : Text; method : Text; status : Text }];
+        created_at_seconds : Nat64;
+        updated_at_seconds : Nat64;
+    };
+    public type OperationDispatch = { operation_id : Text; step_id : Text };
+    public type OperationUpdate = { operation_id : Text; expected_revision : Nat; state_json : Text };
+    public type OperationListQuery = { before : ?Nat; limit : Nat };
+    public type OperationPage = { rows : [OperationSummary]; next_before : ?Nat; total : Nat };
+    public type OperationOutcome = { #ok : OperationDetail; #err : Text };
+
     // ---- Bounds -----------------------------------------------------------
     //
     // Every one of these is enforced on the way in. The canister is the last
@@ -168,7 +231,8 @@ module {
     let MAX_AUDIT_PAGE : Nat = 200;
     let MAX_AUDIT_ROWS_CEILING : Nat = 10_000;
     let NEURON_ID_BYTES : Nat = 32;
-    // The only method this app will ever sign. Not caller-supplied.
+    // The legacy relay's fixed method; journal operations also support the
+    // explicit public SNS governance recovery methods listed below.
     let MANAGE_NEURON : Text = "manage_neuron";
     // A valid, non-self destination used only to ask the broker whether the
     // `manage_neuron` reservation exists. NNS SNS-W is a real canister we
@@ -206,12 +270,13 @@ module {
     };
 
     public type AppBackendEnvironment = {
-        stable_memory : { snsgov : Memory.Mem };
+        stable_memory : { snsgov : Memory.Mem; snsgov_operations : OperationsMemory.Mem };
         capabilities : { backend_calls : NeutronCapabilities.BackendCallsV1 };
     };
 
     public class Init(env : AppBackendEnvironment) {
         let mem = env.stable_memory.snsgov;
+        let operations = env.stable_memory.snsgov_operations;
         let calls = env.capabilities.backend_calls;
 
         // ---- Configuration ------------------------------------------------
@@ -393,7 +458,7 @@ module {
         };
 
 
-        // ---- Signing relay ------------------------------------------------
+        // ---- Legacy signing relay -----------------------------------------
         //
         // The backend is a byte relay: pre-encoded Candid in, raw reply out. It
         // models no SNS types, so an SNS interface change cannot break it and an
@@ -523,6 +588,234 @@ module {
             } else {
                 "This SNS is not on your allowlist, or voting is disabled for it.";
             };
+        };
+
+        // ---- Durable signed operations -----------------------------------
+
+        public func /*update*/snsgov_operation_prepare(request : OperationPrepare) : OperationOutcome {
+            switch (Map.get(operations.operations, Text.compare, request.operation_id)) {
+                case (?existing) {
+                    if (not sameOperation(existing, request)) {
+                        return #err("operation id already belongs to different input or steps");
+                    };
+                    return #ok(operationDetail(existing));
+                };
+                case null {};
+            };
+            if (request.operation_id == "") return #err("operation id is required");
+            let stepIds = Map.empty<Text, Bool>();
+            for (step in request.steps.vals()) {
+                if (step.step_id == "") return #err("step id is required");
+                if (Map.get(stepIds, Text.compare, step.step_id) != null) return #err("duplicate step id");
+                if (not supportedOperationMethod(resolveOperationMethod(step.method))) return #err("unsupported SNS governance operation method");
+                Map.add(stepIds, Text.compare, step.step_id, true);
+            };
+            let at = nowSeconds();
+            let operation : OperationsMemory.Operation = {
+                operation_id = request.operation_id;
+                kind = operationLabel(request.kind, "operation");
+                title = operationLabel(request.title, "SNS operation");
+                seq = operations.next_seq;
+                sns = request.sns;
+                governance = request.governance;
+                input_json = request.input_json;
+                review_json = request.review_json;
+                initiator = request.initiator;
+                initial_state_json = request.state_json;
+                var state_json = request.state_json;
+                var revision = 0;
+                steps = Array.map<{ step_id : Text; method : ?Text; args : Blob }, OperationsMemory.Step>(request.steps, func(step) {
+                    {
+                        step_id = step.step_id;
+                        method = resolveOperationMethod(step.method);
+                        args = step.args;
+                        var status : OperationsMemory.StepStatus = #prepared;
+                        var attempted_at_seconds : ?Nat64 = null;
+                        var finished_at_seconds : ?Nat64 = null;
+                    };
+                });
+                created_at_seconds = at;
+                var updated_at_seconds = at;
+            };
+            Map.add(operations.operations, Text.compare, operation.operation_id, operation);
+            Map.add(operations.sequence, Nat.compare, operation.seq, operation.operation_id);
+            operations.next_seq += 1;
+            #ok(operationDetail(operation));
+        };
+
+        public func /*query*/snsgov_operation_get(operation_id : Text) : ?OperationDetail {
+            switch (Map.get(operations.operations, Text.compare, operation_id)) {
+                case null null;
+                case (?operation) ?operationDetail(operation);
+            };
+        };
+
+        // Pagination is caller-selected; it does not discard journal entries
+        // or impose a new limit on the SNS's valid command payloads.
+        public func /*query*/snsgov_operation_list(request : OperationListQuery) : OperationPage {
+            let rows = List.empty<OperationSummary>();
+            var last : ?Nat = null;
+            var next : ?Nat = null;
+            label scan for ((seq, operation_id) in Map.reverseEntries(operations.sequence)) {
+                switch (request.before) {
+                    case (?before) { if (seq >= before) continue scan };
+                    case null {};
+                };
+                if (List.size(rows) >= request.limit) {
+                    next := last;
+                    break scan;
+                };
+                switch (Map.get(operations.operations, Text.compare, operation_id)) {
+                    case null {};
+                    case (?operation) {
+                        List.add(rows, operationSummary(operation));
+                        last := ?seq;
+                    };
+                };
+            };
+            { rows = List.toArray(rows); next_before = next; total = Map.size(operations.operations) };
+        };
+
+        public func /*update*/snsgov_operation_update(request : OperationUpdate) : OperationOutcome {
+            let ?operation = Map.get(operations.operations, Text.compare, request.operation_id) else {
+                return #err("operation not found");
+            };
+            if (request.expected_revision != operation.revision) return #err("operation revision changed; read the current operation before updating");
+            operation.state_json := request.state_json;
+            touchOperation(operation);
+            #ok(operationDetail(operation));
+        };
+
+        public func /*update*/snsgov_operation_dispatch(request : OperationDispatch) : async* OperationOutcome {
+            let ?operation = Map.get(operations.operations, Text.compare, request.operation_id) else {
+                return #err("operation not found");
+            };
+            let ?step = Array.find<OperationsMemory.Step>(operation.steps, func(candidate) { candidate.step_id == request.step_id }) else {
+                return #err("step not found");
+            };
+            // The same durable record serves retries, concurrent callers, and
+            // restoration. Only a never-dispatched step can reach the broker.
+            switch (step.status) {
+                case (#prepared) {};
+                case (_) return #ok(operationDetail(operation));
+            };
+            // Journal operations arrive through the provider's exact review
+            // flow. The legacy unattended-agent voting preference remains on
+            // the old relay paths; initiator here is honest audit metadata.
+            let ?governance = snsgov_allowed(operation.sns, false) else {
+                return #err(notAllowed(operation.sns, false));
+            };
+            if (governance != operation.governance) return #err("operation governance differs from the current SNS allowlist");
+
+            step.status := #dispatching;
+            step.attempted_at_seconds := ?nowSeconds();
+            touchOperation(operation);
+            // The marker commits at the outgoing call's await boundary. A
+            // callback trap or lost reply leaves it dispatching and therefore
+            // cannot cause an automatic second dispatch. Returned broker
+            // errors remain unknown: the broker may have sent the command.
+            try {
+                let outcome = await* calls.call({ canister = governance; method = step.method; args = step.args; cycles = 0 });
+                step.status := switch (outcome) {
+                    case (#ok(reply)) #replied(reply);
+                    case (#err(error)) #unknown(error.code # ": " # error.message);
+                };
+            } catch (error) {
+                step.status := #unknown(Error.message(error));
+            };
+            step.finished_at_seconds := ?nowSeconds();
+            touchOperation(operation);
+            #ok(operationDetail(operation));
+        };
+
+        func touchOperation(operation : OperationsMemory.Operation) {
+            operation.revision += 1;
+            operation.updated_at_seconds := nowSeconds();
+        };
+
+        func sameOperation(operation : OperationsMemory.Operation, request : OperationPrepare) : Bool {
+            if (operation.sns != request.sns or operation.governance != request.governance or
+                operation.kind != operationLabel(request.kind, "operation") or operation.title != operationLabel(request.title, "SNS operation") or
+                operation.input_json != request.input_json or operation.review_json != request.review_json or
+                operation.initiator != request.initiator or operation.initial_state_json != request.state_json or
+                operation.steps.size() != request.steps.size()) return false;
+            var index = 0;
+            for (step in operation.steps.vals()) {
+                let other = request.steps[index];
+                if (step.step_id != other.step_id or step.method != resolveOperationMethod(other.method) or step.args != other.args) return false;
+                index += 1;
+            };
+            true;
+        };
+
+        func resolveOperationMethod(method : ?Text) : Text {
+            switch (method) { case null MANAGE_NEURON; case (?value) value };
+        };
+
+        func supportedOperationMethod(method : Text) : Bool {
+            method == MANAGE_NEURON or method == "fail_stuck_upgrade_in_progress" or
+            method == "reset_timers" or method == "get_maturity_modulation";
+        };
+
+        func stepStatus(step : OperationsMemory.Step) : Text {
+            switch (step.status) {
+                case (#prepared) "prepared";
+                case (#dispatching) "dispatching";
+                case (#replied(_)) "replied";
+                case (#unknown(_)) "unknown";
+            };
+        };
+
+        func operationDetail(operation : OperationsMemory.Operation) : OperationDetail {
+            {
+                operation_id = operation.operation_id;
+                kind = operation.kind;
+                title = operation.title;
+                seq = operation.seq;
+                sns = operation.sns;
+                governance = operation.governance;
+                input_json = operation.input_json;
+                review_json = operation.review_json;
+                initiator = operation.initiator;
+                state_json = operation.state_json;
+                revision = operation.revision;
+                steps = Array.map<OperationsMemory.Step, OperationStep>(operation.steps, func(step) {
+                    {
+                        step_id = step.step_id;
+                        method = step.method;
+                        args = step.args;
+                        status = stepStatus(step);
+                        reply = switch (step.status) { case (#replied(reply)) ?reply; case (_) null };
+                        error = switch (step.status) { case (#unknown(error)) ?error; case (_) null };
+                        attempted_at_seconds = step.attempted_at_seconds;
+                        finished_at_seconds = step.finished_at_seconds;
+                    };
+                });
+                created_at_seconds = operation.created_at_seconds;
+                updated_at_seconds = operation.updated_at_seconds;
+            };
+        };
+
+        func operationSummary(operation : OperationsMemory.Operation) : OperationSummary {
+            {
+                operation_id = operation.operation_id;
+                kind = operation.kind;
+                title = operation.title;
+                seq = operation.seq;
+                sns = operation.sns;
+                governance = operation.governance;
+                initiator = operation.initiator;
+                revision = operation.revision;
+                steps = Array.map<OperationsMemory.Step, { step_id : Text; method : Text; status : Text }>(operation.steps, func(step) {
+                    { step_id = step.step_id; method = step.method; status = stepStatus(step) };
+                });
+                created_at_seconds = operation.created_at_seconds;
+                updated_at_seconds = operation.updated_at_seconds;
+            };
+        };
+
+        func operationLabel(value : ?Text, fallback : Text) : Text {
+            switch (value) { case (?text) if (text == "") fallback else text; case null fallback };
         };
 
         // ---- Drafts -------------------------------------------------------
@@ -681,6 +974,21 @@ public type snsgov_relay_Output = RelayResult;
 
 public type snsgov_relay_batch_Input = (request : RelayBatchRequest);
 public type snsgov_relay_batch_Output = RelayBatchResult;
+
+public type snsgov_operation_prepare_Input = (request : OperationPrepare);
+public type snsgov_operation_prepare_Output = OperationOutcome;
+
+public type snsgov_operation_get_Input = (operation_id : Text);
+public type snsgov_operation_get_Output = ?OperationDetail;
+
+public type snsgov_operation_list_Input = (request : OperationListQuery);
+public type snsgov_operation_list_Output = OperationPage;
+
+public type snsgov_operation_update_Input = (request : OperationUpdate);
+public type snsgov_operation_update_Output = OperationOutcome;
+
+public type snsgov_operation_dispatch_Input = (request : OperationDispatch);
+public type snsgov_operation_dispatch_Output = OperationOutcome;
 
 public type snsgov_drafts_Input = (());
 public type snsgov_drafts_Output = [DraftView];

@@ -1,11 +1,9 @@
 /**
  * Proposal drafts: read, send, discard.
  *
- * An agent can write a draft but has no way to submit one — there is no submit
- * tool on the bus, by design. Sending is a person's act, and this module is the
- * only path to it. It lives outside the UI so the encoding, which is the part
- * that can be wrong in ways nobody notices until a proposal is live, is
- * testable on its own.
+ * Released Motion/custom draft bytes retain their exact meaning. NativeActionV1
+ * is an explicit new encoding of the complete proposal Action. The resident's
+ * submission tool binds a draft to a durable operation before sending it.
  *
  * Self-call API 1 conventions apply throughout: Nat/Nat64 arrive as decimal
  * strings, blobs as bytes, and an absent option as `null` or a missing key —
@@ -22,6 +20,7 @@ import {
   PERMISSION_SUBMIT_PROPOSAL,
 } from "./manage_neuron";
 import { relayManageNeuron } from "./relay";
+import { decodeProposalAction, proposalActionToJson } from "./proposal_actions";
 
 export interface DraftRow {
   id: string;
@@ -41,6 +40,8 @@ export interface DraftRow {
   updatedAtSeconds: bigint;
   /** Decoded from `payload` for a Motion — the motion itself. */
   motionText?: string;
+  /** Only present for the explicit new NativeActionV1 wire format. */
+  nativeAction?: unknown;
 }
 
 function text(value: unknown): string {
@@ -81,6 +82,9 @@ function toDraft(row: Record<string, unknown>): DraftRow {
   if (actionKind === "Motion" && payload) {
     draft.motionText = new TextDecoder().decode(payload);
   }
+  if (actionKind === "NativeActionV1" && payload) {
+    draft.nativeAction = proposalActionToJson(decodeProposalAction(payload));
+  }
   return draft;
 }
 
@@ -112,7 +116,10 @@ export function buildProposalArgs(draft: DraftRow, neuronId: string | Uint8Array
   }
 
   let action: unknown;
-  if (draft.actionKind === "Motion") {
+  if (draft.actionKind === "NativeActionV1") {
+    if (!draft.payload) throw new SnsError("INVALID_REQUEST", "The native proposal draft has no saved action.");
+    action = decodeProposalAction(draft.payload);
+  } else if (draft.actionKind === "Motion") {
     const motion = draft.motionText ?? "";
     if (!motion.trim()) {
       throw new SnsError(

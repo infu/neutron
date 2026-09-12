@@ -11,7 +11,7 @@
  * gateway — so there is no cross-origin request and no CORS involved at all.
  */
 
-import { Actor, HttpAgent, isV2ResponseBody, polling, type ActorSubclass } from "@dfinity/agent";
+import { Actor, HttpAgent, type ActorSubclass } from "@dfinity/agent";
 import type { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
 import { classifyError } from "./errors";
@@ -109,8 +109,9 @@ export async function actorFor<T>(
  *
  * Used for the generic-proposal validator pre-flight, where governance itself
  * passes the payload through verbatim and we want to reproduce that exactly.
- * Tries `query` first and falls back to an update, because a validator may
- * legally be declared either way and governance constrains neither.
+ * This operation is query-only. A missing query method does not authorize an
+ * update: validator updates can change state and run with a different caller
+ * from Governance. Writes use the explicit Neutron backend operation path.
  */
 export async function callRaw(
   canisterId: string | Principal,
@@ -121,30 +122,31 @@ export async function callRaw(
   const agent = await getAgent(options);
   const target = typeof canisterId === "string" ? Principal.fromText(canisterId) : canisterId;
 
+  let response: Awaited<ReturnType<HttpAgent["query"]>>;
   try {
-    const response = await agent.query(target, { methodName, arg });
-    if (response.status === "replied") {
-      return new Uint8Array(response.reply.arg);
-    }
-    throw new Error(`query rejected: ${JSON.stringify(response).slice(0, 200)}`);
-  } catch {
-    try {
-      // HttpAgent.call returns submission metadata, not the method's reply.
-      // Request the asynchronous endpoint so the SDK can retrieve and verify
-      // the raw reply using the returned request ID without knowing its IDL.
-      const { requestId, response } = await agent.call(target, { methodName, arg, callSync: false });
-      if (isV2ResponseBody(response.body)) {
-        throw new Error(
-          `update rejected (${response.body.reject_code}): ${response.body.reject_message}`,
-        );
-      }
-      if (response.status !== 202) {
-        throw new Error(`update submission failed: ${response.status} ${response.statusText}`);
-      }
-      const { reply } = await polling.pollForResponse(agent, target, requestId);
-      return new Uint8Array(reply);
-    } catch (updateError) {
-      throw classifyError(updateError);
-    }
+    response = await agent.query(target, { methodName, arg });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isMissingQuery(message)) throw new QueryMethodUnavailableError(message);
+    throw classifyError(error);
+  }
+  if (response.status === "replied") return new Uint8Array(response.reply.arg);
+  const message = response.reject_message ?? "query rejected";
+  if (isMissingQuery(message)) throw new QueryMethodUnavailableError(message);
+  throw classifyError(new Error(`query rejected (${response.reject_code}): ${message}`));
+}
+
+/** Query absence may require an explicitly routed update; no write was made. */
+export class QueryMethodUnavailableError extends Error {
+  readonly updateRequired = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "QueryMethodUnavailableError";
   }
 }
+
+function isMissingQuery(message: string): boolean {
+  return /has no query method|query method .*not found|no query method|does not have.*query/i.test(message);
+}
+
+export const callRawQuery = callRaw;

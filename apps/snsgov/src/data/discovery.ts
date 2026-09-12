@@ -127,7 +127,7 @@ async function probe(
       return { alive: false, note: `${role}: no answer in ${PROBE_TIMEOUT_MS}ms` };
     }
     const classified = classifyError(error, { sns, role });
-    if (isInactive(classified)) return { alive: false, note: `${role}: not installed` };
+    if (isInactive(classified)) return { alive: false, note: `${role}: ${classified.message}` };
     // A transient failure is not evidence of death. Report it as unknown-but-
     // failing rather than marking a live SNS dead and hiding it from the user.
     return { alive: false, note: `${role}: ${classified.code}` };

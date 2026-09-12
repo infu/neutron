@@ -1,0 +1,26 @@
+.snsgov-feed-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.snsgov-feed-scope { display: flex; align-items: center; flex-wrap: wrap; gap: .2rem; }
+.snsgov-feed-scope button[aria-pressed="true"] { background: var(--nt-bg-control); color: var(--nt-text-strong); }
+.snsgov-community-filter-button { position: relative; flex: 0 0 auto; min-width: 2.5rem; min-height: 2.5rem; }
+.snsgov-filter-active { position: absolute; right: .4rem; top: .4rem; height: .3rem; width: .3rem; border-radius: 50%; background: var(--nt-accent); }
+.snsgov-feed-activity { margin-left: auto; min-width: 0; }
+.snsgov-feed-activity .nt-select { width: 100%; }
+.snsgov-selection-summary { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.snsgov-feed-read-note { display: flex; align-items: flex-start; gap: .5rem; margin-block: .65rem; min-width: 0; color: var(--nt-text-muted); }
+.snsgov-feed-read-note > .snsgov-disclosure { flex: 1 1 auto; margin: 0; min-width: 0; border: 0; }
+.snsgov-feed-read-note > .snsgov-disclosure > summary { padding: .55rem 0; font-size: .8rem; color: var(--nt-text-muted); }
+.snsgov-feed-read-note > .nt-button { flex: 0 0 auto; }
+.snsgov-community-filter { display: grid; gap: .75rem; min-width: 0; }
+.snsgov-community-filter-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.snsgov-community-filter-actions .nt-meta { margin-left: auto; }
+.snsgov-community-checks { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: .2rem; }
+.snsgov-community-checks > label { display: flex; gap: .75rem; align-items: center; padding: .7rem .2rem; min-width: 0; cursor: pointer; border-bottom: 1px solid var(--nt-line-subtle); }
+.snsgov-community-checks input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; }
+.snsgov-community-checks label > span { display: flex; align-items: baseline; flex-wrap: wrap; gap: .4rem; min-width: 0; }
+.snsgov-community-check-name { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .snsgov-feed-controls { gap: .35rem; }
+  .snsgov-feed-scope { flex: 1 1 auto; }
+  .snsgov-feed-scope .nt-button { padding-inline: .6rem; }
+  .snsgov-feed-activity { flex-basis: 100%; margin-left: 0; }
+}

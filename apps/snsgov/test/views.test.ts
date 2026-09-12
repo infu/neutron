@@ -13,6 +13,11 @@ import { formatView, parseView, SNS_TABS, type TileView } from "../src/data/view
 const ROOT = "extk7-gaaaa-aaaaq-aacda-cai";
 
 const cases: TileView[] = [
+  { kind: "feed" },
+  { kind: "neurons" },
+  { kind: "neurons", rootCanisterId: ROOT, neuronId: "ab".repeat(32) },
+  { kind: "activity" },
+  { kind: "activity", operationId: "ab".repeat(16) },
   { kind: "list" },
   { kind: "drafts" },
   { kind: "setup" },

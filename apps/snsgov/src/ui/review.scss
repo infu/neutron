@@ -1,0 +1,24 @@
+.sns-review-dialog {
+  width: min(560px, calc(100% - 20px));
+  max-width: calc(100% - 20px);
+  max-height: calc(100% - 20px);
+  padding: 0;
+  border: 1px solid var(--nt-line, #27333c);
+  border-radius: 5px;
+  color: var(--nt-text, #e5e7eb);
+  background: var(--nt-bg-elevated, #10161c);
+  &::backdrop { background: rgb(0 0 0 / 55%); }
+  > header, > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+  > header { border-bottom: 1px solid var(--nt-line, #27333c); }
+  > header h2 { margin: 0; font-size: 16px; line-height: 1.4; }
+  > header p { margin: 0 0 4px; font-size: 12px; }
+  > footer { justify-content: flex-end; border-top: 1px solid var(--nt-line, #27333c); }
+  .sns-review-body { padding: 4px 16px 16px; overflow: auto; max-height: 65dvh; overflow-wrap: anywhere; }
+  .sns-review-fields { display: grid; gap: 10px; }
+  .sns-review-fields > div { display: grid; gap: 3px; }
+  .sns-review-fields dt { font-size: 12px; opacity: .75; }
+  .sns-review-fields dd { margin: 0; }
+  .sns-review-warning { color: var(--nt-warning, #f4c46a); }
+  summary { cursor: pointer; padding: 8px 0; font-size: 12px; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+}

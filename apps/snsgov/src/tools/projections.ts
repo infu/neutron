@@ -9,7 +9,11 @@
  */
 
 import { formatDuration, formatTimestamp, formatTokenAmount } from "../data/format";
-import { maxVotingPeriodExtensionSeconds } from "../data/governance";
+import { maxVotingPeriodExtensionSeconds, proposalAcceptsVotes } from "../data/governance";
+import { IDL } from "@dfinity/candid";
+import { idlFactory } from "../candid/sns_governance.did.js";
+import { candidValueToJson } from "../data/candid_codec";
+import { proposalActionToJson } from "../data/proposal_actions";
 import { displayName, type RegistryEntry } from "../data/registry";
 import type {
   NervousSystemFunctionInfo,
@@ -106,6 +110,11 @@ export function snsDetail(
           maxAgeForAgeBonus: durationOf(params.maxNeuronAgeForAgeBonusSeconds),
           maxAgeBonusPercent: numberOf(params.maxAgeBonusPercentage),
           maxPrincipalsPerNeuron: numberOf(params.maxNumberOfPrincipalsPerNeuron),
+          neuronClaimerPermissions: params.neuronClaimerPermissions,
+          neuronGrantablePermissions: params.neuronGrantablePermissions,
+          maxFolloweesPerFunction: params.maxFolloweesPerFunction?.toString(),
+          automaticallyAdvanceTargetVersion: params.automaticallyAdvanceTargetVersion,
+          maturityModulationDisabled: params.maturityModulationDisabled,
           rewardRate:
             params.rewards === undefined
               ? undefined
@@ -132,6 +141,9 @@ export function proposalRow(proposal: ProposalSummary, symbol?: string): Record<
     id: proposal.id.toString(),
     title: proposal.title,
     status: proposal.status,
+    acceptsVotes: proposalAcceptsVotes(proposal),
+    minimumYesProportionOfTotalBasisPoints: proposal.minimumYesProportionOfTotal?.toString(),
+    minimumYesProportionOfExercisedBasisPoints: proposal.minimumYesProportionOfExercised?.toString(),
     action: proposal.actionKind,
     functionId: proposal.functionId?.toString(),
     topic: proposal.topic ?? null,
@@ -166,6 +178,13 @@ export function proposalDetail(
     url: proposal.url,
     proposerNeuronId: proposal.proposerNeuronId,
     payloadRendering: proposal.payloadTextRendering,
+    actionPayload: proposal.action === undefined ? undefined : proposalActionToJson(proposal.action),
+    payloadProvenance: proposal.payloadProvenance,
+    actionReusable: proposal.actionReusable,
+    failureReason: proposal.failureReason,
+    isEligibleForRewards: proposal.isEligibleForRewards,
+    rewardEventRound: proposal.rewardEventRound?.toString(),
+    rewardEventEndTimestampSeconds: proposal.rewardEventEndTimestampSeconds?.toString(),
     ballotSummary: {
       eligible: proposal.ballots.length,
       cast: cast.length,
@@ -189,18 +208,40 @@ export function neuronRow(neuron: NeuronSummary, decimals: number, symbol: strin
     id: neuron.id,
     stake: `${formatTokenAmount(neuron.stakeE8s, decimals, { group: false })} ${symbol}`,
     maturity: formatTokenAmount(neuron.maturityE8s, decimals, { group: false }),
+    stakedMaturity: formatTokenAmount(neuron.stakedMaturityE8s, decimals, { group: false }),
+    fees: neuron.feesE8s === undefined ? undefined : `${formatTokenAmount(neuron.feesE8s, decimals, { group: false })} ${symbol}`,
+    effectiveStake: neuron.effectiveStakeE8s === undefined ? undefined : `${formatTokenAmount(neuron.effectiveStakeE8s, decimals, { group: false })} ${symbol}`,
+    autoStakeMaturity: neuron.autoStakeMaturity,
+    sourceNnsNeuronId: neuron.sourceNnsNeuronId?.toString(),
+    agingSince: formatTimestamp(neuron.agingSinceSeconds),
+    vestingPeriod: durationOf(neuron.vestingPeriodSeconds),
+    followees: neuron.followees?.map((entry) => ({ functionId: entry.functionId.toString(), neuronIds: entry.neuronIds })),
+    topicFollowees: neuron.topicFollowees,
+    disburseMaturityInProgress: neuron.disburseMaturityInProgress?.map((entry) => prune({
+      amount: formatTokenAmount(entry.amountE8s, decimals, { group: false }), amountE8s: entry.amountE8s.toString(),
+      initiatedAt: formatTimestamp(entry.timestampSeconds),
+      finalizesAt: entry.finalizeDisbursementTimestampSeconds === undefined ? undefined : formatTimestamp(entry.finalizeDisbursementTimestampSeconds),
+      account: entry.account,
+    })),
     votingPowerMultiplierPercent: Number(neuron.votingPowerMultiplierPercent),
     dissolve:
       neuron.dissolveState === undefined
         ? undefined
         : neuron.dissolveState.kind === "delay"
-          ? { state: "not-dissolving", delay: formatDuration(neuron.dissolveState.value) }
-          : { state: "dissolving", dissolvesAt: formatTimestamp(neuron.dissolveState.value) },
+          ? { state: neuron.dissolveState.value === 0n ? "dissolved" : "not-dissolving", delay: formatDuration(neuron.dissolveState.value) }
+          : { state: neuron.dissolveState.value <= BigInt(Math.floor(Date.now() / 1000)) ? "dissolved" : "dissolving", dissolvesAt: formatTimestamp(neuron.dissolveState.value) },
     createdAt: formatTimestamp(neuron.createdAtSeconds),
     principals: neuron.permissions.map((entry) => ({
       principal: entry.principal,
       permissions: entry.permissions,
-      // 3 = SubmitProposal, 4 = Vote. Those two are the whole grant we ask for.
+      canManagePrincipals: entry.permissions.includes(2),
+      canManageVotingPermissions: entry.permissions.includes(10),
+      canConfigureDissolveState: entry.permissions.includes(1),
+      canDisburse: entry.permissions.includes(5),
+      canSplit: entry.permissions.includes(6),
+      canMergeMaturity: entry.permissions.includes(7),
+      canDisburseMaturity: entry.permissions.includes(8),
+      canStakeMaturity: entry.permissions.includes(9),
       canVote: entry.permissions.includes(4),
       canPropose: entry.permissions.includes(3),
     })),
@@ -218,13 +259,13 @@ export function functionRow(fn: NervousSystemFunctionInfo): Record<string, unkno
     targetMethodName: fn.targetMethodName,
     validatorCanisterId: fn.validatorCanisterId,
     validatorMethodName: fn.validatorMethodName,
-    // An untopicked custom function cannot be proposed at all: make_proposal
-    // rejects it with InvalidProposal regardless of payload.
-    proposable: fn.kind === "native" || fn.topic !== undefined,
+    // A missing topic only became a submission error in newer governance
+    // versions. Function metadata alone cannot establish that version's rule.
+    proposable: fn.kind === "native" || fn.topic !== undefined ? true : null,
     ...(fn.kind === "generic" && fn.topic === undefined
       ? {
-          blockedReason:
-            "This proposal type has no topic assigned, so the SNS rejects every submission of it. The DAO must submit SetTopicsForCustomProposals to fix it.",
+          eligibilityNote:
+            "This proposal type has no topic assigned. Governance versions that require topics may reject it; the deployed Governance canister decides eligibility at submission.",
         }
       : {}),
   });
@@ -249,4 +290,12 @@ function prune<T extends Record<string, unknown>>(value: T): T {
     if (item !== undefined) out[key] = item;
   }
   return out as T;
+}
+
+/** Lossless natural JSON for complete typed governance read replies. */
+export function governanceReadToJson(method: string, value: unknown): unknown {
+  const service = idlFactory({ IDL }) as unknown as { _fields: [string, { retTypes: IDL.Type[] }][] };
+  const type = service._fields.find(([name]) => name === method)?.[1].retTypes[0];
+  if (!type) throw new Error(`Unknown governance read method: ${method}`);
+  return candidValueToJson(type, value);
 }
