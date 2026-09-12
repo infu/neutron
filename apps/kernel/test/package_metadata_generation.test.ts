@@ -446,8 +446,6 @@ describe("Kernel v360 NPL package metadata", () => {
       "packages/neutron-compiler/test/ic_wallet_journals_upgrade.pocketic.test.ts",
       "doc/evm-wallet.md",
       "doc/evm-wallet-research.md",
-      "doc/todo.evm-wallet.md",
-      "doc/todo.wallet-fresh-start.md",
       "packages/neutron-compiler/test/fresh_custody_cutover.pocketic.test.ts",
     ]) {
       expect(sourcePaths).toContain(required);

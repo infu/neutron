@@ -1,7 +1,6 @@
 # Backend App Dependencies
 
-[Back to the documentation index](./index.md)
-
+Use this reference when adding or changing a backend provider or consumer.
 Neutron apps compose through domain-owned backend functions. App memory is
 private to its owner and is never injected into another app. A provider can
 explicitly expose selected internal Motoko functions, and a consumer receives
@@ -13,7 +12,8 @@ dialogs or use the frontend message bus.
 
 ## Export A Provider Function
 
-Mark an `Init` method with `/*internal:apps*/`:
+Mark an `Init` method with `/*internal:apps*/`. This sketch assumes the app's
+managed-memory import and domain implementation:
 
 ```motoko
 module {
@@ -36,7 +36,7 @@ module {
 }
 ```
 
-Run `npm run mogen`. It writes the provider metadata:
+Run the provider workspace's `mogen` script. It writes the provider metadata:
 
 ```json
 {
@@ -56,22 +56,11 @@ function cannot be requested by another app.
 
 ## Declare A Consumer Dependency
 
-The consumer declares a local alias, provider app id, minimum provider version,
-and exact function list:
+The consumer declares a local alias, provider app ID, minimum provider version,
+and exact function list. Add a declaration such as this to its manifest:
 
 ```json
 {
-  "id": "calendar",
-  "version": 100,
-  "memory": {
-    "calendar": {
-      "version": 1,
-      "schemas": {
-        "1": { "src": "memory/calendar/v1.mo" }
-      },
-      "migrations": []
-    }
-  },
   "dependencies": {
     "contacts": {
       "app": "contacts",
@@ -82,11 +71,11 @@ and exact function list:
 }
 ```
 
-The alias must match `^[a-z][a-z0-9_]{0,29}$`. One manifest may declare up to
-32 dependencies, and each dependency may name up to 64 unique functions. A
-dependency is required: optional dependencies, wildcards, exact versions, and
-maximum versions are not supported. Apps cannot depend on themselves or on the
-kernel.
+Aliases and function names must pass `normalizeManifestDependencies` in the
+manifest schema, which also owns declaration-size bounds. Functions must be
+unique within a dependency. A dependency is required: optional dependencies,
+wildcards, exact versions, and maximum versions are not supported. Apps cannot
+depend on themselves or on Kernel, and Kernel cannot declare app dependencies.
 
 The assembler derives dependencies automatically. An ordinary app cannot
 declare `init_arg`; it receives its exact dependency functions under
@@ -95,7 +84,8 @@ capability interfaces are separate groups in that one environment.
 
 ## Receive The Typed Handle
 
-The consumer defines the structural type it expects:
+The consumer defines the structural type it expects. This sketch assumes its
+own managed-memory import and a `contact_count` field:
 
 ```motoko
 module {
@@ -125,29 +115,10 @@ module {
 }
 ```
 
-The assembler initializes providers before consumers and injects a generated
-record equivalent to:
-
-```motoko
-transient let NeutronAppEnvironment_a8_calendar = {
-  installation = NeutronTrustedInstallationContextV1;
-  stable_memory = {
-    calendar = NeutronMemory_a8_calendar_r8_calendar;
-  };
-  app_calls = {
-    contacts = {
-      list_contacts = NeutronAppFunction_a8_contacts_r13_list_contacts;
-    };
-  };
-};
-
-transient let NeutronAppInit_a8_calendar =
-  NeutronModule_a8_calendar.Init(NeutronAppEnvironment_a8_calendar);
-```
-
-The `NeutronAppFunction_...` helper is a compiler-owned, length-delimited physical
-name for the provider app and local method. The dependency field exposed to the
-consumer remains the logical `list_contacts` name.
+The assembler initializes providers before consumers and injects the declared
+functions at `env.app_calls.<alias>.<function>`. It creates private,
+collision-resistant physical helpers for provider methods; consumers use the
+logical names from the manifest and must not depend on generated symbol names.
 
 The generated record always carries `installation`, even though the consumer's
 own `AppBackendEnvironment` above does not declare it. Motoko record width
@@ -156,7 +127,7 @@ simply omit that field from its local type. See
 [Compiler And Actor Assembly](./compiler-and-actor-assembly.md).
 
 The consumer does not receive the provider module, provider `Init` instance,
-provider memory, kernel internals, or undeclared provider functions. Ordinary
+provider memory, Kernel internals, or undeclared provider functions. Ordinary
 apps cannot author constructor injection tokens, and compiler-owned function
 helpers, foreign `memory_*`, `this`, `this.*`, and initialization identifiers
 are never fields in the generated environment.
@@ -195,11 +166,10 @@ compilation:
 - uninstalling a provider is blocked while direct consumers remain;
 - uninstalling a consumer removes its edge and can make its provider removable.
 
-Settings shows `Requires` and `Required by`, exact functions, installed and
-minimum versions, and exported internal methods. **Delete selected** permits a
-provider only when all of its remaining consumers are selected too. The
-launcher does not expose uninstall. The compiler repeats the dependency check
-so stale frontend state cannot bypass it.
+A multi-app removal can include a provider only when the target set also
+removes all of its consumers. Frontend dependency disclosures and deletion
+preflight are advisory views of this same contract. The compiler repeats the
+dependency check so stale frontend state cannot bypass it.
 
 Neutron does not download missing provider packages automatically and does not
 cascade uninstall into dependents.
@@ -214,17 +184,17 @@ to frontend agents.
 
 ## Verification
 
-Before publishing a provider or consumer:
+Use the affected workspaces' validation, typechecking, and test scripts from
+their `package.json` files. Provider tests should compile every supported
+consumer against the new provider release. Consumer tests should cover the
+minimum version, a later compatible version, missing functions, and expected
+nested dependency order. A provider's
+tests must also protect the semantic and authorization behavior on which its
+consumers rely; compilation alone cannot establish that compatibility.
 
-```sh
-npm run validate
-npm test
-npm run typecheck
-```
-
-Provider tests should compile every supported consumer against the new provider
-release. Consumer tests should cover the minimum version, a later compatible
-version, missing functions, and expected nested dependency order.
+Publishing follows [Package Updates](./package-updates.md). Backend dependency
+compatibility does not replace managed-memory migration or release-version
+requirements.
 
 Primary implementation files:
 
@@ -233,3 +203,7 @@ Primary implementation files:
 - `packages/neutron-compiler/src/app_dependencies.ts`
 - `packages/neutron-compiler/src/assemble.ts`
 - `packages/neutron-compiler/src/install.ts`
+
+Use `packages/neutron-compiler/test/app_dependencies.test.ts` for graph and
+version rejection cases, `assemble.test.ts` for environment projection, and
+`packages/neutron-scripts/test/mogen.test.ts` for export-marker generation.

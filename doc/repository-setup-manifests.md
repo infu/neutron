@@ -2,385 +2,198 @@
 
 [Back to the documentation index](./index.md).
 
-Neutron Repository Protocol v1 adds an optional way for an independent
-provider to offer one or more `.neutron` packages as a setup. It does not add a
-Neutron marketplace, default catalog, operated package repository, update feed,
-or separate Kernel protocol. With no setup fragment, the dispenser, manual
-file installer, Kernel replacement flow, and ordinary Neutron UI behave as
-before.
+Repository Protocol v1 (`neutron-repo-v1`) supplies a digest-pinned selection
+of `.neutron` packages to the existing installer. Setup installs missing apps;
+it never upgrades or replaces installed apps. Updates use a separate release
+record in the same repository namespace; see [Package Updates](./package-updates.md).
 
-Repository setup remains setup-only. App updates reuse the repository v1
-content-addressed package path but add a separate fixed certified HTTP release
-asset at `/repo/v1/releases/<app-id>.json`. Settings requests only installed
-app IDs that explicitly name a source and never turns a setup manifest into an
-update feed. See [App Package Updates](./package-updates.md).
+The Marketplace app and protocol exist separately under `apps/marketplace/`
+and `support/marketplace/`. Marketplace prepares manifests and download access
+for this installer. `support/repository/` remains a static example provider,
+not the Marketplace implementation. Do not infer a catalog, publisher identity,
+entitlement, or update subscription from the setup protocol alone.
 
-The implementation is split between:
+## Source Of Truth
 
-- `packages/neutron-tools/src/repository.ts`, which owns the v1 wire model,
-  strict schemas, limits, link parsing, and transient handoff helpers;
-- `support/dispenser/`, which transfers a validated setup reference in the
-  browser without adding it to a dispenser backend request;
-- `apps/kernel/src/repository/`, which obtains contact consent, verifies the
-  repository, reconciles installed apps, and drives one batch install;
-- `packages/neutron-compiler/`, which performs bounded package decoding and the
-  existing compile/journal/deploy transaction; and
-- `support/repository/`, a static example provider template, not an official or
-  production repository.
+| Contract | Implementation |
+| --- | --- |
+| Wire types, closed JSON schemas, resource paths, link parsing, expiry and bounds | [`repository.ts`](../packages/neutron-tools/src/repository.ts) |
+| Certified Candid resource verification | [`certified_asset.ts`](../packages/neutron-tools/src/certified_asset.ts) |
+| Anonymous retrieval and package transport selection | [`repository/client.ts`](../apps/kernel/src/repository/client.ts) |
+| Setup lifecycle, prepared app handoff, selection and review | [`repository/service.ts`](../apps/kernel/src/repository/service.ts), [`repository/model.ts`](../apps/kernel/src/repository/model.ts) |
+| Authenticated package baseline and shared compile/deploy transaction | [`reducer/apps.ts`](../apps/kernel/src/reducer/apps.ts), [`install.ts`](../packages/neutron-compiler/src/install.ts) |
+| Source-access consent and credentials | [`repository_access/client.ts`](../apps/kernel/src/repository_access/client.ts) |
+| Static provider generation | [`support/repository/src/generate.ts`](../support/repository/src/generate.ts) |
+| Marketplace manifest and release generation | [`support/marketplace/mo/Repository.mo`](../support/marketplace/mo/Repository.mo) |
 
-## Provider Link
+Read `REPOSITORY_LIMITS`, `REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS`, and
+`KERNEL_INSTALL_MAX_COPIES` for current bounds. Do not copy their values into
+provider code or assume the manual installer has the same remote-import limits.
 
-The canonical provider link is:
+## Provider Link And Handoff
 
-```text
-https://<dispenser-origin>/#repo=<canister-principal>&manifest=<manifest-id>&digest=<64-lowercase-hex>
-```
-
-The current SushiOS production dispenser origin is
-`https://2h7je-aiaaa-aaaay-aacra-cai.icp0.io/`. A provider may use a different
-deployed dispenser by setting its own origin explicitly.
-
-All three fields are required and occur in the URL fragment. Query-string
-forms are rejected. The fragment keeps the selection out of the HTTP request
-to the dispenser, but it is not a secret: it can briefly be visible to the
-address bar, extensions, screenshots, the clipboard, or anyone who receives
-the link.
-
-The fields mean:
-
-- `repo`: the canonical principal of the repository canister;
-- `manifest`: a bounded identifier matching
-  `^[a-z0-9][a-z0-9_-]{0,63}$`; and
-- `digest`: SHA-256 of the exact certified manifest bytes.
-
-The digest pins a named manifest. If a provider later changes those bytes, an
-old link fails instead of silently selecting the replacement. A provider can
-still issue a unique syntactically valid manifest id or digest and correlate a
-later request with that link; the first-contact dialog discloses this before
-the browser contacts the canister.
-
-## Dispenser And Activation Handoff
-
-The dispenser frontend captures, validates, stores in same-tab session state,
-and removes the provider setup fragment before provisioning work. It appends a
-canonical internal fragment only to the user's Neutron link. Repository fields
-do not enter `provision()`, any query parameter, or the dispenser's persistent
-registry. Opening a setup link for an existing completed canister opens that
-canister; it does not mutate it until the authenticated owner reviews the
-repository setup inside Neutron.
-
-The same internal fragment also carries the dispenser's independent
-`activate` bearer. Internet Identity principals are scoped to the frontend
-origin, so the dispenser does not attempt to reuse its local Ed25519
-provisioning principal as the browser principal for the new Neutron. The kernel
-captures both handoffs before Internet Identity, uses the activation code once
-to authorize the actual Neutron-origin caller, and then resumes repository
-setup only after authorization and registry load.
-
-Both frontend entrypoints run a small bootstrap/capture path before their main
-work and handle a later `hashchange`. The kernel requires durable same-tab
-storage and successful address-bar removal for its internal setup and
-activation values; failure rolls back and stops startup. The provider
-dispenser may retain a parsed repository setup in the already-mounted page when
-session storage is unavailable, but it does not put that value in a backend
-request. Kernel and dispenser HTML also set a `no-referrer` policy.
-
-## Public Repository Query API
-
-Repository resources are public. After the authenticated owner clicks
-`Load setup`, the kernel creates a separate anonymous `HttpAgent` and calls a
-fixed Candid interface:
-
-```candid
-type read_request = record { index : nat };
-type manifest_read_request = record { id : text; index : nat };
-type package_read_request = record { sha256 : text; index : nat };
-
-type certified_value = record {
-  content : blob;
-  chunks : nat;
-};
-
-type certified_read = record {
-  certificate : blob;
-  witness : blob;
-  asset : opt certified_value;
-};
-
-service : {
-  repo_info : (read_request) -> (certified_read) query;
-  repo_manifests : (read_request) -> (certified_read) query;
-  repo_manifest : (manifest_read_request) -> (certified_read) query;
-  repo_package : (package_read_request) -> (certified_read) query;
-}
-```
-
-The kernel uses `repo_info`, `repo_manifest`, and `repo_package` for a setup.
-`repo_manifests` exists for provider tooling; Neutron does not call it to build
-a catalog.
-
-Anonymous calls prevent the repository method from receiving the owner's
-Internet Identity principal. They do not provide network anonymity: an IC
-gateway and network infrastructure can still observe request metadata. The
-transport forces `credentials: "omit"`, `referrerPolicy: "no-referrer"`, and
-`cache: "no-store"`.
-
-Anonymous transport is independent of integrity. Every accepted response must
-carry an IC certificate and an exact Merkle witness bound to the selected
-canister and certified resource path. The shared certified-asset reader checks
-the root of trust, canister id, certificate freshness, witness, chunk count and
-size, complete byte count, and whole-resource hash. In local development the
-anonymous agent first fetches the local replica root key.
-
-## Certified Resources
-
-The v1 certified tree uses the existing `http_assets` label. The setup flow
-consumes exactly these keys:
+The provider link uses a fragment:
 
 ```text
-/repo/v1/info.json
-/repo/v1/manifests.json
-/repo/v1/manifests/<manifest-id>.json
-/repo/v1/packages/<sha256>.neutron
+https://<dispenser-origin>/#repo=<canister-principal>&manifest=<manifest-id>&digest=<manifest-sha256>
 ```
 
-The same v1 namespace also defines `/repo/v1/releases/<app-id>.json`, used by
-the separate owner-triggered update-check flow rather than by setup. The static
-example provider under `support/repository/` generates only the four setup keys
-above.
+Use the shared link helpers and validators. All three fields are required;
+query-string setup fields are rejected. `repo` identifies the canister,
+`manifest` names a bounded manifest identifier, and `digest` is the lowercase
+SHA-256 of the exact manifest bytes. A changed manifest fails an old pinned
+link rather than silently replacing its selection.
 
-These are certified-tree keys read through Candid queries, not public `GET`
-routes. Each leaf contains SHA-256 of the complete raw resource. Package chunks
-are exact `.neutron` bytes; there is no extra transport gzip layer.
+The fragment avoids transmission in the dispenser HTTP request. It is still
+visible to browser extensions, the address bar and anyone receiving the link.
+A provider can assign a unique manifest identifier or digest to correlate later
+contact, even when the caller uses an anonymous identity.
 
-`info.json` is a closed object containing protocol, repository name, and
-provider name, with optional bounded descriptions and HTTPS-only website,
-terms, privacy, and support links. All provider names, descriptions, links,
-publisher claims, and source claims are rendered as repository-provided and
-unverified plain text. They cannot supply HTML, executable UI, Candid, method
-names, install scripts, or fetch URLs.
+The dispenser captures the reference before provisioning and carries it only
+in the browser handoff to Neutron. Repository fields do not become provisioning
+arguments or dispenser registry data. See
+[`support/dispenser/src/provisioning.ts`](../support/dispenser/src/provisioning.ts).
 
-A setup manifest is also a closed object:
+The internal handoff may also carry an independent `activate` bearer. Kernel
+captures the handoff before authentication and requires successful same-tab
+storage and address-bar removal. Activation authorizes the Neutron-origin
+identity; a dispenser identity is not interchangeable with it. Repository setup
+resumes after authorization and verified registry load. Preserve these capture
+and identity boundaries when changing bootstrap or login code; see
+[`apps/kernel/src/bootstrap.ts`](../apps/kernel/src/bootstrap.ts).
 
-```json
-{
-  "protocol": "neutron-repo-v1",
-  "id": "demopack",
-  "revision": 1,
-  "name": "Demo Pack",
-  "description": "Hello and Kitchen Sink examples",
-  "packages": [
-    {
-      "id": "hello",
-      "version": 100,
-      "sha256": "<sha256-of-exact-neutron-package>",
-      "size": 165459,
-      "publisher": {
-        "name": "Example publisher",
-        "website": "https://example.invalid/"
-      },
-      "source": "https://example.invalid/source/hello"
-    }
-  ]
-}
-```
+Opening or capturing a setup reference does not authorize installation. The
+pending-contact dialog does make a public source-access-cost lookup before
+`Load setup`; do not claim there is no repository contact before that action.
+This lookup neither buys a grant nor downloads the selected manifest/packages.
+Loading those resources and acquiring any approved source access requires the
+loading action. An already approved app/agent install offer supplies that
+loading decision; the Kernel must not repeat it or treat it as final deployment
+approval. See [App Install Offers](./app-install-offers.md) and
+[`RepositoryAccessCost.tsx`](../apps/kernel/src/repository_access/RepositoryAccessCost.tsx).
 
-The outer entry supplies exact download expectations. After download, the
-package's own `neutron.json` remains authoritative for app identity, name,
-permissions, dependencies, files, memory, and runtime behavior. The importer
-rejects an outer id or version that does not match the prepared package. It
-also rejects duplicate ids or digests and any repository package whose id is
-`kernel`. Deliberate local-file kernel replacement remains supported.
+## Certified Resources And Retrieval
 
-`manifests.json` is a bounded, sorted index of provider-generated manifest
-summaries and exact manifest digests. It is useful for the provider's tooling
-but is not fetched by the setup dialog.
+The fixed query interface is `repositoryIdlFactory` in the shared protocol
+module. Provider data cannot supply Candid, method names or arbitrary fetch
+URLs. Its methods map to these certified-tree keys:
 
-## Owner Workflow
+| Method | Resource |
+| --- | --- |
+| `repo_info` | `/repo/v1/info.json` |
+| `repo_manifests` | `/repo/v1/manifests.json` |
+| `repo_manifest` | `/repo/v1/manifests/<manifest-id>.json` |
+| `repo_package` | `/repo/v1/packages/<sha256>.neutron` |
 
-The root-level repository controller becomes active only after login,
-authorization, and a verified app registry load.
+Setup reads information, the selected manifest and its packages. It does not
+use the manifest index as a discovery catalog. The separate update path reads
+`/repo/v1/releases/<app-id>.json` over HTTP.
 
-1. **Contact decision.** The dialog shows the repository principal, manifest
-   id, pinned digest, anonymous-query behavior, remaining network visibility,
-   and identifier-correlation warning. No repository request occurs before
-   `Load setup`.
-2. **Uniform verification.** After that click, the kernel acquires the same
-   app-operation mutex used by manual installation, snapshots authenticated
-   package/runtime state, verifies repository information and the pinned
-   manifest, then fetches, verifies, and prepares every package in the
-   manifest. It does this even for an app that is already installed, so omitted
-   package requests do not reveal the installed subset.
-3. **Reconciliation and selection.** Installed presence is the union of the
-   local registry, compiled package configurations, and running actor state.
-   Any present or inconsistent id is conservatively shown as
-   `Installed — skipped`; repository setup never updates, downgrades, replaces,
-   or uninstalls it. Missing apps start unchecked. Selecting a dependent
-   automatically selects and locks its missing dependency closure. A too-old
-   installed dependency blocks the selection rather than being updated.
-4. **Review and compile.** Selection is local and causes no further repository
-   request. `Review N applications` freezes the selected closure, shows
-   verified package facts and kernel-derived permission disclosures, preflights
-   the selected mutable-file count against the kernel's 4,000-copy journal
-   limit, and calls `compilePackages()` once for the batch.
-5. **Final install.** `Install N applications` rechecks registry, compiled
-   configuration, runtime deployment identity, stable signature, and certified
-   provenance. It then calls `deployPreparedPackages()` once. One journal
-   stages the selected web/package metadata and provenance, activates one
-   combined actor, verifies it, and commits active assets atomically. The same
-   commit removes only content-addressed modules from the authenticated
-   pre-install baseline that the compiled actor no longer reaches; it never
-   scans or deletes unknown concurrent uploads.
+Metadata queries use a dedicated anonymous agent, not the owner's Internet
+Identity actor. The transport omits cookies, referrers and caches. This prevents
+the method from receiving the owner's authentication principal; it does not
+provide network anonymity or hide a uniquely selected manifest.
 
-The repository session holds the compiler/deployment mutex from `Load setup`
-through cancellation, failure, or completion. An additive
-`kernel_install_begin_checked` compares the caller's expected running
-deployment id before accepting the journal, closing the last cross-tab race.
-It is the only supported journal-begin API in the development V1 baseline.
-The journal also commits the current and target capability-plan fingerprint
-inventories so activation cannot mix registry and actor projections.
+For Candid resources, the shared reader verifies the IC certificate, selected
+canister, freshness, witness under `http_assets`, chunk bounds, complete bytes
+and resource hash. The selected manifest must also match the link's pinned
+digest. Local root-key discovery follows the runtime deployment policy; it is
+not a production verification bypass.
 
-Before and after every package-state baseline, the kernel frontend reconciles
-an existing journal: it commits when the journal's runtime is active and waits
-or refuses while another activation remains possible. A pre-activation journal
-left by a crashed tab does not hide the current app registry. The owner sees an
-persistent, nonmodal recovery panel in Settings and may discard that exact
-staged deployment after the kernel's dispatch marker and ordered management
-fence prove that no queued activation can still apply it. The journal continues
-to fence app authority and further app mutations, but it does not block
-unrelated Settings work. Neutron never aborts another tab's journal merely
-because a timer elapsed.
+Package bytes have two supported channels. A certified Candid resource is read
+directly. **Only certified absence** selects the same canister's fixed HTTP
+package path through the repository-access client. A failed proof, interrupted
+read or HTTP error must not select another channel. Marketplace deliberately
+certifies absence for package Candid reads and serves packages over HTTP with
+repository access. Metadata is public; package download access can require an
+approved grant. Do not describe the entire protocol as anonymous public package
+download.
 
-No package is installed when the owner merely opens the link, logs in, loads
-the manifest, changes selection, or compiles the review. If every id is already
-present, the dialog reports `Nothing to install` and performs no compile or
-update. A failed repository or validation request does not prevent ordinary
-Neutron use. The same-tab setup reference expires after one hour; its timer
-continues through loading, selection, and compilation. Once the owner approves
-the exact compiled transaction, an in-flight deployment may finish. If that
-deployment fails, the original deadline is restored and rechecked.
+Whichever package channel is used, setup verifies the exact manifest size and
+SHA-256 before preparation. Access credentials authorize download, not package
+identity or deployment. Prepared app requests provide their own scoped download
+access; Kernel does not acquire paid access for those requests. Their transient
+credentials are not persisted as a resumable setup link.
+
+Repository metadata and manifests are closed-schema data. Provider prose and
+publisher/source claims are unverified text, not executable UI or authority.
+Each package entry supplies download identity (`id`, `version`, `sha256`,
+`size`); the packed `neutron.json` supplies permissions, dependencies, memory and
+runtime behavior. Preparation rejects identity mismatches, duplicate app IDs or
+digests, and a setup package named `kernel`.
+
+## Selection And Installation Invariants
+
+1. Acquire the shared app-operation session and an authenticated baseline before
+   repository loading. Verify and prepare every package in the manifest, even
+   already-installed ones, so omitted downloads do not disclose the installed
+   subset.
+2. Reconcile registry, compiled configuration and runtime presence. Any present
+   app is skipped; inconsistent state is not permission to replace it. Resolve
+   missing dependencies from verified package manifests. An insufficient or
+   inconsistent installed dependency blocks selection rather than triggering an
+   implicit upgrade.
+3. External-link selections begin unchecked. A prepared app handoff can supply
+   selected roots and proceed directly to build review, but its roots must
+   belong to the verified manifest and pass the same dependency checks.
+4. Freeze the selected closure, check aggregate archive and install-journal
+   capacity, and compile one batch. Permission disclosures and deployment review
+   derive from verified packages and the compiled result.
+5. Require final approval of that exact build. Revalidate package state and
+   deployment evidence before one checked, state-preserving journal transaction.
+   A concurrent package change requires a new review; it must not reuse an old
+   approval against a different deployment.
+
+Selection is local after loading. An empty selection performs no compile or
+deployment. Session expiry applies through loading, selection and review. Once
+the exact transaction is approved, an in-flight deployment may finish; failure
+restores the original expiry check. Failed setup does not disable ordinary
+Neutron use.
+
+Preserve the shared install journal's crash recovery and cross-tab fencing;
+do not invent repository-specific abort or cleanup behavior. The compiler
+owns package decoding, collision checks, capability evidence, managed-memory
+compatibility and atomic asset activation. See
+[App Package Format](./app-package-format.md),
+[Compiler And Actor Assembly](./compiler-and-actor-assembly.md), and
+[Memory Migrations And Uninstall](./memory-migrations-and-uninstall.md).
 
 ## Certified Provenance
 
-A successful repository batch commits one minimal certified record at
-`/system/install-provenance.json` in the same journal as the registry. The
-record is served over the canister's certified HTTP surface and is not private:
+Successful selected apps receive a `kind: "repository"` entry at
+`/system/install-provenance.json`, committed with the installed registry. The
+entry retains the repository canister, manifest identifier and digest, and
+package digest. It is certified public metadata, not a secret store.
 
-```json
-{
-  "format": 1,
-  "apps": {
-    "hello": {
-      "kind": "repository",
-      "repository": "<repository-canister-principal>",
-      "manifest_id": "demopack",
-      "manifest_digest": "<manifest-sha256>",
-      "package_digest": "<package-sha256>"
-    }
-  }
-}
-```
+Repository provenance does not retain raw links, provider prose, unselected
+package IDs, download history or timestamps. The shared file also supports
+manual, provisioned and update-source entries; their fields differ. Uninstall
+removes the app entry, and later installation replaces its provenance according
+to the new acquisition path. Use
+[`repository/provenance.ts`](../apps/kernel/src/repository/provenance.ts) rather
+than assuming every installed app has repository provenance.
 
-Only successfully selected apps are recorded. Neutron does not retain the raw
-link, provider prose, informational links, unselected package ids,
-fetch history, or timestamps. Settings shows this source and integrity record.
-Uninstall removes the app entry, and a later manual file replacement clears a
-stale repository entry. There is no subscription or callback to the provider.
+## Provider Development And Verification
 
-## Bounds And Package Hardening
+The static template reads `support/repository/repository.json`, inspects actual
+archives, derives package identity and digests, validates aggregate decoder and
+journal capacity, then emits deterministic certified resources and generated
+Motoko. Build each referenced app through its complete workspace package
+command before `npm run repository:generate`; changing prose or package bytes
+changes manifest digests and therefore provider links. See the template's
+[`package.json`](../support/repository/package.json) for Wasm and test commands.
 
-Important v1 remote-import limits include:
+`REPOSITORY_CANISTER_ID` selects the deployed provider when printing links.
+`REPOSITORY_DISPENSER_ORIGIN` overrides the origin otherwise read from the
+dispenser mapping. Generation does not deploy or publish a canister. The
+template implements static query resources; Marketplace's mutable catalog,
+entitlements, HTTP delivery and publication are separate implementations. A
+static template remains controller-upgradeable; certification does not prove
+controller immutability or publisher trust.
 
-| Resource | Limit |
-| --- | ---: |
-| Packages in one manifest | 64 |
-| One query chunk | 1 MiB |
-| One raw package | 32 MiB / 32 chunks |
-| Raw packages in one manifest | 64 MiB |
-| Concurrent repository reads | 4 |
-| Entries in one package | 4,096 |
-| Entries across a manifest | 16,384 |
-| One decoded entry | 16 MiB |
-| Decoded files in one package | 64 MiB |
-| Decoded files across a manifest | 128 MiB |
-| Repository metadata or manifest JSON | 256 KiB each |
-| Mutable asset copies in one install journal | 4,000, including four compiler/provenance assets |
-| Complete authenticated static-key listing | 20,000; overflow traps instead of returning a partial baseline |
-| Obsolete baseline module paths in one commit | 20,000 exact lowercase SHA-256 `.mo` names |
-
-The package decoder preflights the flat MessagePack map instead of asking a
-general-purpose decoder to allocate it first. It rejects excessive raw input,
-entries, path bytes, compressed values, duplicate or dangerous keys, unsafe
-paths, trailing data, multiple gzip members, invalid gzip footer/checksum, and
-per-entry or aggregate decompression overflow. Multi-package preparation also
-rejects duplicate app ids, duplicate mutable targets, and same-path Motoko
-module conflicts while deduplicating byte-identical shared modules.
-
-The repository limits are scoped to remote setup imports. The manual file
-installer uses larger finite safety ceilings and retains its current package
-and Kernel-replacement behavior. Repository setup consumes the current
-`.neutron`, install-journal, and managed-memory contracts; it does not define
-alternate versions of them.
-
-## Static Example Provider
-
-`support/repository/` is an independent static provider template. Its build
-reads `repository.json`, inspects the actual `.neutron` files, derives their ids,
-versions, sizes, digests, and chunks, serializes deterministic JSON, and writes
-`mo/GeneratedRepository.mo`. Hand-authored configuration cannot override the
-derived package identity or digest. Generation applies the same remote package
-decoder, manifest-wide archive-entry and decoded-byte ceilings, and 4,000-copy
-install-journal preflight that the browser enforces, so an example manifest that
-cannot fit the kernel transaction is rejected before publication.
-
-The example contains:
-
-- `demopack`, referencing the local Hello and Kitchen Sink packages; and
-- `hello`, referencing only Hello.
-
-From the repository root, build the application packages before generating the
-repository:
-
-```sh
-npm --workspace neutron-hello run package
-npm --workspace neutron-kitchensink run package
-npm run repository:generate
-```
-
-`npm run build:all` runs the repository-wide source build, app packaging, and
-this generation step in dependency order. Repository Wasm compilation remains
-a separate workspace command.
-
-Supplying `REPOSITORY_CANISTER_ID` and `REPOSITORY_DISPENSER_ORIGIN` makes the
-generator print pinned provider links after a repository has been deployed by
-an operator. The generator does not deploy a canister, there are no root
-commands to deploy either support canister locally, and the unified PocketIC
-provisioner does not install either of them. The dispenser's checked-in IC
-project contains only the production backend and frontend. The updater is a
-separate certified asset canister and is not a setup repository.
-
-The example canister exposes only the four query methods. It has no HTTP asset
-endpoint, upload API, publisher accounts, or application-level admin method. It
-is static, not inherently immutable: an IC controller can still replace its
-code. Neutron does not publish, recommend, select, or operate it as a production
-package source.
-
-## Verification Surface
-
-The fast tests cover strict fragment/schema parsing, capture and expiry,
-certificate-path adapters, repository byte and digest verification, uniform
-package reads, privacy fetch options, installed-state reconciliation,
-dependency closure, certified provenance, bounded package decoding, batch
-collisions, checked journal activation, manual-authorization separation,
-dispenser backend separation, and deterministic example generation and Motoko
-lookup behavior.
-
-There is no combined dispenser/repository Playwright fixture. The repository
-provider is not part of the provisioner's PocketIC topology. The dispenser can
-be deployed separately into the same running PocketIC for focused frontend,
-starter, handoff, and CMC creation testing; its constructor-bound target is the
-Application subnet attested by that supervised PocketIC runtime. The provisioner
-independently owns a minimal update-source fixture; neither support component
-is a repository alias. The provider template and protocol have focused
-TypeScript and Motoko coverage, but Neutron configures no production repository
-or setup link.
+When changing this protocol, exercise shared schema/handoff tests, Kernel
+repository retrieval/model/service tests, dispenser handoff tests and provider
+generation tests. Include certified absence versus invalid proof, package
+digest/identity mismatch, installed-state reconciliation, dependency closure,
+prepared access, approval evidence and expiry. Test deployment changes through
+the shared installer suites as well; parser tests do not prove safe activation.

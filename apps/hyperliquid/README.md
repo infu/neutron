@@ -263,5 +263,4 @@ Live checks perform public reads only; they do not spend funds or submit orders.
 The app introduces one managed memory root; existing Wallet memory versions
 and released migration history remain unchanged. Use checked state-preserving
 installation and the canonical [publication workflow](../../doc/package-updates.md).
-The [implementation checklist](../../todo.hl.md) records completed evidence.
 Publishing does not install into existing Neutrons or change the starter.

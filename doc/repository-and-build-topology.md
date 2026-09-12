@@ -2,8 +2,10 @@
 
 [Back to the documentation index](./index.md).
 
-This page describes the current repository boundaries, target-neutral package
-pipeline, and unified production/local provisioning path.
+Use this reference to locate the owner of a build or deployment change. Keep
+package construction, fresh provisioning, and state-preserving in-product
+updates separate. Read workspace scripts and deployment configs for the current
+command inventory and package selection.
 
 ## Monorepo layout
 
@@ -13,13 +15,12 @@ cross-workspace checks, and developer commands.
 - `apps/kernel/` contains the React operating-system UI, Motoko kernel backend,
   package build, generated complete-actor source, and Kernel tests.
 - `apps/*/` contains first-party Neutron application packages. Each app owns a
-  `neutron.json`, frontend/backend source, package scripts, and tests. The
-  repository includes Hello and Kitchen Sink examples as well as Contacts,
-  Wallet, Mail, VFS, Spreadsheet, Gemma, Chess, My Subnet, and other
-  first-party apps.
+  `neutron.json` and its package workflow. Source layout and test scripts vary
+  by app; inspect its manifest and workspace `package.json`.
 - `../ntmux/` is the separate sibling Ntmux workspace. It owns the Ntmux app,
   TypeScript protocol and CLI packages, native daemon/platform packages,
-  deployment config, and all Ntmux unit, Motoko, Rust, and browser tests.
+  deployment config, and tests. Its workspace scripts are separate from this
+  repository's root checks.
 - `packages/neutron-tools/` contains shared manifest, runtime, URL, schema, and
   browser/package utilities.
 - `packages/neutron-scripts/` owns manifest generation, Motoko dependency
@@ -38,12 +39,10 @@ cross-workspace checks, and developer commands.
 - `packages/neutron-provision/` is the only production or local provisioning
   system. It owns archive-only format-3 configs, schema-3 sessions, local
   archive-identity derivation, production/release pin validation, IC
-  creation/reinstall, PocketIC supervision, complete local fleet reinstall,
+  creation and destructive reinstall, PocketIC supervision, local fleet reset,
   authorization, fixture setup, asset seeding, and verification. It does not
   build app workspaces or execute app scripts.
 - `packages/neutron-design-system/` is the shared scoped app UI system.
-- `packages/neutron-management/` contains Neutron's management protocol/runtime
-  components. Ntmux packages live only in the sibling workspace.
 - `support/dispenser/` is the user-facing support dispenser product, not a
   developer-local Neutron deployment mechanism.
 - `support/repository/` is the static `neutron-repo-v1` example provider and
@@ -52,7 +51,11 @@ cross-workspace checks, and developer commands.
   `local_chain_fixtures.ts`, and the provisioner-owned `assets/` directory hold
   the app-neutral local fixture logic and pinned fixture inputs.
 - `support/update-source/` is the reference developer-owned certified update
-  source. Its publisher uses direct authenticated agent calls.
+  source and supplies assets for the provision-owned local fixture.
+- `support/marketplace/` owns the Marketplace protocol and production catalog
+  publisher invoked by `npm run updates:publish`.
+- `support/feedback/` owns the shared Feedback protocol. These support canisters
+  are separate from the app backends assembled into a user's Neutron.
 
 The root workspaces are `packages/*`, `apps/*`, and `support/*`. The shared
 `icblast` client is installed from its public npm package rather than linked to
@@ -71,12 +74,11 @@ The shared TypeScript baseline is:
 - root `tsconfig.json` as the project-reference entrypoint.
 
 Run `npm run typecheck` for the complete referenced TypeScript graph. Root
-`npm run test:unit` runs an explicit list of workspace suites in
-dependency-aware order. That list is narrower than the set of workspaces
-defining a `test` script, so a workspace added to the repository is not covered
-until it is added to that list. Run `npm test` from `../ntmux/` for the separate Ntmux
-TypeScript, Motoko, and Rust suites. Browser tests are separate because they
-need a live local Neutron and Chromium.
+`npm run test:unit` runs an explicit list of workspace suites; adding a
+workspace or a new test script does not automatically add it to the root suite.
+Inspect root and workspace scripts to select complete checks for a change. Run
+the sibling workspace's scripts for Ntmux. Browser tests are separate because
+they need a live local Neutron and Chromium.
 
 ## Root build phases
 
@@ -93,8 +95,9 @@ npm run repository:generate
 script. App builds create browser output and generated metadata, but do not
 create `.neutron` archives. `npm run package` runs the complete production app
 package workflows and produces those archives. `npm run repository:generate`
-then reads the configured Hello and Kitchen Sink archives, validates their
-contents, and writes `support/repository/mo/GeneratedRepository.mo`.
+then reads the archives declared in `support/repository/repository.json`,
+validates their contents, and writes
+`support/repository/mo/GeneratedRepository.mo`.
 
 The repository generator intentionally exposes `generate`, not a workspace
 `build` lifecycle. This keeps the generic workspace fan-out valid on a clean
@@ -125,8 +128,11 @@ script runs these stages:
 
 Kernel uses the same single `package` command. It has one browser entrypoint and
 does not compile a gateway, identity provider, local flag, or canister ID into
-the archive. No build writes a local/production marker. Current package loading
-rejects an archive containing the removed `.neutron-build.json` marker.
+the archive. No build writes a local/production marker. Package loading
+rejects an archive containing the removed `.neutron-build.json` marker. Packing
+a non-Kernel app adds the shared browser-surface-origin metadata; keep it under
+the shared packer's ownership. See [Planned Deprecations](./deprecated.md) for
+older app-origin compatibility paths.
 
 Common stored paths are:
 
@@ -182,24 +188,29 @@ There are three deliberately separate consumers of package data:
 - `neutron-provision` derives exact identity for declared local archives or
   validates production/release pins, compiles the whole actor, installs or
   reinstalls it, restores certified assets, and verifies the running system.
-  It never invokes a package build.
+  It never invokes a package build. Reinstall is destructive and is not an
+  upgrade path for production Neutrons; preserve production state through the
+  checked in-product transaction and explicit memory migrations.
 
 The browser transaction is a product feature. It is not a substitute for local
 provisioning. Local development has no per-app CLI install, uninstall, upgrade,
 or unchanged no-op. It also has no offline local compile: only the attached
-provisioner possesses the verified PocketIC root context required by assembler
-V25.
+provisioner possesses the verified PocketIC root context required by the
+compiler. The compiler selects the supported assembler generation from the
+Kernel package; its retained predecessor path does not enable newer browser
+origin declarations. See `packages/neutron-compiler/src/assemble.ts`.
 
 Target differences enter only during complete actor compilation and final
 runtime binding. The same `.neutron` bytes feed both targets. Once the final
-canister ID is known, the provisioner writes the certified closed ten-field
-`/system/runtime-config.json`. It includes the exact isolated-frame origin
-template and the explicit provision-owned local update-source origin. IC uses
+canister ID is known, the provisioner writes the certified closed-schema
+`/system/runtime-config.json`. The schema and target validation live in
+`packages/neutron-tools/src/runtime_config.ts`. The record includes the exact
+isolated-frame origin template and the explicit provision-owned local update-source origin. IC uses
 `null` for “no origin override” and derives the standard `.icp0.io` origin from
 each package's manifest source principal; Kernel validates the runtime record
 before initializing browser network clients or frames.
 
-Assembler V25 separately compiles a trusted immutable
+The assembler separately compiles a trusted immutable
 `installation.network_id` into the actor. Production derives it from the
 compiler-pinned IC mainnet root-key SPKI DER; PocketIC derives it from the
 exact status root key of the attached pinned instance. Runtime config,
@@ -218,8 +229,12 @@ bun packages/neutron-provision/src/index.ts CONFIG.ndeploy.json status
 bun packages/neutron-provision/src/index.ts CONFIG.ndeploy.json authorize PRINCIPAL
 ```
 
-`create` is IC-only. IC mutations use `--execute` and optionally `--yes`.
-PocketIC uses `serve`, `status`, an always-executing `reinstall`, and
+`create` is IC-only. IC creation and destructive reinstall require `--execute`
+to mutate and support `--yes` to skip the CLI prompt. The IC-only `adopt` command
+records verified ownership of an existing canister without installing anything;
+it accepts `--execute` but rejects `--yes`. See
+[Production Provisioning](./production-provisioning.md) before using any IC
+operation. PocketIC uses `serve`, `status`, an always-executing `reinstall`, and
 `authorize`; `authorize` is rejected for IC configs.
 
 The root local aliases are thin wrappers over the current
@@ -243,15 +258,19 @@ rather than starting a competing server. After a trusted package workflow
 rewrites archives at the declared local paths, its direct `reinstall` command
 derives their exact identity, compiles the complete actor once, then installs
 or destructively reinstalls every node in the ordered config fleet. When there
-is a current receipt, per-node module drift is rejected before replacement. It
-restores the complete configured package set, applies a separately
-canister-bound runtime configuration, authorizes the deterministic developer
+is a current receipt, a changed module after an in-product update does not
+prevent explicit local reset: the verified supervisor and recorded canister
+identity determine the target. An in-progress reinstall still verifies the
+module for every phase it resumes. It restores the complete configured package
+set, applies a separately canister-bound runtime configuration, authorizes the
+deterministic developer
 plus the target's configured `authorized_principals` on every node, funds
 provision-owned fixtures according to their fleet policy, and reports every
 labeled browser URL. The format-3 `authorize` command adds and verifies a
 temporary principal fleet-wide without changing the deployment receipt; the
 next full reinstall resets each node to the developer plus the configured
 desired-state list.
+
 Format-3 `status` verifies the recorded PocketIC runtime and the
 config-to-session binding, then reports its gateway and instance plus all
 recorded labeled canisters and URLs. It does not call each fleet node; the
@@ -271,8 +290,9 @@ payload; completed operations do not retain archive JSON bundles.
 ## Certified asset boundary
 
 Package preparation rewrites Kernel files to root/package paths, app files to
-`/app/<id>/`, and shared Motoko modules to `/mo/<sha256>.mo`. Provisioning clears
-the new actor's static namespace and restores the complete file set.
+`/app/<id>/`, and shared Motoko modules to `/mo/<sha256>.mo`. Fresh provisioning
+seeds the complete file set into the newly installed actor's static namespace;
+it does not use an asset clear as an upgrade mechanism.
 
 Identical files resolving to one final content-addressed path are deduplicated;
 conflicting bytes for one path fail. Uploads may be scheduled concurrently, but
@@ -282,31 +302,35 @@ call.
 
 ## Support package boundaries
 
-The dispenser, repository, and update source remain useful product/protocol
-components, but none owns an alternate developer-local Neutron. Local browser
-and E2E helpers read the running canister, gateway, and PocketIC runtime from
+The support canisters have their own product/protocol deployment lifecycles.
+They do not replace `neutron-provision` for developer-local Neutrons. Local
+browser and E2E helpers read the running canister, gateway, and PocketIC runtime from
 the selected config's provision session, while deriving the deterministic
 developer identity from that config's seed.
 
 PocketIC fixture lifecycle is provisioner-owned. The `minimal` profile provides
 local authentication, its lean NNS trust-root subnet, and the provision-owned
 update source. `full_protocol_fixtures` additionally attaches the remaining
-system subnets,
-starts persistent Bitcoin Core regtest and Anvil services, installs the pinned
+system subnets, starts persistent Bitcoin Core regtest and Anvil services, installs the pinned
 ledger/index and native-minter fixtures, and funds them through their native
 paths. The server synchronizes `support/update-source/assets` and records the
 source canister in the session; each Neutron binds only that recorded origin.
-The fresh source has a health asset but no package releases, and its origin
-applies only to packages that name its principal. This does not introduce a
-workspace deployment command.
+The fixture's seeded contents come from that assets directory; read it rather
+than assuming a release catalog exists. Its origin applies only to packages
+that name its principal. This does not introduce a workspace deployment
+command.
 
-## Cutover verification
+## Verification Boundaries
 
-The code has focused unit coverage for closed format-3 config, path-only local
-archive derivation, and production/release pin validation; schema-3
-session/fleet state; the complete-actor compile cache; PocketIC
-REST/supervisor reuse; local management; fixtures; per-node reinstall
-progress; and session discovery. Live fleet verification must still perform
-the management install/reinstall, separate asset restoration, authorization,
-fixture funding, runtime-identity checks, and browser verification on every
-configured node even when compilation is cached.
+Use `packages/neutron-provision/test/` for config, journal, artifact, cache,
+recovery, and fixture behavior. Select affected workspace checks from each
+`package.json`; a successful build is not release-test evidence. Live fleet
+verification must still perform management installation, asset restoration,
+authorization, fixture funding, runtime-identity checks, and browser
+verification on every configured node even when compilation is cached.
+
+Production package changes follow [App Package Updates](./package-updates.md)
+and [Memory Migrations](./memory-migrations-and-uninstall.md), including
+versioning, state compatibility, atomic publication, and verified no-op
+postflight. Publishing a catalog does not modify existing Neutrons or the
+Dispenser starter.

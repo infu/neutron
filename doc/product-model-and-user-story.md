@@ -1,13 +1,24 @@
-# Product Model And User Story
+# Product model and runtime boundaries
 
 Neutron is a personal operating system deployed as one Internet Computer
 canister. The user owns the canister, chooses its apps, reviews their authority,
 and can replace the Kernel without turning app publishers into canister
 operators.
 
-The product is designed to feel like an ordinary app workspace. Cryptography,
-certification, app-installation identity, cycle accounting, and revocation are
-platform work under that interface, not terminology every app must expose.
+Use this document to place changes in the correct trust layer. Exact resource
+limits, starter selections, versions and deployment state belong to source
+configuration and verified runtime evidence.
+
+## Source map
+
+| Boundary | Implementation entrypoints |
+| --- | --- |
+| Reviewed packages, assembly and install transaction | `packages/neutron-compiler/src/compile.ts`, `packages/neutron-compiler/src/assemble.ts`, `packages/neutron-compiler/src/install.ts` |
+| Runtime capabilities, app scopes and authority | `apps/kernel/backend/`, `apps/kernel/src/expose.ts` |
+| Browser frame isolation and endpoint lifecycle | `apps/kernel/src/app_frame_security.ts`, `apps/kernel/src/frame_context.ts` |
+| Owner identity and canister calls | `apps/kernel/src/reducer/auth.ts` |
+| App SDK, provider tools and Agent protocol | `packages/neutron-tools/src/app.ts`, `packages/neutron-tools/src/protocol.ts` |
+| Provisioning and local environment selection | `packages/neutron-provision/src/`, especially `local_environment.ts` and `local_fixtures.ts` |
 
 ## Product Principles
 
@@ -46,7 +57,7 @@ A Neutron contains:
 The compiler assembles these parts into one actor. The canister remains the
 management, payment, upgrade, and public-network identity.
 
-The compiler also derives a 32-byte public network ID from the trusted
+The compiler also derives a public network ID from the trusted
 deployment root key. Apps may use it to distinguish local and production
 networks, but it grants no authority.
 
@@ -123,9 +134,11 @@ standing unattended spend budgets.
 ### Kernel And Provisioner
 
 The Kernel enforces runtime policy. The compiler converts reviewed declarations
-into exact code and registrations. The provisioner creates or reinstalls the
-canister and verifies the deployed result. None of these layers is an
-app-specific orchestration service.
+into exact code and registrations. The provisioner creates and verifies fresh
+canisters and exposes separately guarded deployment/recovery operations. None
+of these layers is an app-specific orchestration service. Existing production
+state is durable: ordinary upgrades use the checked in-product install
+transaction, never a clean reinstall.
 
 ## User Lifecycle
 
@@ -137,9 +150,10 @@ canister, uploads the Wasm, initializes the fresh Kernel, seeds certified
 runtime assets, authorizes the owner, and verifies the resulting module,
 runtime, access, and browser entrypoint.
 
-An existing canister may be adopted only after live verification. A destructive
-reinstall preserves its verified controller set and records a new deployment
-receipt.
+An existing canister may be adopted only after live verification. Management
+recovery tooling does not make destructive reinstall an acceptable app upgrade
+or a way to resolve a migration failure. Preserve installed state and use the
+verified successor path described in [package updates](package-updates.md).
 
 Local development uses the same package/compiler/install model on PocketIC.
 
@@ -211,8 +225,9 @@ either a direct ICRC-1 transfer or an exact short-lived ICRC-2 allowance; a
 pull-based Swap then executes `icrc2_transfer_from` through its own reviewed
 authority without another owner prompt. Wallet, not Kernel, owns token
 metadata, formatting, fee and spender meaning, durable idempotency, approval
-enumeration, and revocation. Published Wallet 0.3.6 retains the generic raw-JSON
-owner review for compatibility, while current human flows use provider-owned UI.
+enumeration, and revocation. The legacy generic raw-JSON owner-review path remains available for
+compatibility; new human funding flows use provider-owned UI. See
+[planned compatibility removals](deprecated.md).
 
 During Agent Mode, a public provider tool can instead prepare the exact
 operation and call `requestApproval(review)`. Kernel sends the complete bounded
@@ -284,28 +299,19 @@ Removing an app retires its:
 - app registry and package assets; and
 - managed memory according to the explicit retirement plan.
 
-One deployment may remove at most 64 apps, so large inventory reductions are
-performed through successive installs.
+App removal is bounded by the install transaction. Read its current limits in
+the compiler and Kernel before preparing a large inventory change.
 
-## App And Resource Scale
+## App and resource scale
 
-The supported target is hundreds of small apps without turning every app into
-a resident browser process.
+Tile-only, backend-only, and headless apps do not consume a resident-frame slot.
+Resident backgrounds, scheduled tasks, connections and other capability
+resources have separate bounds. Read the compiler/Kernel validators and
+manifest schemas for current thresholds; do not infer a resource allowance from
+an inventory table in documentation.
 
-Current structural limits are:
-
-| Resource | Limit |
-| --- | ---: |
-| Installed app instances, including Kernel | 256 |
-| Ordinary packages in a deployment config | 255 |
-| App removals in one install commit | 64 |
-| Resident backgrounds | 32 |
-| Scheduled tasks actor-wide | 64 |
-| Connections `(AppScope, provider)` actor-wide | 256 |
-
-Tile-only, backend-only, and headless apps consume no resident-frame slot.
-Capabilities have additional per-app and global quotas based on their physical
-cost.
+Changing a threshold is a policy or resource-safety decision, not ordinary app
+integration. Follow `AGENTS.md` before adding restrictions or adjusting bounds.
 
 ## Local Product Environments
 
@@ -316,8 +322,8 @@ PocketIC has two app-neutral profiles:
 - `full_protocol_fixtures` additionally runs the chain, ledger, index, minter,
   and funding fixtures used by protocol-heavy development.
 
-A config may declare up to 16 named Neutron nodes. All nodes receive the same
-ordered package set and authorization policy. The profile is environment data,
+A config may declare named Neutron nodes within the provisioner's validated
+bound. All nodes receive the same ordered package set and authorization policy. The profile is environment data,
 not a hidden choice based on an installed app.
 
 ## Product Boundaries

@@ -4,9 +4,14 @@ A Neutron app package is one `.neutron` archive containing a format-3 manifest,
 content-addressed Motoko modules, optional managed-memory lock, and optional
 frontend assets.
 
-The package is deployment-target neutral. Canister IDs, root keys, local
-fixtures, installation UIDs, origins, grants, and deployment IDs are supplied
-by the compiler and installer, not embedded by the packer.
+The package is deployment-target neutral. The compiler and installer bind the
+target Neutron canister, root of trust, installation identity, browser origins,
+and reviewed authority at deployment time. A declared remote service such as
+`update_source` is package configuration, not a target-Neutron binding.
+
+Use this document for package invariants and the source map below for exact
+validation rules. Do not duplicate validator limits or current release inventories
+in app documentation.
 
 ## Archive Shape
 
@@ -22,32 +27,18 @@ MessagePack map<
 Each source file is gzip-compressed independently. The top-level archive is not
 itself gzip.
 
-The decoder accepts no numeric keys, integer byte arrays, nested maps, symlinks,
+The decoder accepts no numeric keys, integer byte arrays, nested maps,
 absolute paths, `.`/`..` segments, duplicate paths, dangerous JavaScript keys,
-trailing bytes, or multiple gzip members.
+trailing bytes, or multiple gzip members. The archive has no symlink entry type;
+the packer rejects symlinks and non-regular files in its input tree.
 
-Default deliberate local-file limits are:
-
-| Resource | Limit |
-| --- | ---: |
-| Raw archive | 128 MiB |
-| Entries | 16,384 |
-| Path bytes | 4,096 |
-| Compressed entry | 128 MiB |
-| Decoded entry | 64 MiB |
-| Decoded total | 256 MiB |
-
-Packages fetched through a repository use the smaller remote trust-bound
-limits:
-
-| Resource | Limit |
-| --- | ---: |
-| Raw archive | 32 MiB |
-| Entries | 4,096 |
-| Path bytes | 512 |
-| Compressed entry | 32 MiB |
-| Decoded entry | 16 MiB |
-| Decoded total | 64 MiB |
+The decoder applies separate local-file and remote-acquisition safety ceilings.
+Use `DEFAULT_NEUTRON_PACKAGE_DECODE_LIMITS` and
+`REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS` from
+`packages/neutron-compiler/src/package_decoder.ts` for the current values.
+They bound raw bytes, entry count, path bytes, compressed entry size, and both
+per-entry and aggregate decompression. Preserve the smaller remote profile when
+adding a repository or update acquisition path.
 
 Expected outer archive SHA-256 and byte size are checked before decompression
 when the acquisition path provides them.
@@ -83,8 +74,12 @@ app package:
 It is generated metadata, not an app capability or a file authors place in
 `dist`. The Kernel package never carries it, and an authored collision fails
 packaging. The installer uses its exact canonical bytes to distinguish packages
-built for installation-owned browser-surface origins from immutable historical
-archives that retain the opaque-frame compatibility path.
+built for installation-owned browser-surface origins from historical archives.
+A `browser_permissions` declaration also establishes readiness in
+`preparePackageInstall`; marker absence alone does not prove an archive uses
+the legacy path. New apps must use the current packaging flow and
+installation-owned origins. See [Planned Compatibility Removals](./deprecated.md)
+for the retained opaque-frame and Kernel-host fallbacks.
 
 Frontend files are optional. A backend-only or otherwise headless package does
 not need `web/index.html`.
@@ -101,12 +96,11 @@ remain valid and are reported as legacy/undeclared; a malformed present record
 fails package preparation. See
 [License And Deployment Records](./license-and-deployment-records.md#package-information-record-v1).
 
-The sidecar is optional product metadata, not a user-maintained legal registry.
-The NPL/NSAL drafts do not require an app author or private installer to
-hand-write hashes or identify the browser-generated package combination or
-combined Wasm. Ordinary first-party app packaging generates the sidecar,
-governing license, concise application notice, complete derived third-party
-notice set, and a closed Complete App Source snapshot automatically.
+Use the shared package-metadata generator for the sidecar, governing license,
+application notice, derived third-party notices, and Complete App Source
+snapshot. Do not hand-maintain generated hashes or deployment combinations.
+Follow the repository license-selection rules in `AGENTS.md` and the canonical
+[License And Deployment Records](./license-and-deployment-records.md) contract.
 
 For an app with `update_source`, the default production form keeps the license
 and notices at ordinary installable `legal/**` paths and writes the exact
@@ -171,24 +165,22 @@ The closed top-level fields are:
 | `backend` | Exact backend capability interfaces to inject |
 | `capabilities` | Closed authority declarations |
 
-Unknown fields are rejected. In particular, immutable production v0.3.5 and
-v0.3.6 and the compatible private v0.3.7 candidate reject the archive-only
-marker before staging any files. A later archive-only-aware Kernel accepts it
-and cross-checks the same feature in the package record against the actual
-reserved archive paths. Production packages that use the HTTPS source offer
-omit both the reserved paths and marker, so those older Kernels can prepare
-them in the same **Upgrade all** batch as a newer Kernel. Keeping any marker out
-of source manifests makes this an automatic packaging safety boundary rather
-than an app-author duty.
+Unknown fields are rejected. A Kernel predating archive-only support rejects
+`package_features` before staging. An archive-only-aware Kernel cross-checks the
+manifest marker, package-record feature, and actual reserved archive paths.
+Provider-hosted HTTPS source offers omit those reserved paths and the marker,
+which allows compatible app packages to participate in an **Upgrade all** batch
+with a Kernel successor. Determine supported predecessor behavior from the
+installer and release evidence, not a copied version list.
 
 ## IDs, Names, And Versions
 
 App IDs use the shared app-ID grammar and are not display names. The literal
 `kernel` ID is reserved for the operating-system package.
 
-Names are 3–20 ASCII letters, digits, and spaces. Descriptions and endpoint
-text are NFC-normalized and reject control, bidi, default-ignorable, and
-line-separator characters before trusted UI display.
+Names use the bounded ASCII display-name grammar in `schema.ts`. Descriptions
+and endpoint text are NFC-normalized and reject control, bidi,
+default-ignorable, and line-separator characters before trusted UI display.
 
 Release versions are a naturally ordered SemVer subset:
 
@@ -201,24 +193,28 @@ packed = major * 10_000 + minor * 100 + patch
 
 ## Functions
 
-`func` maps logical method names to:
+`func` maps logical method names to declarations. For example, an internal
+method exported to typed app dependencies uses:
 
 ```json
 {
-  "type": "query | update | internal",
+  "type": "internal",
   "async": false,
-  "arg": ["resource_name"],
   "expose": "apps"
 }
 ```
 
-Rules include:
+`type` selects `query`, `update`, or `internal`; `arg` lists the exact injected
+resource names required by the backend signature. Function and injected-resource
+counts are bounded by the manifest validator;
+resource names within a function must be unique. Internal functions may be
+exposed to typed app dependencies. Only Kernel may use its direct
+unauthorized-function declaration; ordinary public access must use
+`capabilities.public_ingress`.
 
-- at most 256 functions;
-- at most 16 unique injected resources per function;
-- internal functions may be exposed to typed app dependencies;
-- only Kernel may use its direct unauthorized-function declaration; and
-- ordinary public access must use `capabilities.public_ingress`.
+`async` describes the Motoko calling convention (`false`, `true`, or `"async*"`),
+not whether a frontend should wait for the result. Use the source signature and
+compiler validation when declaring it.
 
 The compiler validates the source signature and maps logical methods to
 physical actor methods or dispatchers. App code cannot select its physical
@@ -239,9 +235,8 @@ name.
 }
 ```
 
-The current interface catalog includes deferred timers, backend calls,
-randomness, chain-key signing, stable store, HTTPS outcalls, attenuated vetKey
-public access, and Certified Assets.
+Read `packages/neutron-tools/src/capabilities/catalog.ts` for supported
+interface names, API versions, declaration requirements, and bounds.
 
 Selecting an interface does not create undeclared authority. For example, the
 `stable_store` interface also requires a matching closed
@@ -250,37 +245,21 @@ environment for the exact installation.
 
 ## Capabilities
 
-`capabilities` is closed and normalized by the shared catalog. It may declare:
+`capabilities` is closed and normalized by the shared catalog. Declare the
+specific authority the app needs; selecting an injected interface does not
+replace its matching authority declaration. The compiler derives the runtime
+plan from that declaration together with functions, memory, dependencies, and
+frontend endpoints. App code cannot author an alternative runtime plan.
 
-- backend calls and install-reviewed reservations;
-- randomness;
-- chain-key signing;
-- stable stores;
-- HTTPS outcalls;
-- vetKeys;
-- scheduled tasks;
-- preapproved self calls;
-- agent entrypoints;
-- background UI request categories;
-- browser-wallet methods and chains;
-- provider connections;
-- camera and microphone access for exact tile IDs;
-- persistent or ephemeral resident origins;
-- public Candid ingress;
-- bounded HTTP POST mounts; and
-- Certified Assets collections.
-
-The compiler derives stable-memory, migration, app-call, backend-environment,
-certified-read-route, function-resource, app-export, tile, background, and tray
-entries.
-
-See [Kernel Capability Inventory](./kernel-capability-inventory.md).
+Use the catalog and [Kernel Capability Inventory](./kernel-capability-inventory.md)
+to locate a capability's validator, projection, enforcement, and tests. Do not
+copy a capability list into an app as a second source of truth.
 
 ## Frontend Surfaces
 
 ### Tiles
 
-`tiles` is optional and may contain at most 32 entries:
+`tiles` is an optional, bounded list of frontend endpoints:
 
 ```json
 {
@@ -308,9 +287,13 @@ Missing or empty `tiles` stays empty. No tile or asset is synthesized.
 }
 ```
 
-There is at most one resident background. Its security mode is derived from
-the persistent/dedicated-origin capability declarations, or uses the default
-opaque credentialless mode.
+There is at most one resident background. Persistent browser storage and an
+ephemeral dedicated resident origin are explicit, mutually exclusive capability
+choices. An ordinary background uses the browser-surface origin policy, which
+depends on package readiness and browser support. Do not infer its effective
+origin or storage access from the internal default mode name. See
+`app_frame_security.ts` and `workspace/AppBackgroundFrames.tsx` under
+`apps/kernel/src/` for frame selection and preflight.
 
 ### Tray
 
@@ -344,10 +327,10 @@ Dependencies are keyed by local aliases:
 }
 ```
 
-An app may declare at most 32 dependencies and at most 64 exact functions per
-dependency. The provider must be installed at the minimum version and must
-expose those methods as internal app exports. The compiler injects only the
-typed dependency handle.
+The dependency count and exact function list are bounded by the shared
+validator. The provider must be installed at the minimum version and expose
+those methods as internal app exports. The compiler injects only the typed
+dependency handle.
 
 Kernel cannot declare app dependencies, and an app cannot depend on itself or
 on Kernel.
@@ -377,8 +360,9 @@ A memory declaration has:
 }
 ```
 
-Limits are 64 roots, 256 migration edges across the manifest, and 16 consumed
-roots per consolidation edge.
+Root, migration-edge, and consolidation-input counts are bounded by the
+manifest validator. Preserve every released schema and migration module; add
+explicit forward paths when the persistent schema changes.
 
 The packager:
 
@@ -389,9 +373,8 @@ The packager:
 5. compares and merges the source `neutron.lock.json`; and
 6. copies the exact lock into `dist/`.
 
-`neutron.lock.json` currently has its own format 2. That is the active
-managed-memory lock format, not a deployment-config or provision-journal
-compatibility path.
+`neutron.lock.json` uses managed-memory lock format 2, independently of manifest
+or deployment formats. Its released lineage is immutable.
 
 A removed memory root must be declared `retired` and participate in the
 compiler's explicit retirement plan. Apps cannot share raw memory roots.
@@ -400,7 +383,9 @@ See [Managed Memory Migrations And Uninstall](./memory-migrations-and-uninstall.
 
 ## Certified Assets Example
 
-Certified Assets uses three closed kinds and compiler-derived read routes:
+Certified Assets uses closed collection kinds and compiler-derived read routes.
+This example declares one immutable-blob collection with illustrative requested
+bounds; choose bounds for the app and validate them against the shared catalog:
 
 ```json
 {
@@ -440,7 +425,10 @@ See [Certified HTTP And Certified Assets](./kernel-http-v2-and-certified-assets.
 
 ## Build And Pack Flow
 
-A conventional app build:
+Run the complete app workspace `package` command; invoking the archive packer
+alone does not validate source or generate metadata. Run the app release tests
+separately as required by `AGENTS.md`; packaging success is not release-test
+evidence. A conventional package pipeline:
 
 1. bundles frontend assets into `dist/web` when present;
 2. validates the source manifest;
@@ -518,10 +506,13 @@ After Motoko packaging, `dist/neutron.json` also contains the content-addressed
 
 ## Relevant Sources
 
-- `packages/neutron-tools/src/schema.ts`
-- `packages/neutron-tools/src/memory.ts`
-- `packages/neutron-tools/src/capabilities/`
-- `packages/neutron-compiler/src/package_decoder.ts`
-- `packages/neutron-compiler/src/install.ts`
-- `packages/neutron-scripts/src/mopack.ts`
-- `packages/neutron-scripts/src/pack.ts`
+- `packages/neutron-tools/src/schema.ts`: closed manifest and normalization.
+- `packages/neutron-tools/src/memory.ts`: source/package validation and lock lineage.
+- `packages/neutron-tools/src/capabilities/`: declarations and derived authority.
+- `packages/neutron-tools/src/package_surface_origins.ts`: canonical readiness marker.
+- `packages/neutron-tools/src/package_record.ts`: legal/source sidecar and source artifact format.
+- `packages/neutron-compiler/src/package_decoder.ts`: archive shape and decode ceilings.
+- `packages/neutron-compiler/src/install.ts`: preparation, rewrites, compatibility, and deployment.
+- `packages/neutron-scripts/src/mopack.ts`: content-addressed Motoko and memory packaging.
+- `packages/neutron-scripts/src/package_metadata.ts`: generated legal/source metadata.
+- `packages/neutron-scripts/src/pack.ts`: deterministic traversal and archive encoding.

@@ -2,6 +2,10 @@
 
 [Back to documentation index](./index.md)
 
+Use this contract when implementing or reviewing app calls. Resolve exact tool
+descriptors, capability bounds, and app-specific method inventories from source;
+do not infer them from an older package or an example in this document.
+
 Neutron has two separate security layers around app backend calls:
 
 1. **Backend method access** determines which principals the generated Motoko
@@ -75,59 +79,46 @@ or—on updates—either self-authenticating direct ingress with no payment or a
 positive canister-paid static floor, plus rate, concurrency, pending-dispatch,
 and cycle-reserve admission.
 
-For a paid route, the static floor is accepted and retained before later
-payload, reserve, concurrency, or rate admission, so it must cover all work
-that can become irreversible. Inside an opting-in handler, `available()` is
-the captured still-unaccepted surplus minus amounts already requested, while
-`request(amount)` accumulates a request and traps if it exceeds that remainder;
-neither accepts cycles directly. After the handler mutation commits, the outer
-dispatcher attempts the request only if the route, lease, fingerprint,
-authority epoch, and persisted completion are still live. Supplemental
-acceptance is best-effort and non-atomic; revocation after dispatch returns
-`#revoked_after_dispatch` without accepting the supplement, and unaccepted
-surplus is refunded.
+Paid public ingress has a separate admission and cycle-acceptance contract; a
+frontend grant cannot substitute for it. Use
+[Compiler And Actor Assembly](./compiler-and-actor-assembly.md) for generated
+wrappers and the public-ingress dispatcher.
 
 ## Why App Frames Use The Kernel
 
-Third-party surfaces never receive the Kernel origin. Under the
-browser-surface-origin runtime, an ordinary package is eligible for originful
-surfaces only after a
-selected package proves readiness with the packer-owned
-`.neutron/browser-surface-origins.v1.json` marker or the inherently new
-`browser_permissions` declaration and the checked install transaction records
-the app in the certified surface-origin sidecar. The Kernel combines the app
-installation's browser nonce with each surface key to derive a separate exact
-origin for each tile ID, tray, and ordinary background. Those surfaces use
-credentialless `sandbox="allow-scripts allow-same-origin"` frames; instances
-of the same tile ID intentionally share that tile's origin.
+App frames do not receive the Kernel origin or its Internet Identity
+credentials. Installation-owned browser-surface origins use credentialless
+`sandbox="allow-scripts allow-same-origin"` framing and an exact per-surface
+origin. Historical packages, the predecessor upgrade bridge, and browsers
+without the required credentialless support retain opaque
+`sandbox="allow-scripts"` framing. Dedicated backgrounds have their own declared
+origin mode. The readiness evidence, URL construction, and browser-feature
+delegation contract are defined in
+[Kernel HTTP And Certified Assets](./kernel-http-v2-and-certified-assets.md).
 
-Historical packages without readiness evidence, the explicit predecessor
-upgrade bridge, and the unsupported-browser fallback retain the released
-credentialless opaque frame policy: `sandbox="allow-scripts"` and
-`origin: "null"`. Dedicated
-backgrounds continue to use the compiled opaque, credentialless-ephemeral, or
-persistent mode specified in
-[Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
-No mode gives app script the Kernel's origin or access to the Kernel
-frontend's Internet Identity credentials.
+Opaque framing has a separate message-bus limitation: a document that replaces
+an app by navigating within its existing iframe still reports `origin: "null"`
+and may receive a new port under that app's registered endpoint. Exact-origin
+mode rejects a replacement document on another origin. Kernel-origin storage
+remains isolated. New apps must target installation-owned origins; unsupported
+browser fallback and Kernel-host app serving are planned for removal in
+[Deprecated Compatibility Paths](./deprecated.md). App migration alone does not
+remove the browser fallback, and the removal plan has not changed runtime behavior.
 
-Browser-feature delegation is separate from frontend call consent. It is
-denied by default. An app can declare only the closed V1 `camera` and
-`microphone` features for exact tile IDs in `browser_permissions`; the normal
-install or update review displays that request. Once accepted, the Kernel
-intersects the Host-bound child policy with the exact iframe `allow` policy,
-and the tile calls browser APIs such as `getUserMedia()` directly. The browser
-or operating system may still prompt or deny access. No media session, lease,
-or per-use call passes through the Kernel backend, and V1 delegates neither
-feature to tray or background surfaces.
+Browser-feature delegation is independent of call consent. Install-approved
+`browser_permissions` grants for exact tiles intersect the HTTP and iframe
+policies; the app calls browser APIs directly. Browser or operating-system
+permission may still be required. A media permission grants no owner identity
+or backend authority.
 
 When an app frame needs the authenticated owner identity for a canister call,
-it asks the Kernel over the source-bound message bus. The Kernel:
+it asks the Kernel over the source-bound message bus. For its current self-call
+and v2 external-call routes, the Kernel:
 
 1. Derives the requesting app and endpoint from the registered frame or private
    `MessagePort`.
-2. Loads the live installed Candid interface rather than trusting schemas from
-   the app package.
+2. Loads live Candid from the installed service for self calls or anonymous
+   discovery for external calls, rather than trusting an app-supplied schema.
 3. Validates and normalizes the arguments against that interface, including
    binary leaves where the live Candid type is `blob`/`vec nat8`.
 4. Applies the relevant frontend consent route.
@@ -145,14 +136,16 @@ authorization boundary.
 | Run a listed self update | `updateSelf(method, args)` | No | Exact method must be listed in `preapproved_self_calls.methods`, owner-authorized, owned by the source app, and an update. Arguments and results follow the method's complete live Candid type, including nested or repeated blobs. |
 | Make a canister call through the owner identity | `callCanisterDialog({ canister, method, args })` | When the source app has no active invocation | A same-Neutron target uses the private attachment-aware API-1 self-call wire and ordinary owner consent when the source app has no active invocation. While that app has an active invocation, an unscoped request fails with `SCOPED_CONTEXT_REQUIRED`, while a valid scoped request fails with `USER_INTERACTION_REQUIRED`. An eligible external call made through a live invocation-scoped client uses the generic JSON route and agent decision policy. The Kernel validates live input and calls only after the applicable decision. |
 | Call a tile, tray, or background tool in the same app | `callTool(...)` | No | Target must be a live endpoint; JSON Schema is checked at the endpoint and kernel. |
-| Call another app's live endpoint tool | `callTool(...)` | When the source app has no active invocation: one-call or session grant | Kernel identifies both endpoints. Ordinary calls honor a matching live session grant before asking the owner; invocation-scoped calls use the agent decision policy even if a session grant exists. |
+| Call another app's live endpoint tool | `callTool(...)` | No new dialog for an install-declared exact tool; otherwise one-call or session consent outside Agent Mode | Kernel identifies both endpoints and checks the live descriptor. Ordinary calls honor a matching live session grant before asking the owner; invocation-scoped calls honor exact install declarations but otherwise use the agent decision policy instead of session grants. |
 | Request session access to an exact set of another app's tools | Kernel `permissions.request` with `target` and `tools` | One session-access dialog for the missing tools | Kernel discovers and validates every requested live descriptor, displays their titles and descriptions, and records a separate grant for each approved name, bound to both endpoint sessions. Existing valid grants require no new owner dialog. |
 | Open or focus an installed app tile | `openAppTile(...)` | No for a live direct app endpoint | The retained compatibility route confines navigation to the active workspace, forces exact app/tile reuse, and applies workspace capacity. This grants visible navigation only and has no navigation cooldown. |
 | Inspect or arrange the visual workspace | Kernel `workspace.inspect` / `workspace.control` tools | No | Source must be a live resident background whose installed app declares `agent_entrypoints`. Invocation-free resident calls and live direct roots are admitted; delegated descendants are rejected. Control applies one open/focus/close/place/resize/move/switch/expand/restore operation through the canonical workspace store and grants no target-app effect authority. |
 | Call another app's `provider_once` tool on the current provider-UI lane | `callTool(...)`, then target-only `context.presentUserInterface(...)` | One decision in the provider's tile | Kernel validates the public tool input, ignores session grants, and gives that invocation one callback which can open or focus only the provider's exact tile and route opaque arguments to a private `same_app` + `foreground_tile` tool. The provider tile may use exact preapproved methods to prepare non-value-moving review state and persist cancellation; only the affirmative action may dispatch value-moving execution. Kernel opens no dialog and learns no app-domain semantics. |
 | Call a provider's root-agent tool | `callTool(...)` from the invocation-scoped root client | No | The exact target tool must declare `same_app` visibility and the `agent_root` audience. Kernel admits only the active depth-zero root, attests that audience, and rejects ordinary callers and delegated descendants before target dispatch. |
-| Add or remove backend-call reservations | `requestBackendCallReservations(...)` | When the source app has no active invocation: persistent-access dialog | Scopes must be declared by the app manifest. An invocation-scoped action-only request uses the agent decision policy, and an allowed reservation change persists. An optional same-app post-grant call uses the private attachment-aware API-1 wire and supports nested or repeated blobs; the generic JSON tool accepts actions only. |
+| Add or remove backend-call reservations | `requestBackendCallReservations(...)` | When the source app has no active invocation: persistent-access dialog | Requests originate from a tile or background and use manifest-declared scopes. An invocation-scoped action-only request uses the agent decision policy, and an allowed reservation change persists. An optional same-app post-grant call uses the private attachment-aware API-1 wire and supports nested or repeated blobs; the generic JSON tool accepts actions only. |
 | Install package-declared backend-call reservations | `capabilities.backend_calls.install_reservations` | App install dialog | Every exact scope is kernel-normalized, displayed in install review, and applied only after the accepted app installation becomes active. |
+| Request a one-time cycle-bearing backend call | Kernel `backend_calls.cycles_request` | Owner approval before first execution, including Agent callers | Requires the app's backend-call declaration and a tile or background source for the decision. The exact call and cycle amount are reviewed and durably journaled; status recovery with the same request ID does not execute again. This creates no standing reservation or larger recurring budget. |
+| Offer or prepare app installation | Kernel `apps.install_offer` / `apps.install_prepared` | Owner-controlled installation review | These routes present installation work, not deployment authority. Prepared installation requires exact install-declared access to `kernel/apps.install_prepared`; offer admission depends on focused owner interaction or a live Agent invocation. Neither lets an Agent approve installation. |
 | Call from trusted kernel UI or an authorized CLI | Actor or agent API | No app dialog | The caller already possesses an authorized principal; backend authorization still applies. |
 | Call a declared public-ingress route externally | Actor or agent API | No | Use the generated app/protocol/mode physical dispatcher and stable V1 wire. Queries obey recipient caller policy. A direct authenticated update requires a self-authenticating user principal and accepts no cycles; a paid update must come from a canister with at least its `required_cycles` floor. The recipient still applies admission. |
 
@@ -169,7 +162,7 @@ validation or consent path.
 
 ## Declare Preapproved Self Calls
 
-An app may declare up to 32 exact owner-authorized query or update methods that
+An app may declare exact owner-authorized query or update methods that
 its own registered tile, tray, and background endpoints may call without a
 per-call dialog:
 
@@ -179,16 +172,8 @@ per-call dialog:
     "preapproved_self_calls": {
       "api": 1,
       "methods": [
-        "wallet_snapshot",
-        "wallet_catalog",
-        "wallet_contact_destinations",
-        "wallet_refresh_metadata",
-        "wallet_refresh_balances",
-        "wallet_transfer",
-        "wallet_funding_prepare_v1",
-        "wallet_funding_execute_v1",
-        "wallet_funding_reject_v1",
-        "wallet_allowances_page_v1"
+        "read_counter",
+        "bump_counter"
       ]
     }
   }
@@ -246,19 +231,12 @@ container-element, decoder-allocation, per-endpoint in-flight, and global
 in-flight limits. Replies receive equivalent raw-Candid preflight before a
 decoder can allocate their nested values.
 
-This private path does not validate the structural value against ICBlast's
-public JSON Schema projection. At a live record position, it may leave a string
-opaque only for the pinned encoder's released record shorthand and only with no
-sidecar at or below that path. Generated schema does not authorize the
-exception. The Kernel binds sidecars against the exact live type graph, encodes
-through the live IDL method, scans the raw Candid against those same types, and
-requires its blob count and aggregate blob-byte length to equal the
-materialized-sidecar statistics.
-
-One direction may contain at most 512 binary leaves but still only 1,900,000
-aggregate binary bytes. The leaf-count ceiling preserves bounded Mail list and
-Wallet history responses with hundreds of small blobs; it is not an increase
-to the byte budget.
+Use the private transport's exact live Candid graph, not ICBlast's public JSON
+Schema projection, as the authority for binary positions and encoded values.
+Resolve enforced bounds and encoder compatibility from the implementation when
+changing a payload shape; binary leaf count and aggregate byte size are
+independent limits. The detailed wire contract is in
+[Self Calls With Nested Binary Values](./kernel-app-communication.md#self-calls-with-nested-binary-values).
 
 When a trusted approval or inspection surface displays such a value, it never
 renders, hex-encodes, or truncates the bytes as text. For every live binary
@@ -284,18 +262,18 @@ Use `querySelf()` for a query listed by the requesting app:
 ```ts
 import { querySelf } from "neutron-tools/app";
 
-const snapshot = await querySelf("wallet_snapshot", [null]);
+const counter = await querySelf("read_counter", []);
 ```
 
 The kernel verifies that:
 
 - the source is a registered endpoint;
-- `wallet_snapshot` belongs to that endpoint's installed app;
+- `read_counter` belongs to that endpoint's installed app;
 - the installed capability plan lists it in `preapproved_self_calls.methods`;
 - its registry access remains `authorized`;
 - the registry declares it as a query rather than an update or internal
   method; and
-- `[null]` matches the live Candid input.
+- `[]` matches the live Candid input.
 
 The call uses the authenticated kernel identity, so an authorized query still
 passes the generated principal check. It does not need a mutation dialog
@@ -315,7 +293,7 @@ Use `updateSelf()` for an update listed by the requesting app:
 ```ts
 import { updateSelf } from "neutron-tools/app";
 
-const report = await updateSelf("wallet_refresh_metadata", [null]);
+const counter = await updateSelf("bump_counter", [1]);
 ```
 
 The kernel applies the same source-app ownership, exact manifest list, live
@@ -328,9 +306,9 @@ The method may carry any finite binary shape admitted by its live Candid type.
 The SDK does not split a final blob from the request, and the kernel does not
 rewrite the physical method signature.
 
-Preapproval does not grant the backend any additional external authority. For
-example, Wallet refresh still reaches only ledger canisters covered by its
-separately approved persistent backend-call reservations.
+Preapproval does not grant the backend any additional external authority.
+Remote backend calls still require the app's separately approved reservations
+or other explicitly injected capability.
 
 ## Provider-Mediated One-Shot Tools
 
@@ -358,8 +336,8 @@ private optional callback on that invocation:
 
 ```ts
 return context.presentUserInterface({
-  tileId: "wallet",
-  tool: "wallet_funding_present_v1",
+  tileId: "main",
+  tool: "operation_review_v1",
   arguments: request,
 });
 ```
@@ -436,22 +414,9 @@ and renders the bounded review as inert raw JSON. For an Agent invocation, that
 same callback sends a fresh, one-operation review to the root permission judge;
 provider presentation arguments and results remain opaque to Kernel.
 
-| Kernel \ Wallet | W306 | W307 | W308 | W309 | W310 | W311 |
-| --- | --- | --- | --- | --- | --- | --- |
-| K323 | Human funding uses the released generic raw review. W306 has no root tool. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Human funding fails before preparation or effect. The root tool is unavailable cross-app. | Same public funding contract as W309; human funding fails before preparation or effect and the root tool is unavailable cross-app. | Same funding behavior as W310; adds the ordinary `wallet_token_info_v1` read tool. |
-| K324 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Human funding fails before preparation or effect because K324 lacks W308's explicit provider-UI feature marker. Direct-root funding remains UI-free. | Same provider-marker behavior as W308; direct-root funding remains UI-free. | Same public funding contract and provider-marker behavior as W309; direct-root funding remains UI-free. | Same funding behavior as W310; adds the ordinary `wallet_token_info_v1` read tool. |
-| K325 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Default-account funding works, but non-default account input has W308's hidden-sidecar regression. Direct-root funding is UI-free. | Human funding uses one provider-owned decision; direct-root funding is UI-free. | Same public funding contract as W309; an open Send view also follows refreshed ledger state. | Same funding behavior as W310; adds the ordinary `wallet_token_info_v1` read tool. |
-| K326 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. | The focus correction applies, but non-default account input retains W308's hidden-sidecar regression. Direct-root funding is UI-free. | Human funding uses one provider-owned decision, then releases an unchanged settled provider session's frame focus; direct-root funding is UI-free. | Same provider presentation behavior as W309; an open Send view also follows refreshed ledger state. | Same funding behavior as W310; adds the ordinary `wallet_token_info_v1` read tool. |
-| K327 | Human funding uses the deprecated generic raw review. W306 has no root tool. | Human funding uses one provider-owned decision without source-focus admission or settlement blur; direct-root funding is UI-free. | The K327 presentation behavior applies, but non-default account input retains W308's hidden-sidecar regression. Direct-root funding is UI-free. | Human funding uses one provider-owned decision without source-focus admission or settlement blur; direct-root funding is UI-free. | Same public funding contract as W309, with K327 presentation behavior and live Send-view refresh. | Same funding behavior as W310; adds the ordinary `wallet_token_info_v1` read tool. |
-| K328 | Human funding uses the deprecated generic raw review. W306 has no root tool. | K327 presentation behavior remains, and rejected requests can retry immediately. | K327 presentation behavior remains, but non-default account input retains W308's hidden-sidecar regression. | One Wallet decision, immediate retry after rejection, and direct-root funding without UI. | Same as W309 with live Send-view refresh. | Same funding behavior as W310, plus the ordinary `wallet_token_info_v1` read tool; Wallet's exact ledger reservations remain effective alongside other apps' broader reservations. |
-
-Every valid released ordinary tool, grant, self-call, attachment, control, and
-Agent route remains compatible. Malformed tool input still fails before any
-permission UI.
-
-Ordinary tools retain their existing one-call/session-grant behavior. The first
-version rejects `provider_once` on attachment and control tools so the new path
-cannot become an alternate binary or cancellation protocol.
+Ordinary tools retain their one-call/session-grant behavior. `provider_once`
+is rejected on attachment and control tools; it is not an alternate binary or
+cancellation protocol. Malformed tool input fails before permission UI.
 
 ## Calling Any Other App Method
 
@@ -518,9 +483,10 @@ installations. They retain owner-authenticated discovery and pre-conversion
 ICBlast JSON handling, including numbered-principal conveniences. Their dialog
 therefore labels the displayed values as pre-conversion JSON. Both route
 families share Kernel consent, audit, authority, dispatch, and reply fencing.
-The compatibility routes lack v2's anonymous discovery, closed method lookup,
-phase-aware request cancellation, and complete prepared-argument review in an
-Agent Mode challenge. An Agent-scoped signed call through the compatibility
+Discovery may disclose the owner's principal to the target before operation
+approval, and cancellation can leave the old owner dialog active for later
+approval. The compatibility routes lack v2's anonymous discovery, closed method
+lookup, phase-aware cancellation, and complete prepared-argument review. An Agent-scoped signed call through the compatibility
 route is rejected before live discovery; use the v2 route for nested Agent
 signed calls.
 
@@ -528,7 +494,9 @@ Ordinary global SDK helpers prefer v2 and select an unversioned route only when
 the connected Kernel does not advertise its v2 counterpart. An
 invocation-scoped client does not negotiate down to the compatibility route;
 it must discover and call the v2 tool or report that the operation is
-unsupported.
+unsupported. New external integrations must require v2; both the unversioned
+tools and ordinary SDK fallback are planned for removal. See
+[Deprecated Compatibility Paths](./deprecated.md#unversioned-external-canister-tools).
 
 For a call back into the Neutron canister, the trusted registry must resolve
 the target as a non-internal method owned by the live source app. An app cannot
@@ -556,129 +524,36 @@ entering the agent decision flow.
 An app avoids per-call consent for its own exact listed methods by using
 `querySelf()` or `updateSelf()` instead.
 
-## Wallet Example
+## Backend Reservations And Post-Grant Calls
 
-Wallet demonstrates the relevant routes:
+Persistent backend-call reservations control which remote scopes an app's
+backend can call. Preapproved self calls control which of that app's methods
+its frontend can ask the Kernel to sign without another dialog. Neither grants
+the other.
 
-- `wallet_snapshot` and `wallet_catalog` are authorized queries read through
-  `querySelf()` and listed in `preapproved_self_calls.methods`, so loading the
-  tile does not prompt.
-- `wallet_contact_destinations` is a preapproved Wallet query that uses its
-  installed, typed Contacts backend dependency. It receives only the read-only
-  discovery function and never Contacts memory or mutation authority.
-- `wallet_refresh_metadata` and `wallet_refresh_balances` are authorized
-  updates listed in the same capability and called through `updateSelf()`, so
-  refreshes do not prompt.
-- The released contact-bound `wallet_transfer` method is also listed exactly.
-  Wallet's own Send/Withdraw confirmation is the one trusted decision, then
-  `updateSelf()` executes without a second generic backend-call dialog. Its
-  signature and contact/revision semantics remain unchanged.
-- The resident exposes exact `wallet_fund_v1` with
-  `{"neutron:consent":"provider_once"}`. Existing callers keep that public
-  name and schema. The resident validates the caller and request, requires
-  `presentUserInterface`, and asks Kernel to open Wallet before any backend
-  preparation.
-- Wallet's private `wallet_funding_present_v1` tile tool declares `same_app` +
-  `foreground_tile`. It prepares the ICRC-1 transfer or short-lived ICRC-2
-  allowance through `wallet_funding_prepare_v1`, renders Wallet's own modal,
-  and its primary action executes only the returned command key through
-  `wallet_funding_execute_v1`. Cancel records the Wallet-owned rejection. No
-  Kernel dialog is involved.
-- The resident's separate `wallet_fund_root_v1` tool declares `same_app` +
-  `agent_root`. Only the active depth-zero root can call it; Wallet verifies the
-  attested audience and prepares and executes without UI. Human callers and
-  delegated descendants cannot dispatch it.
-- `wallet_allowances_page_v1` obtains bounded live approval pages for the
-  Wallet UI. It is an update rather than a query because it makes remote ledger
-  query calls during replicated execution.
-- Ledger setup uses `requestBackendCallReservations()` to add and remove all
-  selected ledger reservations atomically. The same approval request includes
-  the same-app `wallet_set_ledgers` update, avoiding a second dialog after the
-  reservation batch succeeds.
+`requestBackendCallReservations()` can batch declared reservation changes and
+attach a same-app operation to run after approval. Resolve that operation
+against the installed app and validate its arguments against live Candid before
+creating a decision or mutating reservations. The owner reviews the exact
+method and complete normalized value retained by the Kernel. Review renders
+strings and keys as quoted JSON, visibly escaping control and formatting code
+points without changing the value that will execute. Binary values follow the
+self-call review contract above.
 
-Reviewed preset ledgers use a whole-principal reservation plus exact scopes for
-their reviewed history index and any native minter route. A custom ledger id
-receives only exact `icrc1_metadata`, `icrc1_balance_of`, `icrc1_fee`,
-`icrc1_transfer`, and `icrc3_get_blocks` scopes for existing Wallet behavior.
-Allowance support additionally requires exact `icrc2_allowance`,
-`icrc2_approve`, and `icrc103_get_allowances` scopes. Existing custom-ledger
-installations keep their old functionality and show **permission required**
-until the owner adds those scopes through the existing ledger-settings batch;
-neither Swap nor Approvals creates a surprise reservation prompt.
+Approval applies only to that immutable value. Kernel rechecks authorization
+and Candid before execution after the reservation batch succeeds. Do not treat
+reservation mutation and the following application operation as an atomic
+transaction; design recovery for an operation that fails after access changes.
 
-`wallet_set_ledgers` is intentionally not preapproved. It runs only as the
-same-app operation attached to the owner-approved reservation batch. The
-persistent ledger reservations control which remote principals the Wallet
-backend may call; the preapproved self-call list controls which Wallet methods
-its isolated frontend may ask the kernel to sign without another dialog.
-
-Before a reservation decision is created, an attached same-app operation is
-resolved against the installed app and its arguments are validated against the
-live Candid interface. The owner dialog displays the exact method and complete
-normalized argument value retained by the kernel as type-aware canonical JSON.
-Strings and keys are quoted, and control, bidi-formatting, zero-width, and other
-default-ignorable code points are shown as visible Unicode escapes without
-changing the value that will execute. Approval applies to that immutable value;
-invalid arguments fail before any dialog or reservation mutation. The kernel
-repeats the authorization and Candid checks at execution time after the
-reservation batch succeeds.
-
-For direct Swap funding, Wallet's prepared review binds the exact ICRC account,
-amount, current transfer fee, maximum debit, optional memo, command id, and
-freshness deadline before one `icrc1_transfer`.
-For a pull-based Swap, it binds the exact spender account, short expiration,
-swap amount, transfer-from fee, current-to-replacement absolute allowance and
-expiration, separate approval fee, and maximum source-account debit before one
-`icrc2_approve`. That approval is not itself one-use: the spender may make
-multiple pulls and choose destinations within the remaining allowance. Swap
-performs its own quote-bound DEX action after Wallet returns; Wallet accepts no
-caller-selected canister method.
-
-Wallet rechecks review-sensitive ledger metadata, fee, freshness, and current
-allowance state before first dispatch. A change rejects the prepared command
-and requires a fresh request and review instead of silently increasing the
-approved fee, debit, or allowance.
-
-Wallet enumerates ICRC approvals with the draft
-`icrc103_get_allowances` route, filters to its exact default source account,
-and revokes through `icrc2_approve(amount = 0, expected_allowance = current)`.
-ICP uses its separate paginated `get_allowances` and `remove_approval` API and
-displays its exact account-identifier spender. A custom ledger without a
-complete enumeration API yields a degraded or incomplete approval view;
-history is not presented as a complete allowance registry.
-
-That legacy ICP adapter is for listing and revocation. The first
-`wallet_fund_v1` contract does not create a new ICP approval; a pull-based
-funding request requires ICRC-2.
-
-Funding and revoke retries use Wallet-owned durable command identity. The
-backend freezes exact ledger arguments and `created_at_time` before the first
-value-moving await, accepts an exact ledger `Duplicate` as the receipt for that
-command, and reconciles ambiguous outcomes instead of rebuilding and blindly
-retrying them. Kernel's generic routing and audit are not the financial
-transaction journal.
-
-A `pending` result means the call may have committed. The same caller and
-request id must reach the same durable command and protocol-safe recovery path;
-a new id is not a retry. Expiry stops a new dispatch but does not turn an
-already-dispatched command into a rejection or make that pending record
-evictable.
-
-Here the durable caller is the installed app, endpoint role, and Agent-mode
-provenance. A disposable tile or tray endpoint UUID may change when the caller
-is reopened: Wallet compares that retry using the original endpoint stored in
-the command. The exact request id, ledger, deadline, amount, account, memo or
-expiry, role, and Agent mode remain bound. This also replays released W306-W309
-command blobs in place; no memory rewrite or schema migration is involved.
-
-Kitchen Sink provides a bounded reference declaration: ordinary data methods
-such as `read_profile`, `read_counter`, and `bump_counter`, plus the exact
-capability-lab bridge methods such as `random_bytes`,
-`chain_key_public_key`, and `chain_key_sign_receipt`, are preapproved same-app
-calls. Its undeclared methods, including the reviewed `echo` example, continue
-to use the confirmation dialog. Its Wallet funding demo calls the unchanged
-public `wallet_fund_v1` tool; Wallet owns the resulting transfer or allowance
-review.
+For financial integrations, a provider must own authoritative preparation,
+review, execution, and a durable transaction journal. An unknown result can mean
+the operation committed. Retain the same operation identity across retries and
+reconcile through the provider's recovery protocol; a new request ID is a new
+operation. Kernel routing and generic audit do not provide financial
+idempotency. Use the Wallet integration contract in
+[`apps/wallet/README.md`](../apps/wallet/README.md) for its current tools and
+recovery APIs. New integrations must use the durable transfer APIs identified
+in [Deprecated Compatibility Paths](./deprecated.md#legacy-wallet-transfers).
 
 ## App-Isolated Key Lifecycle Consent Is Separate
 
@@ -691,7 +566,7 @@ purpose are unverified context; the kernel derives app id, slot declaration,
 current authorized principal, and lifecycle warnings.
 
 Private derivation does not add another user consent layer. A live tile or
-resident starts one 60-second challenge with an ephemeral browser transport
+resident starts a short-lived challenge with an ephemeral browser transport
 key, then the exact originating endpoint immediately confirms its own challenge
 through `approveVetKeyDerivation()`. The API name is historical: confirmation
 requires no focus, transient user activation, or prompt and returns the
@@ -719,7 +594,7 @@ custody authority. See the [wallet custody contract](./app-isolated-chain-key-si
 
 `capabilities.chain_key_signing` has a different lifetime from vetKey lifecycle
 actions. Installing it grants the backend autonomous use of the exact declared
-assertion slots within their byte, rate, cycle, concurrency, namespace, and
+assertion slots within their byte, cycle, concurrency, namespace, and
 runtime-toggle bounds. The install dialog and Settings show kernel-derived slot
 and algorithm facts while keeping `purpose` visibly untrusted. There is no
 second prompt for each assertion, and a preapproved same-app bridge method does
@@ -730,17 +605,11 @@ high-impact operation. Apps must constrain assertion semantics; install
 approval is standing bounded signing authority, not one-shot transaction
 consent.
 
-That standing authority is assertion-only. It exposes no raw digest,
-transaction encoder, threshold key name, derivation path, attached cycle amount,
-or retry control. A future Kernel-provided raw threshold-transaction signing
-adapter for Bitcoin/EVM/Solana must be a separate capability and require
-one-shot, transaction-shaped owner presence immediately before signing;
-neither this assertion install grant nor an ordinary agent/tool grant may
-satisfy that raw-signing decision. This stricter rule does not describe a
-separately installed, owner-trusted Wallet which interprets its own asset
-protocol, presents its own bounded `provider_once` UI, and executes through its
-own preapproved backend method. See [App-Isolated Chain-Key Assertion Signing
-V1](./app-isolated-chain-key-signing.md).
+The assertion capability does not expose a raw-digest signing operation or let
+the app choose a threshold key name, derivation path, cycle attachment, or retry
+policy. Keep that interface separate from the explicit wallet-custody capability.
+See [App-Isolated Chain-Key Assertion Signing](./app-isolated-chain-key-signing.md)
+for their respective injected APIs and authority boundaries.
 
 ## Frontend Tool Permissions Are Separate
 
@@ -756,8 +625,8 @@ The message bus allows calls between UI endpoints:
 
 These permissions govern frontend endpoint routing only. A same-app tool can
 perform local browser work without a prompt, but if it then requests an
-  authorized backend update, the preapproved self-call list or canister-call
-  dialog still applies.
+authorized backend update, the preapproved self-call list or canister-call
+dialog still applies.
 
 Likewise, granting one app permission to call another app's frontend tool does
 not grant either app an authorized principal or bypass a backend wrapper. A
@@ -765,8 +634,8 @@ live Agent invocation honors its calling app's install-declared exact tool
 access; other nested calls use the invocation decision policy rather than an
 ordinary session grant. A `provider_once` invocation deliberately ignores
 install-declared, exact, and wildcard session grants for its fresh decision.
-Its target provider must ask through the invocation-scoped
-presentation callback, and the result completes only that suspended request.
+Its target provider must use the appropriate scoped callback: human presentation
+or Agent review. The result completes only that suspended request.
 The private `foreground_tile` tool cannot be called through ordinary routing.
 The separate `agent_root` tool is visible and callable only from the active
 depth-zero root.
@@ -782,12 +651,11 @@ existing decision requirements.
 
 ### Declare Exact App Tools At Installation
 
-`frontend_tools` requires the successor Kernel parser. Kernel 0.3.43 and earlier
-reject this new field in their closed capability schema before installing an app.
-For those installations, update the Kernel first, reload, then review and apply
-the app updates. The compatible Kernel and app archives can still be published in
-one atomic catalog transaction; this installation order requires no separate
-publication phase or compatibility shim.
+A Kernel that does not support a capability rejects it during checked
+installation. Use the supported package-update workflow for compatible Kernel
+and app successors; do not add a permissive parser fallback or replace an
+installed capability plan to force acceptance. See
+[Package Updates](./package-updates.md).
 
 An app with known integrations can declare the tools it uses in `neutron.json`:
 
@@ -807,6 +675,11 @@ An app with known integrations can declare the tools it uses in `neutron.json`:
 }
 ```
 
+`apps.install_prepared` separately consumes an exact declaration targeting
+`app: "kernel"`. That declaration authorizes preparation and presentation of
+installation review, not installation itself. Declaring a Kernel tool name
+does not bypass that tool's own admission or owner-consent requirements.
+
 Installation and upgrade review list the exact apps and tool names. Approval
 activates those calls for every surface of the consumer installation, including
 its invocation-scoped Agent handlers. A consumer can call a declared tool directly;
@@ -817,9 +690,8 @@ API remains available for integrations selected later by the owner.
 
 Target app IDs and tool names are exact, with no wildcard declarations. Duplicate
 targets and tool names are rejected; the capability plan sorts both inventories
-before fingerprinting them. No new list quota or endpoint-role restriction is
-introduced. The current target descriptor still controls tool visibility, audience,
-argument validation, and provider confirmation. Declaring a private or root-only
+before fingerprinting them. The live target descriptor controls tool visibility,
+audience, argument validation, and provider confirmation. Declaring a private or root-only
 tool never makes it callable from another audience. Declaring a provider-confirmed
 transaction tool permits using that integration, while the provider must still
 obtain a fresh decision about each actual transaction.
@@ -837,25 +709,19 @@ backend method authorization or wallet signing authority.
 
 ### Request An Exact Group Of Session Tools
 
-An ordinary consumer can establish access before starting concurrent reads:
+An ordinary consumer without an install declaration can establish access to
+exact discovered tools before concurrent calls. The following names are
+illustrative; use the target's current live descriptors:
 
 ```ts
 import { callTool } from "neutron-tools/app";
-import { EVM_WALLET_TARGET, EVM_WALLET_TOOLS } from "neutron-tools/evm_wallet";
 
 await callTool({
   target: "kernel",
   name: "permissions.request",
   arguments: {
-    target: EVM_WALLET_TARGET,
-    tools: [
-      EVM_WALLET_TOOLS.accounts,
-      EVM_WALLET_TOOLS.balances,
-      EVM_WALLET_TOOLS.callContract,
-      EVM_WALLET_TOOLS.estimateTransaction,
-      EVM_WALLET_TOOLS.transaction,
-      EVM_WALLET_TOOLS.replacementTransaction,
-    ],
+    target: providerEndpoint,
+    tools: ["read_items", "read_status"],
   },
 });
 ```
@@ -883,19 +749,11 @@ again; no grant is saved to managed memory. Repeating the request while every
 grant is still valid returns without another owner dialog. Cancellation,
 rejection, or endpoint replacement while consent is pending creates no new grants.
 
-Consumers without an install declaration can use this explicit group for wallet
-reads and for tracking saved wallet requests once per live connection. Tracking updates the journal
-and may rebroadcast only bytes already approved and signed; the initial connection
-grant explicitly includes that tool so waiting for a receipt needs no repeated
-prompt. Transaction and signature tools are excluded from this example. Kernel introduces no
-global read bypass: `neutron:effects` remains
-descriptive metadata, and a tool claiming `read` does not acquire permission
-automatically. The same generic grouped API can request other exact tools, but
-`provider_once` actions still require their own fresh provider decision.
-Within Agent Mode, an undeclared grouped permission request follows the existing
-invocation decision policy and creates no standing session grants. Uniswap now
-declares its exact wallet integration at installation instead of asking the owner
-to connect every live session.
+A session grant may authorize state-changing tools; do not infer safety from
+`neutron:effects`, tool names, or descriptions. Kernel has no global read bypass.
+`provider_once` tools still require their own fresh provider decision. Within
+Agent Mode, an undeclared grouped permission request follows the invocation
+decision policy and creates no standing session grants.
 
 ## Agent Mode Calls
 
@@ -951,12 +809,18 @@ a reservation mutation is different from an ephemeral frontend-tool allow: it
 deliberately applies the requested persistent reservation, still bounded by the
 installed manifest declaration.
 
-Owner-only operations are never sent to the agent judge. This includes
-management-canister and Neutron administration calls, install or uninstall,
-owner and controller changes, workspace switching, cycle administration, and
-external provider login. The app receives `OWNER_REQUIRED` or
-`USER_INTERACTION_REQUIRED` and must let the owner perform the operation in
-kernel UI.
+An Agent decision cannot replace owner consent for Neutron administration,
+installation or uninstall, owner/controller changes, one-time cycle spending,
+or external provider login. Generic calls cannot target the management canister.
+Some owner-controlled flows have app-facing preparation routes: an Agent may
+offer or prepare installation for the owner's final review, or request the
+owner's one-time cycle-call decision. Other routes reject with `OWNER_REQUIRED`
+or `USER_INTERACTION_REQUIRED`. Handle each tool's actual contract rather than
+assuming every owner-only effect rejects before presenting UI.
+
+Workspace inspection and control, including switching, have the separate
+declared-resident/direct-root admission in the route table. They grant visual
+workspace control without granting authority to execute the target app's effects.
 
 Preapproved self calls and existing backend reservations retain their normal
 meaning. Matching live frontend session grants are checked before a new
@@ -1002,34 +866,20 @@ the invocation ends are separate future authority designs.
 10. Treat an unknown update outcome as potentially committed. Reconcile or use
    remote idempotency before retrying.
 
-## Enforcement Summary
+## Source Map
 
-`querySelf()` and `updateSelf()` use the private API-1 self-call wire rather
-than generic Kernel tools. The Kernel derives the app from the registered
-source, reads only the installed registry capability, enforces the expected
-method type and owner-authorized access, validates against the live Candid
-interface, fixes the destination to the current Neutron canister, uses the
-authenticated owner identity, and passes through the normal message-bus
-concurrency and audit path. Same-Neutron `callCanisterDialog()` and post-grant
-calls in `requestBackendCallReservations()` use that same wire with their
-respective consent policy.
+Use these implementation entrypoints to verify behavior without relying on
+release numbers, copied inventories, or line references:
 
-The app cannot provide an authoritative app id, target canister, schema,
-identity, access level, binary-field path, digest, or Candid type in either
-request.
-
-For `provider_once`, the Kernel similarly derives the original caller and
-target endpoint bindings and never accepts caller, provider, owner, or audience
-identity from provider arguments. It derives the provider app, opens or focuses
-only its exact tile, and routes bounded opaque arguments only to its private
-`foreground_tile` tool. The provider owns the display value and decision; the
-public handler remains responsible for completing that one presentation. During
-an Agent invocation, the one-shot capability instead binds the exact provider
-invocation and sends its bounded review to the root Agent. The Kernel rechecks
-caller, provider, owner session, and invocation authority before completing the
-callback and returning the tool result. Root cancellation aborts the interaction.
-Existing separate direct-root tools still receive `agent_root` attestation and
-no UI.
+| Contract | Authoritative implementation |
+| --- | --- |
+| Capability declarations and normalization | `packages/neutron-tools/src/capabilities/` |
+| Generated method authorization and public ingress | `packages/neutron-compiler/src/assemble.ts`, `packages/neutron-compiler/src/install.ts` |
+| Routing, self calls, reservations, grants, provider callbacks, workspace admission | `apps/kernel/src/expose.ts` |
+| External discovery identities and actor construction | `apps/kernel/src/reducer/auth.ts` |
+| Frame policy and message-port lifecycle | `apps/kernel/src/app_frame_security.ts`, `apps/kernel/src/frame_context.ts` |
+| App helpers, scoped clients, and callback consumption | `packages/neutron-tools/src/app.ts` |
+| Wire types and resource-safety bounds | `packages/neutron-tools/src/protocol.ts` |
 
 ## Related Documentation
 

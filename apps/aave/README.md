@@ -160,6 +160,5 @@ code with local fixture funds; production endpoints supply read-only data.
 Build through `npm --workspace neutron-aave run package`. Aave uses
 the shared `LICENSE.APP.USE`, application notice and offered-source workflow.
 Publish and verify according to [package updates](../../doc/package-updates.md).
-The [implementation checklist](../../doc/todo.aave.md) records completed
-qualification and publication evidence. Publication makes updates discoverable;
+Publication makes updates discoverable;
 it does not install them into existing Neutrons or change the Dispenser starter.

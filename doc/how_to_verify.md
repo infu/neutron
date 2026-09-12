@@ -1,144 +1,148 @@
-# Verify Source, Build Artifacts, and Live Canisters
+# Source, Artifact, And Live-Canister Verification
 
-Use clean checkouts of [Neutron](https://github.com/infu/neutron) and
-[neutron_motoko](https://github.com/infu/neutron_motoko). This guide assumes
-Neutron is `.` and the compiler is `../neutron_motoko`; in the shared local
-workspace the compiler may instead be `../mot_comp`.
+Use this guide when establishing whether source, a prepared deployment, and an
+installed canister correspond. It does not authorize deployment. Use
+[Package Updates](./package-updates.md) for releases and
+[Production Provisioning](./production-provisioning.md) for provisioning.
+
+## Establish The Inputs
+
+- Record the Neutron and compiler source revisions, working-tree changes,
+  dependency lockfiles, and build runtime versions with the verification output.
+  A clean build of current HEAD does not establish what an older release used.
+- Obtain the exact selected package archives and their trusted release or
+  deployment records. Check each archive's ID, version, size, and SHA-256 before
+  compilation. Do not regenerate missing release archives and treat them as the
+  original bytes.
+- Put temporary verification output in the ignored repository-root `tmp/`
+  directory. Keep release evidence with the relevant release record rather than
+  adding current hashes, canister IDs, or package inventories to this guide.
+
+The current Dispenser selection is
+[`starter-packages.json`](../support/dispenser/starter-packages.json), interpreted
+by [`loadStarterSelection`](../support/dispenser/starter.ts). It names archive
+paths, not immutable release pins. The production staging implementation in
+[`production_deploy.ts`](../support/dispenser/production_deploy.ts) derives exact
+pins and records them in its receipt. For a previous deployment, use that
+deployment's recorded package set; today's selection may differ.
+
+## Keep Byte Domains Separate
+
+Record a filename, byte length, and SHA-256 for each artifact being compared.
+
+| Artifact | What it establishes |
+| --- | --- |
+| Outer `.neutron` archive | Exact package bytes selected for installation |
+| Uncompressed compiler Wasm | Raw compiled actor output |
+| Submitted `wasm_module` bytes | Exact install transport, including compression |
+| Starter file commitment | Static asset paths, HTTP metadata, chunk layout, and bytes |
+| Certified live module hash | Whole-canister installed module identity |
+
+Never compare a raw Wasm hash with a compressed transport hash. Recompressing
+the same raw Wasm with another encoder can produce a different transport hash.
+Use the transport produced and recorded by the installation path being audited:
+
+- Fresh provisioning and Dispenser staging use `prepareDeployment` in
+  [`artifact.ts`](../packages/neutron-provision/src/artifact.ts), which returns
+  both raw and transport hashes and the exact transport bytes.
+- In-product checked installation binds its transport through
+  [`deployment_record.ts`](../packages/neutron-compiler/src/deployment_record.ts).
+  Read the encoder identity from the build record and implementation; do not
+  assume it is the same encoder used by the provisioning path.
+- The Dispenser backend is separately compiled and installed. Follow its own
+  deployment implementation when identifying the exact installed bytes.
+
+## Verify The Compiler And Package Contents
+
+Set `MOTOKO_REPO` to the compiler checkout for the release under examination.
+The compiler repository's `scripts/build-neutron-moc-wasm` builds the browser
+compiler through its Nix configuration and writes the loaders, Wasm sidecar,
+and `SHA256SUMS`. Give it a new temporary output directory because it replaces
+that directory's contents:
 
 ```sh
-MOTOKO_REPO=${MOTOKO_REPO:-../neutron_motoko} # use ../mot_comp in the shared workspace
-git status --short
-git -C "$MOTOKO_REPO" status --short
-git rev-parse HEAD
-git -C "$MOTOKO_REPO" rev-parse HEAD
-```
-
-Do not compare a raw `.wasm` hash with a gzip transport hash. Neutron creates
-its install transport with the fixed encoder identity
-`fflate@0.8.3:default-level:mtime=0`. Record the byte domain, filename, byte
-length, and SHA-256 for every comparison.
-
-## 1. Verify the browser compiler
-
-Build the compiler from source into a new temporary directory:
-
-```sh
-MOTOKO_OUT=$(mktemp -d)
+mkdir -p tmp
+MOTOKO_OUT=$(mktemp -d "$PWD/tmp/compiler-verification.XXXXXX")
 "$MOTOKO_REPO/scripts/build-neutron-moc-wasm" "$MOTOKO_OUT"
-cat "$MOTOKO_OUT/SHA256SUMS"
-```
-
-Compare the fresh output with the compiler vendored by Neutron:
-
-```sh
 diff -u "$MOTOKO_OUT/SHA256SUMS" \
   packages/neutron-motoko-wasm/compiler/SHA256SUMS
+(cd "$MOTOKO_OUT" && sha256sum -c SHA256SUMS)
+(cd packages/neutron-motoko-wasm/compiler && sha256sum -c SHA256SUMS)
 ```
 
-Also confirm that the Kernel archive selected for the starter contains those
-same compiler hashes:
+For a historical release, compare with that release's vendored compiler rather
+than assuming the current checkout is its reference. Compare actual asset
+bytes as well as checksum manifests. [`apps/kernel/build.ts`](../apps/kernel/build.ts)
+copies the compiler assets into the Kernel's `web/motoko` directory. Unpack the
+selected Kernel archive with `unpackNeutronPackage` from
+[`install.ts`](../packages/neutron-compiler/src/install.ts) and verify those
+packaged assets too; matching files in the workspace do not prove the archive
+contains them.
 
-```sh
-KERNEL_ARCHIVE=$(jq -r '.kernel.path' production-starter.artifacts.json)
-KERNEL_ARCHIVE="$KERNEL_ARCHIVE" bun -e '
-  import { readFileSync } from "node:fs";
-  import { unpackNeutronPackage } from "./packages/neutron-compiler/src/install.ts";
-  const files = unpackNeutronPackage(readFileSync(process.env.KERNEL_ARCHIVE));
-  process.stdout.write(new TextDecoder().decode(files["web/motoko/SHA256SUMS"]));
-'
-```
+## Reproduce The Deployment
 
-## 2. Verify the live Dispenser
+For a fresh production actor, call `prepareDeployment` with the exact ordered
+archive paths, `target: "production"`, and `expectedArtifacts` from the reviewed
+pins. The implementation validates the archive identities, package roles,
+dependencies, and compiler output. Production preparation does not permit the
+local compiled-actor cache or caller-supplied local installation context.
 
-Build with the ICP CLI; do not use an older file from `.icp/cache` as evidence:
+Compare the compiled deployment ID, raw Wasm, transport Wasm, Candid, and stable
+signature with the recorded evidence in their respective byte domains. Reuse
+any recorded deployment nonce or other compilation inputs. An in-product
+upgrade also depends on installed source, memory lineage, and transaction
+inputs; compiling a fresh starter is not a reproduction of that upgrade.
+
+For Dispenser assets, use `starterFilesSha256` in
+[`starter_payload.ts`](../support/dispenser/starter_payload.ts). Its asset
+builder includes generated registry and provenance files and excludes paths
+populated dynamically for the created canister. Verify runtime configuration
+separately; the static file commitment does not cover every eventual served
+file. Do not substitute a hash of a directory listing or concatenated archive
+contents for this commitment.
+
+To build the Dispenser backend without installing it, use the build-only ICP
+command from its workspace:
 
 ```sh
 cd support/dispenser
 icp build -e ic dispenser
-sha256sum .icp/cache/artifacts/dispenser
-stat -c '%s bytes' .icp/cache/artifacts/dispenser
 ```
 
-Set the live canister ID and operator identity, then read its installed raw
-module hash. The `Module hash` must equal the fresh build hash above.
+Hash the artifact produced by that invocation, not an older cache entry. The
+build definition is [`icp.yaml`](../support/dispenser/icp.yaml); the production
+deployment path uses the same `compileMotokoWithCandid` implementation through
+[`production_deploy.ts`](../support/dispenser/production_deploy.ts). Do not run a
+deployment or starter-staging command merely to obtain verification evidence.
 
-```sh
-export DISPENSER_ID='<dispenser-canister-id>'
-export ICP_IDENTITY='<controller-identity>'
-icp canister status -e ic --identity "$ICP_IDENTITY" "$DISPENSER_ID"
-cd ../..
-```
+## Compare Live State
 
-## 3. Verify the starter pack
+Resolve canister IDs and controller identities from the deployment being
+audited. Query `starter()` on the Dispenser and compare its committed revision,
+deployment ID, ordered app IDs, Wasm size and digest, file counts and commitment,
+and reserved backend-call target principals with the prepared payload and
+receipt. [`assertCommittedStarter`](../support/dispenser/starter_payload.ts)
+defines the uploader's postflight comparison. A query result is a report from
+the backend; its trust depends on separately verifying that backend's installed
+module.
 
-First verify every selected archive against the tracked pins:
+For the installed Dispenser or Neutron, an IC controller can read management
+`canister_status`. Certified `read_state` provides the
+`/canister/<id>/module_hash` path without requiring controller access. Verify
+the certificate against the intended network's trusted root. Existing
+implementations are in [`ic_client.ts`](../packages/neutron-provision/src/ic_client.ts)
+and [`deployed_kernel_observation.ts`](../packages/neutron-provision/src/deployed_kernel_observation.ts).
+The latter also reconciles controller, operational, and certified Registry
+placement evidence for production qualification.
 
-```sh
-jq -r '[.kernel, .packages[]] | .[] | [.path,.sha256,(.bytes|tostring)] | @tsv' \
-  production-starter.artifacts.json |
-while IFS=$'\t' read -r file expected_hash expected_bytes; do
-  test "$(sha256sum "$file" | cut -d' ' -f1)" = "$expected_hash"
-  test "$(stat -c %s "$file")" = "$expected_bytes"
-  echo "OK $file"
-done
-```
+For a Neutron installed by provisioning, compare the live module hash with
+`transportWasmSha256`, not `rawWasmSha256`. For another installation path,
+compare with the exact submitted transport recorded by that path. This is one
+hash for the combined Kernel-plus-app actor, not a hash per installed app.
 
-Compile those exact archives without the local compiled-actor cache:
-
-```sh
-bun -e '
-  import fs from "node:fs/promises";
-  import path from "node:path";
-  import { prepareDeployment } from "./packages/neutron-provision/src/artifact.ts";
-  import { starterFilesSha256 } from "./support/dispenser/starter_payload.ts";
-  const pins = JSON.parse(await fs.readFile("production-starter.artifacts.json", "utf8"));
-  const artifacts = [pins.kernel, ...pins.packages].map(x => ({ ...x, path: path.resolve(x.path) }));
-  const result = await prepareDeployment(artifacts.map(x => x.path), {
-    target: "production",
-    expectedArtifacts: artifacts,
-  });
-  console.log(JSON.stringify({
-    deploymentId: result.compiled.deploymentId,
-    rawWasmBytes: result.compiled.wasm.byteLength,
-    rawWasmSha256: result.rawWasmSha256,
-    transportWasmBytes: result.transportWasm.byteLength,
-    transportWasmSha256: result.transportWasmSha256,
-    filesSha256: starterFilesSha256(result),
-  }, null, 2));
-'
-```
-
-Read the live committed starter. Compare its deployment ID, app order, byte
-length, and `wasm_sha256` only with the fresh gzip transport values. Compare
-`files_sha256` with the fresh `filesSha256`; it covers every static file path,
-HTTP metadata field, chunk count, and byte in the starter payload. It is
-calculated once when the upload is committed and only read by this query:
-
-```sh
-icp canister call -e ic "$DISPENSER_ID" starter '()' --query
-```
-
-## 4. Verify a newly created Neutron
-
-After provisioning, set its canister ID and read the live installed module
-hash. Use a controller identity when calling `canister status`:
-
-```sh
-export NEUTRON_ID='<new-neutron-canister-id>'
-icp canister status -e ic --identity "$ICP_IDENTITY" "$NEUTRON_ID"
-```
-
-Compare the live module hash with SHA-256 of the exact deterministic gzip
-`wasm_module` transport bytes submitted by the provisioning record. Do not
-compare it with `rawWasmSha256`. Keep the raw compiler output and transport
-hashes separately, and verify the certified `/canister/<id>/module_hash` path
-when the caller is not an IC controller. This is one canister-level value for
-the complete Kernel-plus-app actor, not one hash per installed app.
-
-The check is complete only when the compiler assets, Dispenser raw Wasm,
-starter archives and transport Wasm, and the newly installed live module all
-match their corresponding source-built artifacts.
-
-For the state-preserving candidate transition from the released `0.3.6` Kernel to
-the GPL-only `0.3.7` bridge, including memory and no-publication constraints,
-use [License And Deployment Records](./license-and-deployment-records.md#historical-v035-and-v036-to-v037-gpl-bridge-candidate-checklist).
+Report which comparisons were completed and which evidence was unavailable.
+Matching module bytes establishes code identity; it does not establish memory
+migration correctness, asset integrity, or controller retirement. Verify those
+separately using [Memory Migrations](./memory-migrations-and-uninstall.md),
+[Dispenser And Provisioning](./dispenser-and-provisioning.md), and
+[Testing And Verification](./testing-and-verification.md).

@@ -1,119 +1,137 @@
-# Uniswap V4 and liquidity management
+# Uniswap V4 And Liquidity Integration
 
 [Documentation index](./index.md) · [EVM Wallet](./evm-wallet.md)
 
-## Integration decision
+Use this contract when changing routing, position discovery or durable Uniswap
+execution. Read network deployments, ABI definitions and dependency pins from
+source rather than copying addresses or package-version snapshots into docs.
 
-Uniswap owns routing, pool and position reads, SDK calculations, and the durable
-sequence of approvals and position transactions. EVM Wallet owns account custody,
-exact transaction review, signing, browser RPC and receipt tracking. This uses
-the existing installation tool grants and Agent provider review. No Kernel
-change, external wallet extension, API credential or IC HTTP outcall is needed.
+## Source map
 
-The interface offers Swap and Liquidity tabs. Liquidity management covers V3 and
-V4 positions on Ethereum and Arbitrum: mint in an initialized pool, inspect, add,
-remove, collect available amounts, and close. Creating an uninitialized pool is a separate
-operation requiring an explicit initial price; it is not inferred from deposit
-amounts. Changing a position's range requires removing liquidity and minting a
-new position. Existing V3 positions are not migrated into V4.
+| Concern | Source of truth |
+| --- | --- |
+| V3 routing and configured networks | [swap.ts](../apps/uniswap/src/swap.ts) and [swap_routes.ts](../apps/uniswap/src/swap_routes.ts) |
+| V4 deployments, PoolKey and swap encoding | [v4_common.ts](../apps/uniswap/src/v4_common.ts) and [v4_swap.ts](../apps/uniswap/src/v4_swap.ts) |
+| Position reads and index adapter | [positions.ts](../apps/uniswap/src/positions.ts) |
+| Budget-constrained liquidity and calldata | [liquidity_math.ts](../apps/uniswap/src/liquidity_math.ts) and [liquidity.ts](../apps/uniswap/src/liquidity.ts) |
+| ERC20 and Permit2 prerequisites | [approval_plan.ts](../apps/uniswap/src/approval_plan.ts) |
+| Durable multi-step recovery | [action_workflow.ts](../apps/uniswap/src/action_workflow.ts), [action_store.ts](../apps/uniswap/src/action_store.ts) and [Actions.mo](../apps/uniswap/backend/Actions.mo) |
+| Legacy swap reconciliation | [controller.ts](../apps/uniswap/src/controller.ts) and [Journal.mo](../apps/uniswap/backend/Journal.mo) |
+| Installed capabilities and memory lineage | [manifest](../apps/uniswap/neutron.json) and [lock](../apps/uniswap/neutron.lock.json) |
+| Dependency pins and distributed-byte evidence | [package.json](../apps/uniswap/package.json), repository lockfile and [build.ts](../apps/uniswap/build.ts) |
 
-## Research and contract boundary
+## Ownership boundary
 
-Verified against official sources on 2026-09-06:
+Uniswap owns route selection, pool/position interpretation, liquidity math and
+the durable sequence of approvals and position transactions. EVM Wallet owns
+custody, exact transaction review, signing, browser RPC and receipt tracking.
+Consumers use installation tool grants and provider review; protocol routing
+and liquidity calculations do not require Kernel policy or signing access.
 
-- [V4 deployments](https://developers.uniswap.org/docs/protocols/v4/deployments)
-  supply network-specific PositionManager, StateView, Quoter and Universal Router
-  addresses. V4 native ETH uses currency address zero; WETH is a different pool
-  currency. Pool identity includes both sorted currencies, fee, tick spacing and
-  hook address.
-- [Universal Router 2.1.1's V4 interface](https://github.com/Uniswap/v4-periphery/blob/3231810e39b8c4d569b9d66907fa4ef8cd2cec22/src/interfaces/IV4Router.sol)
-  includes `minHopPriceX36` in the single-swap tuple. The older documentation
-  example cannot be copied unchanged against this deployment. Explicit recipient
-  output uses `TAKE`; `TAKE_ALL` pays the original caller. Native input refunds
-  go back to the signing wallet.
-- [The pinned official SDK](https://github.com/Uniswap/sdks/tree/35c4e35aca9e22169ce17d7106e7fc5f27ccd03d)
-  provides concentrated-liquidity math and position calldata. Pins are
-  `sdk-core@7.19.2`, `v3-sdk@3.31.3`, and `v4-sdk@2.3.3`. The application fits
-  liquidity to explicit token budgets, including slippage maxima, rather than
-  silently authorizing more than the requested deposit.
-- [V4 PositionManager](https://github.com/Uniswap/sdks/blob/35c4e35aca9e22169ce17d7106e7fc5f27ccd03d/sdks/v4-sdk/src/PositionManager.ts)
-  settles a mint with `SETTLE_PAIR`; increases use `CLOSE_CURRENCY` on both sides
-  because accrued fees can reverse the amount owed. Removal and collection also
-  take the resulting currencies back to the recipient. V3 removal must include
-  collection; decreasing liquidity alone leaves funds owed inside its manager.
-- [Permit2 allowance transfer](https://developers.uniswap.org/docs/protocols/permit2/concepts/allowance-transfer)
-  has two authorization layers: the token's allowance to Permit2 and Permit2's
-  allowance to the router or position manager. This integration uses exact
-  onchain approvals, reusing sufficient allowances and setting Permit2 expiry
-  to the operation deadline. These prerequisites advance automatically within
-  the requested flow. They are separate transactions and are not atomic with
-  its final effect. Ordinary ERC20 allowances do not expire with that deadline.
+Supported liquidity actions operate on initialized V3 or V4 pools: mint,
+inspect, increase, decrease, collect and close. Pool initialization is not
+inferred from deposit amounts. Changing a range requires removing liquidity
+and minting a position; existing V3 positions are not migrated into V4.
 
-Swap auto-selection compares observed direct V3 and V4 pool quotes. This is not
-global routing: split routes, multi-hop routing and UniswapX are outside this
-integration. Default V4 candidates use common static fees without hooks.
-Advanced inputs retain the complete PoolKey and hook data; imported positions
-retain their actual pool and range. A hook may require integration-specific data
-or change accounting. A successful position read does not guarantee its next
-modification will simulate successfully.
+Auto-routing compares observed direct V3 and V4 pool quotes. It does not promise
+global, split or multi-hop routing. Default V4 candidates use static fees without
+hooks. Advanced inputs preserve the complete PoolKey and hook data. Imported
+positions retain their actual pool and range; successful reads do not prove a
+hook-dependent modification will simulate or execute successfully.
 
-## Position discovery
+## Encoding and approval invariants
 
-[V4 NFTs do not implement ERC721 enumeration](https://developers.uniswap.org/docs/sdks/v4/guides/managing-liquidity/position-fetching).
-V3 uses its manager's onchain enumeration. V4 uses browser requests to the public
-Ethereum and Arbitrum Blockscout instances for candidate token IDs:
+V4 pool identity includes sorted currencies, fee, tick spacing and hook address.
+Native currency uses the zero address and differs from the wrapped native token.
+Use the configured deployment's actual ABI when changing encoders. The current
+single-swap tuple includes `minHopPriceX36`; an otherwise plausible older tuple
+would encode the wrong call. Output to an explicit recipient uses `TAKE`;
+`TAKE_ALL` pays the original caller. Native input refunds return to the signing
+wallet.
 
-```text
-https://eth.blockscout.com/api/v2/tokens/{manager}/instances?holder_address_hash={owner}
-https://arbitrum.blockscout.com/api/v2/tokens/{manager}/instances?holder_address_hash={owner}
-```
+Liquidity math fits the position to both explicit token budgets, including the
+slippage maxima that the transaction may spend. Do not derive an approval from
+an estimated amount if calldata authorizes a larger maximum. Keep canonical
+atomic amounts and contract integer ranges throughout the calculation.
 
-Both endpoints were checked using public fixture addresses: HTTP 200, no API
-key, CORS `*`, and owner-filtered results. Their metadata is not authority: each
-candidate is checked with `ownerOf`, and position/pool values come from Wallet
-contract reads at a consistent block. Pagination and incomplete discovery remain
-visible; an unavailable index is not an empty wallet. Confirmed mint IDs and
-manual imports allow management independently of indexing delay.
+V4 mint settlement uses `SETTLE_PAIR`; increases close both currency deltas
+because accrued fees can reverse the amount owed. Decrease/collect returns the
+resulting currencies to the recipient. V3 decrease must also collect to return
+the owed funds. Position displays keep newly accrued fees distinct from stored
+owed balances, which may already include withdrawn principal.
 
-[Blockscout documents a planned API access change](https://docs.blockscout.com/devs/apis/requests-and-limits),
-so its adapter is replaceable. The app does not fetch NFT media or put SVG
-metadata into Agent results. Uniswap's hosted liquidity API would require a
-[server-held API key](https://developers.uniswap.org/docs/liquidity/liquidity-provisioning-api/integration-guide),
-which would introduce an unnecessary service dependency for this architecture.
+Permit2 requires both the token's ERC20 allowance to Permit2 and Permit2's
+allowance to the router or position manager. The planner reuses sufficient
+allowances, otherwise constructs exact onchain approvals and sets Permit2
+expiry to the operation deadline. ERC20 allowance does not acquire that expiry.
+Approval and final-effect transactions are separate and non-atomic. Each new
+effect follows Wallet review; an approval receipt cannot complete the requested
+swap or liquidity change.
 
-## Durable execution and release compatibility
+## Position discovery is a source of candidates
 
-The released `uniswap` memory root remains version 1 with its exact schema and
-saved legacy swaps. A separate `uniswap_actions` version 1 root stores new
-multi-step flows. Installation initializes that new root while preserving the
-old one. EVM Wallet's existing roots remain at their released versions.
+V3 discovery uses the manager's onchain enumeration. V4 discovery combines a
+browser index adapter with saved and manually imported position IDs. Read the
+adapter's configured indexers and request format from `positions.ts`; public
+endpoint availability and CORS behavior are runtime observations, not guarantees
+recorded in this document.
 
-Each flow retains its original input, account identity, authenticated caller and
-execution mode. Each transaction has a durable request ID saved before Wallet
-dispatch. Resume checks its exact request and actual receipt before advancing.
-An expired, known unsigned plan can be refreshed within the original inputs;
-an ambiguous dispatched request keeps its original identity. An approval receipt
-never completes a swap or liquidity operation. Human UI recovery does not take
-over Agent-owned flows.
+Index metadata never authorizes ownership or supplies authoritative pool values.
+Each candidate passes `ownerOf` and contract reads through Wallet. Dependent
+reads are pinned to the same block and reject a different returned block.
+Preserve incomplete discovery, pagination and provider errors. An unavailable
+index is not an empty wallet; saved/imported positions remain independently
+readable. Only definite ownership loss or the known burned-token response may
+remove a stale reference; a generic RPC outage must not do so.
 
-The same provider review is used by UI and Agent tools. The owner sees the
-Wallet dialog; an active root Agent receives the exact review under the existing
-permission flow. Transaction interpretation belongs in EVM Wallet presentation,
-with full bytes retained in advanced details, not in Kernel policy.
+The adapter ignores NFT media and metadata URLs. Changing index providers must
+retain collection, owner and cursor validation and the subsequent onchain
+verification. SDK or index metadata is never a substitute for actual transaction
+review.
 
-SDK math and V4 action planning remain in the browser bundle. Thin position
-manager wrappers use the app's own ABI definitions: importing the SDK's V3
-manager helper also emitted an unused Solidity contract artifact. The build
-records hashed output contributions to prove the audited artifact packages
-contribute no distributed bytes. Their compiler dependencies are then excluded
-from the notice inventory; unknown package versions or changed outputs require
-fresh evidence. Missing standalone MIT files in actual SDK dependencies use
-exact audited upstream text or installed README material, never a guessed license.
+## Durable execution and memory compatibility
 
-Uniswap release validation includes clean initialization, restoration of both
-Uniswap roots with legacy swap data and saved actions, action recovery, SDK
-calldata checks, local contract execution and browser flows. Wallet's own release
-tests cover its three managed roots. Public network probes are read-only;
-local execution uses fixture funds. Publication follows the
-[production package workflow](./package-updates.md) and its required identical
-second no-op receipt.
+The released `uniswap` root stores legacy swaps; `uniswap_actions` stores the
+multi-step action journal and tracked positions. Restore both through the
+manifest's declared schemas. The source and lock lineage define the supported
+versions. Do not replace the older root when extending the newer workflow, and
+do not create a fake migration for code-only changes.
+
+Each flow retains its original inputs, signing account, authenticated caller and
+execution mode. Each effect has a durable Wallet request ID saved before
+dispatch. Resume verifies its exact request and actual receipt before advancing.
+Wallet account address, key fingerprint and namespace must still match the
+saved identity. Human UI recovery must not take over an Agent-owned flow.
+
+An expired, definitely unsigned plan can be refreshed within the original
+inputs. An ambiguous dispatched request retains its original identity through
+expiry and reconciliation. A replacement must prove its Wallet journal ancestry
+and satisfy the original effect; a cancellation cannot complete a swap or
+position change. Failure to re-read an old approval must not hide an already
+submitted final action.
+
+For human calls, Wallet owns the confirmation UI. During an authenticated Agent
+invocation, the Kernel-bound provider approval callback obtains a fresh decision
+for the exact Wallet review. Nested consumers retain their own installation
+identity; they do not gain root audience or Wallet custody.
+
+## Build and qualification
+
+Use the SDK for liquidity math and action planning, with the application's ABI
+wrappers for manager calls. Browser imports can pull unused Solidity artifacts
+into the distributed bundle. The build records hashed output contributions for
+package notice generation. Dependency exclusions require matching build evidence;
+changed imports, pins or output bytes require fresh evidence. Use audited license
+text through the shared packaging workflow, never an inferred dependency license.
+
+Select checks from the app's [package scripts](../apps/uniswap/package.json),
+[contract fixture guidance](../apps/uniswap/test/fixtures/README.md) and
+[browser harness](../apps/uniswap/test/browser/README.md). Cover memory restoration
+with legacy swaps and saved actions, recovery across uncertain replies, exact SDK
+calldata, actual local contract execution and browser provider flows. Mocked
+quotes alone do not qualify deployed ABI compatibility. Use fixture funds for
+transaction tests and preserve production state.
+
+Publication and offered-source verification follow the
+[production package workflow](./package-updates.md). Keep exact versions,
+validation runs and receipt evidence with the release artifacts.

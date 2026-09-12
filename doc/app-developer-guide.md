@@ -2,9 +2,26 @@
 
 [Back to the documentation index](./index.md)
 
-This guide is for developers building third-party `.neutron` app packages. It
-explains the practical path from a local app source tree to a package that can
-be installed into a user's Neutron canister.
+Use this guide when creating or changing a `.neutron` app. It records authoring
+contracts and repository workflows for coding agents. Read `AGENTS.md` before
+editing production apps; installed state and released memory lineage are durable.
+
+Resolve implementation details from these sources instead of copying release
+snapshots into documentation:
+
+| Question | Source of truth |
+| --- | --- |
+| Manifest fields, app identity, and release encoding | `packages/neutron-tools/src/schema.ts`, `app_ids.ts`, and `version.ts` |
+| SDK helpers and message contracts | `packages/neutron-tools/src/app.ts` and `protocol.ts` |
+| Backend capability types | `packages/neutron-motoko-capabilities/src/lib.mo` |
+| Packaging and generated metadata | `packages/neutron-scripts/src/` and the app's `package.json` |
+| Install validation and actor generation | `packages/neutron-compiler/src/install.ts` and `assemble.ts` |
+| Runtime authority and frame behavior | `apps/kernel/src/expose.ts`, `frame_context.ts`, and `app_frame_security.ts` |
+| Build, test, and deployment commands | Root/workspace `package.json`, `flake.nix`, and `packages/neutron-provision/src/` |
+
+Examples below use illustrative app IDs, schema versions, and limits. They do
+not identify the latest release or authorize new Kernel policy limits. Check
+[planned deprecations](./deprecated.md) before choosing a compatibility API.
 
 ## Table Of Contents
 
@@ -58,15 +75,10 @@ state. Do not build user lists, roles, invitations, or per-user partitions
 around those principals. Technical dispenser/self principals may also exist
 for provisioning and canister management, but they are not app users.
 
-The current minimal working example is `apps/hello/`. The richer
-`apps/kitchensink/` example shows a navigable workbench, companion tile, and
-resident-backed tray, plus frontend form state, typed calls, same-app
-message-bus tools, shared durable state, long scrollable content, and live
-kernel-derived JSON schema display. It also imports the shared
-`neutron-design-system` SCSS package and is the current design reference. Until
-the app-template CLI is published, new app projects should start by copying the
-`apps/hello` shape with the cleanup procedure below and use `apps/kitchensink`
-as a feature reference.
+Use `apps/hello/` as a minimal source template and `apps/kitchensink/` for
+multi-surface, message-bus, capability, and shared design-system examples.
+Copy Hello only with the cleanup procedure below: its released identity and
+memory history must not become a new app's lineage.
 
 ## Prerequisites
 
@@ -82,18 +94,10 @@ For local replica/browser testing on NixOS, enter the repository flake shell:
 nix develop
 ```
 
-The shell provides Bun, Node/npm, curl, git, and Chromium on Linux. It also sets
-the Playwright browser variables used by the current local tests:
-
-```sh
-PLAYWRIGHT_CHROMIUM_EXECUTABLE=<nix chromium>
-PLAYWRIGHT_CHROMIUM_ARGS=--js-flags=--stack-size=16384
-```
-
-The flake passes that V8 stack setting to the Chromium process used by
-Playwright through `launchOptions.args`. Browser Motoko compilation separately
-executes in a dedicated Worker rather than on the page thread; the presence of
-the Chromium launch setting does not imply that compilation runs in the page.
+The shell configures the runtime tools and Playwright browser. Read `flake.nix`
+and `playwright.config.ts` for executable selection and launch arguments; do
+not duplicate those environment defaults in an app. Browser Motoko compilation
+executes in a dedicated Worker rather than on the page thread.
 
 Package construction uses Mops to resolve `mops sources`. Local canister
 deployment itself is owned by `neutron-provision`; it uses the pinned PocketIC
@@ -140,9 +144,9 @@ Then update:
 - the repository test, validation, packaging, and TypeScript project lists:
   enroll the new workspace because these root gates do not discover it
   automatically;
-- `.gitignore`: replace Hello's historical archive exception with only the
-  exact new-app archives deliberately retained as release evidence, while
-  keeping the general rule that ignores disposable `.neutron` builds;
+- tracked package archives and fixtures: retain only the exact new-app release
+  evidence required by its tests; keep disposable archives and scratch work in
+  the ignored repository-root `tmp/` directory;
 - `test/package.test.ts` and `test/memory_release.test.mo`: replace every
   Hello-specific assertion and keep a clean-initialization and retained-root
   test appropriate to the new schema.
@@ -190,9 +194,8 @@ Start a new app at release `0.1.0`, stored as top-level manifest
 separate integer lanes. See [App Package Format](./app-package-format.md) for
 the complete version and upgrade contract.
 
-The polished generator is not built yet. The roadmap item is to publish an
-app-developer package with a bundled kernel package artifact, template
-generator, and one-command local install flow.
+Use the repository copy-and-clean workflow; do not assume that the compile CLI
+also generates app projects.
 
 ## Project Layout
 
@@ -410,26 +413,13 @@ underscores:
 public func /*update*/set_name(name : Text) : Text { ... }
 ```
 
-> **Tip: use `async*` for local asynchronous call chains.** If one local
-> backend function calls another asynchronous local function, return
-> `async* T` and call it with `await*`. This executes local layers inline and
-> avoids adding commit and interleaving points merely to move between helper
-> functions. Keep ordinary `await` for the real shared actor or management
-> canister call where suspension is unavoidable.
-
-```motoko
-func fetchRemoteName(service : actor { read : shared () -> async Text }) : async* Text {
-  await service.read();
-};
-
-public func /*update*/refresh_name(
-  service : actor { read : shared () -> async Text }
-) : async* Text {
-  let name = await* fetchRemoteName(service);
-  mem.name := name;
-  name;
-};
-```
+Use `async*` for local asynchronous call chains. If one local backend function
+calls another asynchronous local function, return `async* T` and call it with
+`await*`. This executes local layers inline and avoids adding commit and
+interleaving points merely to move between helpers. Use the approved backend
+capability for remote calls, as shown under [Use Backend
+Capabilities](#use-backend-capabilities); the broker owns the real shared-call
+`await` where suspension is unavoidable.
 
 `await*` is not itself a commit point. If the computation traps before reaching
 a regular `await`, its changes roll back to the preceding real commit boundary.
@@ -536,15 +526,16 @@ public-ingress dispatcher. If an app also needs an owner-authorized entrypoint,
 declare a separate method over shared internal logic. A handler that omits
 `public_ingress_cycles` keeps the ordinary wrapper behavior.
 
-`protocol` and `id` each use lowercase letters, digits, and underscores, start
-with a letter, and are at most 63 characters; their combined `protocol:id`
-resource is at most 64 characters. Each byte limit is 1 through 1,048,576.
+`protocol` and `id` each use lowercase letters, digits, and underscores and
+start with a letter. Validate resource names and byte/rate bounds against
+`packages/neutron-tools/src/capabilities/catalog.ts` instead of copying its
+limits into app code.
 Query routes omit `max_calls_per_hour`, `max_calls_per_caller_per_hour`, and
 `required_cycles` and may choose `caller` as `any`, `authenticated`, or
 `canister`; query `authenticated` means
 every non-anonymous principal, not only Neutron owners. Every update declares
-a shared rate from 1 through 3,600 and may add
-`max_calls_per_caller_per_hour` from 1 through that rate. The optional caller
+a shared rate and may add `max_calls_per_caller_per_hour` no greater than that
+rate. The optional caller
 window is keyed by the real ingress principal and is checked before shared
 capacity; omission preserves shared-only behavior. Every update chooses one
 class.
@@ -604,14 +595,14 @@ retained. Set `required_cycles` high enough to cover every irreversible path;
 use a supplemental request only for opportunistic recovery. Unaccepted surplus
 is refunded. App code still cannot invoke a raw accept primitive. A direct
 authenticated update attaches no cycles and receives no cycles argument; its
-1,200,000-cycle ingress-reception base and 260,000-cycle self-handler base are
-attributed to the receiving app instead.
+ingress-reception and self-handler costs are attributed to the receiving app
+instead. Read the Kernel's public-ingress accounting implementation for the
+cost constants used by the deployed successor.
 
 Set the route floor as a static protocol-version fact, not a caller-selected
-quote. It must cover all irreversible work, including at least the receiver's
-current 13-node 5,000,000-cycle update execution bases, conservative measured
-handler instructions, and storage of the maximum admitted payload for the
-protocol's promised retention horizon.
+quote. It must cover all irreversible work, including the receiver's execution
+costs, conservative measured handler instructions, and storage of the maximum
+admitted payload for the protocol's promised retention horizon.
 The [IC cycle-cost reference](https://docs.internetcomputer.org/references/cycle-costs/)
 is authoritative for storage and message rates. Keep margin for decoding,
 indexes, metadata, and future variance. The sender separately pays the IC
@@ -644,15 +635,8 @@ provider and consumer examples, limits, lifecycle behavior, and testing rules.
 
 ## Write The Frontend
 
-The frontend is ordinary browser code bundled into `dist/web/`. The hello app
-uses React, TypeScript, Bun, and esbuild:
-
-```ts
-// apps/hello/build.ts
-entryPoints: ["./src/index.tsx"];
-outfile: "./dist/web/main.js";
-platform: "browser";
-```
+The frontend is ordinary browser code bundled into `dist/web/`. Read
+`apps/hello/build.ts` for a complete browser bundle and static-asset build.
 
 Static files from `public/` are copied into `dist/web/`. Keep app frontends
 browser-safe: do not rely on Node/Bun globals at runtime.
@@ -663,7 +647,7 @@ Installed apps are served under:
 /app/<app-id>/<tile-path>
 ```
 
-The kernel loads each opened app tile in a credentialless iframe. Ordinary app
+The kernel loads each opened app tile in a sandboxed iframe. Ordinary app
 packages produced by the current packer carry a browser-surface readiness
 marker, so the browser-surface-origin Kernel gives
 each declared tile an origin derived from the installation nonce and exact
@@ -674,6 +658,18 @@ and the Kernel parent. A browser that cannot prove credentialless originful
 framing falls back to a script-only opaque sandbox. Historical archives without
 the marker remain on that legacy opaque path until a current package update is
 installed; the compatibility decision does not depend on an app id or version.
+The Kernel binds each private message port to the registered source window and,
+for an originful frame, its exact expected origin. Do not navigate an app frame
+to another website; use the supported navigation flows for external content.
+
+**Planned deprecations:** new apps should use installation-owned browser-surface
+origins. We plan to remove both Kernel-host app-content serving and the separate
+opaque app-frame compatibility path after the required migrations and browser
+support decisions. See [Deprecated Compatibility Paths](./deprecated.md) for
+replacement guidance, the external-call and Wallet API deprecations, and the
+update-certification requirement. Current behavior remains in place; no removal
+date is set.
+
 A package can declare multiple frontend tiles in `neutron.json`:
 
 ```json
@@ -790,11 +786,11 @@ Then put `nt-app` on the app root:
 ```
 
 Use app-prefixed classes for local layout and composition. Do not style kernel
-workspace classes from inside an app. The design-system rules are dark-only,
-gradient-free, scoped under `.nt-app`, and capped at `5px` radius. Kitchen Sink
-shows the current reference implementation for forms, typed calls, schema
-display, warning/danger states, and resize-heavy text surfaces. See
-[Neutron Design System](./design-system.md).
+workspace classes from inside an app. Reuse the scoped components and tokens
+instead of duplicating their color, spacing, radius, or interaction values.
+Read [Neutron Design System](./design-system.md) and
+`packages/neutron-design-system/` for the styling contract; use Kitchen Sink
+for integrated examples.
 
 ## Call The Kernel From The App
 
@@ -922,11 +918,12 @@ for the complete policy.
 
 Listing a state-changing method is an explicit trust decision for every live
 tile, tray, and background endpoint of that app. It does not let another app
-invoke the method directly. Wallet, for example, lists its released
-contact-bound `wallet_transfer` method so its own Send confirmation can call
-`updateSelf()` without a second Kernel backend-call dialog. A cross-app Swap
-must instead call Wallet's declared provider tool; Wallet alone may turn the
-approved request into its preapproved backend update.
+invoke the method directly. A provider can call its own declared backend method
+after its domain-specific confirmation without a second Kernel backend-call
+dialog. A cross-app caller must use the provider's declared tool; the provider
+alone converts that approved request into its own backend update. For payment
+flows, use durable preparation and resume APIs rather than legacy transfers;
+see [Deprecated Compatibility Paths](./deprecated.md).
 
 ### Route HTTP Through The Optional Browser Extension
 
@@ -961,8 +958,10 @@ if (!route.available) {
 
 There is no manifest declaration or install-time dependency. Request the route
 when the owner enables a feature that needs it. The extension remembers the
-accepted Neutron origin; the Kernel remembers each app's route grant in this
-browser. Neither has an expiry, and app updates do not invalidate the grant.
+accepted Neutron origin; the Kernel remembers a route grant bound to the owner
+principal, app ID, and installation UID in this browser. Neither has an expiry.
+Compatible app updates retain that installation grant; uninstall/reinstall
+requires a new one.
 The owner revokes app access in Kernel Settings and accepted Neutron origins
 in the extension's settings. Browser-profile deletion or uninstalling the
 extension also removes its local data.
@@ -1065,16 +1064,18 @@ while the user is logged in and authorized. It stays mounted across workspace
 switches and tile close/reopen, and reloads when the app version or background
 path changes.
 
-In a current marked package, a background without a dedicated resident
-capability uses its own credentialless installation origin and
-`sandbox="allow-scripts allow-same-origin"`; an unadopted historical background
-retains its credentialless opaque mode. The existing
+An ordinary background follows the tile browser-surface policy above, with its
+own installation/surface origin and the same browser compatibility conditions.
+The
 `dedicated_resident_origin` capability selects the specialized credentialless
 ephemeral resident contract, while `persistent_browser_storage` selects the
 persistent resident contract. Those capabilities are mutually exclusive. Their
 exact manifest shapes, certified initial-document binding, browser checks,
 rotation, and subresource policy are specified in
 [Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
+
+A background iframe may create a dedicated worker for WebGPU or other heavy
+work. Do not use a service worker as the resident lifecycle primitive.
 
 Expose methods from a tile, tray, or background entrypoint:
 
@@ -1297,8 +1298,9 @@ const funding = await callTool({
 });
 ```
 
-Do not rely on wildcard payment grants. During an active Agent invocation,
-`context.requestApproval(review)` submits the complete bounded operation review
+Do not rely on wildcard payment grants. A provider that supports Agent Mode
+must use `context.requestApproval(review)` during an active Agent invocation.
+It submits the complete bounded operation review
 to the root Agent's permission judge. Await its fresh decision before executing
 that exact operation through `context.kernel`. Kernel binds the callback to the
 original caller, provider, and live invocation; approval has no persistence and
@@ -1306,10 +1308,11 @@ cancellation invalidates it. The preliminary tool-access prompt is skipped, but
 a standing tool grant does not replace this review. `presentUserInterface()` is
 absent during Agent Mode, and the callbacks share one use.
 
-Outside Agent Mode, current providers use `presentUserInterface()`. Released
-provider SDKs which predate and ignore the provider-UI marker, including Wallet
-0.3.6, expose only `requestApproval()` and retain the generic Kernel raw-JSON
-owner review.
+Check the provider's contract before using its public tool in Agent Mode. A
+human-only provider tool can require `presentUserInterface()` and provide a
+separate restricted root-Agent tool; the Wallet example above follows that
+pattern. SDKs that predate and ignore the provider-UI marker expose only
+`requestApproval()` and retain the generic Kernel raw-JSON owner review.
 
 The complete protocol, security invariants, and Wallet funding contract live in
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#provider-mediated-one-shot-tools),
@@ -1498,6 +1501,12 @@ const stop = onTileViewRequest((view) => {
 });
 ```
 
+Use view requests only to select visible UI. Never save, delete, sign, make a
+backend call, or otherwise cause a persistent side effect merely because a
+view token arrived. Perform those actions through normal controls and consent
+paths. Unsubscribe with the returned `stop` function when the handler's UI
+lifecycle ends.
+
 ### Let A Resident Agent Arrange The Workspace
 
 The Kernel also exposes two discoverable tools for agents that need to present
@@ -1563,22 +1572,6 @@ It grants one user-initiated write, not clipboard read access. Handle the
 returned promise when the control needs a local error state; browser or kernel
 policy failures reject it.
 
-Use view requests only to select visible UI. Never save, delete, sign, make a
-backend call, or otherwise cause a persistent side effect merely because a
-view token arrived. Perform those actions through normal controls and consent
-paths. Unsubscribe with the returned `stop` function when the handler's UI
-lifecycle ends.
-
-Current marked tiles and ordinary backgrounds use credentialless
-installation-nonce origins; only unadopted historical packages retain the
-opaque compatibility path. A background may instead use the
-credentialless-ephemeral or persistent dedicated mode described in
-[Dedicated Resident Origins](./kernel-http-v2-and-certified-assets.md#dedicated-resident-origins).
-The kernel transfers a private `MessagePort` only after matching both the
-registered source window and, for an originful frame, its exact expected
-origin. A background iframe may create a dedicated worker for WebGPU or other
-heavy work; do not use a service worker as the resident lifecycle primitive.
-
 ## Add An App Tray
 
 Declare one top-level tray only when the app also declares an ordinary resident
@@ -1596,16 +1589,15 @@ background:
 ```
 
 The background owns long-lived state and may call `setTrayState({ badge: 4 })`.
-Only a badge from `0` through `9999`, or `null`, is accepted; `0` and `null`
-clear it. Updating the badge cannot notify, focus, open, move, or otherwise
+The SDK validates the bounded numeric badge; `0` and `null` clear it.
+Updating the badge cannot notify, focus, open, move, or otherwise
 change shell UI. The tray declaration itself adds no permission.
 
 Clicking the kernel-rendered toolbar button containing the app-provided icon
-mounts `tray.html` in a fresh credentialless frame. A current marked package
-uses the tray's installation-derived origin with
-`sandbox="allow-scripts allow-same-origin"`; an unadopted historical package
-keeps its opaque `sandbox="allow-scripts"` compatibility path. Neither tray
-path receives camera or microphone delegation, because `browser_permissions`
+mounts `tray.html` in a fresh frame using the ordinary browser-surface policy
+above, including its package-readiness and browser compatibility conditions.
+The tray receives its own installation/surface origin when that policy permits
+originful framing. A tray never receives camera or microphone delegation, because `browser_permissions`
 names exact tiles only. The transient endpoint is
 `app:<appId>:tray:instance:<instanceId>` and disappears when the popover closes,
 so fetch state from the resident process on every mount. Calls from the tray to
@@ -1740,8 +1732,8 @@ same `exact`, `principal`, or `method` scope objects accepted by
 `requestBackendCallReservations`. Accepting the installation creates those
 listed grants. The runtime request remains available for grants omitted from
 the package, added later by the user, or restored after revocation.
-One app may declare at most 64 install defaults and the complete target at most
-2,048; exact duplicate default scopes across apps are rejected.
+Per-app and whole-installation default counts are bounded by the capability
+catalog; exact duplicate default scopes across apps are rejected.
 
 Use the reviewed leaf types from the type-only `neutron-capabilities` Mops
 package, while keeping the aggregate local and exact:
@@ -1804,18 +1796,13 @@ await requestBackendCallReservations({
 });
 ```
 
-The two principal actions above illustrate the batch mechanics; they are not
-Wallet's complete selection algorithm. For each reviewed preset, Wallet derives
-the whole-principal ledger scope plus the exact history-index, native-route, and
-gas-ledger helper scopes required by that catalog entry. For a user-supplied
-custom ledger, it requests separate `exact` scopes for `icrc1_metadata`,
-`icrc1_balance_of`, `icrc1_fee`, `icrc1_transfer`, and `icrc3_get_blocks`
-instead of whole-principal access. Wallet allowance funding and enumeration add
-only `icrc2_allowance`, `icrc2_approve`, and
-`icrc103_get_allowances`. An existing custom-ledger installation retains its
-old scopes and behavior; the Wallet shows **permission required** until its
-normal ledger-settings batch grants those additional methods. A Swap or
-Approvals read must not create a surprise persistent-access prompt.
+The two principal actions above illustrate batch mechanics. Derive the full
+desired scope set from the operation's dependencies and preserve scopes needed
+by other enabled features when releasing old grants. Wallet's
+`apps/wallet/src/reservations.ts` (`desiredWalletReservationScopes` and
+`reservationActions`) is a concrete implementation. Keep permission changes in
+the explicit configuration flow; a read must not create a surprise persistent
+access prompt.
 
 The global helper above is for ordinary work outside a routed handler and uses
 the persistent-access owner dialog. During a routed Agent Mode invocation, an
@@ -1852,8 +1839,8 @@ every recipient periodically poll other canisters for new work. This keeps
 discovery and fanout cost with the party initiating the write and lets each
 recipient declare a base for its bounded receive/storage contract.
 
-Use `call_batch` for concurrency. It accepts at most the manifest cap and never
-more than 20 calls. The kernel creates all remote futures before its first
+Use `call_batch` for concurrency within the manifest and broker caps. The
+kernel creates all remote futures before its first
 ordinary `await`; app orchestration should use `async*` and `await*` so internal
 calls do not add actor self-messages.
 
@@ -1894,14 +1881,14 @@ public class Init(env : AppBackendEnvironment) {
 ```
 
 Each successful call returns exactly 32 fresh bytes. There is no fixed-hour
-request field or runtime request counter. The broker permits only one in-flight
-request per installation and four across Neutron and refuses dispatch below
-its cycle reserve. The captured
-installation scope is checked before and after the await, so a retained handle
+request field or runtime request counter. The broker bounds installation/global
+concurrency and refuses dispatch below its cycle reserve; read
+`apps/kernel/backend/randomness/Service.mo` for those resource constants. The
+captured installation scope is checked before and after the await, so a retained handle
 cannot outlive its authority. Use the returned value as a seed and expand it
 locally when one operation needs many random draws.
 
-### Sign App Assertions With A Chain Key (Development V1)
+### Sign App Assertions With A Chain Key V1
 
 Use `chain_key_signing` only for bounded app assertions. It is not a raw-digest
 or transaction-signing API. Declare exact slots and select the leaf explicitly:
@@ -1970,12 +1957,10 @@ Handle `#outcome_unknown` as final for that attempt; do not retry it
 automatically. Local assembly supports ECDSA `dfx_test_key` only, so a local
 Schnorr slot honestly returns `#key_unavailable`. Assertions are visible to
 subnet replicas during replicated canister execution and must not contain
-plaintext secrets. A future Kernel-provided raw threshold-transaction adapter
-requires a separate, one-shot owner confirmation; this assertion install grant
-never supplies that consent, and an ordinary tool/agent grant cannot replace
-it. This stricter raw-signing rule is separate from an owner-trusted Wallet app
-which owns its protocol semantics and modal, then uses its own exact
-preapproved backend method.
+plaintext secrets. Assertion signing grants no raw-digest or transaction-signing
+authority. Wallet custody signing is a separate owner-trust grant: its app owns
+the protocol semantics and operation review before using its exact backend
+method.
 An external verifier can still assign high-impact authority to a signed
 assertion, so constrain assertion semantics and verifier policy. See
 [App-Isolated Chain-Key Assertion Signing
@@ -1998,13 +1983,16 @@ closed protocol requests, and durable caller-bound commands. Direct-root Agent
 requests use their separate attested tool family. An ambiguous signing outcome
 is not permission to repeat signing.
 
-Compatible upgrades and disable/re-enable retain the key. Uninstall/reinstall
-changes the installation UID and address; no key export or reassignment registry
-exists. Document this before funding the account. See the [custody contract and
+Compatible upgrades, disable/re-enable, and reinstalling the same app ID and
+slot in the same Neutron retain the custody key. Runtime handles and cached
+authority remain installation-scoped and must be reacquired. Changing the
+canister, app ID, slot, algorithm, or threshold key changes the namespace; no
+private-key export exists. See `buildDurableCustody` in
+`apps/kernel/backend/chain_key_signing/Namespace.mo` and the [custody contract and
 lifecycle](./app-isolated-chain-key-signing.md#wallet-custody-signing-v1) for the
 manifest, exact namespace encoding, trust model, and shared resource accounting.
 
-### Use Stable Store (Development V1)
+### Use Stable Store V1
 
 Use `stable_store` for bounded dynamic binary records whose schema is owned by
 the app and can migrate lazily. It is different from typed managed memory and
@@ -2085,7 +2073,7 @@ replicated canister state—not encrypted and not certified HTTP content. See
 [App-Isolated Stable Store V1](./app-isolated-stable-store.md) for exact types,
 limits, lifecycle, migration rules, and release gates.
 
-### Use HTTPS Outcalls (Development V1)
+### Use HTTPS Outcalls V1
 
 Declare exact external URL prefixes and select the scoped backend leaf. V1 uses
 single-node GET/HEAD/POST only, strips every response header, and has no
@@ -2144,18 +2132,19 @@ public class Init(env : AppBackendEnvironment) {
 };
 ```
 
-Runtime `path` is a canonical relative suffix capped at 1,024 UTF-8 bytes and
-64 segments; query pairs are structured and percent-encoded by the kernel. The
+Runtime `path` is a bounded canonical relative suffix; query pairs are
+structured and percent-encoded by the kernel. The
 app cannot replace the declared scheme,
 host, port, prefix, fixed single-node mode, response ceiling, or attached
-cycle amount. Header values must be printable ASCII and are capped at 4,096 bytes
-each and 16 KiB in aggregate. GET/HEAD require an empty body and no key. POST requires a 16–64
+cycle amount. Header values must be printable ASCII and satisfy the broker's
+per-value and aggregate bounds. GET/HEAD require an empty body and no key. POST requires a 16–64
 character idempotency key, but the remote service must actually deduplicate it;
 Neutron never retries or promises exactly-once execution.
 
-There is no hourly call or cycle budget. Request/reply ceilings are 64 KiB/512
-KiB; endpoint/app/global concurrency, a 50-billion-cycle per-call quote cap,
-and a 250-billion-cycle reserve apply. Authority loss after the await
+There is no hourly call or cycle budget. Request/reply byte ceilings,
+endpoint/app/global concurrency, per-call quote caps, and a cycle reserve apply.
+Read the capability catalog and `apps/kernel/backend/https_outcalls/Service.mo`
+for their exact values. Authority loss after the await
 suppresses response bytes but cannot undo a remote POST.
 
 Do not put secrets in URL parameters, headers, or bodies: HTTPS outcalls have
@@ -2252,12 +2241,12 @@ The `/*internal*/` marker is required. The build derives the handler's `func`
 metadata from that annotation; do not hand-author a conflicting function entry.
 
 `max_request_bytes`, `max_response_bytes`, and `max_calls_per_hour` are closed
-install-time ceilings: request and reply are 1–65,536 bytes, rate is
-1–240/hour, and no app can exceed 240 accepted POSTs/hour or 8 MiB of possible
-replay replies across all its mounts. `forward_headers` contains at most eight
-unique lowercase names. The kernel never forwards Host, framing, cookies,
+install-time ceilings with aggregate app and replay-storage bounds. Check
+`packages/neutron-tools/src/capabilities/catalog.ts` when declaring them.
+`forward_headers` contains bounded unique lowercase names. The kernel never
+forwards Host, framing, cookies,
 upgrade/certification fields, or the raw `Idempotency-Key`. Each forwarded
-value is at most 4,096 bytes and may appear only once. Cookie/Set-Cookie,
+value is bounded and may appear only once. Cookie/Set-Cookie,
 duplicate declared headers, and duplicate or non-`identity` Content-Encoding
 reject the complete request rather than being silently stripped.
 
@@ -2303,8 +2292,8 @@ key.
 
 ### Use App-Isolated vetKeys
 
-Declare one to four named key slots when browser code needs a durable,
-app-isolated vetKD namespace:
+Declare named key slots within the capability catalog's bounds when browser
+code needs a durable, app-isolated vetKD namespace:
 
 ```json
 {
@@ -2442,8 +2431,8 @@ public class Init(env : AppBackendEnvironment) {
 };
 ```
 
-Keys are 1-40 characters, delays are 10 seconds through 30 days, and at most
-eight keys may be active for one app installation. `status(key)` reports
+Key, delay, and active-key bounds are fixed by the deferred-timer broker; read
+`apps/kernel/backend/scheduler/Service.mo`. `status(key)` reports
 `#waiting` or `#running`. There is no cancel, recurring call, raw timer id, or
 `<system>` access. This selection needs no top-level capability declaration or
 install permission because the kernel fixes those limits and exposes no
@@ -2463,9 +2452,9 @@ Use a manifest-declared scheduled task only when work must continue while no
 tile or resident browser frame is open. The callback is part of the app's
 Motoko module, but only the generated kernel scheduler receives timer authority:
 
-Intervals range from 10 seconds through 30 days. Fast callbacks are a
-high-authority install choice: they can repeatedly spend instructions and their
-per-run backend-call budget, so use the slowest cadence and smallest budget
+Validate interval and per-run budget bounds against the capability catalog.
+Fast callbacks are a high-authority install choice: they can repeatedly spend
+instructions and their per-run backend-call budget, so use the slowest cadence and smallest budget
 that satisfies the workflow.
 
 ```json
@@ -2556,35 +2545,28 @@ wrapper when one exists. A trap rolls back that message's final accounting
 write. Raw totals remain tied to the exact app installation and separately
 typed, including paid public-update cycles accepted by that app. Incoming
 receipts are displayed separately and do not offset measured use. The
-overview's cycles-used value uses the current low-side 13-node
-rates: one cycle per instruction, 5,000,000 cycles per measured update
-execution, 1,200,000 cycles of ingress reception per authorized or
-direct-authenticated-ingress update, and
-260,000 cycles per brokered call or measured timer/handler self-call in
-addition to net explicit transfers. Paid canister public updates omit the
-ingress fee because their sender pays it; direct authenticated ingress records
-it. It formats the result to four
-decimal places in `TC`; variable byte fees, callback bases, shared global-timer
-dispatch, storage, and compute allocation remain excluded.
+overview estimates usage from measured execution and explicit net transfers;
+it is not a complete canister billing statement. Cost assumptions and display
+format belong in `apps/kernel/backend/app_usage/Service.mo` and
+`apps/kernel/src/settings/AppSettingsEntry.tsx`. Paid canister public updates
+omit the ingress fee because their sender pays it; direct authenticated ingress
+records it. Unmeasured transport, storage, allocation, and shared runtime costs
+remain outside this estimate.
 
 ## Validate, Build, And Package
 
-Run app scripts from the app directory because the current script paths are
-relative to that directory:
+From the repository root, run the workspace's authoritative commands. npm
+executes their relative script paths from the workspace directory:
 
 ```sh
-cd apps/my_app
-npm test
-npm run package
+npm --workspace <app-workspace-name> run package
+npm --workspace <app-workspace-name> test
 ```
 
-The hello app package script is the current model:
-
-```json
-"package": "npm run validate && npm run build && npm run mopack && npm run schema && npm run package:metadata && bun ../../packages/neutron-scripts/src/pack.ts"
-```
-
-The steps are:
+Read the app's `package.json` for the exact pipeline and test dependencies;
+`apps/hello/package.json` supplies the template. Do not bypass a workspace's
+complete package command by manually reconstructing its steps. The generated
+artifact responsibilities are:
 
 1. `validate`
    checks `neutron.json` against the shared schema.
@@ -2636,20 +2618,16 @@ combined-Wasm identities, or deployment records. Private browser assembly
 remains private.
 
 Because `build` runs `mogen`, backend annotation changes can rewrite
-`neutron.json` after the first validation step. After changing method
-annotations, run either:
+`neutron.json` after the first validation step. Validate the generated manifest
+after changing method annotations:
 
 ```sh
-npm run build && npm run validate
+npm --workspace <app-workspace-name> run build
+npm --workspace <app-workspace-name> run validate
 ```
 
-or:
-
-```sh
-npm test
-```
-
-before publishing or installing the package.
+The app's release tests must also exercise the generated manifest; do not
+assume every workspace's `npm test` has the same packaging behavior.
 
 The output filename is derived from the app ID and release in its manifest:
 
@@ -2760,27 +2738,20 @@ the kernel manifest used to assemble the user's Neutron actor.
 
 ## Test Your App
 
-Run the app workspace's complete test command:
+Run the app workspace's complete test command from the repository root:
 
 ```sh
-cd apps/my_app
-npm test
+npm --workspace <app-workspace-name> test
 ```
 
-The sample app tests check that:
-
-- `neutron.json` validates;
-- the declared methods are present;
-- the apps declare the expected launcher tile metadata;
-- the generated Candid aliases can produce an app-usable JSON Schema through
-  icblast;
-- clean initialization and retained managed-memory behavior remain correct.
-
-In the copied template, `npm test` runs the complete package command first, then
-the Bun source/metadata tests and the Motoko memory test, so it does build the
-final `.neutron` archive. If the app later splits fast and release suites, keep
-the authoritative package command and every app-specific release test in its
-release qualification; packaging alone is not sufficient evidence.
+Verify the authored and generated manifest, exposed method schemas, package
+metadata, clean initialization, and restoration of every managed-memory root.
+Schema changes also require semantic tests from each supported released start
+version. Use the source and memory tests under `apps/hello/test/` as templates,
+then add checks for the app's actual behavior. Read the workspace scripts to
+determine which tests build artifacts and which need an existing package.
+Keep both the authoritative package command and every app-specific release
+test in release qualification; packaging alone is not sufficient evidence.
 
 Run the complete repository baseline from the root before release:
 
@@ -2801,39 +2772,38 @@ Run the full local browser install flow:
 nix develop -c npm run test:e2e:local:fresh
 ```
 
-That command first performs the provisioner's whole-canister local reinstall,
-then signs in, exercises installed apps and the reviewed browser package flow,
-approves a typed call, and rejects malformed app requests. The normal suite
-resolves the canister and gateway only from `local.ndeploy.session.json`.
-`NEUTRON_E2E_WITH_II` enables the real local Internet Identity path.
+That command performs the provisioner's destructive local reinstall before the
+browser suite. Read `test/e2e/` and the root scripts for the exercised flows;
+do not infer release coverage from the command name. The local suite resolves
+the canister and gateway from the provisioner session. `NEUTRON_E2E_WITH_II`
+selects the real local Internet Identity path.
 
 ## Security And Trust Rules
 
 Neutron treats third-party packages as untrusted input.
 
-Current enforced rules include:
+Enforced boundaries include:
 
 - manifest validation through the shared schema;
 - package path validation during install;
 - Motoko file path hash verification for packaged `mo/<hash>.mo` files;
 - browser/kernel protocol payload validation with JSON Schema;
-- kernel-side method schema derivation through icblast before approved calls.
-
-Current important gaps:
-
+- kernel-side method schema derivation through icblast before approved calls;
 - packaging reports dangerous text findings; install compilation hard-rejects
   non-whitelisted dangerous AST findings for ordinary apps;
-- package signatures and publisher identity are not implemented;
-- browser updates require a strictly higher app release version; trusted local
-  whole-canister provisioning may redeploy the same version, while every path
-  rejects downgrades;
-- persistent cross-app grants and browser resource quotas are still follow-up
-  work; camera and microphone are separately gated by exact per-tile
-  `browser_permissions`, while current frontend message-bus grants are one-call
-  or session scoped and a `provider_once` presentation deliberately accepts
-  neither kind in place of its provider-owned per-operation decision;
-- package publisher signatures remain separate from the implemented memory
-  ownership and schema-hash checks.
+- browser updates require a strictly higher app release version; explicit local
+  whole-canister reinstall discards the old installed set and is not a
+  production upgrade path;
+- camera and microphone are gated by exact per-tile `browser_permissions`;
+- frontend message-bus grants are one-call or session scoped, and a
+  `provider_once` presentation accepts neither kind in place of its
+  provider-owned per-operation decision.
+
+Package hash checks, certified distribution, and memory lineage validation do
+not constitute package publisher signatures. Do not treat an app's descriptive
+author metadata as a signing identity. Read
+[Deprecated Compatibility Paths](./deprecated.md) for retained behavior that
+new apps must avoid.
 
 Do not ask users to trust package-provided schemas. Apps can use schemas for
 their own UI rendering, but the kernel must derive and validate schemas itself
@@ -2891,31 +2861,25 @@ hash.
 
 ## Current Limitations
 
-- There is no published app-template generator yet. Use the copy-and-clean
-  procedure above for now.
+- Use the copy-and-clean procedure for new apps; the compile CLI does not
+  scaffold a project.
 - The production-context compile-only CLI exists as source under
   `packages/neutron-cli`. Trusted local compilation and deployment are owned by
   the format-3 provisioner because it authenticates
   the PocketIC root context. A trusted package workflow must emit the archive
   before the provisioner can consume it.
-- Apps may own multiple managed memory roots. Their manifest ids are local to
-  the app; the compiler gives every stable field and schema/migration alias an
-  owner-and-local-id physical name.
 - Ordinary apps cannot set `allow`; expose public Candid protocols through
   `capabilities.public_ingress`. `allow: "unauthorized"` is kernel-only and
   `allow: "any"` is rejected everywhere.
-- App package signing, publisher trust roots, and install policy are not
-  implemented.
+- App package publisher signatures and signing trust roots are not implemented.
+  Installation still enforces the package, capability, and memory contracts.
 - Migration functions are intentionally synchronous and bounded; large data
   changes need a compatible schema or an app-specific online transition.
-- Persistent cross-app grants and browser resource quotas are not implemented;
-  current message-bus grants last for one call or the page session. Camera and
-  microphone feature gating is implemented through exact per-tile
-  `browser_permissions` plus browser-owned prompting.
-- Browser install error-state coverage exists as a follow-up, even though the
-  happy path is covered by Playwright.
-- Some developer scripts are still repo-relative. The roadmap is to remove
-  assumptions that app authors know this repository layout.
+- Cross-app tool grants do not persist across browser sessions. Browser media
+  feature gating and browser-owned prompts are separate from message-bus
+  grants.
+- Developer scripts use repository workspace paths. Inspect their package
+  scripts before moving an app outside this repository.
 
 ## References
 

@@ -14,35 +14,56 @@ Kernel or another registered endpoint
 
 `window.postMessage` is not an operational fallback.
 
+Use this document for routing and lifecycle contracts. Read current descriptors,
+types, and limits from their implementation rather than copying a tool inventory
+or numeric defaults into app code:
+
+- `packages/neutron-tools/src/protocol.ts`: wire types, descriptor validation,
+  and shared bounds.
+- `packages/neutron-tools/src/app.ts` and `app_attachments.ts`: public and
+  invocation-scoped clients, connection handling, and cancellation.
+- `apps/kernel/src/frame_context.ts`: `RegisteredEndpoint`, registration,
+  handshake, and port retirement.
+- `apps/kernel/src/expose.ts`: `kernelTools`, `routeToolCall`, provider consent,
+  state invalidation, and live endpoint authorization.
+- `apps/kernel/src/self_calls.ts` and `attachment_bus.ts`: binary validation
+  and broker resource accounting.
+- `apps/kernel/src/ui_attention/agent.ts`: invocation authority and delegation.
+
+New apps must use the replacement paths in [Deprecated Compatibility
+Paths](./deprecated.md). Retained compatibility does not establish an equivalent
+security guarantee.
+
 ## Endpoint Model
 
-The registered endpoint itself binds:
+`RegisteredEndpoint` binds:
 
-- app ID and installation UID;
-- app version;
+- endpoint identity and role-specific frame context;
+- app installation scope, version, and runtime generation;
 - endpoint role: `tile`, `tray`, or `background`;
 - iframe `Window`;
 - private port and endpoint session;
-- deployment and app runtime generation;
-- browser origin, nonce, and authority epoch where applicable; and
-- the resident-frame security mode.
+- expected browser origin; and
+- a callback checking whether the captured runtime authority remains current.
 
-The frame lifecycle separately keys the exact declared `src`, and live brokers
-enforce the current capability plan and endpoint declaration. Together these
-bindings form the runtime authority; the endpoint record does not claim to
-store a plan fingerprint or asset path.
+Frame owners separately validate deployment, declared `src`, origin authority,
+and resident security bindings. Live brokers enforce the current capability
+plan and endpoint declaration. These checks form the runtime authority; they
+are not all fields on the endpoint record.
 
 An app may have zero or more tiles, at most one tray, and at most one resident
 background. A tray requires that background. Headless apps need no frontend
-endpoint. The whole Neutron admits at most 32 resident backgrounds.
+endpoint. Installation-wide capacity is defined in
+`apps/kernel/src/runtime_limits.ts`.
 
 Updating an app advances its runtime generation and invalidates the old
 endpoint even though its `AppScope` is retained. Rotating origin authority,
 closing a frame, logging out, or removing the app also invalidates the affected
 endpoint. Ending an agent invocation instead revokes that invocation's
 authority and cancels its invocation-scoped work; it does not disconnect the
-otherwise-current endpoint. A stale Window or port does not inherit new live
-authority.
+otherwise-current endpoint. A retired registration or port does not inherit new
+live authority. Re-navigation inside a still-registered opaque frame is a
+separate compatibility limitation described below.
 
 ## Handshake
 
@@ -62,9 +83,19 @@ expected cleanup Window and origin. It carries no app request, authority, or
 private port. Apart from this lifecycle result and the handshake, app-runtime
 Window messages are not operational transport.
 
-The Kernel checks the registered child Window and exact expected origin before
-transferring a port. The app checks its parent Window and derives the exact
-Kernel parent origin from its own URL before accepting a connection.
+Dedicated-origin frames use the registered child Window and exact expected
+origin when transferring a port. The SDK checks its parent Window and derives
+the exact Kernel parent origin from its own URL before accepting a connection.
+
+Opaque compatibility frames instead use `origin: "null"` and a wildcard
+`targetOrigin` for port transfer. The same WindowProxy can survive navigation to
+an unrelated document; `markFrameEndpointLoaded` can then reconnect that
+document under the original app registration. The HTTP sandbox still isolates
+Kernel-origin storage, but it does not authenticate the replacement document
+for message-bus authority. This also affects ordinary frames when
+`prepareOrdinaryAppFrame` falls back because credentialless originful frames
+are unsupported. Do not describe this path as equivalent to exact-origin
+authentication; its removal is tracked in [deprecated.md](./deprecated.md).
 
 Both sides install listeners on the private port. If no port is connected,
 operational calls wait briefly and then fail. State changes are not sent over a
@@ -162,18 +193,13 @@ cancellation because they cannot mutate canister state.
 The generic tool-attachment wire retains its own settlement and resource
 lifecycle; this envelope does not cancel an attachment request.
 
-The ordinary path uses these wire bounds and SDK defaults:
+The ordinary path bounds payloads, schemas, progress bytes, and progress event
+count. Use the `MSG_BUS_MAX_*` and `MSG_BUS_DEFAULT_*` constants in
+`packages/neutron-tools/src/protocol.ts` for current limits and SDK defaults.
 
-- maximum request or response payload: 1 MiB;
-- maximum input or output schema: 32 KiB;
-- maximum progress event: 64 KiB;
-- at most 2,000 progress events;
-- default call timeout: 300 seconds; and
-- default discovery timeout: 10 seconds.
-
-Sender-side hardening additionally enforces at most 64 nested JSON containers,
-100,000 aggregate container elements, and 128 characters from the closed action
-alphabet. Those are not receive-time limits for the released v1 wire.
+Sender-side validation additionally bounds nested JSON containers, aggregate
+container elements, and action names from a closed alphabet. Those are not
+receive-time limits for the released v1 wire.
 Compatibility receivers continue to accept deeper or larger-container v1 JSON
 and any nonempty legacy action string when the value remains JSON-compatible
 and within its byte ceiling. Dispatch may still reject an action it does not
@@ -242,8 +268,9 @@ return context.presentUserInterface({
 ```
 
 The SDK accepts a closed `{ tileId, tool, arguments }` object. Its exact private
-wire envelope `{ capability, tileId, tool, arguments }` is bounded to 16 KiB in
-addition to the ordinary depth and container-element limits. The Kernel opens
+wire envelope `{ capability, tileId, tool, arguments }` is bounded by
+`MSG_BUS_PROVIDER_APPROVAL_MAX_BYTES` in addition to the ordinary depth and
+container-element limits. The Kernel opens
 or reuses and focuses that exact declared tile of the provider in the active
 workspace, waits for its exact registered endpoint, and routes the opaque
 `arguments` only to a private tool declaring both
@@ -271,8 +298,10 @@ or restore the caller at settlement. Endpoint/session liveness and mounted-tile
 membership, not a second focus model, fence the suspended request.
 
 The pending capability and presentation binding are ephemeral browser state.
-This route adds no Kernel managed-memory schema and no durable permission
-record; existing audit projection remains the only persistent generic record.
+This route adds no Kernel managed-memory schema or durable permission record.
+The generic audit projection in `apps/kernel/src/reducer/msg_bus.ts` is also a
+bounded in-memory browser record; providers must persist domain-specific
+receipts themselves when durable history is needed.
 
 The public handler must complete exactly one provider interaction; returning
 without it is invalid. The SDK gives `requestApproval` and
@@ -301,8 +330,8 @@ it. Kernel treats the review as opaque app data and adds no wallet-specific
 fields or rules.
 
 Outside Agent Mode, `requestApproval(review)` retains the generic inert raw-JSON
-owner review used by published providers including Wallet 0.3.6. Current human
-flows use provider-owned UI; the two callbacks cannot be stacked.
+owner review for compatibility. New human flows use provider-owned UI; the two
+callbacks cannot be stacked. Agent flows still require `requestApproval`.
 
 Providers may also retain a separate direct-root tool declaring both
 `{"neutron:visibility":"same_app"}` and
@@ -320,35 +349,16 @@ Same-app calls and every tool without this exact annotation retain their
 released routing and grant behavior. Unknown annotation values never select
 this path.
 
-Current Kernel tools include:
+Discover current Kernel tools with `tools.list` targeting `kernel`; source
+descriptors are registered through `defineKernelTool` in
+`apps/kernel/src/expose.ts`. Discovery is not authorization: each handler still
+checks its caller and invocation requirements. Use exact names, and consult
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md)
+for external-call and frontend permission contracts.
 
-- `canister.schema`;
-- `canister.schema_v2`;
-- `canister.call_dialog`;
-- `canister.call_dialog_v2`, whose versioned contract is documented in
-  [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method);
-- `backend_calls.request`;
-- `backend_calls.list`;
-- `apps.list`;
-- `apps.describe`;
-- `source.files`;
-- `source.search`;
-- `source.read`;
-- `apps.install_offer`;
-- `endpoints.list`;
-- `attachments.delegate`;
-- `permissions.request`, accepting the existing single `tool` or an exact
-  `tools` array for one grouped session-access decision, as documented in
-  [Frontend Tool Permissions](./app-method-access-and-call-consent.md#request-an-exact-group-of-session-tools);
-- `audit.list`; and
-- `workspace.open_tile`;
-- `workspace.inspect`; and
-- `workspace.control`.
-
-The raw action aliases `schema` and `call_dialog` do not exist.
-
-The unversioned canister names are universally callable compatibility routes,
-not names gated by the age of an installed package. Their exact differences
+The unversioned `canister.schema` and `canister.call_dialog` names are
+universally callable compatibility routes, not names gated by the age of an
+installed package. Their exact differences
 from the v2 external-call route are documented in
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
 
@@ -379,7 +389,7 @@ installation changes, the call is cancelled and inspection must restart at
 `source.files`.
 
 `source.search` performs bounded literal text search, not regular-expression
-evaluation. It returns at most 8 matches per scanned file and reports files
+evaluation. It caps matches per scanned file and reports files
 with further omitted matches in `truncatedFiles`; use `source.read` for deeper
 inspection. Search counters apply only to their returned page, and
 `skippedBinaryFiles` is already included in `scannedFiles`. `source.read`
@@ -387,6 +397,8 @@ accepts only an exact path from the bound catalog and returns bounded
 strict-UTF-8 chunks. Invalid UTF-8, NUL-containing data, Wasm, and other binary
 artifacts return metadata only; their bytes are never placed on the tool wire.
 Results and previews are untrusted installed content, not instructions.
+Current scan, result, and chunk bounds are defined in
+`apps/kernel/src/source_inspection/installed_artifacts.ts`.
 
 The catalog is installed build output, not repository source: frontend bundles
 may be minified and retained Motoko modules are transformed and content
@@ -397,20 +409,10 @@ and [Asset Storage And HTTP Serving](./asset-storage-and-http-serving.md#install
 
 ## App Client API
 
-The app entry provides:
-
-- `exec`;
-- `listTools` and `callTool`;
-- `exposeTool` and `removeExposedTool`;
-- app and endpoint discovery helpers;
-- app-state subscriptions;
-- tile-view subscriptions;
-- tray-state and private tray actions;
-- scoped connection, wallet, vetKey, clipboard, and permission helpers; and
-- `querySelf`, `updateSelf`, `callSelfDialog`, and attachment-aware
-  `requestBackendCallReservations`.
-
-Every helper ultimately uses the connected private port.
+Use `neutron-tools/app` for client helpers and exposed-tool handlers. Read the
+exports of `packages/neutron-tools/src/app_entry.ts` for the current surface.
+Kernel operations use the connected private port; app-local helpers such as URL
+context parsing and listener registration do not themselves dispatch a call.
 
 An `exposeTool()` handler's context additionally contains optional
 `presentUserInterface({ tileId, tool, arguments })` only while Kernel is
@@ -427,32 +429,15 @@ review for compatibility. Both callbacks share the same one-use gate.
 
 ## Self Calls With Nested Binary Values
 
-Self calls use a private API-1 wire in parallel with the ordinary JSON
-envelopes:
-
-```ts
-type SelfCallExecEnvelope = {
-  type: "neutron:self-call:exec";
-  version: 1;
-  id: number;
-  tool:
-    | "canister.query_self"
-    | "canister.update_self"
-    | "canister.call_dialog"
-    | "backend_calls.request";
-  method: string;
-  args: JsonValue[];
-  blobs: SelfCallWireBlob[];
-  // Required only for backend_calls.request.
-  actions?: BackendCallReservationAction[];
-};
-
-type SelfCallWireBlob = {
-  path: (string | number)[];
-  byteLength: number;
-  data: ArrayBuffer;
-};
-```
+Self calls use the private API-1 `neutron:self-call:exec` wire in parallel with
+ordinary JSON envelopes. `SelfCallExecEnvelope` in
+`packages/neutron-tools/src/protocol.ts` carries the exact self-call tool,
+method, JSON argument shadow, binary sidecars, and optional invocation context.
+Its `backend_calls.request` variant additionally requires reservation actions.
+Each `SelfCallWireBlob` carries a structural path, byte length, and transferable
+`ArrayBuffer`. Use these shared types instead of recreating the union: making
+reservation actions optional for every variant loses a wire requirement, and
+dropping invocation context loses scoped authority propagation.
 
 `canister.query_self` and `canister.update_self` are not generic Kernel tool
 descriptors. They are private self-call wire helpers. `callSelfDialog` uses the
@@ -501,18 +486,13 @@ materialized-sidecar statistics.
 The reply is raw-preflighted before decode, projected into the same native
 binary model, and transferred back through response sidecars.
 
-Limits are:
-
-| Self-call resource     |     Limit |
-| ---------------------- | --------: |
-| Aggregate binary bytes | 1,900,000 |
-| Binary leaves          |       512 |
-| JSON metadata          |    64 KiB |
-| Value/Candid depth     |        32 |
-| Container elements     |     4,096 |
-
-Additional type-table, non-binary Candid, decoder allocation, in-flight byte,
-and concurrency limits apply in the Kernel.
+The SDK's `SELF_CALL_*` constants in `packages/neutron-tools/src/protocol.ts`
+bound binary bytes and leaves, JSON metadata, depth, and container elements.
+Kernel preflight additionally bounds type tables, non-binary Candid, decoder
+allocation, in-flight bytes, and concurrency. Inspect
+`apps/kernel/src/self_calls.ts` and the self-call broker in `expose.ts` before
+changing or sizing around these constraints; SDK validation alone is not the
+receiver's resource contract.
 
 For an interactive review, the Kernel shows only the exact Candid path, byte
 length, and transient SHA-256 of each bound binary field. The bytes remain
@@ -536,17 +516,18 @@ or output declaration to allow no attachment in that direction; optional
 attachments are not supported.
 
 Every data buffer is transferred. The Kernel validates descriptor, metadata,
-source endpoint, name, type, size, and in-flight capacity. Current ceilings are
-16 MiB per attachment, 32 MiB in flight per endpoint, and 64 MiB across one
-trusted frontend broker realm/process. That browser limit is not an
-actor-global total across separate browsers.
+source endpoint, name, type, size, and in-flight capacity. Per-attachment,
+per-endpoint, and broker-wide ceilings are defined in
+`apps/kernel/src/attachment_bus.ts`. The broker-wide limit covers one trusted
+frontend realm/process, not an actor-global total across separate browsers.
 
 An attachment handler's `context.callTool` carries its invocation binding
 directly. An ordinary exposed-tool handler instead bridges its current
 invocation into the separate attachment client by requesting a short-lived,
 one-use delegation token from `attachments.delegate`; a call cannot combine
-that token with direct invocation metadata. Tokens expire after 10 seconds and
-are bounded to four per endpoint and 64 globally.
+that token with direct invocation metadata. Tokens have a short expiry and
+bounded per-endpoint and broker-wide capacity, defined alongside the attachment
+broker's limits.
 
 ## App State Invalidation
 
@@ -630,12 +611,18 @@ until first activated.
 
 ## Tray Boundary
 
-Tray actions are private to the declaring app and the current tray endpoint.
+Tray state and dismissal actions are private to the declaring app. Only its
+current resident background can set its badge, and only its current tray
+endpoint can dismiss that popout; see `apps/kernel/src/tray/service.ts`.
 The Kernel owns tray opening, focus, close, and state delivery. A tray cannot
-call another app's private tray surface or tools, become a resident background,
-or retain authority after its session closes. The generic
-`workspace.open_tile` navigation described above is the only cross-app tray
-exception and grants no target-app authority.
+control another app's private tray surface,
+become a resident background, or retain authority after its session closes.
+
+Ordinary cross-app tool routing also applies to tray endpoints: descriptor
+visibility, installed or session grants, and provider consent determine access.
+Tray role alone does not prohibit cross-app tools. Delegated Agent calls cannot
+target tray popouts. `workspace.open_tile` grants visible navigation only and
+does not itself grant access to the target app's tools.
 
 ## Agent Invocations
 
@@ -748,7 +735,8 @@ changing callback ownership.
 Resident backgrounds are mounted only for the declared endpoint and admitted
 security mode. Startup, readiness retry, authority rotation, app replacement,
 capability disablement, and uninstall are Kernel-owned lifecycle events. The
-launcher remounts once after a missed readiness deadline; a second missed
+resident lifecycle in `apps/kernel/src/workspace/AppBackgroundFrames.tsx`
+remounts once after a missed readiness deadline; a second missed
 deadline blocks further automatic relaunch for that mounted lifecycle instead
 of entering a general failure-backoff loop. A late authenticated connection can
 still mark that retry ready.
@@ -762,7 +750,8 @@ trusted browser shell is open and uses declared broker APIs for durable work.
   resident-origin cleanup result is a lifecycle-only exception.
 - Operational calls require the exact private port.
 - A port belongs to one endpoint session and cannot be reassigned.
-- AppScope and plan fingerprint remain authoritative across every route.
+- Current AppScope, runtime authority, and declared capabilities constrain
+  protected routes; a descriptor or payload cannot replace those checks.
 - Live Candid, not a sidecar marker or JSON Schema, determines binary type.
 - Payloads, progress, attachments, callbacks, and in-flight work are bounded.
 - Authority is rechecked after `await`.

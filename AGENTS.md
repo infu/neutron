@@ -5,6 +5,8 @@ state must be treated as durable user data. Development-only clean-reinstall,
 state-reset, and backward-incompatible shortcuts are not acceptable release
 paths.
 
+Put TODO files in the repository-root `tmp/` directory, which is gitignored.
+
 ## Ask Before Adding Kernel Restrictions
 
 - Do not add restrictions, cooldowns, focus requirements, rate limits, quotas,

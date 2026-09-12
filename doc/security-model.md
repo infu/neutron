@@ -4,6 +4,13 @@ Neutron is a user-owned operating-system canister. The Kernel is the trusted
 policy and mediation layer; ordinary apps are untrusted packages assembled into
 the same actor and rendered in isolated browser endpoints.
 
+Use this document when changing trust boundaries. It records the intended
+bindings and the implemented compatibility exceptions; it is not evidence that
+every legacy path has equivalent protection. Read [Deprecated Compatibility
+Paths](./deprecated.md) before extending an existing integration. New apps must
+use the replacements described there. Numerical admission limits and release
+inventories belong in their source declarations, not in this document.
+
 The central rule is:
 
 ```text
@@ -24,16 +31,17 @@ Neutron aims to ensure that:
 - only the owner can grant or exercise owner authority;
 - controllers retain explicit recovery and deployment power;
 - an app cannot exceed the authority shown during installation;
-- one app installation cannot use another installation's storage, routes,
-  credentials, memory, browser endpoint, or runtime leases;
+- one app installation cannot exercise another installation's live storage,
+  route, credential, memory, browser-endpoint, or lease authority;
 - updating an app advances its runtime generation and reconciles changed
   authority, while removal retires its scope;
 - untrusted package bytes and browser messages cannot select Kernel code,
   policy, headers, certification expressions, or raw system routes;
 - failed or interrupted installs do not leave a partially promoted runtime;
 - public HTTP responses can be verified against the canister certificate; and
-- all potentially expensive or persistent facilities have finite admission and
-  runtime limits.
+- untrusted operations pass the applicable decoder, admission, and resource
+  bounds. These are per-facility contracts, not a universal runtime or spending
+  quota for an Agent root.
 
 Neutron does not claim that ordinary app code is benign. The system confines
 such code to reviewed platform primitives and explicit owner decisions.
@@ -101,9 +109,12 @@ resident-frame security mode.
 
 Updating an existing app ID retains its `AppScope`. Commit binds that scope to
 the new version, capability plan, deployment, and app generation and reconciles
-changed resources. The browser-origin nonce and authority epoch also remain
-stable unless the resident security mode changes. Removing and later re-adding
-the app allocates a new UID; stale frames, credentials, reservations, tasks,
+changed resources. On an ordinary upgrade, the browser-origin nonce and
+authority epoch also remain stable unless the resident security mode changes.
+Snapshot recovery and
+install dispatch must preserve the allocator/epoch anti-reuse rules rather than
+reusing authority from a discarded branch. Removing and later re-adding the app
+allocates a new UID; stale frames, credentials, reservations, tasks,
 collection leases, and backend handles from the removed scope cannot become
 authority for it.
 
@@ -141,9 +152,11 @@ again.
 
 Capability changes are staged with the install. Commit activates the target
 plan and reconciles its resources; abort discards it. Removal retires the
-scope, and a later re-addition receives a new one. Operations that cross an
-`await` recheck their lease, endpoint, owner, and scope before publishing a
-result or durable state.
+scope, and a later re-addition receives a new one. Protected brokers that cross
+an `await` recheck the applicable lease, endpoint, owner, and scope before
+publishing a result or durable state. Cancellation or
+revocation after an external dispatch cannot undo the remote effect; callers
+must treat a withheld or lost reply as potentially committed.
 
 ## Package And Compiler Boundary
 
@@ -217,6 +230,14 @@ or ordinary background. That hostname may execute only the matching app's
 asset subtree under the allowed request destinations; it cannot become a Kernel
 document origin or load another app's executable assets.
 
+Kernel-host app assets remain a compatibility path. Their HTTP response CSP
+uses `sandbox allow-scripts`, so direct navigation to app HTML does not give it
+the Kernel document origin or its browser credentials. Do not confuse this
+HTTP/storage protection with the opaque-frame message-port limitation below.
+New apps use their assigned origins and relative asset URLs; public data links
+need the separate migration described in [Deprecated Compatibility
+Paths](./deprecated.md).
+
 ## Certified Assets
 
 Certified Assets exposes three kinds:
@@ -286,6 +307,16 @@ cannot establish credentialless originful framing falls back before navigation
 to `sandbox="allow-scripts"`, an opaque origin, and no browser-feature
 delegation. Historical packages without readiness evidence retain that same
 opaque compatibility policy.
+
+The opaque path has a known identity limitation: a replacement document reached
+by navigation inside the same iframe still presents the same WindowProxy and
+`origin: "null"`. The reconnect path can assign that document a new port under
+the original app endpoint. Exact-origin mode rejects a document on a different
+origin. The opaque sandbox still isolates Kernel browser storage, but it does
+not authenticate the replacement document as the installed app. New packages
+must adopt surface origins; removing the unsupported-browser fallback also
+requires an explicit browser-support decision. See [Deprecated Compatibility
+Paths](./deprecated.md#opaque-app-frame-compatibility).
 
 Camera and microphone are denied by default. `browser_permissions` may delegate
 only those closed features to exact adopted tile IDs through the certified
@@ -368,7 +399,7 @@ exception to the ordinary pre-dispatch cross-app grant: the target provider
 must inspect authoritative state before the owner or active root Agent can make
 a meaningful decision.
 
-On the current provider-UI lane, Kernel validates the original tool input and
+For human provider presentation, Kernel validates the original tool input and
 binds a one-use capability to the originating validated public tool handler,
 both source and target endpoint/session/AppScope/version state, owner/auth
 state, and cancellation. Any exact live app surface may request presentation;
@@ -403,8 +434,8 @@ returning from the handler without one completed callback fails the call.
 Timeout, duplicate use, replay,
 endpoint replacement, logout, update, or authority change aborts the pending
 route. Kernel rechecks both endpoints after asynchronous routing steps. The
-initial version rejects attachment and control tools so the path cannot smuggle a second
-transport or cancellation protocol.
+protocol rejects attachment and control tools so the path cannot become a
+second binary transport or cancellation protocol.
 
 This primitive intentionally relies on the owner-trusted provider to call the
 callback before using its own preapproved authority and to keep preparation,
@@ -435,32 +466,18 @@ attested audience. The provider verifies it and may use its own preapproved
 authority without provider or Kernel UI. An Agent invocation which attempts
 `presentUserInterface` still fails closed.
 
-Outside Agent Mode, `requestApproval(review)` retains the bounded raw-JSON
-Kernel owner review used by published providers including Wallet 0.3.6.
-Current human flows use provider-owned UI. Both callbacks share one use,
-preventing stacked consent flows.
+Outside Agent Mode, `requestApproval(review)` retains a compatibility
+Kernel owner review of bounded raw JSON. Human integrations should use
+provider-owned presentation. Both callbacks share one use, preventing stacked
+consent flows.
 
-Wallet uses the path without adding token logic to Kernel. Inside its private
-tile after presentation routing, it uses exact preapproved methods to prepare
-either an ICRC-1 transfer or a short-lived ICRC-2 allowance and to persist
-rejection. Only the affirmative action may dispatch the value-moving execute
-method. Its separate root tool performs the same bounded operation without UI
-only for the attested direct root. It
-lists ICRC approvals through the draft ICRC-103 API or ICP's distinct approval
-API and revokes under Wallet policy. Another asset standard belongs in another
-provider app.
-
-Exact allowance and expiry bounds limit a spender's authority but do not attest
-the code behind its principal. An external DEX canister may be upgraded after
-the Wallet or Swap source was reviewed and then spend within the remaining
-approved bounds. Likewise, response validation cannot prove that a selected
-malicious ledger honestly enumerates every allowance; it may omit or fabricate
-rows or implement inconsistent transfer behavior.
-
-Where a trustworthy attestation source exists, a provider or consumer app may
-optionally pin reviewed external module hashes and require a new decision when
-they drift. This is app-level defense in depth, not a Kernel policy: Kernel must
-not acquire DEX, module-registry, ledger, token, or allowance semantics.
+Provider implementations own protocol-specific preparation, review, execution,
+and recovery. Inspect the provider's backend and durable command journal before
+changing those semantics; Kernel approval is not a financial transaction
+journal. Exact operation bounds do not attest an external canister's code or
+honesty. A remote upgrade or malicious ledger can still violate assumptions
+within the authority the provider approved. Any protocol-specific attestation
+belongs in the provider or consumer app, not in Core policy.
 
 All assembled app backends call external canisters as the same Neutron canister
 principal. For a Swap-owned `icrc2_transfer_from`, the ledger authenticates that
@@ -472,10 +489,9 @@ hard-codes or validates the spender subaccount and every financial argument.
 The allowance itself is not a cryptographic per-app sandbox, and Kernel remains
 token-agnostic.
 
-Wallet rejects its own default source account as spender, treating an absent
-(`null`) subaccount and the all-zero subaccount as equivalent. Direct-calling
-Swap apps and fixtures must use a distinct exact spender subaccount because
-ICRC-2 same-account `transfer_from` is not allowance-bounded.
+For the API and provider obligations, see
+[App Method Access And Call Consent](./app-method-access-and-call-consent.md).
+For financial behavior, consult the relevant app's own contract and source.
 
 ## Agent Mode
 
@@ -507,6 +523,14 @@ rather than summary counts, and an oversized challenge fails before signing.
 The unversioned compatibility route rejects Agent-scoped signed calls before
 discovery. See
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md#calling-any-other-app-method).
+
+The unversioned external-canister tools remain callable outside Agent Mode.
+They can perform owner-authenticated discovery before operation approval,
+review arguments before legacy conversion, and leave a consent dialog live
+after caller cancellation. The v2 routes use anonymous discovery, an immutable
+prepared-argument review, and phase-aware cancellation. New integrations must
+require v2; the old paths are scheduled for removal in
+[Deprecated Compatibility Paths](./deprecated.md#unversioned-external-canister-tools).
 
 Visual workspace control is separate from effect authority. A live resident
 background whose installed app declares `agent_entrypoints` may inspect and
@@ -585,13 +609,42 @@ fingerprint, methods, chains, accounts, expiry, request counts, and concurrency
 are bound into the Kernel session. The browser wallet remains responsible for
 account, chain-switch, and transaction confirmation.
 
-## vetKeys And Previous Generations
+## Key Authority And Previous Generations
 
 vetKey slots are installation-scoped and declaration-bound. Browser derivation,
 backend public-key discovery, generation rotation, and retirement use distinct
-attenuated interfaces. Rotation preserves the immediately previous generation
-only for the bounded transition needed to read and re-encrypt existing data;
-it does not make old authority current again.
+attenuated interfaces. At most one previous generation is retained for reading
+and re-encrypting existing data; it must be explicitly retired before another
+rotation. Disablement and retirement stop future supported derivation, but
+cannot erase a key already held by a browser or restored snapshot.
+
+Assertion signing and wallet custody are separate installation grants. Assertion
+signing signs a Kernel-domain-separated envelope; custody signs an exact digest
+within the installed wallet's own namespace. Neither capability implies the
+other. The owner-trusted wallet owns transaction validation, provider consent,
+and durable replay; Kernel does not infer transaction effects from a digest.
+Custody account identity deliberately survives reinstall of the same app ID and
+slot in the same Neutron under the same key configuration; live authority does
+not. The replacement installation needs an explicit custody grant and cannot
+reuse a retired installation's handles.
+See [App-Isolated vetKeys](./app-isolated-vetkeys.md) and
+[App-Isolated Chain-Key Signing](./app-isolated-chain-key-signing.md).
+
+## Update Source Integrity
+
+Package digest verification requires authenticated release metadata as its
+anchor. The HTTP update client uses a fixed non-raw gateway and rejects an
+incomplete visible certification-v2 envelope or `no_certification` expression.
+It currently skips those envelope checks when both proof headers are hidden
+from JavaScript. Gateway success alone does not prove full body certification:
+a certified opt-out policy can leave the content unauthenticated. Do not treat
+this compatibility exception as equivalent to visible full-v2 certification.
+
+New update sources must provide full response certification and expose both
+proof headers through CORS. Removing the hidden-header exception requires a
+Kernel acceptance change and source migration; app permission and managed-memory
+checks remain separate. See [Package Updates](./package-updates.md) and
+[Deprecated Compatibility Paths](./deprecated.md#update-responses-with-hidden-certification-headers).
 
 ## Provisioning Boundary
 
@@ -633,3 +686,20 @@ Changes must preserve all of the following:
 
 If a proposed convenience bypasses one of these bindings, the convenience must
 be redesigned rather than added as an alternate path.
+
+## Source Entry Points
+
+Use symbols and tests in these modules to resolve implementation details:
+
+| Boundary | Source |
+| --- | --- |
+| Capability schemas and compiler projection | [`neutron-compiler`](../packages/neutron-compiler/src/), [`capability registry`](../apps/kernel/backend/capabilities/Registry.mo) |
+| Checked installation and authority identity | [`install.ts`](../packages/neutron-compiler/src/install.ts), [`installation_context.ts`](../packages/neutron-compiler/src/installation_context.ts), [`install service`](../apps/kernel/backend/install/Service.mo) |
+| HTTP headers, origins, and atomic commit | [`Kernel backend`](../apps/kernel/backend/main.mo) |
+| App framing and message-port lifetime | [`app_frame_security.ts`](../apps/kernel/src/app_frame_security.ts), [`frame_context.ts`](../apps/kernel/src/frame_context.ts) |
+| Frontend consent, provider routing, and Agent authority | [`expose.ts`](../apps/kernel/src/expose.ts), [`Agent runtime`](../apps/kernel/src/ui_attention/agent.ts) |
+| Authenticated canister calls and binary values | [`auth.ts`](../apps/kernel/src/reducer/auth.ts), [`self_calls.ts`](../apps/kernel/src/self_calls.ts) |
+| Update HTTP acceptance | [`update client`](../apps/kernel/src/updates/client.ts) |
+| Installed artifact inspection | [`installed_artifacts.ts`](../apps/kernel/src/source_inspection/installed_artifacts.ts) |
+| Connections and browser wallets | [`connections`](../apps/kernel/src/connections/service.ts), [`ethereum_provider`](../apps/kernel/src/ethereum_provider/service.ts) |
+| Key authority | [vetKeys contract](./app-isolated-vetkeys.md), [chain-key contract](./app-isolated-chain-key-signing.md) |
