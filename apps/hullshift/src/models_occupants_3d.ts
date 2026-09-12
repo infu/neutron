@@ -130,12 +130,11 @@ export function createCargoPodModel(): HullshiftOccupantModelDescriptor {
   const detail = mergeModelRole("cargo", "detail", [
     // Thick top restraint rails remain more than one final render pixel at
     // the minimum supported 24 CSS pixels per cell.
-    chamferedPrism(0.72, 0.14, 0.065, 0.475, 0.025),
-    chamferedPrism(0.14, 0.72, 0.065, 0.475, 0.025),
-    ...cornerPrisms(0.145, 0.145, 0.13, 0.445, 0.29),
+    ...cornerPrisms(0.09, 0.09, 0.08, 0.445, 0.29),
   ]);
 
   const emissive = mergeModelRole("cargo", "emissive", [
+    chamferedPrism(0.22, 0.22, 0.025, 0.52, 0.035).rotateZ(Math.PI / 4),
     chamferedPrism(0.25, 0.09, 0.025, 0.548, 0.015, 0, -0.255),
     chamferedPrism(0.25, 0.09, 0.025, 0.548, 0.015, 0, 0.255),
   ]);

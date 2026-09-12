@@ -118,6 +118,8 @@ export interface ObjectDefinition {
 
 export interface LevelDefinition {
   readonly generatorVersion: string;
+  /** Absent on released evacuation puzzles; cargo puzzles finish on all bays. */
+  readonly objective?: "cargo";
   readonly width: number;
   readonly height: number;
   /** Canonically serialized by id, irrespective of the input array order. */

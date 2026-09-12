@@ -628,6 +628,8 @@ export class HullshiftRenderer {
       renderer.setClearColor(HULLSHIFT_PALETTE.void, 1);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.NoToneMapping;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.domElement.className = "hullshift-board-canvas";
       renderer.domElement.setAttribute("aria-label", this.ariaLabel);
       renderer.domElement.setAttribute("role", "img");
@@ -744,6 +746,13 @@ export class HullshiftRenderer {
     this.colorGradePass = null;
     this.outputPass = null;
     this.composer = null;
+    this.scene.traverse((object) => {
+      if (object instanceof THREE.DirectionalLight) {
+        object.shadow.dispose();
+        object.shadow.map = null;
+        object.shadow.mapPass = null;
+      }
+    });
     if (this.renderer !== null) {
       const canvas = this.renderer.domElement;
       canvas.removeEventListener("webglcontextlost", this.handleContextLost);
@@ -1053,6 +1062,11 @@ function createHullshiftEnvironmentLights(): THREE.Group {
   const key = new THREE.DirectionalLight(0xd9efff, 2.35);
   key.name = "Hullshift upper-left key";
   key.position.set(-5, -7, 11);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  Object.assign(key.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 0.1, far: 40 });
+  key.shadow.bias = -0.001;
+  key.shadow.normalBias = 0.025;
   environment.add(key);
 
   const rim = new THREE.DirectionalLight(0x6d8fb8, 0.72);

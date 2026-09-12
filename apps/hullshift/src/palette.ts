@@ -7,22 +7,22 @@
  * carrier.
  */
 export const HULLSHIFT_PALETTE = Object.freeze({
-  void: 0x05080d,
-  hullDeep: 0x0b121a,
-  hull: 0x14222e,
-  hullRaised: 0x203542,
-  hullEdge: 0x3f5863,
-  steel: 0x71838b,
+  void: 0x0c1421,
+  hullDeep: 0x182638,
+  hull: 0x293c51,
+  hullRaised: 0x55738b,
+  hullEdge: 0x8babbc,
+  steel: 0xacc0cc,
   textLight: 0xd8e5df,
   focusCyan: 0x57dbe8,
-  powerGreen: 0x68db87,
-  goalIvory: 0xf1edc5,
+  powerGreen: 0x91e5c7,
+  goalIvory: 0xf8f1df,
   warningAmber: 0xf0ad4e,
   hazardOrange: 0xf06d3f,
   dangerRed: 0xe4474f,
   relayViolet: 0x9a77df,
   reactorGold: 0xe2c35b,
-  cargoBlue: 0x4f87a4,
+  cargoBlue: 0xffb663,
   inactive: 0x40505a,
   shadow: 0x020407,
 } as const);
@@ -57,7 +57,7 @@ export const HULLSHIFT_CHANNEL_COLORS = Object.freeze([
   0x57dbe8,
   0xe2c35b,
   0x9a77df,
-  0x68db87,
+  0x91e5c7,
 ] as const);
 
 export function paletteColor(role: HullshiftPaletteRole): number {

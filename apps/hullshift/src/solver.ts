@@ -188,6 +188,15 @@ export interface InteractionMetrics {
 }
 
 export interface AnalysisReport {
+  /** g5 uses solution search, never a purported exhaustive winning-state set. */
+  readonly cargo?: Readonly<{
+    layout: string;
+    boxLines: number;
+    turns: number;
+    revisits: number;
+    detours: number;
+    searchComplete: boolean;
+  }>;
   readonly solvable: boolean;
   readonly initialStateKey: string;
   readonly winningStateKeys: ReadonlySet<string>;

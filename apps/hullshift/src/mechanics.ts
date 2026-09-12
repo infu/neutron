@@ -241,7 +241,9 @@ export function deriveMechanics(level: LevelDefinition, state: PuzzleState): Der
           kind: fixture.kind,
           channel: fixture.channel,
           position,
-          active: entityOccupies(state, position),
+          active: level.objective === "cargo"
+            ? objectAt(state, position)?.kind === "cargo"
+            : entityOccupies(state, position),
         });
         break;
       case "relay":
@@ -638,7 +640,18 @@ export function validateLevel(level: LevelDefinition): readonly ValidationIssue[
   if (fixtureCount > BOARD_LIMITS.maxStatefulFixtures) {
     issues.push(issue("fixture-limit", `Board exceeds the ${BOARD_LIMITS.maxStatefulFixtures}-fixture limit`));
   }
-  if (gateCount !== 1) {
+  if (level.objective !== undefined && level.objective !== "cargo") {
+    issues.push(issue("objective", "Unknown puzzle objective"));
+  }
+  if (level.objective === "cargo") {
+    const bays = level.cells.filter((cell) => cell.fixture?.kind === "plate");
+    if (bays.length === 0 || bays.length !== level.objects.length || gateCount !== 0
+      || level.objects.some((object) => object.kind !== "cargo")
+      || level.cells.some((cell) => cell.terrain !== "floor" && cell.terrain !== "bulkhead")
+      || level.cells.some((cell) => cell.fixture !== undefined && cell.fixture.kind !== "plate")) {
+      issues.push(issue("cargo-objective", "Cargo puzzles need one bay per cargo pod and only floor, walls, and bays"));
+    }
+  } else if (gateCount !== 1) {
     issues.push(issue("gate-count", `Board must contain exactly one evacuation gate; found ${gateCount}`));
   }
 

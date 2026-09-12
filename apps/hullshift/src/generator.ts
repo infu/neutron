@@ -5,6 +5,7 @@ import {
   selectBrainCatalogEntry,
 } from "./brain_catalog.ts";
 import type { DifficultyRating } from "./difficulty.ts";
+import { generateCargoPuzzle } from "./cargo_puzzles.ts";
 import { assertValidLevel } from "./mechanics.ts";
 import type { LevelDefinition } from "./model.ts";
 import { formatCanonicalSeed, parseCanonicalSeed } from "./prng.ts";
@@ -80,9 +81,8 @@ export class GenerationCancelledError extends Error {
 }
 
 /**
- * Deterministically select and independently re-certify a frozen offline
- * HullshiftBrain level. Python performs expensive content search offline; this
- * browser boundary continues to trust only production mechanics and analysis.
+ * New seeds build procedural cargo puzzles. Explicit g4 identities retain the
+ * released catalog and its original validation for reproducible old shares.
  */
 export async function generateLevel(
   request: GenerateLevelRequest,
@@ -90,7 +90,7 @@ export async function generateLevel(
 ): Promise<GeneratedLevel> {
   checkCancelled(hooks);
   const generatorVersion = request.generatorVersion ?? GENERATOR_VERSION;
-  if (generatorVersion !== GENERATOR_VERSION || generatorVersion !== "g4") {
+  if (generatorVersion !== GENERATOR_VERSION && generatorVersion !== "g4") {
     throw new GenerationCertificationError(
       `Generator ${generatorVersion} is frozen and cannot create new missions`,
     );
@@ -99,6 +99,18 @@ export async function generateLevel(
   const canonicalSeed = formatCanonicalSeed(seed);
   if (!Number.isInteger(request.difficulty) || request.difficulty < 0 || request.difficulty > 8) {
     throw new RangeError("Hullshift difficulty must be 0 through 8");
+  }
+
+  if (generatorVersion === "g5") {
+    hooks.onProgress?.({ stage: "starting", completed: 0, total: 1, detail: "Arranging a new cargo deck" });
+    const { level, analysis } = await generateCargoPuzzle(seed, request.difficulty, hooks);
+    checkCancelled(hooks);
+    assertValidLevel(level);
+    const identity = Object.freeze({ generatorVersion, seed: canonicalSeed, difficulty: request.difficulty });
+    hooks.onProgress?.({ stage: "complete", completed: 1, total: 1, detail: "Your puzzle is ready" });
+    return Object.freeze({ identity, level, levelHash: canonicalLevelHash(level),
+      shareCode: encodeShareCode({ generatorVersion, seed, difficulty: request.difficulty }),
+      analysis, difficulty: analysis.difficulty! });
   }
 
   hooks.onProgress?.({

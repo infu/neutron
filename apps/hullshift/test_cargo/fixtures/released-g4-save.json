@@ -1,0 +1,1315 @@
+{
+  "schema": 1,
+  "savedAt": 1789171200000,
+  "payload": {
+    "serviceRevision": 5,
+    "runs": [
+      {
+        "saveVersion": 1,
+        "id": "run_933419fac5f302006a839ec51310389f",
+        "trainingId": null,
+        "revision": 3,
+        "identity": {
+          "generatorVersion": "g4",
+          "seed": "00000000000000ab",
+          "difficulty": 3
+        },
+        "levelHash": "2d23cefe0306b6328b8c521e6ff5517b00e728141e94e4009c32d44dd4ddac2b",
+        "shareCode": "HS1-G4-D3-S00000000000000ab-C6cf673ca",
+        "level": {
+          "generatorVersion": "g4",
+          "width": 11,
+          "height": 9,
+          "channels": [
+            {
+              "id": "exchange-hold",
+              "symbol": "A"
+            },
+            {
+              "id": "exchange-dispatch",
+              "symbol": "B"
+            },
+            {
+              "id": "exchange-exit",
+              "symbol": "C"
+            }
+          ],
+          "cells": [
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor",
+              "fixture": {
+                "id": "exchange-memory-door",
+                "kind": "door",
+                "channel": "exchange-dispatch"
+              }
+            },
+            {
+              "terrain": "floor",
+              "fixture": {
+                "id": "exchange-exit-gate",
+                "kind": "gate",
+                "channel": "exchange-exit"
+              }
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor",
+              "fixture": {
+                "id": "exchange-hold-plate",
+                "kind": "plate",
+                "channel": "exchange-hold"
+              }
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor",
+              "fixture": {
+                "id": "exchange-exit-socket",
+                "kind": "socket",
+                "channel": "exchange-exit",
+                "initiallyInstalled": false
+              }
+            },
+            {
+              "terrain": "floor",
+              "fixture": {
+                "id": "exchange-dispatch-plate",
+                "kind": "plate",
+                "channel": "exchange-dispatch"
+              }
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "vacuum",
+              "fixture": {
+                "id": "exchange-crossover",
+                "kind": "bridge",
+                "channel": "exchange-hold"
+              }
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            }
+          ],
+          "playerStart": {
+            "x": 4,
+            "y": 4
+          },
+          "objects": [
+            {
+              "id": "exchange-freight",
+              "kind": "cargo",
+              "position": {
+                "x": 4,
+                "y": 6
+              }
+            },
+            {
+              "id": "exchange-reactor",
+              "kind": "reactor-cell",
+              "position": {
+                "x": 3,
+                "y": 4
+              }
+            }
+          ]
+        },
+        "analysis": {
+          "solvable": true,
+          "initialStateKey": "[\"hullshift-state\",1,[4,4],[[\"exchange-freight\",\"cargo\",4,6],[\"exchange-reactor\",\"reactor-cell\",3,4]],[],[],[],[]]",
+          "fatalFrontier": [
+            {
+              "stateKey": "[\"hullshift-state\",1,[3,4],[[\"exchange-freight\",\"cargo\",4,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "W",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[5,5],[[\"exchange-freight\",\"cargo\",4,6],[\"exchange-reactor\",\"reactor-cell\",3,4]],[],[],[],[]]",
+              "action": "S",
+              "kind": "physical",
+              "reason": "physical-hazard"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[6,6],[[\"exchange-freight\",\"cargo\",4,6],[\"exchange-reactor\",\"reactor-cell\",3,4]],[],[],[],[]]",
+              "action": "W",
+              "kind": "physical",
+              "reason": "physical-hazard"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[1,4],[[\"exchange-freight\",\"cargo\",4,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "E",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[5,6],[[\"exchange-freight\",\"cargo\",4,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "W",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[5,6],[[\"exchange-freight\",\"cargo\",6,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "E",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[5,7],[[\"exchange-freight\",\"cargo\",4,6],[\"exchange-reactor\",\"reactor-cell\",3,4]],[],[],[],[]]",
+              "action": "N",
+              "kind": "physical",
+              "reason": "physical-hazard"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[6,5],[[\"exchange-freight\",\"cargo\",6,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "S",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[3,4],[[\"exchange-freight\",\"cargo\",5,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "W",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[3,4],[[\"exchange-freight\",\"cargo\",6,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "W",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[5,5],[[\"exchange-freight\",\"cargo\",6,5],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "E",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[5,5],[[\"exchange-freight\",\"cargo\",5,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "S",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[1,4],[[\"exchange-freight\",\"cargo\",5,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "E",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[1,4],[[\"exchange-freight\",\"cargo\",6,6],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "E",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[3,4],[[\"exchange-freight\",\"cargo\",6,5],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "W",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[3,4],[[\"exchange-freight\",\"cargo\",5,5],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "W",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[1,4],[[\"exchange-freight\",\"cargo\",6,5],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "E",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[3,4],[[\"exchange-freight\",\"cargo\",5,4],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "W",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[1,4],[[\"exchange-freight\",\"cargo\",5,5],[\"exchange-reactor\",\"reactor-cell\",2,4]],[],[],[],[]]",
+              "action": "E",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[3,3],[[\"exchange-freight\",\"cargo\",5,4],[\"exchange-reactor\",\"reactor-cell\",3,4]],[],[],[],[]]",
+              "action": "S",
+              "kind": "causal",
+              "reason": "no-evacuation-route"
+            },
+            {
+              "stateKey": "[\"hullshift-state\",1,[4,6],[[\"exchange-freight\",\"cargo\",5,4]],[],[[\"exchange-exit-socket\",\"exchange-reactor\"]],[],[]]",
+              "action": "E",
+              "kind": "physical",
+              "reason": "physical-hazard"
+            }
+          ],
+          "preferredSolution": {
+            "actions": [
+              "W",
+              "S",
+              "S",
+              "E",
+              "W",
+              "N",
+              "N",
+              "E",
+              "E",
+              "S",
+              "E",
+              "S",
+              "S",
+              "W",
+              "N",
+              "N",
+              "S",
+              "W",
+              "W",
+              "N",
+              "N",
+              "N",
+              "W",
+              "W",
+              "S",
+              "E",
+              "E",
+              "N",
+              "E",
+              "E"
+            ],
+            "commitments": 13,
+            "pushes": 6,
+            "totalActions": 30
+          },
+          "optimalActions": 30,
+          "optimalPushes": 6,
+          "retainedNearOptimalSolutions": [
+            {
+              "actions": [
+                "W",
+                "S",
+                "S",
+                "E",
+                "W",
+                "N",
+                "N",
+                "E",
+                "E",
+                "S",
+                "E",
+                "S",
+                "S",
+                "W",
+                "N",
+                "N",
+                "S",
+                "W",
+                "W",
+                "N",
+                "N",
+                "N",
+                "W",
+                "W",
+                "S",
+                "E",
+                "E",
+                "N",
+                "E",
+                "E"
+              ],
+              "commitments": 13,
+              "pushes": 6,
+              "totalActions": 30
+            }
+          ],
+          "stateCount": 778,
+          "transitionCount": 1855,
+          "physicalFailureTransitionCount": 81,
+          "victoryTransitionCount": 1,
+          "estimatedBytes": 730662,
+          "limits": {
+            "maxStates": 200000,
+            "maxTransitions": 800000,
+            "maxEstimatedBytes": 134217728,
+            "cooperateEvery": 512
+          },
+          "milestones": {
+            "mandatoryIds": [
+              "a-stage",
+              "hold-source",
+              "crossover-open",
+              "b-cross",
+              "b-seat",
+              "dispatch-source",
+              "memory-door-open",
+              "a-dock",
+              "exit-source",
+              "evacuate"
+            ],
+            "precedence": [
+              {
+                "before": "a-stage",
+                "after": "b-cross"
+              },
+              {
+                "before": "a-stage",
+                "after": "b-seat"
+              },
+              {
+                "before": "a-stage",
+                "after": "dispatch-source"
+              },
+              {
+                "before": "a-stage",
+                "after": "a-dock"
+              },
+              {
+                "before": "a-stage",
+                "after": "exit-source"
+              },
+              {
+                "before": "a-stage",
+                "after": "evacuate"
+              },
+              {
+                "before": "hold-source",
+                "after": "b-cross"
+              },
+              {
+                "before": "hold-source",
+                "after": "b-seat"
+              },
+              {
+                "before": "hold-source",
+                "after": "dispatch-source"
+              },
+              {
+                "before": "hold-source",
+                "after": "a-dock"
+              },
+              {
+                "before": "hold-source",
+                "after": "exit-source"
+              },
+              {
+                "before": "hold-source",
+                "after": "evacuate"
+              },
+              {
+                "before": "crossover-open",
+                "after": "b-cross"
+              },
+              {
+                "before": "crossover-open",
+                "after": "b-seat"
+              },
+              {
+                "before": "crossover-open",
+                "after": "dispatch-source"
+              },
+              {
+                "before": "crossover-open",
+                "after": "a-dock"
+              },
+              {
+                "before": "crossover-open",
+                "after": "exit-source"
+              },
+              {
+                "before": "crossover-open",
+                "after": "evacuate"
+              },
+              {
+                "before": "b-cross",
+                "after": "b-seat"
+              },
+              {
+                "before": "b-cross",
+                "after": "dispatch-source"
+              },
+              {
+                "before": "b-cross",
+                "after": "a-dock"
+              },
+              {
+                "before": "b-cross",
+                "after": "exit-source"
+              },
+              {
+                "before": "b-cross",
+                "after": "evacuate"
+              },
+              {
+                "before": "b-seat",
+                "after": "a-dock"
+              },
+              {
+                "before": "b-seat",
+                "after": "exit-source"
+              },
+              {
+                "before": "b-seat",
+                "after": "evacuate"
+              },
+              {
+                "before": "dispatch-source",
+                "after": "a-dock"
+              },
+              {
+                "before": "dispatch-source",
+                "after": "exit-source"
+              },
+              {
+                "before": "dispatch-source",
+                "after": "evacuate"
+              },
+              {
+                "before": "memory-door-open",
+                "after": "a-dock"
+              },
+              {
+                "before": "memory-door-open",
+                "after": "exit-source"
+              },
+              {
+                "before": "memory-door-open",
+                "after": "evacuate"
+              },
+              {
+                "before": "a-dock",
+                "after": "evacuate"
+              },
+              {
+                "before": "exit-source",
+                "after": "evacuate"
+              }
+            ],
+            "dependencyDepth": 5,
+            "planningHorizon": 6,
+            "crossMechanicCoupling": 11,
+            "mandatoryFamilies": [
+              "consumers",
+              "momentary-circuit",
+              "permanent-sources",
+              "pushing"
+            ]
+          },
+          "features": {
+            "commitments": 13,
+            "dependencyDepth": 5,
+            "planningHorizon": 6,
+            "interleaving": 0,
+            "irreversibility": 3,
+            "decisionPressure": 1.351197168846341,
+            "crossMechanicCoupling": 11,
+            "stateSpaceComplexity": 8.049848549450562,
+            "fatalChoicePressure": 0.1411764705882353,
+            "mechanicFamilies": 4,
+            "mechanicFamiliesPresent": 6,
+            "mechanicFamiliesMandatory": 4
+          },
+          "difficulty": {
+            "requestedDifficulty": 3,
+            "ratedDifficulty": 3,
+            "profileMatch": true,
+            "hardViolations": [],
+            "targetDistance": 2.1877879655054184,
+            "challengeScore": 42.59840472738477
+          },
+          "decisionStructure": {
+            "solutionDirectionChanges": 18,
+            "pushDirections": 3,
+            "pushAxes": 2,
+            "pushedObjects": 2,
+            "repositioningActions": 21,
+            "winningChoiceStates": 6,
+            "recoverableChoiceStates": 5,
+            "fatalChoiceStates": 2,
+            "pushRuns": 4,
+            "turningRegrips": 2,
+            "nonProgressPushes": 1,
+            "objectRevisits": 1,
+            "longestConsequenceFreeRun": 9,
+            "consequenceFreePermille": 700
+          },
+          "macroProjection": {
+            "schemaVersion": "neutral-scc-v1",
+            "rawStateCount": 778,
+            "macroStateCount": 264,
+            "winningMacroStateCount": 41,
+            "decisionTransitionCount": 581,
+            "preferredCommitments": 13,
+            "retainedMaterialSolutions": 1,
+            "retainedSolutionCap": 8,
+            "retainedSolutionCapReached": false,
+            "retainedMaterialSolutionCountExact": false
+          },
+          "interaction": {
+            "schemaVersion": "interaction-metrics-v1",
+            "preferredCommitmentLabels": [
+              "object:exchange-reactor",
+              "object:exchange-freight",
+              "fixture:exchange-exit-socket",
+              "fixture:exchange-dispatch-plate",
+              "fixture:exchange-dispatch-plate",
+              "object:exchange-freight",
+              "object:exchange-freight",
+              "fixture:exchange-crossover",
+              "fixture:exchange-crossover",
+              "object:exchange-reactor",
+              "object:exchange-reactor",
+              "fixture:exchange-memory-door",
+              "milestone:evacuate"
+            ],
+            "entityMechanicAlternations": 8,
+            "mechanicFamilyAlternations": 9,
+            "recurringResourceLabels": [
+              "fixture:exchange-crossover",
+              "fixture:exchange-hold-plate",
+              "fixture:exchange-memory-door",
+              "object:exchange-freight",
+              "object:exchange-reactor"
+            ],
+            "preferredBalancedDecompositionCost": 1,
+            "balancedDecomposition": {
+              "supported": true,
+              "value": 1,
+              "commitmentBudget": 15,
+              "partitionsEvaluated": 10
+            },
+            "counterintuitiveCommitments": {
+              "schemaVersion": "counterintuitive-commitments-v1",
+              "supported": true,
+              "value": 1,
+              "commitmentBudget": 15,
+              "productStatesEvaluated": 497,
+              "modeledRecurringResourceLabels": [
+                "fixture:exchange-crossover",
+                "fixture:exchange-hold-plate",
+                "fixture:exchange-memory-door",
+                "object:exchange-freight",
+                "object:exchange-reactor"
+              ]
+            }
+          }
+        },
+        "difficulty": {
+          "requestedDifficulty": 3,
+          "ratedDifficulty": 3,
+          "profileMatch": true,
+          "hardViolations": [],
+          "targetDistance": 2.1877879655054184,
+          "challengeScore": 42.59840472738477
+        },
+        "initialSnapshot": {
+          "state": {
+            "player": {
+              "x": 4,
+              "y": 4
+            },
+            "objects": [
+              {
+                "id": "exchange-freight",
+                "kind": "cargo",
+                "position": {
+                  "x": 4,
+                  "y": 6
+                }
+              },
+              {
+                "id": "exchange-reactor",
+                "kind": "reactor-cell",
+                "position": {
+                  "x": 3,
+                  "y": 4
+                }
+              }
+            ],
+            "activeRelayIds": [],
+            "installedCells": [],
+            "collapsedFractures": [],
+            "removedObjectIds": []
+          },
+          "derived": {
+            "sources": [
+              {
+                "fixtureId": "exchange-hold-plate",
+                "kind": "plate",
+                "channel": "exchange-hold",
+                "position": {
+                  "x": 2,
+                  "y": 4
+                },
+                "active": false
+              },
+              {
+                "fixtureId": "exchange-exit-socket",
+                "kind": "socket",
+                "channel": "exchange-exit",
+                "position": {
+                  "x": 4,
+                  "y": 4
+                },
+                "active": false
+              },
+              {
+                "fixtureId": "exchange-dispatch-plate",
+                "kind": "plate",
+                "channel": "exchange-dispatch",
+                "position": {
+                  "x": 5,
+                  "y": 4
+                },
+                "active": false
+              }
+            ],
+            "channels": [
+              {
+                "id": "exchange-dispatch",
+                "symbol": "B",
+                "active": false
+              },
+              {
+                "id": "exchange-exit",
+                "symbol": "C",
+                "active": false
+              },
+              {
+                "id": "exchange-hold",
+                "symbol": "A",
+                "active": false
+              }
+            ],
+            "consumers": [
+              {
+                "fixtureId": "exchange-memory-door",
+                "kind": "door",
+                "channel": "exchange-dispatch",
+                "position": {
+                  "x": 4,
+                  "y": 3
+                },
+                "powered": false,
+                "passable": false,
+                "jammed": false
+              },
+              {
+                "fixtureId": "exchange-exit-gate",
+                "kind": "gate",
+                "channel": "exchange-exit",
+                "position": {
+                  "x": 5,
+                  "y": 3
+                },
+                "powered": false,
+                "passable": false,
+                "jammed": false
+              },
+              {
+                "fixtureId": "exchange-crossover",
+                "kind": "bridge",
+                "channel": "exchange-hold",
+                "position": {
+                  "x": 5,
+                  "y": 6
+                },
+                "powered": false,
+                "passable": false,
+                "jammed": false
+              }
+            ]
+          },
+          "outcome": {
+            "kind": "playing"
+          }
+        },
+        "snapshot": {
+          "state": {
+            "player": {
+              "x": 3,
+              "y": 6
+            },
+            "objects": [
+              {
+                "id": "exchange-freight",
+                "kind": "cargo",
+                "position": {
+                  "x": 4,
+                  "y": 6
+                }
+              },
+              {
+                "id": "exchange-reactor",
+                "kind": "reactor-cell",
+                "position": {
+                  "x": 2,
+                  "y": 4
+                }
+              }
+            ],
+            "activeRelayIds": [],
+            "installedCells": [],
+            "collapsedFractures": [],
+            "removedObjectIds": []
+          },
+          "derived": {
+            "sources": [
+              {
+                "fixtureId": "exchange-hold-plate",
+                "kind": "plate",
+                "channel": "exchange-hold",
+                "position": {
+                  "x": 2,
+                  "y": 4
+                },
+                "active": true
+              },
+              {
+                "fixtureId": "exchange-exit-socket",
+                "kind": "socket",
+                "channel": "exchange-exit",
+                "position": {
+                  "x": 4,
+                  "y": 4
+                },
+                "active": false
+              },
+              {
+                "fixtureId": "exchange-dispatch-plate",
+                "kind": "plate",
+                "channel": "exchange-dispatch",
+                "position": {
+                  "x": 5,
+                  "y": 4
+                },
+                "active": false
+              }
+            ],
+            "channels": [
+              {
+                "id": "exchange-dispatch",
+                "symbol": "B",
+                "active": false
+              },
+              {
+                "id": "exchange-exit",
+                "symbol": "C",
+                "active": false
+              },
+              {
+                "id": "exchange-hold",
+                "symbol": "A",
+                "active": true
+              }
+            ],
+            "consumers": [
+              {
+                "fixtureId": "exchange-memory-door",
+                "kind": "door",
+                "channel": "exchange-dispatch",
+                "position": {
+                  "x": 4,
+                  "y": 3
+                },
+                "powered": false,
+                "passable": false,
+                "jammed": false
+              },
+              {
+                "fixtureId": "exchange-exit-gate",
+                "kind": "gate",
+                "channel": "exchange-exit",
+                "position": {
+                  "x": 5,
+                  "y": 3
+                },
+                "powered": false,
+                "passable": false,
+                "jammed": false
+              },
+              {
+                "fixtureId": "exchange-crossover",
+                "kind": "bridge",
+                "channel": "exchange-hold",
+                "position": {
+                  "x": 5,
+                  "y": 6
+                },
+                "powered": true,
+                "passable": true,
+                "jammed": false
+              }
+            ]
+          },
+          "outcome": {
+            "kind": "playing"
+          }
+        },
+        "commands": [
+          "W",
+          "S",
+          "S"
+        ],
+        "cursor": 3,
+        "checkpoints": [
+          {
+            "cursor": 0,
+            "snapshot": {
+              "state": {
+                "player": {
+                  "x": 4,
+                  "y": 4
+                },
+                "objects": [
+                  {
+                    "id": "exchange-freight",
+                    "kind": "cargo",
+                    "position": {
+                      "x": 4,
+                      "y": 6
+                    }
+                  },
+                  {
+                    "id": "exchange-reactor",
+                    "kind": "reactor-cell",
+                    "position": {
+                      "x": 3,
+                      "y": 4
+                    }
+                  }
+                ],
+                "activeRelayIds": [],
+                "installedCells": [],
+                "collapsedFractures": [],
+                "removedObjectIds": []
+              },
+              "derived": {
+                "sources": [
+                  {
+                    "fixtureId": "exchange-hold-plate",
+                    "kind": "plate",
+                    "channel": "exchange-hold",
+                    "position": {
+                      "x": 2,
+                      "y": 4
+                    },
+                    "active": false
+                  },
+                  {
+                    "fixtureId": "exchange-exit-socket",
+                    "kind": "socket",
+                    "channel": "exchange-exit",
+                    "position": {
+                      "x": 4,
+                      "y": 4
+                    },
+                    "active": false
+                  },
+                  {
+                    "fixtureId": "exchange-dispatch-plate",
+                    "kind": "plate",
+                    "channel": "exchange-dispatch",
+                    "position": {
+                      "x": 5,
+                      "y": 4
+                    },
+                    "active": false
+                  }
+                ],
+                "channels": [
+                  {
+                    "id": "exchange-dispatch",
+                    "symbol": "B",
+                    "active": false
+                  },
+                  {
+                    "id": "exchange-exit",
+                    "symbol": "C",
+                    "active": false
+                  },
+                  {
+                    "id": "exchange-hold",
+                    "symbol": "A",
+                    "active": false
+                  }
+                ],
+                "consumers": [
+                  {
+                    "fixtureId": "exchange-memory-door",
+                    "kind": "door",
+                    "channel": "exchange-dispatch",
+                    "position": {
+                      "x": 4,
+                      "y": 3
+                    },
+                    "powered": false,
+                    "passable": false,
+                    "jammed": false
+                  },
+                  {
+                    "fixtureId": "exchange-exit-gate",
+                    "kind": "gate",
+                    "channel": "exchange-exit",
+                    "position": {
+                      "x": 5,
+                      "y": 3
+                    },
+                    "powered": false,
+                    "passable": false,
+                    "jammed": false
+                  },
+                  {
+                    "fixtureId": "exchange-crossover",
+                    "kind": "bridge",
+                    "channel": "exchange-hold",
+                    "position": {
+                      "x": 5,
+                      "y": 6
+                    },
+                    "powered": false,
+                    "passable": false,
+                    "jammed": false
+                  }
+                ]
+              },
+              "outcome": {
+                "kind": "playing"
+              }
+            },
+            "pushes": 0,
+            "commitments": 0,
+            "lastEvents": []
+          }
+        ],
+        "statistics": {
+          "acceptedActions": 3,
+          "pushes": 1,
+          "commitments": 1,
+          "rewinds": 0,
+          "restarts": 0,
+          "hints": 0
+        },
+        "lastEvents": [
+          {
+            "type": "entity-exited",
+            "entity": {
+              "kind": "player"
+            },
+            "position": {
+              "x": 3,
+              "y": 5
+            }
+          },
+          {
+            "type": "player-moved",
+            "from": {
+              "x": 3,
+              "y": 5
+            },
+            "to": {
+              "x": 3,
+              "y": 6
+            }
+          },
+          {
+            "type": "entity-entered",
+            "entity": {
+              "kind": "player"
+            },
+            "position": {
+              "x": 3,
+              "y": 6
+            }
+          }
+        ],
+        "createdAt": 1789171200000,
+        "updatedAt": 1789171200000,
+        "completedAt": null
+      }
+    ],
+    "tileBindings": {
+      "legacy-test": "run_933419fac5f302006a839ec51310389f"
+    },
+    "settings": {
+      "sound": true,
+      "reducedMotion": "system",
+      "skipKnownBriefings": false
+    },
+    "learnedMechanics": [],
+    "completions": []
+  }
+}

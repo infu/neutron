@@ -1,6 +1,7 @@
 import { generateLevel, type GenerationProgress } from "./generator.ts";
 import { GENERATOR_VERSION } from "./share_code.ts";
 import { analyzeLevel } from "./solver.ts";
+import { cargoAnalysis, solveCargo } from "./cargo_puzzles.ts";
 import {
   MAX_WORKER_MESSAGE_BYTES,
   WORKER_PROTOCOL_VERSION,
@@ -71,7 +72,9 @@ async function run(request: Exclude<WorkerRequest, { type: "cancel" }>): Promise
       return;
     }
 
-    const analysis = await analyzeLevel(request.level, hooks);
+    const analysis = request.level.objective === "cargo"
+      ? cargoAnalysis(request.level, await solveCargo(request.level, hooks), 0)
+      : await analyzeLevel(request.level, hooks);
     if (cancelled.has(request.jobId)) throw new WorkerCancelledError();
     respond({
       protocol: WORKER_PROTOCOL_VERSION,

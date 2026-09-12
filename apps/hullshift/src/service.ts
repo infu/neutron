@@ -55,7 +55,7 @@ exposeTool(
   HULLSHIFT_TOOLS.generationStatus,
   {
     title: "Read Hullshift Generation",
-    description: "Read certified HullshiftBrain generation progress and current tile state.",
+    description: "Read procedural puzzle generation progress and current tile state.",
     inputSchema: snapshotInputSchema,
     outputSchema: residentSnapshotSchema,
     annotations: readAnnotations,
@@ -70,7 +70,7 @@ exposeTool(
   HULLSHIFT_TOOLS.generationStart,
   {
     title: "Generate Hullshift Mission",
-    description: "Select and exactly certify a deterministic HullshiftBrain catalog mission.",
+    description: "Generate a fresh, solvable Sokoban cargo puzzle from a reproducible seed and difficulty.",
     inputSchema: generationStartInputSchema,
     outputSchema: resultSchema,
     annotations: writeAnnotations,
@@ -90,7 +90,7 @@ exposeTool(
   HULLSHIFT_TOOLS.generationCancel,
   {
     title: "Cancel Hullshift Generation",
-    description: "Cancel the active HullshiftBrain certification job owned by this tile.",
+    description: "Cancel the active puzzle generation job owned by this tile.",
     inputSchema: generationCancelInputSchema,
     outputSchema: resultSchema,
     annotations: writeAnnotations,
@@ -202,7 +202,7 @@ exposeTool(
 
 for (const [name, title, description, operation] of [
   [HULLSHIFT_TOOLS.runUndo, "Undo Hullshift Move", "Restore the state immediately before the latest accepted action.", "undo"],
-  [HULLSHIFT_TOOLS.runRestart, "Restart Hullshift Mission", "Restore the exact certified initial mission state.", "restart"],
+  [HULLSHIFT_TOOLS.runRestart, "Restart Hullshift Mission", "Restore the initial puzzle state without changing its seed.", "restart"],
   [HULLSHIFT_TOOLS.runDelete, "Delete Hullshift Mission", "Delete one explicitly selected local mission save.", "deleteRun"],
 ] as const) {
   exposeTool(
@@ -242,7 +242,7 @@ exposeTool(
   HULLSHIFT_TOOLS.runHint,
   {
     title: "Request Hullshift Hint",
-    description: "Return a bounded non-directional hint derived from the exact certified winning set.",
+    description: "Find a useful hint from the current board. Tier 1 gives a nudge; tier 2 identifies the next push. Suggest undo only when no solution remains.",
     inputSchema: runHintInputSchema,
     outputSchema: resultSchema,
     annotations: writeAnnotations,

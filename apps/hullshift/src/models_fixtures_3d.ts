@@ -144,6 +144,21 @@ export function createMassPlateModel(): HullshiftFixtureModelDescriptor {
   );
 }
 
+/** Low, open cargo-bay brackets stay visible around a parked pod. */
+export function createCargoBayModel(): HullshiftFixtureModelDescriptor {
+  return fixtureDescriptor("plate", "cargo parking bay", (["released", "depressed"] as const).map((state) => variant("plate", state, "illuminated cargo bay", {
+    base: [chamferedPrism(0.85, 0.85, 0.025, 0.012, 0.055)],
+    detail: [chamferedPrism(0.65, 0.65, 0.015, 0.04, 0.045)],
+    emissive: [
+      ...[-1, 1].flatMap((side) => [
+        chamferedPrism(0.82, 0.045, 0.025, 0.06, 0.01, 0, side * 0.39),
+        chamferedPrism(0.045, 0.82, 0.025, 0.06, 0.01, side * 0.39, 0),
+      ]),
+      chamferedPrism(0.16, 0.16, 0.02, 0.06, 0.02),
+    ],
+  })));
+}
+
 /**
  * Persistent player-entry relay. Its lever physically throws between two
  * detents, while the lit terminal follows the lever. That remembered binary

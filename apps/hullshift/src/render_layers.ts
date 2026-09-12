@@ -17,6 +17,7 @@ import {
 } from "./render_shaders.ts";
 import {
   createHullshiftFixtureModel,
+  createCargoBayModel,
 } from "./models_fixtures_3d.ts";
 import {
   createHullshiftOccupantModel,
@@ -268,7 +269,7 @@ export class HullshiftRenderLayers {
       );
       const layer = this.createInstanceLayer(
         `Hullshift terrain: ${kind}`,
-        createHullshiftTerrainModel(kind).geometry,
+        createHullshiftTerrainModel(kind, level.objective === "cargo").geometry,
         new THREE.MeshStandardMaterial({
           // Instanced colors are already authored in the exact palette. A
           // non-white material tint multiplies them in Three's mesh shaders and
@@ -296,7 +297,7 @@ export class HullshiftRenderLayers {
         color: 0xffffff,
         vertexColors: false,
         roughness: 0.62,
-        metalness: 0.38,
+        metalness: 0.06,
         flatShading: true,
         depthTest: true,
         depthWrite: true,
@@ -305,7 +306,7 @@ export class HullshiftRenderLayers {
         color: 0xffffff,
         vertexColors: false,
         roughness: 0.48,
-        metalness: 0.66,
+        metalness: 0.15,
         flatShading: true,
         depthTest: true,
         depthWrite: true,
@@ -321,7 +322,7 @@ export class HullshiftRenderLayers {
 
     const fixtureCapacity = Math.max(1, this.fixtureViews.length);
     for (const kind of FIXTURE_KINDS) {
-      const model = createHullshiftFixtureModel(kind);
+      const model = kind === "plate" && level.objective === "cargo" ? createCargoBayModel() : createHullshiftFixtureModel(kind);
       this.fixtureModels.set(kind, model);
       const kindCapacity = this.fixtureViews.reduce(
         (count, fixture) => count + (fixture.kind === kind ? 1 : 0),
@@ -576,8 +577,9 @@ export class HullshiftRenderLayers {
       if (!layer) return;
       const count = counts.get(kind) ?? 0;
       const coord = { x: cellIndex % this.level.width, y: Math.floor(cellIndex / this.level.width) };
-      this.writeTransform(layer.mesh, count, coord, BOARD_LAYER_Z.terrain);
-      layer.mesh.setColorAt(count, this.scratchColor.setHex(terrainColor(kind)));
+      const cargo = this.level.objective === "cargo";
+      this.writeTransform(layer.mesh, count, coord, BOARD_LAYER_Z.terrain, 0, 0, 1, cargo && kind === "bulkhead" ? 0.7 : 1);
+      layer.mesh.setColorAt(count, this.scratchColor.setHex(terrainColor(kind)).multiplyScalar(cargo && kind === "floor" && (coord.x + coord.y) % 2 === 0 ? 1.1 : 1));
       counts.set(kind, count + 1);
       this.terrainCount += 1;
     });
@@ -677,11 +679,13 @@ export class HullshiftRenderLayers {
         count,
         fixture.coord,
         BOARD_LAYER_Z.fixture,
-        (role) => fixturePartColor(fixture, role, state, this.channelIndex),
+        (role) => this.level.objective === "cargo" && fixture.kind === "plate"
+          ? (role === "emissive" ? HULLSHIFT_PALETTE.powerGreen : HULLSHIFT_PALETTE.hullDeep)
+          : fixturePartColor(fixture, role, state, this.channelIndex),
       );
       kindCounts.set(state, count + 1);
 
-      if (fixture.channelId !== null) {
+      if (fixture.channelId !== null && this.level.objective !== "cargo") {
         const index = this.channelIndex.get(fixture.channelId) ?? 0;
         const marks = Math.min(4, index + 1);
         const poweredChannel = channelIsActive(snapshot, fixture.channelId);
@@ -740,7 +744,11 @@ export class HullshiftRenderLayers {
         count,
         object.position,
         this.occupantStandingZ(snapshot, object.position, object.kind),
-        (role) => occupantPartColor(object.kind, role, snapshot),
+        (role) => this.level.objective === "cargo" && object.kind === "cargo"
+          ? role === "base"
+            ? (this.level.cells[object.position.y * this.level.width + object.position.x]?.fixture ? HULLSHIFT_PALETTE.powerGreen : HULLSHIFT_PALETTE.cargoBlue)
+            : role === "detail" ? HULLSHIFT_PALETTE.hullDeep : HULLSHIFT_PALETTE.goalIvory
+          : occupantPartColor(object.kind, role, snapshot),
       );
       counts.set(object.kind, count + 1);
     }
@@ -815,6 +823,7 @@ export class HullshiftRenderLayers {
       candidate.coord.x === coord.x && candidate.coord.y === coord.y
     ));
     if (model === undefined || fixture === undefined) return BOARD_LAYER_Z.occupant;
+    if (this.level.objective === "cargo" && fixture.kind === "plate") return BOARD_LAYER_Z.occupant + 0.04;
     const state = fixtureModelState(snapshot, fixture);
     const surface = fixtureSupportSurfaceZ(fixture.kind, state);
     if (surface === null) return BOARD_LAYER_Z.occupant;
@@ -906,6 +915,8 @@ export class HullshiftRenderLayers {
     mesh.name = name;
     mesh.count = 0;
     mesh.frustumCulled = false;
+    mesh.castShadow = material instanceof THREE.MeshStandardMaterial;
+    mesh.receiveShadow = material instanceof THREE.MeshStandardMaterial;
     mesh.renderOrder = layerRenderOrder(name);
     mesh.instanceMatrix.setUsage(dynamic ? THREE.DynamicDrawUsage : THREE.StaticDrawUsage);
     return { mesh, geometry, material };

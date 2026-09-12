@@ -34,6 +34,7 @@ import { encodeShareCode } from "./share_code.ts";
 import { parseCanonicalSeed } from "./prng.ts";
 import { mechanicReferencesForLevel } from "./mechanic_reference.ts";
 import { createSolverHint, type HintResponse, type HintTier } from "./hints.ts";
+import { createCargoHint } from "./cargo_hints.ts";
 import { evaluateDifficulty } from "./difficulty.ts";
 import {
   getTrainingDefinition,
@@ -435,7 +436,7 @@ export class HullshiftResident {
     run = requireRun(this.#save, runId);
     const lateConflict = runConflict(run, expectedRevision);
     if (lateConflict !== null) return this.#conflict(tileId, lateConflict);
-    const transition = resolveDirectionalAction(run.level, run.snapshot, direction, { winningStateKeys });
+    const transition = resolveDirectionalAction(run.level, run.snapshot, direction, winningStateKeys ? { winningStateKeys } : {});
     if (!transition.accepted) {
       return {
         ok: true,
@@ -574,13 +575,13 @@ export class HullshiftResident {
     let run = requireRun(this.#save, runId);
     const conflict = runConflict(run, expectedRevision);
     if (conflict !== null) return this.#conflict(tileId, conflict);
-    const winningStateKeys = await this.#winningSet(run);
-    const hint = await createSolverHint(
-      run.level,
-      run.snapshot,
-      { winningStateKeys },
-      tier,
-    );
+    const hint = run.level.objective === "cargo"
+      ? await createCargoHint(run.level, run.snapshot, run.analysis.preferredSolution?.actions ?? [], tier, async (level) => {
+        const analysis = await this.#worker.analyze(level);
+        return { actions: analysis.preferredSolution ? [...analysis.preferredSolution.actions] : null,
+          pushes: analysis.optimalPushes, complete: analysis.cargo?.searchComplete ?? false, explored: analysis.stateCount };
+      })
+      : await createSolverHint(run.level, run.snapshot, { winningStateKeys: (await this.#winningSet(run))! }, tier);
     run = requireRun(this.#save, runId);
     const lateConflict = runConflict(run, expectedRevision);
     if (lateConflict !== null) return this.#conflict(tileId, lateConflict);
@@ -692,7 +693,7 @@ export class HullshiftResident {
         job.error = null;
       } else {
         job.state = "error";
-        job.error = "The installed HullshiftBrain catalog failed exact certification. Your current mission is unchanged.";
+        job.error = "Couldn’t finish making this puzzle. Try a fresh one. Your saved game is still here.";
       }
       await this.#commit();
     }
@@ -781,7 +782,10 @@ export class HullshiftResident {
     };
   }
 
-  async #winningSet(run: SavedRun): Promise<ReadonlySet<string>> {
+  async #winningSet(run: SavedRun): Promise<ReadonlySet<string> | undefined> {
+    // Sokoban allows experimentation and ordinary dead ends, with free undo.
+    // Its solution search does not enumerate the complete winning-state graph.
+    if (run.level.objective === "cargo") return undefined;
     const cached = this.#winningSets.get(run.levelHash);
     if (cached !== undefined) return cached;
     const analysis = await this.#worker.analyze(run.level);
@@ -813,7 +817,7 @@ export class HullshiftResident {
     for (let index = checkpoint.cursor; index < cursor; index += 1) {
       const direction = run.commands[index];
       if (direction === undefined) throw new Error("Hullshift command history is corrupt");
-      const transition = resolveDirectionalAction(run.level, snapshot, direction, { winningStateKeys });
+      const transition = resolveDirectionalAction(run.level, snapshot, direction, winningStateKeys ? { winningStateKeys } : {});
       if (!transition.accepted) throw new Error("Hullshift command history no longer replays exactly");
       snapshot = transition.after;
       if (transition.pushed) pushes += 1;

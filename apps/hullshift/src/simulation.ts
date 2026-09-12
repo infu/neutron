@@ -172,6 +172,8 @@ function canonicalLevelValue(level: LevelDefinition): readonly unknown[] {
     cells,
     [level.playerStart.x, level.playerStart.y],
     objects,
+    // Keep every released evacuation level's canonical bytes unchanged.
+    ...(level.objective === undefined ? [] : [level.objective]),
   ];
 }
 
@@ -634,6 +636,10 @@ export function resolveDirectionalAction(
         ? {}
         : { fixtureId: physicalFailure.fixtureId }),
     });
+  } else if (level.objective === "cargo" && canonicalState.player !== null
+    && finalDerived.sources.length > 0 && finalDerived.sources.every((source) => source.active)) {
+    outcome = { kind: "victory", gateId: "cargo-secured", position: canonicalState.player };
+    events.push({ type: "victory", gateId: "cargo-secured", position: canonicalState.player });
   } else if (gateEntry !== undefined) {
     outcome = {
       kind: "victory",

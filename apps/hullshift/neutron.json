@@ -2,13 +2,13 @@
   "format": 3,
   "name": "Hullshift",
   "id": "hullshift",
-  "version": 206,
+  "version": 207,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
-  "description": "Solve deterministic sci-fi pushing puzzles",
+  "description": "Fresh Sokoban puzzles, one clever push at a time",
   "src": "main.mo",
   "background": {
     "path": "service.html",
-    "description": "Persist local runs and perform deterministic level analysis"
+    "description": "Save puzzle progress and generate new cargo decks"
   },
   "capabilities": {
     "persistent_browser_storage": {
@@ -22,7 +22,7 @@
       "title": "Hullshift",
       "path": "index.html",
       "icon": "static/icon.svg",
-      "description": "Push cargo, route power, and escape a damaged spacecraft"
+      "description": "Park every pod on a glowing bay. Fresh puzzles, free undo, and useful hints."
     }
   ],
   "func": {}

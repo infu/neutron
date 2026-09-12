@@ -19,6 +19,7 @@ export function accessibleBoardSummary(run: BoardDescriptionRun): string {
     .join(", ");
   const removed = new Set(run.snapshot.state.removedObjectIds);
   const movableCount = run.snapshot.state.objects.filter((object) => !removed.has(object.id)).length;
+  if (run.level.objective === "cargo") return `Hullshift cargo puzzle, ${run.level.width} columns by ${run.level.height} rows. Park every pod on a bay. ${run.snapshot.derived.sources.filter((source) => source.active).length} of ${movableCount} pods parked. Player at column ${(player?.x ?? 0) + 1}, row ${(player?.y ?? 0) + 1}. Adjacent cells: ${adjacent}.`;
   return `Hullshift board, ${run.level.width} columns by ${run.level.height} rows. Player ${player ? `at column ${player.x + 1}, row ${player.y + 1}, on ${current}` : "is lost"}. ${movableCount} movable objects remain. Circuits: ${channels || "none"}. Adjacent cells: ${adjacent}.`;
 }
 
@@ -43,7 +44,7 @@ export function describeHullshiftCell(
       installed.socketId === cell.fixture?.id
     ));
   const parts: string[] = [cell.terrain];
-  if (cell.fixture) parts.push(cell.fixture.kind);
+  if (cell.fixture) parts.push(run.level.objective === "cargo" ? "cargo bay" : cell.fixture.kind);
   if (object) parts.push(object.kind);
   if (installedReactor) parts.push("installed reactor-cell");
   return parts.join(" with ");

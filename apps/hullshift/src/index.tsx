@@ -63,22 +63,14 @@ import { canonicalStateHash } from "./simulation.ts";
 import {
   getTrainingDefinition,
 } from "./training.ts";
+import { HomeSurface, CargoHintMap } from "./cargo_ui.tsx";
+import { CARGO_DIFFICULTIES } from "./cargo_puzzles.ts";
 import "./style.scss";
 
 type Overlay = "menu" | "help" | "hint" | "settings" | "details" | "briefing" | "clear" | null;
 type GpuStatus = "ready" | "lost" | "error";
 
-const DIFFICULTY_COPY = [
-  "Cadet · one clear system and generous recovery space",
-  "Deckhand · short dependencies and forgiving staging",
-  "Technician · deliberate pushes and a second system",
-  "Specialist · coupled systems with recoverable commitments",
-  "Engineer · longer plans and meaningful interleaving",
-  "Chief · compact staging with controlled irreversible choices",
-  "Navigator · deep dependencies and tighter recovery",
-  "Commander · high system coupling and decision pressure",
-  "Hullshifter · the full certified mechanism vocabulary",
-] as const;
+const DIFFICULTY_COPY = CARGO_DIFFICULTIES.map((profile) => `${profile.name} · ${profile.description}`);
 
 const EMPTY_SNAPSHOT: ResidentSnapshot | null = null;
 
@@ -101,7 +93,7 @@ export function App() {
   const [inputLocked, setInputLocked] = useState(false);
   const [presentationEvents, setPresentationEvents] = useState<readonly EngineEvent[] | null>(null);
   const busyRef = useRef(false);
-  const [difficulty, setDifficulty] = useState(2);
+  const [difficulty, setDifficulty] = useState(0);
   const [gpuStatus, setGpuStatus] = useState<GpuStatus>("ready");
   const [clearConfirmation, setClearConfirmation] = useState("");
   const [hint, setHint] = useState<HintResponse | null>(null);
@@ -173,7 +165,7 @@ export function App() {
       const run = snapshot?.activeRun;
       const allKnown = run !== null && run !== undefined && mechanicReferencesForLevel(run.level)
         .every((mechanic) => snapshot.learnedMechanics.includes(mechanic.key));
-      if (!snapshot.settings.skipKnownBriefings || !allKnown) setOverlay("briefing");
+      if (run?.level.objective !== "cargo" && (!snapshot.settings.skipKnownBriefings || !allKnown)) setOverlay("briefing");
     }
   }, [snapshot]);
 
@@ -249,7 +241,6 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
       if (inputLockedRef.current) return;
       if (event.key === "Escape" && activeRun?.snapshot.outcome.kind === "playing") {
         event.preventDefault();
@@ -267,7 +258,7 @@ export function App() {
         submitDirection(direction);
         return;
       }
-      if (isNativeControl(event.target)) return;
+      if (isNativeControl(event.target) || event.repeat) return;
       if ((event.key.toLowerCase() === "z" && (event.ctrlKey || event.metaKey || !event.shiftKey)) && activeRun?.canUndo) {
         event.preventDefault();
         void undo(activeRun);
@@ -302,6 +293,7 @@ export function App() {
   }
 
   async function requestHint(run: RunView): Promise<void> {
+    setNotice("Finding a useful push…");
     const stateHash = canonicalStateHash(run.snapshot.state);
     const tier = hint?.kind === "hint" && hint.stateHash === stateHash ? 2 : 1;
     const result = await callMutation(HULLSHIFT_TOOLS.runHint, {
@@ -311,6 +303,7 @@ export function App() {
       tier,
     });
     if (result?.ok && result.hint) {
+      setNotice(null);
       setHint(result.hint);
       setOverlay("hint");
     }
@@ -402,9 +395,6 @@ export function App() {
 
   const generationActive = snapshot.generation?.state === "running" || snapshot.generation?.state === "cancelling";
   const generationFailed = snapshot.generation?.state === "error";
-  const continuableRun = snapshot.runs.find((run) => (
-    run.trainingId === null && run.outcome.kind !== "victory"
-  )) ?? null;
 
   return (
     <main className={cx(nt.appFill, "hullshift", reducedMotion && "hullshift--reduced-motion")}>
@@ -454,6 +444,7 @@ export function App() {
           onRendererRestored={() => void refresh()}
           onExit={() => void goHome()}
           onMenu={() => setOverlay("menu")}
+          onHint={() => void requestHint(activeRun)}
           onUndo={() => void undo(activeRun)}
           onRestart={() => void restart(activeRun)}
         />
@@ -462,9 +453,10 @@ export function App() {
           busy={busy}
           difficulty={difficulty}
           onDifficulty={setDifficulty}
-          onContinue={continuableRun ? () => void openRun(continuableRun.id) : null}
+          runs={snapshot.runs}
+          onOpen={(id) => void openRun(id)}
           onHelp={() => setOverlay("help")}
-          onStart={() => void startMission()}
+          onStart={(selected, seed) => void startMission(selected, seed)}
           onSettings={() => setOverlay("settings")}
         />
       )}
@@ -476,7 +468,7 @@ export function App() {
         </div>
       ) : null}
 
-      {!inputLocked && activeRun?.snapshot.outcome.kind === "physical-failure" ? (
+      {!generationActive && !generationFailed && !inputLocked && activeRun?.snapshot.outcome.kind === "physical-failure" ? (
         <TerminalPanel
           kind="failure"
           title="Hull breach"
@@ -488,7 +480,7 @@ export function App() {
           onRestart={() => void restart(activeRun)}
           onHome={() => void goHome()}
         />
-      ) : !inputLocked && activeRun?.snapshot.outcome.kind === "causal-failure" ? (
+      ) : !generationActive && !generationFailed && !inputLocked && activeRun?.snapshot.outcome.kind === "causal-failure" ? (
         <TerminalPanel
           kind="failure"
           title="No evacuation route remains"
@@ -500,13 +492,17 @@ export function App() {
           onRestart={() => void restart(activeRun)}
           onHome={() => void goHome()}
         />
-      ) : !inputLocked && activeRun?.snapshot.outcome.kind === "victory" ? (
+      ) : !generationActive && !generationFailed && !inputLocked && activeRun?.snapshot.outcome.kind === "victory" ? (
         <VictoryPanel
           run={activeRun}
           busy={busy}
           onDetails={() => setOverlay("details")}
           onHome={() => void goHome()}
-          primaryLabel="New mission at this difficulty"
+          primaryLabel="Another puzzle"
+          onHarder={activeRun.identity.difficulty < 8 ? () => {
+            setDifficulty(activeRun.identity.difficulty + 1);
+            void startMission(activeRun.identity.difficulty + 1);
+          } : null}
           onNew={() => {
             setDifficulty(activeRun.identity.difficulty);
             void startMission(activeRun.identity.difficulty);
@@ -522,6 +518,7 @@ export function App() {
               run={activeRun}
               busy={busy}
               onDetails={() => setOverlay("details")}
+              onNew={() => void startMission(activeRun.identity.difficulty)}
               onHelp={() => setOverlay("help")}
               onHint={() => void requestHint(activeRun)}
               onHome={() => void goHome()}
@@ -531,7 +528,11 @@ export function App() {
           ) : overlay === "details" && activeRun ? (
             <DetailsPanel run={activeRun} />
           ) : overlay === "hint" && hint ? (
-            <HintPanel hint={hint} />
+            <div><HintPanel hint={hint} />
+              {activeRun?.level.objective === "cargo" ? <CargoHintMap run={activeRun} hint={hint} /> : null}
+              {activeRun && hint.kind === "hint" && hint.tier === 1 ? <button className={nt.button} disabled={busy} onClick={() => void requestHint(activeRun)}>Show me the next push</button> : null}
+              <button className={nt.buttonGhost} onClick={() => setOverlay(null)}>Back to puzzle</button>
+            </div>
           ) : overlay === "briefing" && activeRun ? (
             <BriefingPanel
               learnedMechanics={snapshot.learnedMechanics}
@@ -567,7 +568,7 @@ export function App() {
               })}
             />
           ) : (
-            <HelpPanel reducedMotion={reducedMotion} />
+            <HelpPanel reducedMotion={reducedMotion} legacy={activeRun !== null && activeRun.level.objective !== "cargo"} />
           )}
         </Modal>
       ) : null}
@@ -575,61 +576,13 @@ export function App() {
   );
 }
 
-function HomeSurface(props: {
-  difficulty: number;
-  busy: boolean;
-  onDifficulty(value: number): void;
-  onStart(): void;
-  onHelp(): void;
-  onSettings(): void;
-  onContinue: (() => void) | null;
-}) {
-  return (
-    <section className="hullshift-home">
-      <div className="hullshift-home-mark" aria-hidden="true"><span>H</span></div>
-      <p className={nt.eyebrow}>Emergency deck systems</p>
-      <h1>Hullshift</h1>
-      <p className="hullshift-home-copy">Push cargo. Route power. Escape a spacecraft that remembers every choice.</p>
-      <div className="hullshift-start-panel">
-        <label className={nt.field} htmlFor="hullshift-difficulty">
-          <span className="hullshift-difficulty-heading"><span className={nt.label}>Difficulty</span><output htmlFor="hullshift-difficulty">{props.difficulty} · {DIFFICULTY_COPY[props.difficulty]?.split(" · ")[0]}</output></span>
-          <input
-            aria-describedby="hullshift-difficulty-help"
-            className="hullshift-difficulty-slider"
-            id="hullshift-difficulty"
-            max={8}
-            min={0}
-            onChange={(event) => props.onDifficulty(Number(event.target.value))}
-            step={1}
-            type="range"
-            value={props.difficulty}
-          />
-          <span className={nt.help} id="hullshift-difficulty-help">{DIFFICULTY_COPY[props.difficulty]}</span>
-        </label>
-        <button className={nt.button} disabled={props.busy} onClick={props.onStart}><IoPlay /> Start mission</button>
-        {props.onContinue ? <button className={nt.buttonSecondary} disabled={props.busy} onClick={props.onContinue}>Continue last game</button> : null}
-      </div>
-      <div className="hullshift-home-utilities">
-        <button className={nt.buttonGhost} onClick={props.onHelp}><IoHelpCircleOutline /> Help</button>
-        <button className={nt.buttonGhost} onClick={props.onSettings}><IoSettingsOutline /> Settings</button>
-      </div>
-    </section>
-  );
-}
-
 function GenerationSurface(props: { job: NonNullable<ResidentSnapshot["generation"]>; busy: boolean; onCancel(): void }) {
-  const progress = props.job.progress;
   return (
     <section aria-busy="true" className="hullshift-generation">
       <div className="hullshift-scanner" aria-hidden="true"><span /><span /><span /></div>
-      <p className={nt.eyebrow}>Ship computer</p>
-      <h1>Building mission</h1>
-      <dl>
-        <div><dt>Difficulty</dt><dd>{props.job.difficulty} · {DIFFICULTY_COPY[props.job.difficulty]?.split(" · ")[0]}</dd></div>
-        <div><dt>Stage</dt><dd>{progress?.stage.replaceAll("-", " ") ?? "starting"}</dd></div>
-        <div><dt>Work</dt><dd>{progress ? `${progress.completed} / ${progress.total}` : "Preparing"}</dd></div>
-      </dl>
-      {progress ? <progress className={nt.progress} max={Math.max(1, progress.total)} value={progress.completed} /> : null}
+      <p className={nt.eyebrow}>{CARGO_DIFFICULTIES[props.job.difficulty]?.name}</p>
+      <h1>Making room for a new idea.</h1>
+      <p>Arranging the deck and finding an interesting way through.<br />Bigger puzzles can take a little longer.</p>
       <button className={nt.buttonSecondary} disabled={props.busy || props.job.state === "cancelling"} onClick={props.onCancel}>
         {props.job.state === "cancelling" ? "Cancelling…" : "Cancel"}
       </button>
@@ -646,8 +599,8 @@ function GenerationFailureSurface(props: {
     <section className="hullshift-generation hullshift-generation--failed" role="alert">
       <IoAlertCircleOutline aria-hidden="true" />
       <p className={nt.eyebrow}>Map generator</p>
-      <h1>Mission generation unavailable</h1>
-      <p>{props.job.error ?? "HullshiftBrain could not certify this mission."}</p>
+      <h1>Couldn’t make this puzzle</h1>
+      <p>{props.job.error ?? "Try a fresh puzzle from the home screen."}</p>
       <dl>
         <div><dt>Difficulty</dt><dd>{props.job.difficulty}</dd></div>
       </dl>
@@ -670,19 +623,22 @@ function GameSurface(props: {
   onRendererRestored(): void;
   onExit(): void;
   onMenu(): void;
+  onHint(): void;
   onUndo(): void;
   onRestart(): void;
 }) {
   const [retryKey, setRetryKey] = useState(0);
+  const cargo = props.run.level.objective === "cargo";
+  const filled = props.run.snapshot.derived.sources.filter((source) => source.active).length;
   const consumerConsequence = [...props.events].reverse().find((event) => event.type === "consumer-changed");
   return (
     <section className="hullshift-game">
       <header className="hullshift-hud">
         <div className="hullshift-objective">
           <span className="hullshift-objective-mark" aria-hidden="true" />
-          <span><small>{props.run.trainingId === null ? "Objective" : getTrainingDefinition(props.run.trainingId).briefing.title}</small>{props.run.trainingId === null ? "Reach the powered evacuation gate" : getTrainingDefinition(props.run.trainingId).briefing.objective}</span>
+          <span><small>{cargo ? `${props.run.identity.difficulty + 1} / 9 · ${CARGO_DIFFICULTIES[props.run.identity.difficulty]?.name}` : "Escape puzzle"}</small>{cargo ? "Park every pod on a glowing bay" : props.run.trainingId === null ? "Reach the powered evacuation gate" : getTrainingDefinition(props.run.trainingId).briefing.objective}</span>
         </div>
-        <div aria-label="Circuit status" className="hullshift-circuit-status">
+        {cargo ? <div className="hs-bay-progress" aria-label={`${filled} of ${props.run.level.objects.length} pods parked`}><span aria-hidden="true">◇</span><strong>{filled} <small>/ {props.run.level.objects.length}</small></strong><span className="hullshift-action-label">parked</span></div> : <div aria-label="Circuit status" className="hullshift-circuit-status">
           {props.run.snapshot.derived.channels.map((channel) => (
             <span
               aria-label={`${channel.symbol} ${channel.active ? "powered" : "unpowered"}`}
@@ -691,8 +647,9 @@ function GameSurface(props: {
               title={`${channel.id}: ${channel.active ? "powered" : "unpowered"}`}
             >{channel.symbol}</span>
           ))}
-        </div>
+        </div>}
         <div className="hullshift-hud-actions">
+          <button className={nt.buttonGhost} disabled={props.busy || props.inputLocked} onClick={props.onHint}><IoHelpCircleOutline /><span className="hullshift-action-label">Hint</span></button>
           <button aria-keyshortcuts="Z Control+Z Meta+Z" aria-label="Undo move" className={nt.buttonGhost} disabled={!props.run.canUndo || props.busy || props.inputLocked} onClick={props.onUndo}><IoArrowUndoOutline /><span className="hullshift-action-label">Undo</span></button>
           <button aria-label="Exit to lobby" className={nt.buttonGhost} disabled={props.busy || props.inputLocked} onClick={props.onExit}><IoArrowBack /><span className="hullshift-action-label">Lobby</span></button>
           <button aria-label="Mission menu" className={nt.iconButton} disabled={props.busy || props.inputLocked} onClick={props.onMenu}><IoMenu /></button>
@@ -717,7 +674,7 @@ function GameSurface(props: {
         </div>
       ) : null}
       <div className="hullshift-turn-readout" aria-live="polite">
-        <span>{eventSummary(props.events)}</span>
+        <span>{cargo ? (props.run.statistics.acceptedActions === 0 ? "Arrow keys · WASD · or tap a direction" : "Take your time. Undo is always here.") : eventSummary(props.events)}</span>
         <span>{props.run.statistics.acceptedActions} moves · {props.run.statistics.pushes} pushes</span>
       </div>
       {consumerConsequence?.type === "consumer-changed" ? (
@@ -834,6 +791,7 @@ function MenuPanel(props: {
   busy: boolean;
   onRestart(): void;
   onDetails(): void;
+  onNew(): void;
   onHelp(): void;
   onHint(): void;
   onSettings(): void;
@@ -841,17 +799,27 @@ function MenuPanel(props: {
 }) {
   return (
     <div className="hullshift-menu-list">
-      <button className={nt.buttonSecondary} disabled={props.busy} onClick={props.onRestart}><IoRefresh /> Restart mission</button>
-      <button className={nt.buttonGhost} onClick={props.onDetails}><IoInformationCircleOutline /> Mission details</button>
+      <button className={nt.button} disabled={props.busy} onClick={props.onNew}><IoPlay /> New puzzle at this difficulty</button>
+      <button className={nt.buttonSecondary} disabled={props.busy} onClick={props.onRestart}><IoRefresh /> Restart puzzle</button>
+      <button className={nt.buttonGhost} onClick={props.onDetails}><IoInformationCircleOutline /> Puzzle details</button>
       <button className={nt.buttonGhost} disabled={props.busy || props.run.snapshot.outcome.kind !== "playing"} onClick={props.onHint}><IoHelpCircleOutline /> Hint</button>
-      <button className={nt.buttonGhost} onClick={props.onHelp}><IoHelpCircleOutline /> Mechanics & controls</button>
+      <button className={nt.buttonGhost} onClick={props.onHelp}><IoHelpCircleOutline /> How to play</button>
       <button className={nt.buttonGhost} onClick={props.onSettings}><IoSettingsOutline /> Settings</button>
-      <button className={nt.buttonGhost} onClick={props.onHome}><IoArrowBack /> Save and exit to lobby</button>
+      <button className={nt.buttonGhost} onClick={props.onHome}><IoArrowBack /> Save and go home</button>
     </div>
   );
 }
 
 function DetailsPanel({ run }: { run: RunView }) {
+  const [copied, setCopied] = useState(false);
+  if (run.level.objective === "cargo") return <div className="hullshift-details">
+    <p className={nt.eyebrow}>{run.analysis.cargo?.layout ?? "Cargo deck"}</p>
+    <h3>{CARGO_DIFFICULTIES[run.identity.difficulty]?.name}</h3>
+    <p>{run.level.objects.length} pods. One home for each. Take as many tries as you need.</p>
+    <label className={nt.field}><span className={nt.label}>Share this exact puzzle</span><input className={nt.input} readOnly value={run.shareCode} onFocus={(event) => event.target.select()} /></label>
+    <button className={nt.buttonSecondary} onClick={() => { void navigator.clipboard.writeText(run.shareCode).then(() => setCopied(true)).catch(() => setCopied(false)); }}>{copied ? "Copied!" : "Copy puzzle code"}</button>
+    <p className={nt.muted}>Paste the code on the home screen to play the same layout and starting position.</p>
+  </div>;
   const mechanics = mechanicsFor(run);
   return (
     <div className="hullshift-details">
@@ -873,7 +841,7 @@ function DetailsPanel({ run }: { run: RunView }) {
 
 function HintPanel({ hint }: { hint: HintResponse }) {
   if (hint.kind === "rewind") {
-    return <div className="hullshift-hint"><p className={nt.eyebrow}>Route analysis</p><p>{hint.message}</p><p className={nt.muted}>Use Rewind to return to a certified winning position.</p></div>;
+    return <div className="hullshift-hint"><p className={nt.eyebrow}>Route analysis</p><p>{hint.message}</p><p className={nt.muted}>Undo is free. Try an earlier position and a different approach.</p></div>;
   }
   if (hint.kind === "unavailable") {
     return <div className="hullshift-hint"><p className={nt.eyebrow}>Route analysis unavailable</p><p>{hint.message}</p></div>;
@@ -883,7 +851,7 @@ function HintPanel({ hint }: { hint: HintResponse }) {
       <p className={nt.eyebrow}>Hint tier {hint.tier}</p>
       {hint.channel ? <div className="hullshift-hint-channel"><span aria-hidden="true">{hint.channel.symbol}</span> Channel {hint.channel.symbol}</div> : null}
       <p>{hint.message}</p>
-      {hint.pair ? <p className={nt.muted}>Inspect: {hint.pair.first.label} + {hint.pair.second.label}</p> : <p className={nt.muted}>Ask again from the same position to identify the relevant pair.</p>}
+      {hint.pair ? <p className={nt.muted}>Inspect: {hint.pair.first.label} + {hint.pair.second.label}</p> : <p className={nt.muted}>Want a more specific nudge? Reveal the next push below.</p>}
     </div>
   );
 }
@@ -910,7 +878,7 @@ function BriefingPanel(props: { run: RunView; learnedMechanics: readonly string[
   const introduced = mechanics.find((mechanic) => !props.learnedMechanics.includes(mechanic.key));
   return (
     <div className="hullshift-briefing">
-      <p className={nt.eyebrow}>Mission certified</p>
+      <p className={nt.eyebrow}>Escape puzzle</p>
       <p>Restore a route through the damaged deck and enter the evacuation gate after its channel is active.</p>
       {introduced ? (
         <div className="hullshift-mechanic-callout">
@@ -971,11 +939,15 @@ function ClearPanel(props: { value: string; busy: boolean; onChange(value: strin
   );
 }
 
-function HelpPanel({ reducedMotion }: { reducedMotion: boolean }) {
+function HelpPanel({ reducedMotion, legacy }: { reducedMotion: boolean; legacy: boolean }) {
   return (
     <div className="hullshift-help">
       <p>Move the maintenance droid with arrow keys, WASD, or the direction pad. Push one object at a time; objects cannot be pulled or chain-pushed.</p>
-      <HullshiftHelpModelGallery reducedMotion={reducedMotion} />
+      {legacy ? <HullshiftHelpModelGallery reducedMotion={reducedMotion} /> : <div className="hs-help-rules">
+        <p><i className="hs-legend-pod" /><span><strong>Push, don’t pull.</strong> Move into a pod to push it. Only one pod moves at a time.</span></p>
+        <p><i className="hs-legend-bay" /><span><strong>Every pod needs a bay.</strong> Any pod fits any bay. Parked pods turn mint green, and you can still move them.</span></p>
+        <p><IoArrowUndoOutline /><span><strong>Experiment freely.</strong> Corners can trap pods. Undo as often as you like, restart, or ask for a hint.</span></p>
+      </div>}
       <p><kbd>Z</kbd> undo · <kbd>R</kbd> restart · <kbd>Esc</kbd> menu</p>
     </div>
   );
@@ -995,26 +967,25 @@ function TerminalPanel(props: { kind: "failure"; title: string; detail: string; 
   );
 }
 
-function VictoryPanel(props: { run: RunView; busy: boolean; primaryLabel: string; onReplay(): void; onNew(): void; onDetails(): void; onHome(): void }) {
+function VictoryPanel(props: { run: RunView; busy: boolean; primaryLabel: string; onReplay(): void; onNew(): void; onHarder: (() => void) | null; onDetails(): void; onHome(): void }) {
   const dialogRef = useModalFocus();
-  const reference = props.run.optimalActions === null
-    ? "Certified route complete."
-    : `Certified reference: ${props.run.optimalActions} actions${props.run.optimalPushes === null ? "" : ` and ${props.run.optimalPushes} pushes`}. Your route is one valid solution, not a score.`;
+  const cargo = props.run.level.objective === "cargo";
   return (
-    <div aria-label="Evacuation complete" aria-modal="true" className="hullshift-terminal-backdrop" role="dialog">
+    <div aria-label={cargo ? "Puzzle complete" : "Evacuation complete"} aria-modal="true" className="hullshift-terminal-backdrop" role="dialog">
       <section className="hullshift-terminal hullshift-terminal--victory" ref={dialogRef}>
         <IoCheckmarkCircleOutline aria-hidden="true" />
-        <p className={nt.eyebrow}>Evacuation complete</p><h2>Hull shifted. Route secured.</h2>
+        <p className={nt.eyebrow}>{cargo ? "Cargo secured" : "Evacuation complete"}</p>
+        <h2>{cargo ? "Everything in its place." : "Route secured."}</h2>
+        <p>A little planning. A satisfying finish.</p>
         <div className="hullshift-results">
-          <span><strong>{props.run.trainingId === null ? props.run.identity.difficulty : getTrainingDefinition(props.run.trainingId).order}</strong> {props.run.trainingId === null ? "difficulty" : "training"}</span>
-          <span><strong>{props.run.statistics.acceptedActions}</strong> actions</span>
           <span><strong>{props.run.statistics.pushes}</strong> pushes</span>
-          <span><strong>{props.run.statistics.commitments}</strong> commitments</span>
-          <span><strong>{props.run.statistics.rewinds}</strong> rewinds</span>
-          <span><strong>{props.run.statistics.hints}</strong> hints</span>
+          <span><strong>{props.run.statistics.acceptedActions}</strong> moves</span>
+          <span><strong>{props.run.identity.difficulty + 1}</strong> difficulty</span>
         </div>
-        <p className="hullshift-reference">{reference}</p>
-        <div><button autoFocus className={nt.button} disabled={props.busy} onClick={props.onNew}>{props.primaryLabel}</button><button className={nt.buttonSecondary} onClick={props.onReplay}>Replay</button><button className={nt.buttonGhost} onClick={props.onDetails}>Mission details</button><button className={nt.buttonGhost} onClick={props.onHome}><IoArrowBack /> Exit to lobby</button></div>
+        <div><button autoFocus className={nt.button} disabled={props.busy} onClick={props.onNew}>{props.primaryLabel}</button>
+          {props.onHarder ? <button className={nt.buttonSecondary} disabled={props.busy} onClick={props.onHarder}>Try a little harder <IoArrowForward /></button> : null}
+          <button className={nt.buttonGhost} onClick={props.onReplay}>Play again</button>
+          <button className={nt.buttonGhost} onClick={props.onHome}>Back home</button></div>
       </section>
     </div>
   );
@@ -1100,7 +1071,7 @@ function errorMessage(reason: unknown): string {
 }
 
 function overlayTitle(overlay: Exclude<Overlay, null>): string {
-  return ({ menu: "Mission menu", help: "Mechanics & controls", hint: "Ship computer hint", settings: "Settings", details: "Mission details", briefing: "Mission briefing", clear: "Clear local data" })[overlay];
+  return ({ menu: "Puzzle menu", help: "How to play", hint: "A little nudge", settings: "Settings", details: "Puzzle details", briefing: "Mission briefing", clear: "Clear local data" })[overlay];
 }
 
 function mechanicsFor(run: RunView): string[] {
