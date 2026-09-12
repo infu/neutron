@@ -43,6 +43,7 @@ The current Applications using the inspection-oriented use license are:
 - `apps/aave`
 - `apps/hyperliquid`
 - `apps/icpswap`
+- `apps/feedback`
 
 Previously published ordinary Applications remain under the exact Neutron
 Sovereign Application License, Version 1.0
@@ -95,6 +96,11 @@ index is `packages/neutron-motoko-wasm/LICENSES.md`; it must not be described
 as solely NPL, solely Apache-2.0, or solely LGPL.
 
 ## Historical and third-party material
+
+The separate `support/feedback` protocol is proprietary and governed by its
+own `LICENSE`. Its Ashroot runtime retains its own license and is not part of
+the Feedback app's Complete App Source. The app in `apps/feedback` uses the
+shared application use license listed above.
 
 Previously conveyed GPL releases retain their GPL rights. The preserved GPL
 text in `LICENSE.GPL-3.0` and immutable historical package fixtures do not make

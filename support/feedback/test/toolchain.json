@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "pocketIcClient": "0.16.1",
+  "pocketIcVersion": "pocket-ic-server 10.0.0",
+  "pocketIcSha256": "6303d3418bb20eb3b67e21cecbe68cc450b08dcbf2ec0896d831da4ccca6a990",
+  "didcVersion": "didc 0.5.3",
+  "didcSha256": "40a7dc485b48d75b584c3a13dc4786bcf4d8504ee7d00e634858a9f7b245bd78"
+}

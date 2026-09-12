@@ -7,27 +7,15 @@ import { buildStarterInstallProvenanceAsset } from "../starter_payload.ts";
 
 const expectedStarterIds = [
   "kernel",
+  "marketplace",
   "files",
   "contacts",
-  "agent",
-  "blast",
   "wallet",
   "evm_wallet",
-  "icpswap",
-  "uniswap",
-  "curve",
-  "aave",
-  "hyperliquid",
-  "wagyu",
-  "mail",
-  "taggr",
-  "openchat",
-  "nuance",
-  "snsgov",
-  "spreadsheet",
-  "mysubnet",
+  "agent",
+  "feedback",
 ];
-const productionUpdateSource = "233tv-xiaaa-aaaay-aacta-cai";
+const productionUpdateSource = "sj2r4-haaaa-aaaay-aadgq-cai";
 
 test("SushiOS starter list contains the selected distribution apps", async () => {
   const selection = await loadStarterSelection();

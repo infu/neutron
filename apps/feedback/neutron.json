@@ -1,0 +1,131 @@
+{
+  "format": 3,
+  "id": "feedback",
+  "name": "Feedback",
+  "version": 101,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "description": "Get help with Neutron and its apps, share feedback and suggest what comes next.",
+  "src": "main.mo",
+  "backend": {
+    "capabilities": {
+      "backend_calls": {
+        "api": 1
+      }
+    }
+  },
+  "tiles": [
+    {
+      "id": "main",
+      "title": "Feedback",
+      "path": "index.html",
+      "icon": "static/icon.svg",
+      "description": "Get help, share feedback and suggest improvements"
+    }
+  ],
+  "background": {
+    "path": "service.html",
+    "description": "Feedback discussions, Agent tools and new reply notifications"
+  },
+  "tray": {
+    "title": "Feedback",
+    "path": "tray.html",
+    "icon": "static/icon.svg"
+  },
+  "capabilities": {
+    "backend_calls": {
+      "api": 1,
+      "description": "Send your messages to the Feedback service as this Neutron. No cycles are attached to these calls.",
+      "reservation_scopes": [
+        "exact"
+      ],
+      "max_concurrency": 20,
+      "max_cycles_per_call": 0,
+      "max_cycles_per_day": 0,
+      "install_reservations": [
+        {
+          "kind": "exact",
+          "principal": "ld53o-fyaaa-aaaai-ax54q-cai",
+          "method": "read_delegate_set"
+        },
+        {
+          "kind": "exact",
+          "principal": "ld53o-fyaaa-aaaai-ax54q-cai",
+          "method": "thread_create"
+        },
+        {
+          "kind": "exact",
+          "principal": "ld53o-fyaaa-aaaai-ax54q-cai",
+          "method": "reply"
+        },
+        {
+          "kind": "exact",
+          "principal": "ld53o-fyaaa-aaaai-ax54q-cai",
+          "method": "moderation_reply"
+        },
+        {
+          "kind": "exact",
+          "principal": "ld53o-fyaaa-aaaai-ax54q-cai",
+          "method": "mark_read"
+        },
+        {
+          "kind": "exact",
+          "principal": "ld53o-fyaaa-aaaai-ax54q-cai",
+          "method": "issue_status_set"
+        }
+      ]
+    },
+    "preapproved_self_calls": {
+      "api": 1,
+      "methods": [
+        "feedback_state",
+        "feedback_initialize",
+        "feedback_draft",
+        "feedback_drafts",
+        "feedback_save_draft",
+        "feedback_complete_draft",
+        "feedback_call"
+      ]
+    }
+  },
+  "func": {
+    "feedback_state": {
+      "type": "query",
+      "async": false
+    },
+    "feedback_initialize": {
+      "type": "update",
+      "async": false
+    },
+    "feedback_draft": {
+      "type": "query",
+      "async": false
+    },
+    "feedback_drafts": {
+      "type": "query",
+      "async": false
+    },
+    "feedback_save_draft": {
+      "type": "update",
+      "async": false
+    },
+    "feedback_complete_draft": {
+      "type": "update",
+      "async": false
+    },
+    "feedback_call": {
+      "type": "update",
+      "async": "async*"
+    }
+  },
+  "memory": {
+    "state": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/state/v1.mo"
+        }
+      },
+      "migrations": []
+    }
+  }
+}

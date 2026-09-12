@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "app": "feedback",
+  "memory": {
+    "state": {
+      "schemas": {
+        "1": {
+          "hash": "30072c71a95e93c97184a11c5c95a7db940098b2bfe4f394c4088b424088f424",
+          "entry": "34a1a09df6c12e9615c4ee67086e35ec2ff34f8d8887753f0efc3a538e046934"
+        }
+      },
+      "migrations": {}
+    }
+  }
+}
