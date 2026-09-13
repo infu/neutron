@@ -42,6 +42,7 @@ module {
     public type CheckedBeginInput = {
         journal : BeginInput;
         expected_deployment_id : Text;
+        expected_release_preferences_revision : ?Nat;
     };
 
     public type DeploymentInput = {

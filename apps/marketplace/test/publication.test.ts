@@ -50,6 +50,13 @@ test("supported image MIME and original image digests are retained", async () =>
   expect(plan.artifacts[3]).toMatchObject({ role: "screenshot", purpose: "image", mediaType: "image/svg+xml", digest: digest(svg) });
 });
 
+test("package release notes retain their exact text in the reviewed plan", async () => {
+  const releaseNotes = "Saved searches\n\nKeeps your existing notebooks. 🪐";
+  const plan = await preparePublication({ ...input(), releaseNotes });
+  expect(plan.releaseNotes).toBe(releaseNotes);
+  expect(JSON.parse(JSON.stringify(plan)).releaseNotes).toBe(releaseNotes);
+});
+
 for (const type of ["", "text/plain"]) test(`unsupported image MIME ${JSON.stringify(type)} is still rejected`, async () => {
   await expect(preparePublication({ ...input(), iconFile: new File(["image fixture"], "icon.png", { type }) })).rejects.toThrow("Choose a supported image file");
 });

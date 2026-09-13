@@ -9,6 +9,7 @@ import NeutronModule_a6_kernel "main";
 import NeutronMemorySchema_a6_kernel_r6_kernel_v4 "memory/kernel/v4";
 import NeutronMemorySchema_a6_kernel_r17_kernel_activation_v1 "memory/activation/v1";
 import NeutronMemorySchema_a6_kernel_r18_kernel_cycle_calls_v1 "memory/kernel_cycle_calls/v1";
+import NeutronMemorySchema_a6_kernel_r26_kernel_release_preferences_v1 "memory/release_preferences/v1";
 
 
 shared({caller = NeutronInstaller}) persistent actor class Class<system>() = NeutronActor {
@@ -77,6 +78,15 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     transient let #v1(NeutronMemory_a6_kernel_r18_kernel_cycle_calls) = NeutronMemoryStore_a6_kernel_r18_kernel_cycle_calls;
 
 
+    type NeutronMemoryType_a6_kernel_r26_kernel_release_preferences = {
+        #v1 : NeutronMemorySchema_a6_kernel_r26_kernel_release_preferences_v1.Mem;
+    };
+
+    let NeutronMemoryStore_a6_kernel_r26_kernel_release_preferences:NeutronMemoryType_a6_kernel_r26_kernel_release_preferences = #v1(NeutronMemorySchema_a6_kernel_r26_kernel_release_preferences_v1.init());
+
+    transient let #v1(NeutronMemory_a6_kernel_r26_kernel_release_preferences) = NeutronMemoryStore_a6_kernel_r26_kernel_release_preferences;
+
+
 
 
 
@@ -86,12 +96,12 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     };
 
 
-    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 361; capability_plan_fingerprint = "cb62d7c7ebc5d792b931cba651032e537914c88a8169c45ec871ba1155e68879"; resident_frame_security = #credentialless_opaque_v1 }];
+    transient let NeutronActiveAppInstanceInventory = [{ app_id = "kernel"; version = 362; capability_plan_fingerprint = "dc32bb07229aead79b5f68bb0beb657acc55e5b38f4c43cb6b2a37d79f187b0d"; resident_frame_security = #credentialless_opaque_v1 }];
 
 
 
 
-    transient let NeutronKernel = NeutronModule_a6_kernel.Init(NeutronMemory_a6_kernel_r6_kernel,NeutronMemory_a6_kernel_r17_kernel_activation,NeutronMemory_a6_kernel_r18_kernel_cycle_calls,"development",NeutronActiveAppInstanceInventory,NeutronPrim.principalOfActor(NeutronActor));
+    transient let NeutronKernel = NeutronModule_a6_kernel.Init(NeutronMemory_a6_kernel_r6_kernel,NeutronMemory_a6_kernel_r17_kernel_activation,NeutronMemory_a6_kernel_r18_kernel_cycle_calls,NeutronMemory_a6_kernel_r26_kernel_release_preferences,"development",NeutronActiveAppInstanceInventory,NeutronPrim.principalOfActor(NeutronActor));
 
 
 
@@ -179,6 +189,18 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
     public query({ caller = NeutronCaller }) func kernel_settings_snapshot(NeutronRequest: NeutronModule_a6_kernel.kernel_settings_snapshot_Input) : async NeutronModule_a6_kernel.kernel_settings_snapshot_Output {
         assert(NeutronKernel.is_authorized(NeutronCaller));
          NeutronKernel.kernel_settings_snapshot(NeutronRequest )
+    };
+
+
+    public query({ caller = NeutronCaller }) func get_release_preferences(NeutronRequest: NeutronModule_a6_kernel.get_release_preferences_Input) : async NeutronModule_a6_kernel.get_release_preferences_Output {
+        assert(NeutronKernel.is_authorized(NeutronCaller));
+         NeutronKernel.get_release_preferences(NeutronRequest )
+    };
+
+
+    public shared({ caller = NeutronCaller }) func set_release_preferences(NeutronRequest: NeutronModule_a6_kernel.set_release_preferences_Input) : async NeutronModule_a6_kernel.set_release_preferences_Output {
+        assert(NeutronKernel.is_authorized(NeutronCaller));
+         NeutronKernel.set_release_preferences(NeutronRequest )
     };
 
 
@@ -551,7 +573,7 @@ shared({caller = NeutronInstaller}) persistent actor class Class<system>() = Neu
         compiler_id = "unknown";
         capability_authority_revision = ?NeutronKernel.capability_authority_revision();
         apps = NeutronKernel.runtime_app_instances("development");
-        memories = [{ id = "kernel"; owner = "kernel"; version = 4; schema = "memory/kernel/v4" }, { id = "kernel_activation"; owner = "kernel"; version = 1; schema = "memory/activation/v1" }, { id = "kernel_cycle_calls"; owner = "kernel"; version = 1; schema = "memory/kernel_cycle_calls/v1" }];
+        memories = [{ id = "kernel"; owner = "kernel"; version = 4; schema = "memory/kernel/v4" }, { id = "kernel_activation"; owner = "kernel"; version = 1; schema = "memory/activation/v1" }, { id = "kernel_cycle_calls"; owner = "kernel"; version = 1; schema = "memory/kernel_cycle_calls/v1" }, { id = "kernel_release_preferences"; owner = "kernel"; version = 1; schema = "memory/release_preferences/v1" }];
       }
     };
 

@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 118,
+  "version": 119,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
@@ -67,7 +67,8 @@
         {
           "app": "kernel",
           "tools": [
-            "apps.install_prepared"
+            "apps.install_prepared",
+            "updates.preferences"
           ]
         }
       ]
@@ -171,6 +172,46 @@
           "kind": "exact",
           "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
           "method": "publisher_profile_update"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "purchase_v2"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "ethereum_prepare_v2"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "rating_set_v2"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "version_comment_set_v2"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "version_comment_delete_v2"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "candidate_submit_v2"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "release_promote"
+        },
+        {
+          "kind": "exact",
+          "principal": "sj2r4-haaaa-aaaay-aadgq-cai",
+          "method": "install_prepare_v2"
         }
       ]
     },

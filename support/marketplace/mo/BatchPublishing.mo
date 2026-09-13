@@ -8,10 +8,138 @@ import Audits "./Audits";
 import Catalog "./Catalog";
 import Store "./Store";
 import Types "./Types";
+import ReleaseStore "./ReleaseStore";
+import Retention "./Retention";
+import Rankings "./Rankings";
+import Map "mo:core/Map";
+import Text "mo:core/Text";
 
 module {
   public type Published = { batch : Types.PublishBatch; retiredArtifacts : [Types.Artifact]; appIds : [Text] };
+  public type Promoted = { receipt : API.PromotionReceipt; retiredArtifacts : [Types.Artifact]; appIds : [Text] };
   func error<T>(code : Text, message : Text) : API.Result<T> { #err({ code; message }) };
+
+  public func preparePromotion(db : Store.DB, caller : Principal, input : API.PromotionPrepare) : API.Result<API.PromotionPlan> {
+    if (input.appIds.size() == 0) return error("invalid_request", "Select at least one app to release.");
+    let entries = List.empty<API.PromotionEntry>();
+    for (appId in input.appIds.vals()) {
+      for (entry in List.values(entries)) if (entry.appId == appId) return error("duplicate_app", "Select each app once.");
+      let ?app = Store.getApp(db, appId) else return error("release_unavailable", "This app does not exist.");
+      if (app.owner != caller) return error("publisher_required", "Release only apps owned by this publisher.");
+      let heads = ReleaseStore.heads(db.channels, appId);
+      let ?candidate = Catalog.atHead(db, app, heads.betaHead) else return error("release_unavailable", "This app has no approved current beta.");
+      let ?artifact = Store.getArtifact(db, candidate.artifactId) else return error("release_unavailable", "The beta package is unavailable.");
+      let sourceSize = switch (candidate.sourceArtifactId) {
+        case null null;
+        case (?id) { let ?source = Store.getArtifact(db, id) else return error("release_unavailable", "The beta source is unavailable."); ?source.size };
+      };
+      List.add(entries, {
+        appId; candidateId = candidate.id; version = candidate.version; digest = candidate.digest; sourceDigest = candidate.sourceDigest;
+        packageSize = artifact.size; sourceSize; dependencies = candidate.dependencies;
+        expectedBetaRevision = heads.betaHead.revision; expectedStableCandidate = heads.stableHead.candidateId; expectedStableRevision = heads.stableHead.revision;
+      });
+    };
+    #ok({ entries = List.toArray(entries) });
+  };
+
+  // The whole dependency graph is resolved from the resulting stable heads,
+  // including selected successors and the Kernel, before the first write.
+  func validatePromotionDependencies(db : Store.DB, selected : Map.Map<Text, Types.Candidate>) : API.Result<()> {
+    let seen = Map.empty<Text, Types.Candidate>();
+    let pending = List.empty<{ appId : Text; minimum : Nat }>();
+    for ((appId, _) in Map.entries(selected)) List.add(pending, { appId; minimum = 100 });
+    label walk loop {
+      let ?required = List.removeLast(pending) else break walk;
+      let candidate = switch (Map.get(seen, Text.compare, required.appId)) {
+        case (?value) value;
+        case null {
+          let value = switch (Map.get(selected, Text.compare, required.appId)) {
+            case (?value) value;
+            case null {
+              let ?app = Store.getApp(db, required.appId) else return error("dependency_unavailable", "No stable dependency exists for " # required.appId # ".");
+              let ?value = Catalog.release(db, app, #stable_) else return error("dependency_unavailable", "Promote the required " # required.appId # " beta in this same transaction.");
+              value;
+            };
+          };
+          Map.add(seen, Text.compare, required.appId, value);
+          for (dependency in value.dependencies.vals()) List.add(pending, { appId = dependency.appId; minimum = dependency.minVersion });
+          value;
+        };
+      };
+      if (candidate.version < required.minimum) return error("dependency_version", "The resulting stable " # required.appId # " does not satisfy the required version.");
+    };
+    #ok(());
+  };
+
+  public func promote(db : Store.DB, caller : Principal, input : API.PromotionRequest, now : Int) : API.Result<Promoted> {
+    if (not Catalog.hasText(input.requestId) or input.entries.size() == 0) return error("invalid_request", "A request ID and exact beta selection are required.");
+    switch (Map.get(db.channels.promotions, ReleaseStore.requestCompare, (caller, input.requestId))) {
+      case (?receipt) {
+        if (receipt.entries != input.entries) return error("request_conflict", "This request already identifies a different exact promotion.");
+        return #ok({ receipt; retiredArtifacts = []; appIds = [] });
+      };
+      case null {};
+    };
+    let selected = Map.empty<Text, Types.Candidate>();
+    var changed = false;
+    for (entry in input.entries.vals()) {
+      if (Map.containsKey(selected, Text.compare, entry.appId)) return error("duplicate_app", "Select one current beta per app.");
+      let ?app = Store.getApp(db, entry.appId) else return error("release_unavailable", "A selected app does not exist.");
+      if (app.owner != caller) return error("publisher_required", "Release only apps owned by this publisher.");
+      let heads = ReleaseStore.heads(db.channels, entry.appId);
+      if (heads.betaHead.candidateId != ?entry.candidateId or heads.betaHead.revision != entry.expectedBetaRevision or
+          heads.stableHead.candidateId != entry.expectedStableCandidate or heads.stableHead.revision != entry.expectedStableRevision) {
+        return error("channel_conflict", "The stable or beta release changed. Review the current beta again.");
+      };
+      let ?candidate = Catalog.atHead(db, app, heads.betaHead) else return error("release_unavailable", "A selected beta is no longer approved.");
+      if (candidate.publisher != caller or candidate.version != entry.version or candidate.digest != entry.digest or
+          candidate.sourceDigest != entry.sourceDigest or candidate.dependencies != entry.dependencies) return error("request_conflict", "The selected beta identity does not match the frozen release request.");
+      let ?artifact = Store.getArtifact(db, candidate.artifactId) else return error("release_unavailable", "A selected package is unavailable.");
+      if (artifact.digest != entry.digest or artifact.size != entry.packageSize) return error("release_unavailable", "The selected package evidence changed.");
+      switch (candidate.sourceArtifactId, entry.sourceDigest, entry.sourceSize) {
+        case (null, null, null) {};
+        case (?id, ?digest, ?size) {
+          let ?source = Store.getArtifact(db, id) else return error("release_unavailable", "The selected offered source is unavailable.");
+          if (source.digest != digest or source.size != size) return error("release_unavailable", "The offered-source evidence changed.");
+        };
+        case _ return error("request_conflict", "The selected offered-source identity is incomplete.");
+      };
+      if (heads.stableHead.candidateId != ?candidate.id) {
+        switch (heads.stableHead.candidateId) {
+          case null {};
+          case (?id) {
+            let ?stableCandidate = Store.getCandidate(db, id) else return error("release_unavailable", "The retained stable candidate is missing.");
+            if (candidate.version <= stableCandidate.version) return error("channel_conflict", "A stable promotion must advance the release version.");
+          };
+        };
+        changed := true;
+      };
+      Map.add(selected, Text.compare, entry.appId, candidate);
+    };
+    switch (validatePromotionDependencies(db, selected)) { case (#err(value)) return #err(value); case (_) {} };
+    let receipt : API.PromotionReceipt = { id = if (changed) db.channels.nextPromotionId else 0; owner = caller; publisher = caller; requestId = input.requestId; operation = "promote"; channel = "stable"; entries = input.entries; createdAtNs = now };
+    if (not changed) {
+      // A no-op still binds its caller's retry identity. Keep its id zero so it
+      // cannot be mistaken for a new publication transaction.
+      Map.add(db.channels.promotions, ReleaseStore.requestCompare, (caller, input.requestId), receipt);
+      return #ok({ receipt; retiredArtifacts = []; appIds = [] });
+    };
+    let appIds = List.empty<Text>();
+    for (entry in input.entries.vals()) {
+      let heads = ReleaseStore.heads(db.channels, entry.appId);
+      if (heads.stableHead.candidateId != ?entry.candidateId) {
+        ReleaseStore.putHeads(db.channels, entry.appId, { heads with stableHead = { candidateId = ?entry.candidateId; revision = heads.stableHead.revision + 1 } });
+        let ?app = Store.getApp(db, entry.appId) else Runtime.trap("Promotion app disappeared without await");
+        switch (db.apps.update({ app with updatedAtNs = now })) { case (#ok(value)) Rankings.refreshEligibility(db, value); case (#err(value)) Runtime.trap(debug_show(value)) };
+        List.add(appIds, entry.appId);
+      };
+    };
+    let retired = List.empty<Types.Artifact>();
+    for (appId in List.values(appIds)) for (artifact in Retention.afterDecision(db, appId).vals()) List.add(retired, artifact);
+    db.channels.nextPromotionId += 1;
+    Map.add(db.channels.promotions, ReleaseStore.requestCompare, (caller, input.requestId), receipt);
+    #ok({ receipt; retiredArtifacts = List.toArray(retired); appIds = List.toArray(appIds) });
+  };
 
   func matches(saved : Types.PublishBatch, input : API.TrustedPublishRequest) : Bool {
     if (saved.analysis != input.analysis or saved.entries.size() != input.candidates.size()) return false;
@@ -48,7 +176,7 @@ module {
       if (app.owner != caller) return error("publisher_required", "The selected app belongs to another publisher.");
       if (candidate.digest != selected.expectedDigest or candidate.sourceDigest != selected.expectedSourceDigest) return error("digest_mismatch", "A selected package or offered source differs from the exact bytes verified by the publishing script.");
       if (candidate.state != #pending and candidate.state != #approved) return error("candidate_state", "A rejected or revoked candidate cannot be automatically republished. Submit a new candidate.");
-      if (candidate.published and app.approvedCandidate != ?candidate.id) return error("candidate_superseded", "A selected release has already been superseded. Its historical batch receipt does not republish it.");
+      if (candidate.published and not ReleaseStore.references(db.channels, candidate.appId, candidate.id)) return error("candidate_superseded", "A selected release has already been superseded. Its historical batch receipt does not republish it.");
       for (previous in List.values(candidates)) {
         if (previous.appId == candidate.appId) return error("duplicate_app", "Select one package candidate per app in an atomic publication batch.");
       };

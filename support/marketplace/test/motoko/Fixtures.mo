@@ -3,6 +3,10 @@ import Types "../../mo/Types";
 import Catalog "../../mo/Catalog";
 import Publishing "../../mo/Publishing";
 import Audits "../../mo/Audits";
+import ReleaseStore "../../mo/ReleaseStore";
+import Retention "../../mo/Retention";
+import Rankings "../../mo/Rankings";
+import Array "mo:core/Array";
 import Sha256 "mo:sha2/Sha256";
 import Principal "mo:core/Principal";
 import Text "mo:core/Text";
@@ -63,10 +67,22 @@ module {
     }, 2));
   };
   public func approve(db : Store.DB, value : Types.Candidate, requestId : Text) : Audits.StampResult {
-    ok(Audits.stamp(db, auditor(), {
+    let approved = ok(Audits.stamp(db, auditor(), {
       requestId; candidateId = value.id; decision = #approved;
       expectedDigest = value.digest; expectedSourceDigest = value.sourceDigest;
       analysis = "Inspected these exact package and offered-source hashes"; reason = null;
     }, 3));
+    // These legacy domain fixtures mean an ordinary publicly offered release.
+    // Audit approval now publishes beta; explicitly establish stable as a
+    // separate fixture step. Some acquisition tests intentionally build broken
+    // dependency graphs, so their setup cannot use the validating promotion API.
+    let heads = ReleaseStore.heads(db.channels, value.appId);
+    if (heads.betaHead.candidateId == ?value.id and heads.stableHead.candidateId != ?value.id) {
+      ReleaseStore.putHeads(db.channels, value.appId, {
+        heads with stableHead = { candidateId = ?value.id; revision = heads.stableHead.revision + 1 };
+      });
+      Rankings.refreshEligibility(db, approved.app);
+      { approved with retiredArtifacts = Array.concat(approved.retiredArtifacts, Retention.afterDecision(db, value.appId)) };
+    } else approved;
   };
 }

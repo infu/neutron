@@ -13,7 +13,7 @@ function bytes(text: string): Uint8Array {
   return encoder.encode(text);
 }
 
-test("kernel generated artifacts preserve released roots and restore cycle-call V1", async () => {
+test("kernel generated artifacts preserve released roots and initialize release-preference V1", async () => {
   const [
     manifestText,
     lockText,
@@ -29,7 +29,7 @@ test("kernel generated artifacts preserve released roots and restore cycle-call 
     readFile(new URL("../dist/neutron.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.lock.json", import.meta.url), "utf8"),
     readFile(new URL("../dist/neutron.did", import.meta.url), "utf8"),
-    readFile(new URL("../kernel.v0.3.61.neutron", import.meta.url)),
+    readFile(new URL("../kernel.v0.3.62.neutron", import.meta.url)),
   ]);
   const manifest = JSON.parse(manifestText);
   const lock = JSON.parse(lockText);
@@ -38,7 +38,7 @@ test("kernel generated artifacts preserve released roots and restore cycle-call 
   const packagedArchive = preparePackageInstall(new Uint8Array(archive));
 
   expect(manifest.format).toBe(3);
-  expect(manifest.version).toBe(361);
+  expect(manifest.version).toBe(362);
   expect(manifest.update_source).toBe("sj2r4-haaaa-aaaay-aadgq-cai");
   expect(manifest.memory.kernel.version).toBe(4);
   expect(Object.keys(manifest.memory.kernel.schemas)).toEqual(["3", "4"]);
@@ -49,6 +49,11 @@ test("kernel generated artifacts preserve released roots and restore cycle-call 
   expect(manifest.memory.kernel_cycle_calls).toEqual({
     version: 1,
     schemas: { "1": { src: "memory/kernel_cycle_calls/v1.mo" } },
+    migrations: [],
+  });
+  expect(manifest.memory.kernel_release_preferences).toEqual({
+    version: 1,
+    schemas: { "1": { src: "memory/release_preferences/v1.mo" } },
     migrations: [],
   });
   expect(Object.keys(lock.memory.kernel.schemas)).toEqual(["3", "4"]);
@@ -63,13 +68,15 @@ test("kernel generated artifacts preserve released roots and restore cycle-call 
   expect(lock.memory.kernel_activation.migrations).toEqual({});
   expect(Object.keys(lock.memory.kernel_cycle_calls.schemas)).toEqual(["1"]);
   expect(lock.memory.kernel_cycle_calls.migrations).toEqual({});
+  expect(Object.keys(lock.memory.kernel_release_preferences.schemas)).toEqual(["1"]);
+  expect(lock.memory.kernel_release_preferences.migrations).toEqual({});
   expect(lock.memory.kernel_activation.schemas["1"].hash).toMatch(
     /^[0-9a-f]{64}$/,
   );
   expect(lock.format).toBe(2);
   expect(lock.app).toBe("kernel");
   expect(packagedManifest.format).toBe(3);
-  expect(packagedManifest.version).toBe(361);
+  expect(packagedManifest.version).toBe(362);
   expect(packagedManifest.update_source).toBe(
     "sj2r4-haaaa-aaaay-aadgq-cai",
   );
@@ -81,13 +88,17 @@ test("kernel generated artifacts preserve released roots and restore cycle-call 
   expect(packagedManifest.memory.kernel_cycle_calls.version).toBe(1);
   expect(Object.keys(packagedManifest.memory.kernel_cycle_calls.schemas)).toEqual(["1"]);
   expect(packagedManifest.memory.kernel_cycle_calls.migrations).toEqual([]);
+  expect(packagedManifest.memory.kernel_release_preferences.version).toBe(1);
+  expect(Object.keys(packagedManifest.memory.kernel_release_preferences.schemas)).toEqual(["1"]);
+  expect(packagedManifest.memory.kernel_release_preferences.migrations).toEqual([]);
   expect(packagedLock).toEqual(lock);
   expect(packagedArchive.manifest.memory?.kernel?.version).toBe(4);
   expect(packagedArchive.manifest.memory?.kernel_cycle_calls?.version).toBe(1);
-  expect(packagedArchive.manifest.version).toBe(361);
+  expect(packagedArchive.manifest.memory?.kernel_release_preferences?.version).toBe(1);
+  expect(packagedArchive.manifest.version).toBe(362);
   expect(packagedArchive.packageRecord).toMatchObject({
     format: 1,
-    package: { id: "kernel", version: 361 },
+    package: { id: "kernel", version: 362 },
     license: { id: "LicenseRef-Neutron-Public-License-1.0" },
     source: { kind: "https" },
   });
@@ -125,6 +136,12 @@ test("kernel generated artifacts preserve released roots and restore cycle-call 
   expect(wrapper).toContain(
     "let #v1(NeutronMemory_a6_kernel_r18_kernel_cycle_calls) = NeutronMemoryStore_a6_kernel_r18_kernel_cycle_calls",
   );
+  expect(wrapper).toContain(
+    'import NeutronMemorySchema_a6_kernel_r26_kernel_release_preferences_v1 "memory/release_preferences/v1"',
+  );
+  expect(wrapper).toContain(
+    "let #v1(NeutronMemory_a6_kernel_r26_kernel_release_preferences) = NeutronMemoryStore_a6_kernel_r26_kernel_release_preferences",
+  );
   expect(candid).toContain("kernel_activation:");
   const activationWrapper = wrapper.slice(
     wrapper.indexOf("func kernel_activation"),
@@ -136,6 +153,8 @@ test("kernel generated artifacts preserve released roots and restore cycle-call 
     "assert(NeutronKernel.is_authorized",
   );
   for (const method of [
+    "get_release_preferences",
+    "set_release_preferences",
     "kernel_certified_assets_scope_info",
     "kernel_certified_assets_usage",
     "kernel_certified_assets_diagnostics",
@@ -149,18 +168,22 @@ test("kernel generated artifacts preserve released roots and restore cycle-call 
   }
 });
 
-test("release 361 preserves Kernel 336/343/344/346/347/348/349/350/351/352/353/354/355/356/357/358/359/360 memory lineage and public methods", async () => {
+test("release 362 preserves Kernel 336/343/344/346/347/348/349/350/351/352/353/354/355/356/357/358/359/360/361 memory lineage and public methods", async () => {
   const currentFiles = unpackNeutronPackage(
-    await readFile(new URL("../kernel.v0.3.61.neutron", import.meta.url)),
+    await readFile(new URL("../kernel.v0.3.62.neutron", import.meta.url)),
   );
   const current = preparePackageInstall(currentFiles).manifest;
   const decode = (content: Uint8Array) => new TextDecoder().decode(content);
   const currentLock = JSON.parse(decode(currentFiles["neutron.lock.json"]!));
-  expect(current.version).toBe(361);
-  expect(hashContent(currentFiles["neutron.lock.json"]!)).toBe("b21e05c8fc094d1ab721b884c37e3cb9b3aaacff2c101ca54a8af314146f57d7");
-  expect(Object.keys(currentLock.memory).sort()).toEqual(["kernel", "kernel_activation", "kernel_cycle_calls"]);
+  expect(current.version).toBe(362);
+  expect(hashContent(currentFiles["neutron.lock.json"]!)).toBe("5896ba454fefe16d20265bef7a866d41532f71947a16147912f24b3a46280d0c");
+  expect(Object.keys(currentLock.memory).sort()).toEqual(["kernel", "kernel_activation", "kernel_cycle_calls", "kernel_release_preferences"]);
   expect(currentLock.memory.kernel_cycle_calls).toEqual({
     schemas: { "1": { hash: "a25001683a310cd6879290deacd9eb201958adb9e21011230d94da0028585a22", entry: "f04680c732228f8818dd02e8ce74c9ca79a29c6f40f9c6103e898f7c12b6d2d1" } },
+    migrations: {},
+  });
+  expect(currentLock.memory.kernel_release_preferences).toEqual({
+    schemas: { "1": { hash: "6cc8abce587f3db5b9e82004f7c6eacd7fca22ac33d3324b6885064852d97fa5", entry: "6cc8abce587f3db5b9e82004f7c6eacd7fca22ac33d3324b6885064852d97fa5" } },
     migrations: {},
   });
   expect(current.memory?.kernel?.version).toBe(4);
@@ -174,6 +197,7 @@ test("release 361 preserves Kernel 336/343/344/346/347/348/349/350/351/352/353/3
       { kind: "initialize", owner: "kernel", memoryId: "kernel", to: 4 },
       { kind: "initialize", owner: "kernel", memoryId: "kernel_activation", to: 1 },
       { kind: "initialize", owner: "kernel", memoryId: "kernel_cycle_calls", to: 1 },
+      { kind: "initialize", owner: "kernel", memoryId: "kernel_release_preferences", to: 1 },
     ],
     removedApps: [],
     destructiveMemoryRoots: [],
@@ -183,6 +207,7 @@ test("release 361 preserves Kernel 336/343/344/346/347/348/349/350/351/352/353/3
       { kind: "keep", owner: "kernel", memoryId: "kernel", version: 4 },
       { kind: "keep", owner: "kernel", memoryId: "kernel_activation", version: 1 },
       { kind: "keep", owner: "kernel", memoryId: "kernel_cycle_calls", version: 1 },
+      { kind: "keep", owner: "kernel", memoryId: "kernel_release_preferences", version: 1 },
     ],
     removedApps: [],
     destructiveMemoryRoots: [],
@@ -207,6 +232,7 @@ test("release 361 preserves Kernel 336/343/344/346/347/348/349/350/351/352/353/3
     { release: "0.3.58", version: 358, schema: 4, sha256: "0e0b801a37ca42dcce8bc5a396b035ba46ca39d0e0245d849a49f7df6b9a3eda" },
     { release: "0.3.59", version: 359, schema: 4, sha256: "6b506590ab9160a6e8e31859a791d40e60b797f06e9fde28781b8f0beb89574d" },
     { release: "0.3.60", version: 360, schema: 4, sha256: "e2abbcac2aaa0d7eec8538a17923454ce4e2ab2d6d634630880533a3af8f2410" },
+    { release: "0.3.61", version: 361, schema: 4, sha256: "34a003ee2e01d045df211c0bf52609b472956f7f9ec5085c9a045d2457ef7ca4" },
   ]) {
     const previousBytes = await readFile(new URL(`../kernel.v${predecessor.release}.neutron`, import.meta.url));
     // Retained release archives are immutable fixtures, never regenerated from current source.
@@ -220,12 +246,17 @@ test("release 361 preserves Kernel 336/343/344/346/347/348/349/350/351/352/353/3
     if (predecessor.version === 352) expect(previousBytes.byteLength).toBe(2_464_667);
     if (predecessor.version === 353) expect(previousBytes.byteLength).toBe(2_464_830);
     if (predecessor.version === 360) expect(previousBytes.byteLength).toBe(2_476_358);
+    if (predecessor.version === 361) expect(previousBytes.byteLength).toBe(2_477_271);
     const previousFiles = unpackNeutronPackage(previousBytes);
     const previous = preparePackageInstall(previousFiles).manifest;
     const previousLock = JSON.parse(decode(previousFiles["neutron.lock.json"]!));
+    if (predecessor.version >= 360) {
+      expect(hashContent(previousFiles["neutron.lock.json"]!)).toBe("b21e05c8fc094d1ab721b884c37e3cb9b3aaacff2c101ca54a8af314146f57d7");
+    }
     expect(previous.version).toBe(predecessor.version);
     expect(previous.memory?.kernel?.version).toBe(predecessor.schema);
     assert(previous.memory, "Published Kernel must declare its memory roots");
+    expect(previous.memory.kernel_release_preferences).toBeUndefined();
     if (predecessor.schema === 4) expect(current.memory).toMatchObject(previous.memory);
     if (predecessor.version < 360) {
       expect(previous.memory.kernel_cycle_calls).toBeUndefined();
@@ -269,18 +300,24 @@ test("release 361 preserves Kernel 336/343/344/346/347/348/349/350/351/352/353/3
       }
     }
     if (predecessor.schema === 4) {
-      // Release 360 introduced the independent cycle-call journal. Earlier
-      // releases initialize it; all released roots and public methods persist.
+      // Releases 360 and 362 add independent cycle-call and preference roots.
+      // Compare exactly the released lineage while initializing only new roots.
+      expect({ ...currentLock, memory: Object.fromEntries(
+        Object.keys(previousLock.memory).map((id) => [id, currentLock.memory[id]]),
+      ) }).toEqual(previousLock);
       if (predecessor.version < 360) {
-        expect({ ...currentLock, memory: { kernel: currentLock.memory.kernel, kernel_activation: currentLock.memory.kernel_activation } }).toEqual(previousLock);
         expect(current.init_arg).toEqual([
           ...previous.init_arg!.slice(0, 2),
           "memory_kernel_cycle_calls",
+          "memory_kernel_release_preferences",
           ...previous.init_arg!.slice(2),
         ]);
       } else {
-        expect(currentLock).toEqual(previousLock);
-        expect(current.init_arg).toEqual(previous.init_arg);
+        expect(current.init_arg).toEqual([
+          ...previous.init_arg!.slice(0, 3),
+          "memory_kernel_release_preferences",
+          ...previous.init_arg!.slice(3),
+        ]);
       }
       expect(current.func).toMatchObject(previous.func ?? {});
       expect(current.func?.kernel_repository_access_v1).toMatchObject({ type: "update", async: "async*", arg: ["caller"] });
@@ -299,6 +336,7 @@ test("release 361 preserves Kernel 336/343/344/346/347/348/349/350/351/352/353/3
         predecessor.version < 360
           ? { kind: "initialize", owner: "kernel", memoryId: "kernel_cycle_calls", to: 1 }
           : { kind: "keep", owner: "kernel", memoryId: "kernel_cycle_calls", version: 1 },
+        { kind: "initialize", owner: "kernel", memoryId: "kernel_release_preferences", to: 1 },
       ],
       removedApps: [],
       destructiveMemoryRoots: [],
@@ -876,7 +914,7 @@ test("checked install APIs are hard-cutover and fail closed", async () => {
     /func kernel_install_begin_checked[\s\S]*?assert\(NeutronKernel\.is_authorized\(NeutronCaller\)\)/,
   );
   expect(wrapper).toMatch(
-    /transient let NeutronActiveAppInstanceInventory = \[[\s\S]*?NeutronModule_a6_kernel\.Init\(NeutronMemory_a6_kernel_r6_kernel,NeutronMemory_a6_kernel_r17_kernel_activation,NeutronMemory_a6_kernel_r18_kernel_cycle_calls,"development",NeutronActiveAppInstanceInventory,NeutronPrim\.principalOfActor\(NeutronActor\)\)/,
+    /transient let NeutronActiveAppInstanceInventory = \[[\s\S]*?NeutronModule_a6_kernel\.Init\(NeutronMemory_a6_kernel_r6_kernel,NeutronMemory_a6_kernel_r17_kernel_activation,NeutronMemory_a6_kernel_r18_kernel_cycle_calls,NeutronMemory_a6_kernel_r26_kernel_release_preferences,"development",NeutronActiveAppInstanceInventory,NeutronPrim\.principalOfActor\(NeutronActor\)\)/,
   );
 
   expect(
@@ -1412,6 +1450,7 @@ test("kernel settings snapshot is authenticated and reports bounded memory", asy
     "kernel",
     "kernel_activation",
     "kernel_cycle_calls",
+    "kernel_release_preferences",
   ]);
   expect(manifest.memory.kernel.version).toBe(4);
   expect(manifest.memory.kernel.migrations).toEqual([{ from: 3, to: 4, src: "memory/kernel/v3_to_v4.mo" }]);
@@ -1420,6 +1459,11 @@ test("kernel settings snapshot is authenticated and reports bounded memory", asy
   expect(manifest.memory.kernel_cycle_calls).toEqual({
     version: 1,
     schemas: { "1": { src: "memory/kernel_cycle_calls/v1.mo" } },
+    migrations: [],
+  });
+  expect(manifest.memory.kernel_release_preferences).toEqual({
+    version: 1,
+    schemas: { "1": { src: "memory/release_preferences/v1.mo" } },
     migrations: [],
   });
 });

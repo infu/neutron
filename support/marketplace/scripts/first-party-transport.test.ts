@@ -7,9 +7,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { TRUSTED_PUBLISHER_CALLER, type BatchReceipt } from "./first-party-publish.ts";
-import { certifiedQueryFetch, createFirstPartyEnvironment, createFirstPartyTransport, firstPartyService, publisherActorTransport, TrustedBatch, TrustedBatchRequest, type FirstPartyActor } from "./first-party-transport.ts";
+import { certifiedQueryFetch, createFirstPartyEnvironment, createFirstPartyTransport, firstPartyService, publisherActorTransport, PromotionEntryWire, PromotionRequestWire, PromotionReceiptWire, LegacyTrustedBatch, TrustedBatch, TrustedBatchRequest, type FirstPartyActor } from "./first-party-transport.ts";
 import { encode, decode } from "./operator-wire.ts";
 import { UploadChunk, UploadReply } from "./publisher.ts";
+import { PromotionRejectedError, type PromotionEntry, type PromotionReceipt } from "./first-party-promote.ts";
 import type { HttpReader } from "./audit-download.ts";
 
 const canister = "233tv-xiaaa-aaaay-aacta-cai", caller = Principal.fromText(TRUSTED_PUBLISHER_CALLER);
@@ -29,7 +30,7 @@ function mocked(p = caller, actor: FirstPartyActor = { marketplace_info: async (
   };
 }
 function batch(): BatchReceipt {
-  return { id: 8n, owner: caller, publisher: caller, requestId: "same-publication-request", entries: [{ candidateId: 17n, appId: "alpha", version: 104n, digest: new Uint8Array(32).fill(1), sourceDigest: [new Uint8Array(32).fill(2)], auditId: 19n }], analysis: "Automated package verification", createdAtNs: 1788990000000000000n };
+  return { operation: "publish", channel: "beta", id: 8n, owner: caller, publisher: caller, requestId: "same-publication-request", entries: [{ candidateId: 17n, appId: "alpha", version: 104n, digest: new Uint8Array(32).fill(1), sourceDigest: [new Uint8Array(32).fill(2)], auditId: 19n }], analysis: "Automated package verification", createdAtNs: 1788990000000000000n };
 }
 
 test("uses only existing identity 0 and the built-in IC root without discovery or root-key fetch", async () => {
@@ -57,7 +58,7 @@ test("identity mismatch and missing saved identity stop before agent creation or
 test("server must explicitly assign the loaded principal before publication writes", async () => {
   let writes = 0;
   for (const trustedPublishingPrincipal of [[], [other]]) {
-    const m = mocked(caller, { marketplace_info: async () => ({ ...info(), trustedPublishingPrincipal }), trusted_publish_batch: async () => { writes++; return { ok: batch() }; } });
+    const m = mocked(caller, { marketplace_info: async () => ({ ...info(), trustedPublishingPrincipal }), trusted_publish_beta_batch: async () => { writes++; return { ok: batch() }; } });
     await expect(createFirstPartyTransport({ canister, host: target.network }, m.dependencies)).rejects.toThrow("has not assigned this principal");
   }
   expect(writes).toBe(0);
@@ -79,15 +80,15 @@ test("local replica uses the explicitly supplied raw root key and never trusts f
 
 test("batch Candid includes exact digest bindings, one record argument and a query-only status endpoint", () => {
   const value = batch();
-  const request = { requestId: value.requestId, candidates: value.entries.map(entry => ({ candidateId: entry.candidateId, expectedDigest: entry.digest, expectedSourceDigest: entry.sourceDigest })), analysis: value.analysis };
+  const request = { operation: "publish" as const, channel: "beta" as const, requestId: value.requestId, candidates: value.entries.map(entry => ({ candidateId: entry.candidateId, expectedDigest: entry.digest, expectedSourceDigest: entry.sourceDigest })), analysis: value.analysis };
   expect(decode<typeof request>(TrustedBatchRequest, encode(TrustedBatchRequest, request))).toEqual(request);
   expect(decode<BatchReceipt>(TrustedBatch, encode(TrustedBatch, value))).toEqual(value);
   const methods = Object.fromEntries(firstPartyService()._fields);
   expect(methods.marketplace_info!.argTypes).toHaveLength(0);
-  expect(methods.trusted_publish_batch!.argTypes).toHaveLength(1);
-  expect(methods.trusted_publish_batch!.annotations).toEqual([]);
-  expect(methods.trusted_publish_status!.argTypes).toHaveLength(1);
-  expect(methods.trusted_publish_status!.annotations).toEqual(["query"]);
+  expect(methods.trusted_publish_beta_batch!.argTypes).toHaveLength(1);
+  expect(methods.trusted_publish_beta_batch!.annotations).toEqual([]);
+  expect(methods.trusted_publish_beta_status!.argTypes).toHaveLength(1);
+  expect(methods.trusted_publish_beta_status!.annotations).toEqual(["query"]);
 });
 
 test("batch API preserves original request and reports protocol errors instead of successful publication", async () => {
@@ -95,13 +96,13 @@ test("batch API preserves original request and reports protocol errors instead o
   let status: { ok: [] | [BatchReceipt] } | { err: { code: string; message: string } } = { ok: [] };
   const m = mocked(caller, {
     marketplace_info: async () => info(),
-    trusted_publish_status: async (...args) => { requests.push(args); return status; },
-    trusted_publish_batch: async (...args) => { requests.push(args); return { ok: value }; },
+    trusted_publish_beta_status: async (...args) => { requests.push(args); return status; },
+    trusted_publish_beta_batch: async (...args) => { requests.push(args); return { ok: value }; },
   });
   const transport = await createFirstPartyTransport({ canister, host: target.network }, m.dependencies);
   expect(await transport.batchStatus(value.requestId)).toBeNull();
   status = { ok: [value] }; expect(await transport.batchStatus(value.requestId)).toBe(value);
-  const request = { requestId: value.requestId, candidates: [], analysis: value.analysis };
+  const request = { operation: "publish" as const, channel: "beta" as const, requestId: value.requestId, candidates: [], analysis: value.analysis };
   expect(await transport.publishBatch(request)).toBe(value);
   expect(requests).toEqual([[{ requestId: value.requestId }], [{ requestId: value.requestId }], [request]]);
   status = { err: { code: "trusted_publisher_required", message: "Authorization changed" } };
@@ -181,4 +182,98 @@ test("environment checks signer assignment before creating its HTTP reader and n
   expect(readers).toBe(1);
   await expect(environment.fetch(artifactUrl)).rejects.toThrow();
   expect(grants).toBe(0);
+});
+
+
+test("promotion Candid freezes artifact identities and both channel revisions", () => {
+  const entry: PromotionEntry = { appId: "alpha", candidateId: 17n, version: 104n, digest: new Uint8Array(32).fill(1), sourceDigest: [new Uint8Array(32).fill(2)], packageSize: 111n, sourceSize: [222n], dependencies: [{ appId: "kernel", minVersion: 305n }], expectedBetaRevision: 7n, expectedStableCandidate: [10n], expectedStableRevision: 2n };
+  const receipt: PromotionReceipt = { id: 8n, owner: caller, publisher: caller, requestId: "promote-exact", operation: "promote", channel: "stable", entries: [entry], createdAtNs: 1n };
+  expect(decode<PromotionEntry>(PromotionEntryWire, encode(PromotionEntryWire, entry))).toEqual(entry);
+  expect(decode<PromotionReceipt>(PromotionReceiptWire, encode(PromotionReceiptWire, receipt))).toEqual(receipt);
+  const request = { requestId: receipt.requestId, entries: [entry], feeVersion: 7n };
+  expect(decode<typeof request>(PromotionRequestWire, encode(PromotionRequestWire, request))).toEqual(request);
+  const methods = Object.fromEntries(firstPartyService()._fields);
+  expect(methods.promotion_prepare!.annotations).toEqual(["query"]);
+  expect(methods.promotion_status!.annotations).toEqual(["query"]);
+  expect(methods.release_promote!.annotations).toEqual([]);
+  expect(methods.trusted_publish_batch).toBeUndefined();
+});
+
+test("promotion transport preserves exact preparation, fee version and request identity", async () => {
+  const value: PromotionReceipt = { id: 8n, owner: caller, publisher: caller, requestId: "promote-exact", operation: "promote", channel: "stable", entries: [], createdAtNs: 1n };
+  const seen: unknown[] = [];
+  const m = mocked(caller, { marketplace_info: async () => info(),
+    promotion_prepare: async request => { seen.push(request); return { ok: { entries: value.entries } }; },
+    promotion_status: async request => { seen.push(request); return { ok: [value] }; },
+    release_promote: async request => { seen.push(request); return { ok: value }; },
+  });
+  const environment = await createFirstPartyEnvironment({ canister, host: target.network }, { ...m.dependencies, httpReader: async () => ({ actor: emptyHttp(), rootKey: new Uint8Array() }) as never });
+  expect(await environment.promotion.prepare(["alpha"])).toEqual({ entries: [] });
+  expect(await environment.promotion.status(value.requestId)).toBe(value);
+  expect(await environment.promotion.promote({ requestId: value.requestId, entries: [] })).toBe(value);
+  expect(seen).toEqual([{ appIds: ["alpha"] }, { requestId: value.requestId }, { requestId: value.requestId, entries: [], feeVersion: 7n }]);
+});
+
+test("channel metadata requests require valid certified evidence and never request artifact grants", async () => {
+  for (const pathname of ["/repo/v1/channels.json", "/repo/v1/channels/apps/alpha.json", "/repo/v1/channels/beta/releases/alpha.json"]) {
+    let reads = 0, grants = 0;
+    const http = emptyHttp(404);
+    const read = certifiedQueryFetch({ canister, actor: { ...http, http_request: async request => { reads++; return http.http_request(request); } }, rootKey: new Uint8Array(133), authorize: async () => { grants++; return "secret"; } });
+    await expect(read(`https://${canister}.icp0.io${pathname}`)).rejects.toThrow();
+    expect(reads).toBe(1); expect(grants).toBe(0);
+  }
+});
+
+
+test("only an explicit promotion protocol error is classified as a definitive rejection", async () => {
+  let lost = false;
+  const m = mocked(caller, { marketplace_info: async () => info(), release_promote: async () => {
+    if (lost) throw new Error("lost response");
+    return { err: { code: "channel_conflict", message: "Current beta advanced" } };
+  } });
+  const environment = await createFirstPartyEnvironment({ canister, host: target.network }, { ...m.dependencies, httpReader: async () => ({ actor: emptyHttp(), rootKey: new Uint8Array() }) as never });
+  await expect(environment.promotion.promote({ requestId: "same-promotion", entries: [] })).rejects.toBeInstanceOf(PromotionRejectedError);
+  lost = true;
+  try { await environment.promotion.promote({ requestId: "same-promotion", entries: [] }); throw new Error("Expected lost response"); }
+  catch (error) { expect(error).not.toBeInstanceOf(PromotionRejectedError); expect((error as Error).message).toBe("lost response"); }
+});
+
+
+test("legacy publication recovery queries its original stable receipt without a legacy mutation route", async () => {
+  const { operation: _operation, channel: _channel, ...legacy } = batch();
+  expect(decode<typeof legacy>(LegacyTrustedBatch, encode(LegacyTrustedBatch, legacy))).toEqual(legacy);
+  const requests: unknown[] = [];
+  const m = mocked(caller, { marketplace_info: async () => info(), trusted_publish_status: async request => { requests.push(request); return { ok: [legacy] }; } });
+  const transport = await createFirstPartyTransport({ canister, host: target.network }, m.dependencies);
+  expect(await transport.legacyBatchStatus!(legacy.requestId)).toBe(legacy);
+  expect(requests).toEqual([{ requestId: legacy.requestId }]);
+  const methods = Object.fromEntries(firstPartyService()._fields);
+  expect(methods.trusted_publish_status!.annotations).toEqual(["query"]);
+  expect(methods.trusted_publish_batch).toBeUndefined();
+});
+
+
+test("query-only environments never request a private artifact grant, while execution retains exact grants", async () => {
+  for (const allowArtifactAuthorization of [false, true, undefined]) {
+    let grants = 0;
+    const m = mocked(caller, { marketplace_info: async () => info(), repo_access_v1: async value => {
+      grants++;
+      const request = value as { request_id: string; paths: string[] };
+      return { ok: { request_id: request.request_id, paths: request.paths, accepted_cycles: 0n } };
+    } });
+    const environment = await createFirstPartyEnvironment({ canister, host: target.network, ...(allowArtifactAuthorization === undefined ? {} : { allowArtifactAuthorization }) }, {
+      ...m.dependencies, httpReader: async () => ({ actor: emptyHttp(), rootKey: new Uint8Array(133) }),
+      // Simulate the already-verified private challenge at the reader boundary;
+      // proof rejection itself is covered by the real certified-reader tests.
+      certifiedFetch: options => (async (_input: RequestInfo | URL) => { await options.authorize(artifactPath); return new Response("verified artifact"); }) as typeof fetch,
+    });
+    if (allowArtifactAuthorization === false) {
+      await expect(environment.fetch(artifactUrl)).rejects.toThrow("--execute is required");
+      await expect(environment.fetch(artifactUrl)).rejects.toThrow("no grant was requested");
+      expect(grants).toBe(0);
+    } else {
+      await environment.fetch(artifactUrl); await environment.fetch(artifactUrl);
+      expect(grants).toBe(1);
+    }
+  }
 });

@@ -435,7 +435,7 @@ function provenanceFixture(
   packageDigests: Readonly<Record<string, string>> = {},
 ): InstallProvenance {
   return {
-    format: 1,
+    format: 2,
     apps: Object.fromEntries(
       Object.entries(packageDigests).map(([appId, package_digest]) => [
         appId,

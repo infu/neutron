@@ -5,9 +5,10 @@ import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { Principal } from "@dfinity/principal";
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
-import { checkoutType, withdrawalType, encodeOpaque, decodeOpaque, type Checkout, type Fee, type WireResult, type WithdrawQuote } from "../src/protocol.ts";
+import { checkoutType, channelCheckoutType, withdrawalType, encodeOpaque, decodeOpaque, type Checkout, type ChannelCheckout, type Fee, type WireResult, type WithdrawQuote } from "../src/protocol.ts";
 import type { PurchaseQuote, WithdrawalQuote } from "../src/view-types.ts";
 import type { PurchaseFundingRequest } from "../src/wallet.ts";
+import type { ReleasePreferences } from "../src/release_preferences.ts";
 
 // Client substitution is process-local: production protocol/Wallet parsers and
 // the real durable-store adapter remain intact, and other tests see no mocks.
@@ -44,7 +45,7 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       items: [{ id: "test-app", title: "Test app", summary: "", category: "", publisher: PROTOCOL, priceUsdMicros: String(wire.amount), version: "1", rating: null, ratingCount: 0 }],
       token: "ckUSDC", subtotalUsdMicros: String(wire.amount), discountUsdMicros: "0", payment: money(wire.amount), approvalFee: money(10000n),
       collectionFee: money(wire.fee), totalDebit: money(wire.amount + 20000n), allocations: [], cycles: actualClient.cycleView(wire.cycles),
-      affiliateCode: "", warnings: [], opaque: encodeOpaque(checkoutType, wire) };
+      affiliateCode: "", warnings: [], opaque: encodeOpaque(checkoutType, wire), ...(quotePreferences ? { releasePreferences: quotePreferences } : {}), ...(quoteChannel ? { channelOpaque: encodeOpaque(channelCheckoutType, { ...quoteChannel, quote: wire }) } : {}) };
   }
   function withdrawal(): WithdrawQuote {
     return { request: { requestId: WITHDRAWAL, ledger: principal(LEDGER), to: { owner: principal(OWNER), subaccount: [] }, totalDebit: 1000000n },
@@ -64,13 +65,20 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
   let idCounter: number;
   let freshPurchase: Checkout | null, freshWithdrawal: WithdrawQuote | null, ownerApproved: boolean;
   let fundingReplies: Array<"approved" | "pending" | "rejected">;
+  let quotePreferences: ReleasePreferences | undefined, preferences: ReleasePreferences;
+  let quoteChannel: ChannelCheckout | undefined, channelUpdates: ChannelCheckout[], quoteRequests: unknown[][];
   let restoreClock: (() => void) | null = null;
   const client = {
     state: { owner: OWNER, canisterId: PROTOCOL },
     token: () => ({ ledger: principal(LEDGER) }),
-    purchaseView: async (wire: Checkout) => view(wire), withdrawalView,
-    query: async (name: string) => {
+    purchaseView: async (wire: Checkout, _includeWallet: boolean, _wallet: unknown, retained?: ReleasePreferences, channel?: ChannelCheckout) => ({ ...view(wire), ...(retained ? { releasePreferences: retained } : {}), ...(channel ? { channelOpaque: encodeOpaque(channelCheckoutType, channel) } : {}) }), withdrawalView,
+    purchaseWireStatus: async (_id: string): Promise<{ purchase: WireResult; channel?: ChannelCheckout } | null> => {
+      events.push("query:purchase_status"); if (queryError) throw queryError;
+      return observed ? { purchase: observed, ...(quoteChannel ? { channel: quoteChannel } : {}) } : null;
+    },
+    query: async (name: string, args: unknown[] = []) => {
       events.push(`query:${name}`); if (queryError) throw queryError;
+      if (name === "purchase_quote_v2") { quoteRequests.push(args); return { ...quoteChannel!, quote: freshPurchase ?? quoteChannel!.quote }; }
       if (name === "purchase_quote") {
         const saved = stored.get(`operation:${OPERATION}`);
         return freshPurchase ?? (observed?.quote?.[0] || (saved ? decodeOpaque<Checkout>(checkoutType, JSON.parse(new TextDecoder().decode(saved)).quote.opaque) : checkout()));
@@ -81,8 +89,11 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       }
       return observed ? [observed] : [];
     },
-    update: async (name: string, request: { quote: Checkout | WithdrawQuote }, fees: Fee) => {
-      events.push(`update:${name}`); updates.push({ name, request, fee: fees }); if (updateError) throw updateError; return updateResult;
+    update: async (name: string, request: { quote: Checkout | WithdrawQuote | ChannelCheckout }, fees: Fee) => {
+      const channel = "quote" in request.quote ? request.quote : undefined;
+      if (channel) channelUpdates.push(channel);
+      events.push(`update:${name}`); updates.push({ name, request: { quote: channel ? channel.quote : request.quote as Checkout | WithdrawQuote }, fee: fees }); if (updateError) throw updateError;
+      return channel ? { purchase: updateResult, quote: [channel] } : updateResult;
     },
   };
   mock.module("../src/client.ts", () => ({ ...actualClient, protocolClient: async () => client, randomId: () => (++idCounter).toString(16).padStart(32, "0") }));
@@ -93,6 +104,7 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       caller: { appId: root ? "agent" : "marketplace", installationUid: "original-installation", role: root ? "background" : "tile", endpoint: root ? "app:agent:background" : "app:marketplace:tile:main:instance:test" },
       requestApproval: async (review: JsonObject) => { events.push("review"); reviews.push(review); },
       kernel: {
+        listTools: async () => [{ name: "updates.preferences" }],
         querySelf: async (name: string, args: unknown[]) => {
           if (name !== "marketplace_draft") throw new Error(`Unexpected self query ${name}`);
           const saved = stored.get(args[0] as string); return saved === undefined ? [] : [saved];
@@ -109,6 +121,7 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
           events.push("save"); stored.set(id, new Uint8Array(value)); return { ok: value };
         },
         callTool: async (call: WalletCall) => {
+          if (call.name === "updates.preferences") return preferences;
           if (call.name === "marketplace_owner_review_v1") {
             events.push("owner-review"); reviews.push(JSON.parse((call.arguments as unknown as { reviewJson: string }).reviewJson)); return { approved: ownerApproved };
           }
@@ -124,6 +137,8 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
     stored = new Map(); events = []; walletCalls = []; reviews = []; updates = []; observed = null; updateResult = result("complete");
     fundingError = null; updateError = null; queryError = null; idCounter = 0; freshPurchase = null; freshWithdrawal = null; ownerApproved = true;
     fundingReplies = [];
+    quotePreferences = undefined; preferences = { betaEnabled: false, revision: "0" };
+    quoteChannel = undefined; channelUpdates = []; quoteRequests = [];
   });
   afterEach(() => { restoreClock?.(); restoreClock = null; });
   function storedPurchase() {
@@ -157,6 +172,98 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
   }
 
   describe("durable purchase funding", () => {
+    function bindChannel() {
+      quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+      quoteChannel = { quote: checkout(), mode: { beta: null }, selection: [
+        { appId: "test-app", candidateId: 2n, version: 2n, digest: new Uint8Array(32).fill(5), sourceDigest: [], channel: { beta: null }, revision: 2n },
+        { appId: "kernel", candidateId: 1n, version: 10n, digest: new Uint8Array(32).fill(6), sourceDigest: [], channel: { stable: null }, revision: 1n },
+      ] };
+    }
+    test("a submitted channel purchase retries the exact selection and legacy inner quote after a toggle", async () => {
+      bindChannel(); const original = decodeOpaque<ChannelCheckout>(channelCheckoutType, encodeOpaque(channelCheckoutType, quoteChannel!)), shown = view(original.quote);
+      updateError = new Error("Purchase reply lost");
+      await runPurchase(context(), shown);
+      preferences = { betaEnabled: false, revision: "2" }; updateError = null; observed = result("outcome_unknown");
+      expect((await resumeOperation(context(), OPERATION)).state).toBe("complete");
+      expect(channelUpdates).toEqual([original, original]);
+      expect(quoteRequests).toEqual([[{ request: original.quote.request, mode: original.mode, expectedSelection: [original.selection] }]]);
+      expect(storedPurchase().quote.opaque).toEqual(shown.opaque);
+      expect(storedPurchase().quote.channelOpaque).toEqual(shown.channelOpaque);
+      expect(walletCalls).toHaveLength(1);
+    });
+    test("a release-head change cannot silently replace the saved channel selection", async () => {
+      bindChannel(); await runPurchase(context(true), view(quoteChannel!.quote));
+      quoteChannel = { ...quoteChannel!, selection: quoteChannel!.selection.map(value => value.appId === "test-app" ? { ...value, candidateId: 3n, revision: 3n } : value) };
+      await expect(resumeOperation(context(true), OPERATION)).rejects.toThrow("original release selection changed");
+      expect(walletCalls).toHaveLength(0); expect(updates).toHaveLength(0);
+    });
+    test("a submitted channel purchase recovers after local state loss without inventing preference authority", async () => {
+      bindChannel(); quotePreferences = undefined;
+      observed = { ...result("outcome_unknown"), quote: [quoteChannel!.quote] };
+      const ctx = context();
+      ctx.kernel.listTools = async () => { throw new Error("Today's preference is unavailable"); };
+      expect((await resumeOperation(ctx, OPERATION)).state).toBe("complete");
+      expect(channelUpdates).toEqual([quoteChannel!]); expect(walletCalls).toHaveLength(0);
+      expect(storedPurchase().quote.releasePreferences).toBeUndefined();
+    });
+    test("a changed preference rejects an unsubmitted quote before financial calls", async () => {
+      quotePreferences = { betaEnabled: true, revision: "1" };
+      await expect(runPurchase(context(), view(checkout()))).rejects.toThrow("Beta updates changed");
+      expect(walletCalls).toHaveLength(0); expect(updates).toHaveLength(0);
+    });
+
+    test("turning beta off and back on still invalidates the old review revision", async () => {
+      quotePreferences = { betaEnabled: true, revision: "1" };
+      preferences = { betaEnabled: true, revision: "3" };
+      await expect(runPurchase(context(), view(checkout()))).rejects.toThrow("Beta updates changed");
+      expect(walletCalls).toHaveLength(0); expect(updates).toHaveLength(0);
+    });
+
+    test("a preference change during Wallet approval cannot dispatch purchase collection", async () => {
+      quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+      const ctx = context(), call = ctx.kernel.callTool.bind(ctx.kernel);
+      ctx.kernel.callTool = (async (...args: Parameters<typeof call>) => {
+        const value = await call(...args);
+        if (args[0].target === "app:wallet:background") preferences = { betaEnabled: false, revision: "2" };
+        return value;
+      }) as typeof ctx.kernel.callTool;
+      await expect(runPurchase(ctx, view(checkout()))).rejects.toThrow("Beta updates changed");
+      expect(walletCalls).toHaveLength(1); expect(updates).toHaveLength(0);
+      expect(await operationStatus(context(), OPERATION)).toMatchObject({ state: "approval_required", canDismiss: true });
+      expect((await operationStatus(context(), OPERATION)).message).toContain("allowance was approved");
+    });
+
+    test("a lost allowance reply reconciles its exact request after a toggle without collecting payment", async () => {
+      quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+      fundingError = new Error("Wallet reply lost");
+      await expect(runPurchase(context(), view(checkout()))).rejects.toThrow("Wallet reply lost");
+      const original = structuredClone(walletCalls[0]!.arguments);
+      preferences = { betaEnabled: false, revision: "2" }; fundingError = null;
+      await expect(resumeOperation(context(), OPERATION)).rejects.toThrow("Beta updates changed");
+      expect(walletCalls).toHaveLength(2); expect(walletCalls[1]!.arguments).toEqual(original); expect(updates).toHaveLength(0);
+    });
+
+    test("a submitted purchase resumes its original quote after beta is disabled", async () => {
+      quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+      updateError = new Error("Purchase reply lost");
+      await runPurchase(context(), view(checkout()));
+      preferences = { betaEnabled: false, revision: "2" }; updateError = null;
+      observed = result("outcome_unknown");
+      expect((await resumeOperation(context(), OPERATION)).state).toBe("complete");
+      expect(walletCalls).toHaveLength(1); expect(updates).toHaveLength(2);
+      expect(updates[1]!.request.quote).toEqual(updates[0]!.request.quote);
+      expect(storedPurchase().quote.releasePreferences).toEqual(quotePreferences);
+    });
+
+    test("the same operation cannot be relabeled with current release preferences", async () => {
+      quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+      const quote = view(checkout());
+      await runPurchase(context(true), quote);
+      preferences = { betaEnabled: false, revision: "2" };
+      await expect(runPurchase(context(true), { ...quote, releasePreferences: preferences })).rejects.toThrow("original release preference");
+      expect(walletCalls).toHaveLength(0); expect(updates).toHaveLength(0);
+    });
+
     test("saves exact funding before Wallet and respects the deployed Wallet validity window", async () => {
       const now = BigInt(Date.now()) * 1000000n;
       expect((await runPurchase(context(), view(checkout()))).state).toBe("complete");

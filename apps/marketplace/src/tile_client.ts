@@ -1,6 +1,7 @@
 import { callTool, type JsonObject, type EthereumProviderConnection } from "neutron-tools/app";
 import type { MarketplaceClient, PublicationInput, PublicationQuote, PurchaseQuote, OperationResult, InstallationQuote } from "./view-types.ts";
 import { base64, preparePublication, publicationFiles, UPLOAD_CHUNK_BYTES, type PublicationPlan } from "./publication.ts";
+import type { ReleasePreferences } from "./release_preferences.ts";
 
 async function invoke<T>(write: boolean, method: string, args: unknown = {}): Promise<T> {
   const value = await callTool<{ resultJson: string }>({ target: "app:marketplace:background", name: write ? "ui_update" : "ui_query", arguments: { method, paramsJson: JSON.stringify(args) } }, { timeout: write ? 0 : 90 });
@@ -72,7 +73,7 @@ async function publish(input: PublicationInput, quote: PublicationQuote, progres
 }
 type PrivateInstallation = {
   result: OperationResult;
-  handoff?: { url: string; appIds: string[]; access?: { source: string; token: string; paths: string[] } };
+  handoff?: { url: string; appIds: string[]; releasePreferences?: ReleasePreferences; access?: { source: string; token: string; paths: string[] } };
 };
 
 async function install(appIds: string[], quote: InstallationQuote): Promise<OperationResult> {
@@ -95,6 +96,7 @@ async function install(appIds: string[], quote: InstallationQuote): Promise<Oper
   if (!handoff) return result;
   const prepared = result.installation;
   if (!prepared || prepared.operationId !== quote.operationId || handoff.url !== prepared.setupUrl || JSON.stringify(handoff.appIds) !== JSON.stringify(appIds)) throw new Error("The installer handoff does not match the selected apps.");
+  if (prepared.preferenceChanged || JSON.stringify(prepared.selection ?? null) !== JSON.stringify(quote.selection ?? null) || JSON.stringify(handoff.releasePreferences ?? null) !== JSON.stringify(prepared.releasePreferences ?? null)) throw new Error("The installer handoff changed the reviewed release selection. Refresh the selection before installing.");
   const opened = await callTool<{ presented: boolean; requestId: string }>({ target: "kernel", name: "apps.install_prepared", arguments: handoff }, { timeout: 0 });
   if (opened.presented !== true) throw new Error("The installer did not open. Resume the saved installation request.");
   // Only the public retained quote is acknowledged or returned to UI/history;
@@ -111,6 +113,10 @@ export function createMarketplaceClient(): MarketplaceClient {
     initialize: () => invoke(true, "initialize"), connect: () => invoke(true, "connect"),
     discount: () => invoke(false, "discount"), setDiscountCode: code => invoke(true, "setDiscountCode", { code }),
     catalog: args => invoke(false, "catalog", args), detail: appId => invoke(false, "detail", { appId }),
+    publisherDetail: appId => invoke(false, "publisherDetail", { appId }),
+    comments: (appId, release, cursor) => invoke(false, "comments", { appId, release, ...(cursor ? { cursor } : {}) }),
+    comment: (appId, release, text) => invoke(true, "comment", { appId, release, text }),
+    pendingPromotions: () => invoke(false, "pendingPromotions"), quotePromotion: appId => invoke(true, "quotePromotion", { appId }), promote: quote => invoke(true, "promote", { quote }),
     library: cursor => invoke(false, "library", cursor ? { cursor } : {}), publisherApps: cursor => invoke(false, "publisherApps", cursor ? { cursor } : {}),
     publisherProfile: id => invoke(false, "publisherProfile", { id }), ownPublisherProfile: () => invoke(false, "ownPublisherProfile"),
     publisherCatalog: (id, cursor) => invoke(false, "publisherCatalog", { id, ...(cursor ? { cursor } : {}) }),

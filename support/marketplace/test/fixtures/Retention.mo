@@ -10,13 +10,15 @@ import Catalog "../../mo/Catalog";
 import Publishing "../../mo/Publishing";
 import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
+import ReleaseStore "../../mo/ReleaseStore";
 import Types "../../mo/Types";
 import F "../motoko/Fixtures";
 
 persistent actor {
   let memory = F.memory();
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(memory, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  transient let db = Store.UseWithChannels(memory, publisherMemory, releaseMemory);
   var phase : Nat = 0;
   var seeded = false;
   var candidates : [Types.Candidate] = [];
@@ -154,13 +156,13 @@ persistent actor {
     let ?beta = Store.getApp(db, "beta") else return false;
     let expectedAlpha = if (phase == 0) candidates[0] else if (phase < 3) candidates[2] else if (phase == 3) candidates[3] else candidates[5];
     let expectedBeta = if (phase < 2) candidates[1] else candidates[4];
-    if (alpha.approvedCandidate != ?expectedAlpha.id or beta.approvedCandidate != ?expectedBeta.id) return false;
+    if (ReleaseStore.heads(db.channels, alpha.appId).stableHead.candidateId != ?expectedAlpha.id or ReleaseStore.heads(db.channels, beta.appId).stableHead.candidateId != ?expectedBeta.id) return false;
     // Every submitted/audited identity remains in its history, even where its
     // package and source allocation is gone.
     for (original in candidates.vals()) {
       let ?saved = Store.getCandidate(db, original.id) else return false;
       if (saved.digest != original.digest or saved.sourceDigest != original.sourceDigest or saved.publisher != original.publisher) return false;
-      if (saved.state == #pending or alpha.approvedCandidate == ?saved.id or beta.approvedCandidate == ?saved.id) {
+      if (saved.state == #pending or ReleaseStore.heads(db.channels, alpha.appId).stableHead.candidateId == ?saved.id or ReleaseStore.heads(db.channels, beta.appId).stableHead.candidateId == ?saved.id) {
         if (not readMatches(artifact(saved.artifactId)) or not readMatches(source(saved))) return false;
       };
     };
@@ -222,7 +224,7 @@ persistent actor {
     assert secondResult.retiredArtifacts.size() == 2;
     keepRetired(secondResult.retiredArtifacts);
     let ?alpha = Store.getApp(db, "alpha") else Runtime.trap("Current app missing");
-    let ?currentId = alpha.approvedCandidate else Runtime.trap("Current release missing");
+    let ?currentId = ReleaseStore.heads(db.channels, alpha.appId).stableHead.candidateId else Runtime.trap("Current release missing");
     let ?current = Store.getCandidate(db, currentId) else Runtime.trap("Current candidate missing");
     let currentPackage = artifact(current.artifactId);
     let currentSource = source(current);
@@ -234,7 +236,7 @@ persistent actor {
     {
       firstRejected = firstResult.retiredArtifacts.size(); lastRejected = secondResult.retiredArtifacts.size();
       revoked = revoked.retiredArtifacts.size();
-      valid = after.approvedCandidate == ?currentId and readMatches(currentPackage) and readMatches(currentSource)
+      valid = ReleaseStore.heads(db.channels, after.appId).stableHead.candidateId == ?currentId and readMatches(currentPackage) and readMatches(currentSource)
         and savedFirst.state == #rejected and savedSecond.state == #rejected and verifyRetired();
     };
   };

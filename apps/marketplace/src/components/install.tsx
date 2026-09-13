@@ -3,9 +3,10 @@ import type { InstallationQuote, MarketplaceClient } from "../view-types.ts";
 import { ErrorNote, Icon, errorMessage, useRead } from "./primitives.tsx";
 
 /** Installation's protocol fee is reviewed on the existing Install control. */
-export function InstallControl({ client, appIds, disabled = false, busy = false, label = "Install", onInstall, className = "mp-secondary" }: {
+export function InstallControl({ client, appIds, selectionIdentity = "", disabled = false, busy = false, label = "Install", onInstall, className = "mp-secondary" }: {
   client: MarketplaceClient;
   appIds: string[];
+  selectionIdentity?: string;
   disabled?: boolean;
   busy?: boolean;
   label?: string;
@@ -16,7 +17,7 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   const [dispatchBusy, setDispatchBusy] = useState(false);
   const [failure, setFailure] = useState<{ key: string; error: string } | null>(null);
   const dispatching = useRef(false);
-  const selection = JSON.stringify(appIds);
+  const selection = JSON.stringify([appIds, selectionIdentity]);
   const retained = useRef<{ selection: string; operationId?: string }>({ selection });
   if (retained.current.selection !== selection) retained.current = { selection };
   const key = !disabled && appIds.length ? JSON.stringify([selection, revision]) : null;
@@ -36,7 +37,9 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
   const working = busy || dispatchBusy;
   const hasPreparedSelection = !!read.data?.setupUrl;
   const unavailableReason = read.data?.unavailableReason;
-  const canPrepareLatest = hasPreparedSelection || !!unavailableReason;
+  const preferenceChanged = !!read.data?.preferenceChanged;
+  const reconciliationRequired = !!read.data?.reconciliationRequired;
+  const canPrepareLatest = hasPreparedSelection || !!unavailableReason || preferenceChanged;
   function prepareLatest() {
     if (disabled || working || read.loading || !canPrepareLatest) return;
     // A fresh request is created only by this explicit action. Refresh and
@@ -60,9 +63,10 @@ export function InstallControl({ client, appIds, disabled = false, busy = false,
     <div className="mp-button-row">
       {!disabled && appIds.length > 0 && <span className="mp-muted mp-install-cost" aria-live="polite" title="Includes selection preparation and private download access. Neutron reviews app permissions and installation costs next.">{quote ? quote.unavailableReason ? "Selection no longer available" : BigInt(quote.cycles.total) === 0n ? "Ready · No additional access charge" : `${BigInt(quote.cycles.total).toLocaleString("en-US")} cycles` : read.error || dispatchError ? "Refresh cost to continue" : "Checking cost…"}</span>}
       {!disabled && appIds.length > 0 && <button type="button" className="mp-text-button" aria-label="Refresh installation cost" title="Refresh cost" disabled={working || read.loading} onClick={() => setRevision((value) => value + 1)}><Icon name="refresh" /></button>}
-      <button type="button" className={className} disabled={disabled || working || !quote || !!unavailableReason} onClick={() => void install()}>{working ? "Opening install…" : label}</button>
+      <button type="button" className={className} disabled={disabled || working || !quote || !!unavailableReason || preferenceChanged && !reconciliationRequired} onClick={() => void install()}>{working ? "Opening install…" : reconciliationRequired ? "Continue original request" : label}</button>
     </div>
     {!disabled && canPrepareLatest && <button type="button" className="mp-text-button" disabled={working || read.loading} onClick={prepareLatest} title="Review a new preparation request for the latest approved releases. Your previous request remains in saved history.">Prepare latest selection</button>}
-    <ErrorNote error={dispatchError || read.error || unavailableReason || null} retry={!dispatchError && !unavailableReason && !working ? () => setRevision((value) => value + 1) : undefined} />
+    {quote?.selection && <span className="mp-muted">{quote.selection.packages.filter(pkg => appIds.includes(pkg.appId)).map(pkg => `${pkg.appId} v${pkg.version}${pkg.channel === "beta" ? " · Beta" : ""}`).join(", ")}</span>}
+    <ErrorNote error={dispatchError || read.error || unavailableReason || (preferenceChanged ? reconciliationRequired ? "Beta updates changed. Continue the original request to confirm its submitted charge, then prepare a new selection." : "Beta updates changed. Prepare a new selection using the current setting." : null)} retry={!dispatchError && !unavailableReason && !preferenceChanged && !working ? () => setRevision((value) => value + 1) : undefined} />
   </div>;
 }

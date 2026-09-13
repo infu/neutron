@@ -28,11 +28,12 @@ if (process.env.NEUTRON_MARKETPLACE_DISCOUNT_CLIENT_CHILD !== "1") {
       calls.push({ method, args });
       if (method === "marketplace_info") { if (offline) throw new Error("Protocol offline"); return info; }
       if (method === "referral_quote") return { ok: { code: args[0], affiliate: canister, discountBps: 1250n, termsVersion: 1n } };
-      if (method === "purchase_status") return { ok: original ? [{ quote: [original] }] : [] };
+      if (method === "purchase_status_v2") return { ok: original ? [{ purchase: { quote: [original] }, quote: [] }] : [] };
       if (method === "ethereum_fees") return { prepare: fee, verify: fee, settle: fee, cancel: fee };
-      if (method === "purchase_quote" || method === "ethereum_quote") {
-        const quote: Checkout = { request: args[0], buyer: owner, items: [], amount: 0n, fee: 0n, affiliate: args[0].referralCode.length ? [canister] : [], rate: [], spender: { owner: canister, subaccount: [] }, commitment: new Uint8Array(32), cycles: fee, quotedAtNs: 1n };
-        return { ok: quote };
+      if (method === "purchase_quote_v2" || method === "ethereum_quote_v2") {
+        const request = args[0].request;
+        const quote: Checkout = { request, buyer: owner, items: [], amount: 0n, fee: 0n, affiliate: request.referralCode.length ? [canister] : [], rate: [], spender: { owner: canister, subaccount: [] }, commitment: new Uint8Array(32), cycles: fee, quotedAtNs: 1n };
+        return { ok: { quote, mode: args[0].mode, selection: [] } };
       }
       throw new Error(`Unexpected query ${method}`);
     }, update: async () => { throw new Error("No protocol update needed"); },
@@ -40,6 +41,8 @@ if (process.env.NEUTRON_MARKETPLACE_DISCOUNT_CLIENT_CHILD !== "1") {
   const { protocolClient, clearClient, discount } = await import("../src/client.ts");
   const { ethereumQuote } = await import("../src/ethereum_client.ts");
   const context = { signal: new AbortController().signal, kernel: {
+    listTools: async () => [{ name: "updates.preferences" }],
+    callTool: async () => ({ betaEnabled: false, revision: "0" }),
     querySelf: async (method: string, args: unknown[]) => {
       if (method === "marketplace_state") return { seed: [], canister: [canister.toText()], host: "https://icp-api.io", owner: owner.toText(), revision: 1 };
       if (method === "marketplace_draft") { const value = drafts.get(args[0] as string); return value ? [new TextEncoder().encode(JSON.stringify(value))] : []; }
@@ -78,7 +81,7 @@ if (process.env.NEUTRON_MARKETPLACE_DISCOUNT_CLIENT_CHILD !== "1") {
     drafts.clear();
     original = { request: { requestId: quote.operationId, appIds: ["editor"], ledger, referralCode: ["WELCOME"] }, buyer: owner, items: [], amount: 0n, fee: 0n, affiliate: [canister], rate: [], spender: { owner: canister, subaccount: [] }, commitment: new Uint8Array(32), cycles: fee, quotedAtNs: 1n };
     expect((await client.quotePurchase({ appIds: ["editor"], token: "ckUSDC", operationId: quote.operationId })).affiliateCode).toBe("WELCOME");
-    expect(calls.slice(before).map(call => call.method)).toEqual(["purchase_status"]);
+    expect(calls.slice(before).map(call => call.method)).toEqual(["purchase_status_v2"]);
     original = null;
   });
   test("an offline protocol still exposes the durable code as inactive on restoration", async () => {
@@ -91,6 +94,7 @@ if (process.env.NEUTRON_MARKETPLACE_DISCOUNT_CLIENT_CHILD !== "1") {
     const value = { ok: { code: "WELCOME", affiliate: canister, discountBps: 1250n, termsVersion: 3n } };
     expect(CONTRACT.referral_quote!.update).toBeUndefined();
     expect(IDL.decode(CONTRACT.referral_quote!.args, IDL.encode(CONTRACT.referral_quote!.args, ["WELCOME"]))).toEqual(["WELCOME"]);
-    expect(IDL.decode(CONTRACT.referral_quote!.returns, IDL.encode(CONTRACT.referral_quote!.returns, [value]))[0]).toEqual(value);
+    const decoded = IDL.decode(CONTRACT.referral_quote!.returns, IDL.encode(CONTRACT.referral_quote!.returns, [value]))[0] as unknown as typeof value;
+    expect(decoded).toEqual(value);
   });
 }

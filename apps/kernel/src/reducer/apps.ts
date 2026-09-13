@@ -102,6 +102,7 @@ import {
   type DeploymentBuildReviewInput,
 } from "../install_review/deployment_build_review.ts";
 import { assertPackageProvenanceCoverage } from "../install_review/provenance_binding.ts";
+import { getReleasePreferences, type ReleasePreferences } from "../release_preferences.ts";
 
 function runtimeCompilerEnvironment(): "production" | "local" {
   // Runtime deployment is loaded from the Kernel's certified closed config
@@ -248,6 +249,7 @@ export type AppsUninstallResult = {
 export type RepositoryInstallBaseline = {
   readonly state: KernelPackageState;
   readonly runtime: KernelRuntimeInfo;
+  readonly provenance?: InstallProvenance;
 };
 
 export type RepositoryInstallSession = {
@@ -1911,15 +1913,24 @@ function manualInstallProvenanceAssets(
  * session is deliberately single-owner; callers must cancel it when the setup
  * is dismissed.
  */
-export async function beginRepositoryInstallSession(): Promise<RepositoryInstallSession> {
-  return beginPackageInstallSession({ mode: "setup" });
+export type RepositoryReleaseAdmission = Readonly<{
+  releasePreferences?: ReleasePreferences;
+  revalidateReleaseSelection?: () => Promise<void>;
+}>;
+
+export async function beginRepositoryInstallSession(
+  admission: RepositoryReleaseAdmission = {},
+): Promise<RepositoryInstallSession> {
+  return beginPackageInstallSession({ ...admission, mode: "setup" });
 }
 
 export async function beginPackageInstallSession({
   mode,
+  releasePreferences,
+  revalidateReleaseSelection,
 }: {
   mode: "setup" | "update";
-}): Promise<PackageUpdateSession> {
+} & RepositoryReleaseAdmission): Promise<PackageUpdateSession> {
   beginOperation();
   try {
     const neutron = await getNeutronCan();
@@ -1966,12 +1977,21 @@ export async function beginPackageInstallSession({
       inFlight = false;
       if (cancelRequested) finish();
     };
+    const assertReleasePreferences = async (): Promise<void> => {
+      if (!releasePreferences) return;
+      const current = await getReleasePreferences();
+      assertActive();
+      if (current.revision !== releasePreferences.revision || current.betaEnabled !== releasePreferences.betaEnabled) {
+        throw new Error("Beta updates changed after this selection. Check and review the releases again.");
+      }
+    };
 
     return {
-      baseline: Object.freeze({ state: reconciliationState, runtime }),
+      baseline: Object.freeze({ state: reconciliationState, runtime, provenance }),
       async compile(packages) {
         beginCall();
         try {
+          await assertReleasePreferences();
           assertPackageSessionTargets(mode, state, packages);
           assertTargetAppSurfaceCapacity(
             state.apps,
@@ -2057,6 +2077,9 @@ export async function beginPackageInstallSession({
             );
           }
           assertPackageProvenanceCoverage(packages, provenanceEntries);
+          await assertReleasePreferences();
+          await revalidateReleaseSelection?.();
+          assertActive();
           const {
             state: currentState,
             runtime: currentRuntime,
@@ -2111,6 +2134,9 @@ export async function beginPackageInstallSession({
             currentProvenance,
             provenanceEntries,
           );
+          // Recheck after asynchronous source and baseline validation. The
+          // checked backend begin and dispatch bind the same revision atomically.
+          await assertReleasePreferences();
           deployStarted = true;
           const { apps } = await deployPreparedPackages({
             actor: neutron,
@@ -2125,6 +2151,7 @@ export async function beginPackageInstallSession({
             ),
             deploymentBuildRecord,
             expectedDeploymentId: currentRuntime.deployment_id,
+            ...(releasePreferences ? { expectedReleasePreferencesRevision: releasePreferences.revision } : {}),
             stagedAssets: [
               {
                 target: INSTALL_PROVENANCE_PATH,

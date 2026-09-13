@@ -3,6 +3,7 @@ import { QueryResponseStatus, type Agent } from "@dfinity/agent";
 import { IDL } from "@dfinity/candid";
 import {
   isJsonObject,
+  isAppStateChangeEnvelope,
   msgBusLocalActions,
   validateToolArguments,
   NEUTRON_TOOL_AUDIENCE_AGENT_ROOT,
@@ -110,6 +111,16 @@ const defaultExternalIdlFactory: IDL.InterfaceFactory = ({ IDL: FactoryIDL }) =>
     ),
   });
 const defaultExternalMethod = async () => null;
+let releasePreferencesWire = { beta_enabled: false, revision: 0n };
+const releasePreferencesListeners = new Set<(next: { betaEnabled: boolean; revision: string }) => void>();
+mock.module("../src/release_preferences.ts", () => ({
+  getReleasePreferences: async () => ({ betaEnabled: releasePreferencesWire.beta_enabled, revision: releasePreferencesWire.revision.toString() }),
+  subscribeReleasePreferences: (listener: (next: { betaEnabled: boolean; revision: string }) => void) => {
+    releasePreferencesListeners.add(listener);
+    return () => { releasePreferencesListeners.delete(listener); };
+  },
+  clearReleasePreferences: () => {},
+}));
 
 const mockIcblast = Object.assign(
   (options: Record<string, unknown> = {}) =>
@@ -1332,6 +1343,7 @@ test.each([
 });
 
 afterEach(() => {
+  releasePreferencesWire = { beta_enabled: false, revision: 0n };
   selfCallTarget = undefined;
   selfCallAgent = undefined;
   submitSelfCallUpdate = undefined;
@@ -2945,7 +2957,10 @@ test("one-time cycle tools register with safe schemas in the real Kernel router"
   expect(() => validateToolArguments(request, { ...args, cyclesAtoms: "01" })).toThrow();
   expect(request.description).toContain("Root agents cannot approve it");
   expect(request.annotations?.["neutron:effects"]).toContain("user_visible_ui");
-  expect(descriptors.filter(({ name }) => !name.endsWith("_request")).every(({ annotations }) => annotations?.["neutron:effects"]?.join() === "read")).toBe(true);
+  expect(descriptors.filter(({ name }) => !name.endsWith("_request")).every(({ annotations }) => {
+    const effects = annotations?.["neutron:effects"];
+    return Array.isArray(effects) && effects.join() === "read";
+  })).toBe(true);
 });
 
 test("generic backend access tool rejects attached calls", async () => {
@@ -4617,6 +4632,19 @@ test("app state changes stay source-bound and within one app", async () => {
       { source: publisher, origin: TEST_FRAME_ORIGIN },
     ),
   ).toThrow("Invalid app state change");
+
+  // The Kernel announces only preference invalidation across app boundaries.
+  // The event supplies no setting value or install authority.
+  for (const listener of releasePreferencesListeners) listener({ betaEnabled: true, revision: "50" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const preferenceEvent = {
+    type: "neutron:app:state", version: 1,
+    topic: "kernel.release-preferences", revision: "50",
+  };
+  expect(isAppStateChangeEnvelope(preferenceEvent)).toBe(true);
+  expect(messages(publisher).at(-1)).toEqual(preferenceEvent);
+  expect(messages(sameAppTile).at(-1)).toEqual(preferenceEvent);
+  expect(messages(otherAppTile).at(-1)).toEqual(preferenceEvent);
 });
 
 test("a retained tile receives the latest state invalidation when it reconnects", async () => {
@@ -7046,6 +7074,38 @@ test("prepared installs require an install-declared exact tool grant and redact 
   expect(audit?.arguments).toHaveProperty("metadataBytes");
   expect(JSON.stringify(audit)).not.toContain(token);
   expect(JSON.stringify(audit)).not.toContain(request.arguments.url);
+});
+
+test("release preferences expose a read-only exact snapshot to apps", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const source = { postMessage() {} } as unknown as Window;
+  const caller = registerScopedBackgroundEndpoint(source, "app_catalog", "82", undefined, {
+    frontendTools: [{ app: "kernel", tools: ["updates.preferences"] }],
+  });
+  releasePreferencesWire = { beta_enabled: true, revision: 9n };
+  await expect(routeToolCall({ target: "kernel", name: "updates.preferences", arguments: {} }, caller))
+    .resolves.toEqual({ betaEnabled: true, revision: "9" });
+  await expect(routeToolCall({ target: "kernel", name: "updates.preferences", arguments: { betaEnabled: false } }, caller))
+    .rejects.toThrow();
+  await expect(routeToolCall({ target: "kernel", name: "updates.preferences.set", arguments: { betaEnabled: false } }, caller))
+    .rejects.toThrow();
+  expect(releasePreferencesWire).toEqual({ beta_enabled: true, revision: 9n });
+});
+
+test("prepared installs reject a preference revision changed after app preparation", async () => {
+  installFakeWindow();
+  authorizeTestOwner();
+  const source = { postMessage() {} } as unknown as Window;
+  const caller = registerScopedBackgroundEndpoint(source, "app_catalog", "82", undefined, {
+    frontendTools: [{ app: "kernel", tools: ["apps.install_prepared"] }],
+  });
+  releasePreferencesWire = { beta_enabled: true, revision: 2n };
+  await expect(routeToolCall({ target: "kernel", name: "apps.install_prepared", arguments: {
+    url: `https://aaaaa-aa.icp0.io/#repo=rrkah-fqaaa-aaaaa-aaaaq-cai&manifest=chosen&digest=${"a".repeat(64)}`,
+    appIds: ["hello"], releasePreferences: { betaEnabled: true, revision: "0" },
+  } }, caller)).rejects.toThrow("Beta updates changed");
+  expect(useRepositorySetupStore.getState().phase).toBe("idle");
 });
 
 test("prepared installs accept asynchronous app preparation but retain final Kernel review", async () => {

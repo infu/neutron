@@ -21,6 +21,8 @@ export type CheckForAppUpdatesOptions = Readonly<{
   onResult?: (result: UpdateCheckResult) => void;
   signal?: AbortSignal;
   waveSize?: number;
+  betaEnabled?: boolean;
+  preferenceRevision?: string;
 }>;
 
 export async function checkForAppUpdates(
@@ -107,7 +109,9 @@ async function checkOne(
     });
     if (!fetched) {
       return {
-        kind: "not_published",
+        kind: isWaitingForStable(app, options)
+          ? "ahead_of_stable"
+          : "not_published",
         appId: app.appId,
         name: app.name,
         installed: app.version,
@@ -124,11 +128,23 @@ async function checkOne(
         source,
         release: record,
         releaseDigest,
+        ...(fetched.channel ? { releaseChannel: fetched.channel } : {}),
+        ...(fetched.channelRevision !== undefined
+          ? { channelRevision: fetched.channelRevision }
+          : {}),
+        ...(fetched.candidateId !== undefined
+          ? { candidateId: fetched.candidateId }
+          : {}),
+        ...(options.preferenceRevision !== undefined
+          ? { preferenceRevision: options.preferenceRevision }
+          : {}),
       };
     }
     if (record.version < app.version) {
       return {
-        kind: "source_regression",
+        kind: isWaitingForStable(app, options)
+          ? "ahead_of_stable"
+          : "source_regression",
         appId: app.appId,
         name: app.name,
         installed: app.version,
@@ -150,6 +166,16 @@ async function checkOne(
       source,
       release: record,
       releaseDigest,
+      ...(fetched.channel ? { releaseChannel: fetched.channel } : {}),
+      ...(fetched.channelRevision !== undefined
+        ? { channelRevision: fetched.channelRevision }
+        : {}),
+      ...(fetched.candidateId !== undefined
+        ? { candidateId: fetched.candidateId }
+        : {}),
+      ...(options.preferenceRevision !== undefined
+        ? { preferenceRevision: options.preferenceRevision }
+        : {}),
     };
   } catch (error) {
     if (isAbortError(error)) throw error;
@@ -159,6 +185,13 @@ async function checkOne(
       error instanceof UpdateCheckError ? error.code : "unavailable",
     );
   }
+}
+
+function isWaitingForStable(
+  app: InstalledUpdateApp,
+  options: CheckForAppUpdatesOptions,
+): boolean {
+  return !options.betaEnabled && app.releaseChannel === "beta";
 }
 
 function failed(
@@ -202,7 +235,8 @@ function sameInstalledApp(
     left.name === right.name &&
     left.version === right.version &&
     left.updateSource === right.updateSource &&
-    left.packageDigest === right.packageDigest
+    left.packageDigest === right.packageDigest &&
+    left.releaseChannel === right.releaseChannel
   );
 }
 

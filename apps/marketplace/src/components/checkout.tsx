@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { EthereumProviderConnection } from "neutron-tools/app";
-import type { AppListing, EthereumWalletSource, MarketplaceClient, OperationResult, PaymentToken, PurchaseQuote, DiscountPreference } from "../view-types.ts";
+import type { AppListing, EthereumWalletSource, MarketplaceClient, OperationResult, PaymentToken, PurchaseQuote, DiscountPreference, PurchaseSelection } from "../view-types.ts";
+import { assertReleasePreferencesUnchanged } from "../release_preferences.ts";
 import { AppPrice, discountPercent, noDiscount } from "./discount.tsx";
 import { connectEthereumFundingBrowser } from "../ethereum.ts";
 import { AppIcon, CycleCost, ErrorNote, Icon, Modal, Principal, dateLabel, errorMessage, quantity, usd } from "./primitives.tsx";
@@ -56,7 +57,14 @@ export function Checkout({ client, apps, discount = noDiscount, close, complete,
         payerAddress = accounts[0];
       }
       if (!mounted.current) return;
-      const reviewed = await client.quotePurchase({ appIds: apps.map((app) => app.id), token: source === "ethereum" ? "ckUSDC" : token, ...(source === "ethereum" ? { ethereum: { wallet, ...(payerAddress ? { payerAddress } : {}) } } : {}) });
+      let selection: PurchaseSelection | undefined;
+      if (apps.some(app => app.releaseSelection || app.releasePreferences)) {
+        const preferences = apps[0]?.releasePreferences;
+        if (!preferences || apps.some(app => !app.releaseSelection || !app.releasePreferences)) throw new Error("Refresh the selected app releases before reviewing this purchase.");
+        for (const app of apps) assertReleasePreferencesUnchanged(preferences, app.releasePreferences!);
+        selection = { releasePreferences: preferences, packages: apps.map(app => app.releaseSelection!) };
+      }
+      const reviewed = await client.quotePurchase({ appIds: apps.map((app) => app.id), token: source === "ethereum" ? "ckUSDC" : token, ...(selection ? { selection } : {}), ...(source === "ethereum" ? { ethereum: { wallet, ...(payerAddress ? { payerAddress } : {}) } } : {}) });
       if (mounted.current && reviewedControls === currentControls.current) { setQuote(reviewed); setQuoteDiscount(reviewed.affiliateCode === reviewedDiscount.code ? reviewedDiscount : noDiscount); setKnownPaid(BigInt(reviewed.payment.atoms) > 0n); }
     }
     catch (cause) { setError(errorMessage(cause)); }

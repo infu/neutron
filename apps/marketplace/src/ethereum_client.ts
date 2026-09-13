@@ -1,10 +1,17 @@
 import { getAddress } from "viem";
 import type { MsgBusToolContext } from "neutron-tools/app";
 import { protocolClient, randomId, cycleView, type Client } from "./client.ts";
-import { first, some, type Checkout } from "./protocol.ts";
+import { channelCheckoutType, decodeOpaque, first, some, type Checkout, type ChannelCheckout } from "./protocol.ts";
 import { ETHEREUM_USDC } from "./ethereum.ts";
-import type { EthereumFees, EthereumInvoicePage, EthereumInvoiceResult } from "./ethereum_protocol.ts";
-import type { EthereumPurchaseSelection, EthereumWalletSource, Money, OperationResult, Page, PurchaseQuote } from "./view-types.ts";
+import type { EthereumFees, EthereumInvoiceResult, ChannelEthereumInvoiceResult, ChannelEthereumInvoicePage } from "./ethereum_protocol.ts";
+import type { EthereumPurchaseSelection, EthereumWalletSource, Money, OperationResult, Page, PurchaseQuote, PurchaseSelection } from "./view-types.ts";
+import { assertReleasePreferences, type ReleasePreferences } from "./release_preferences.ts";
+
+export type RetainedEthereumInvoiceResult = EthereumInvoiceResult & { channelQuote?: ChannelCheckout };
+export function retainedEthereumInvoice(result: ChannelEthereumInvoiceResult): RetainedEthereumInvoiceResult {
+  const channel = first(result.quote);
+  return { ...result.invoice, ...(channel ? { channelQuote: channel } : {}) };
+}
 
 function payer(value: string | undefined): string {
   if (!value || !/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error("Select the Ethereum wallet that will pay for this purchase.");
@@ -14,10 +21,10 @@ const usdc = (atoms: bigint): Money => ({ atoms: String(atoms), decimals: 6, sym
 export async function ethereumFees(context: MsgBusToolContext): Promise<EthereumFees> {
   return (await protocolClient(context)).transport.query<EthereumFees>("ethereum_fees");
 }
-async function quoteView(client: Client, quote: Checkout, selection: EthereumPurchaseSelection, fees: EthereumFees): Promise<PurchaseQuote> {
+async function quoteView(client: Client, quote: Checkout, selection: EthereumPurchaseSelection, fees: EthereumFees, preferences?: ReleasePreferences, channel?: ChannelCheckout): Promise<PurchaseQuote> {
   const selected = client.token("ckUSDC");
   if (selected.decimals !== 6 || selected.ledger.toText() !== quote.request.ledger.toText()) throw new Error("The Ethereum checkout quote does not use this marketplace's ckUSDC pricing ledger.");
-  const view = await client.purchaseView(quote);
+  const view = await client.purchaseView(quote, false, undefined, preferences, channel);
   return {
     ...view, payment: usdc(quote.amount), approvalFee: usdc(0n), collectionFee: usdc(quote.fee), totalDebit: usdc(quote.amount + quote.fee),
     allocations: view.allocations.map(allocation => ({ ...allocation, amount: { ...allocation.amount, symbol: "USDC" } })),
@@ -29,24 +36,33 @@ async function quoteView(client: Client, quote: Checkout, selection: EthereumPur
     warnings: [...view.warnings, "Ethereum approval and payment each cost ETH gas in addition to the displayed USDC total. App access begins after the protocol verifies the Ethereum payment; wrapping and revenue settlement continue separately."],
   };
 }
-export async function ethereumQuote(context: MsgBusToolContext, input: { appIds: string[]; affiliateCode?: string | undefined; ethereum: EthereumPurchaseSelection; operationId?: string }): Promise<PurchaseQuote> {
+export async function ethereumQuote(context: MsgBusToolContext, input: { appIds: string[]; affiliateCode?: string | undefined; ethereum: EthereumPurchaseSelection; operationId?: string; selection?: PurchaseSelection; retained?: PurchaseQuote }): Promise<PurchaseQuote> {
   const selection = { ...input.ethereum, payerAddress: payer(input.ethereum.payerAddress) };
   const client = await protocolClient(context), selected = client.token("ckUSDC");
   const affiliateCode = await client.purchaseCode(input.affiliateCode);
+  const retainedChannel = input.retained?.channelOpaque ? decodeOpaque<ChannelCheckout>(channelCheckoutType, input.retained.channelOpaque) : undefined;
+  const prepared = input.retained ? undefined : await client.purchaseSelection(input.appIds, input.selection);
+  const preferences = input.retained ? input.retained.releasePreferences : prepared!.releasePreferences;
+  const request = { requestId: input.operationId ?? randomId(), appIds: input.appIds, ledger: selected.ledger, referralCode: some(affiliateCode || null) };
+  const useChannels = !input.retained || !!retainedChannel;
   const [quote, fees] = await Promise.all([
-    client.query<Checkout>("ethereum_quote", [{ requestId: input.operationId ?? randomId(), appIds: input.appIds, ledger: selected.ledger, referralCode: some(affiliateCode || null) }]),
+    useChannels
+      ? client.query<ChannelCheckout>("ethereum_quote_v2", [{ request, mode: retainedChannel?.mode ?? prepared!.mode, expectedSelection: retainedChannel ? [retainedChannel.selection] : prepared!.expectedSelection }])
+      : client.query<Checkout>("ethereum_quote", [request]),
     client.transport.query<EthereumFees>("ethereum_fees"),
   ]);
-  return quoteView(client, quote, selection, fees);
+  const view = "quote" in quote ? await quoteView(client, quote.quote, selection, fees, preferences, quote) : await quoteView(client, quote, selection, fees, preferences);
+  if (prepared) await assertReleasePreferences(context, prepared.releasePreferences);
+  return view;
 }
 /** Rebuild the review from the retained protocol invoice, even if its listing
  * later changes or becomes unavailable. The original opaque checkout stays exact. */
-export async function ethereumInvoiceView(context: MsgBusToolContext, result: EthereumInvoiceResult, source: EthereumWalletSource): Promise<PurchaseQuote> {
+export async function ethereumInvoiceView(context: MsgBusToolContext, result: RetainedEthereumInvoiceResult, source: EthereumWalletSource): Promise<PurchaseQuote> {
   const client = await protocolClient(context), { invoice, quote } = result;
   if (invoice.route.chainId !== 1n || invoice.route.token.toLowerCase() !== ETHEREUM_USDC || invoice.route.decimals !== 6) throw new Error("The retained invoice does not use canonical Ethereum USDC.");
   if (invoice.requestId !== quote.request.requestId || invoice.owner.toText() !== quote.buyer.toText() || invoice.route.ledger.toText() !== quote.request.ledger.toText()) throw new Error("The retained Ethereum invoice differs from its saved checkout.");
   if (invoice.saleAtoms !== quote.amount || invoice.sweepFee !== quote.fee || invoice.grossAtoms !== quote.amount + quote.fee) throw new Error("The retained Ethereum invoice amount differs from its saved checkout.");
-  const view = await quoteView(client, quote, { wallet: source, payerAddress: invoice.payer }, await client.transport.query<EthereumFees>("ethereum_fees"));
+  const view = await quoteView(client, quote, { wallet: source, payerAddress: invoice.payer }, await client.transport.query<EthereumFees>("ethereum_fees"), undefined, result.channelQuote);
   return { ...view, ethereum: { ...view.ethereum!, helperAddress: payer(invoice.route.helper), minterAddress: payer(invoice.route.minterAddress) } };
 }
 export function ethereumOperationView(result: EthereumInvoiceResult, source?: EthereumWalletSource): OperationResult {
@@ -82,14 +98,15 @@ export function ethereumOperationView(result: EthereumInvoiceResult, source?: Et
   if ("wait_wrapping" in result.nextAction || "settle" in result.nextAction) return { ...identity, state: "pending", nextAction: "resume", message: detail ?? "The original payment is awaiting wrapping or settlement. Continue this invoice without another Ethereum payment." };
   return { ...identity, state: "pending", nextAction: "none", message: detail ?? "App access has not been confirmed for this invoice. Retain its original payment evidence for review." };
 }
-export async function ethereumInvoiceStatus(context: MsgBusToolContext, operationId: string): Promise<EthereumInvoiceResult | null> {
-  return first(await (await protocolClient(context)).query<[] | [EthereumInvoiceResult]>("ethereum_status", [{ requestId: operationId }]));
+export async function ethereumInvoiceStatus(context: MsgBusToolContext, operationId: string): Promise<RetainedEthereumInvoiceResult | null> {
+  const result = first(await (await protocolClient(context)).query<[] | [ChannelEthereumInvoiceResult]>("ethereum_status_v2", [{ requestId: operationId }]));
+  return result ? retainedEthereumInvoice(result) : null;
 }
 export async function ethereumStatus(context: MsgBusToolContext, operationId: string, source?: EthereumWalletSource): Promise<OperationResult | null> {
   const result = await ethereumInvoiceStatus(context, operationId);
   return result ? ethereumOperationView(result, source) : null;
 }
 export async function ethereumHistory(context: MsgBusToolContext, cursor?: string): Promise<Page<OperationResult>> {
-  const result = await (await protocolClient(context)).query<EthereumInvoicePage>("ethereum_history", [{ cursor: cursor ? [BigInt(cursor)] : [], limit: 24n }]);
-  return { items: result.invoices.map(invoice => ethereumOperationView(invoice)), nextCursor: first(result.nextCursor)?.toString() ?? null };
+  const result = await (await protocolClient(context)).query<ChannelEthereumInvoicePage>("ethereum_history_v2", [{ cursor: cursor ? [BigInt(cursor)] : [], limit: 24n }]);
+  return { items: result.invoices.map(invoice => ethereumOperationView(invoice.invoice)), nextCursor: first(result.nextCursor)?.toString() ?? null };
 }

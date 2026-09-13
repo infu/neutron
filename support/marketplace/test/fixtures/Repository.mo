@@ -6,6 +6,7 @@ import Encoding "../../mo/Encoding";
 import Http "../../mo/Http";
 import Repository "../../mo/Repository";
 import PublisherStore "../../mo/PublisherStore";
+import ReleaseStore "../../mo/ReleaseStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
 import Fixtures "../motoko/Fixtures";
@@ -20,7 +21,8 @@ persistent actor Fixture {
   var packageId : Nat64 = 0;
   var extraPackageIds : [Nat64] = [];
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(memory, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  transient let db = Store.UseWithChannels(memory, publisherMemory, releaseMemory);
   transient let repo = Repository.Service(db, certification, Principal.fromActor(Fixture));
   transient let http = Http.Store(certification, {
     artifact = func(path) { switch (repo.artifact(path)) { case (?value) ?value; case null Certification.artifact(db, path) } };
@@ -51,7 +53,9 @@ persistent actor Fixture {
       artifactId = value.id; sourceArtifactId = null; digest = value.digest; sourceDigest = null;
       dependencies = []; state = #approved; published = true; createdAtNs = 1; updatedAtNs = 1;
     }));
-    ignore Fixtures.stored(db.apps.update({ app with approvedCandidate = ?candidate.id }));
+    ReleaseStore.putHeads(db.channels, app.appId, {
+      ReleaseStore.heads(db.channels, app.appId) with stableHead = { candidateId = ?candidate.id; revision = 1 };
+    });
     ignore Fixtures.stored(Store.insertEntitlement(db, { owner = Fixtures.owner(); appId = app.appId; orderId = 1; kind = #paid; acquiredAtNs = 2 }));
     seeded := true;
   };
@@ -64,7 +68,10 @@ persistent actor Fixture {
   public func setupTwo() : async API.InstallResult {
     if (extraPackageIds.size() == 0) {
       let ?original = Store.getApp(db, "repo_test") else Runtime.trap("Missing original fixture app");
-      ignore Fixtures.stored(db.apps.update({ original with approvedCandidate = null }));
+      let heads = ReleaseStore.heads(db.channels, original.appId);
+      ReleaseStore.putHeads(db.channels, original.appId, {
+        heads with stableHead = { candidateId = null; revision = heads.stableHead.revision + 1 };
+      });
       func add(appId : Text, bytes : Blob) : Nat64 {
         let value = Fixtures.stored(Store.insertArtifact(db, {
           digest = Encoding.hash(bytes); size = Nat64.fromNat(bytes.size()); mediaType = "application/octet-stream";
@@ -80,7 +87,9 @@ persistent actor Fixture {
           artifactId = value.id; sourceArtifactId = null; digest = value.digest; sourceDigest = null;
           dependencies = []; state = #approved; published = true; createdAtNs = 1; updatedAtNs = 1;
         }));
-        ignore Fixtures.stored(db.apps.update({ app with approvedCandidate = ?candidate.id }));
+        ReleaseStore.putHeads(db.channels, appId, {
+          ReleaseStore.heads(db.channels, appId) with stableHead = { candidateId = ?candidate.id; revision = 1 };
+        });
         ignore Fixtures.stored(Store.insertEntitlement(db, {
           owner = Fixtures.owner(); appId; orderId = 2; kind = #paid; acquiredAtNs = 2;
         }));

@@ -58,6 +58,7 @@ import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
 import { parseRepositorySetupUrl } from "neutron-tools/repository";
 import { normalizeUntrustedText } from "neutron-tools/src/schema.js";
+import { getReleasePreferences, subscribeReleasePreferences, type ReleasePreferences } from "./release_preferences.ts";
 import icblast from "icblast";
 import { getNeutronId } from "./config.ts";
 import {
@@ -414,6 +415,30 @@ const vetKeysBroker = new VetKeysBrowserBroker({
 });
 subscribeEndpointChanges(flushPendingTileViews);
 subscribeEndpointChanges(replayRetainedAppStateChanges);
+subscribeReleasePreferences((next) => {
+  const event: AppStateChangeEnvelope = {
+    type: "neutron:app:state", version: 1,
+    topic: "kernel.release-preferences", revision: next.revision,
+  };
+  for (const endpoint of listRegisteredEndpoints()) {
+    try { postAppStateChange(endpoint, event); } catch {
+      // A retired endpoint cannot prevent other apps receiving invalidation.
+    }
+  }
+});
+const refreshReleasePreferencesOnReturn = (): void => {
+  const auth = useAuthStore.getState();
+  if (!auth.logged || !auth.authorized || auth.loading) return;
+  void getReleasePreferences().catch(() => undefined);
+};
+if (typeof window !== "undefined") {
+  window.addEventListener?.("focus", refreshReleasePreferencesOnReturn);
+}
+if (typeof document !== "undefined") {
+  document.addEventListener?.("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshReleasePreferencesOnReturn();
+  });
+}
 subscribeEndpointChanges(() => vetKeysBroker.reconcileEndpoints());
 subscribeEndpointChanges(reconcileProviderApprovalEndpoints);
 let currentAuthSessionGeneration =
@@ -1465,6 +1490,24 @@ for (const [name, options, operation] of [
 }
 
 defineKernelTool(
+  "updates.preferences",
+  {
+    title: "Read Release Preferences",
+    description: "Read this Neutron's owner-controlled beta release preference and revision.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    outputSchema: {
+      type: "object", required: ["betaEnabled", "revision"], additionalProperties: false,
+      properties: {
+        betaEnabled: { type: "boolean" },
+        revision: { type: "string", anyOf: [{ const: "0" }, { pattern: "^[1-9][0-9]*$" }] },
+      },
+    },
+    annotations: { "neutron:effects": ["read"], "neutron:audit": "metadata_only" },
+  },
+  async () => ({ ...await getReleasePreferences() }),
+);
+
+defineKernelTool(
   "apps.install_prepared",
   {
     title: "Review Prepared App Installation",
@@ -1475,6 +1518,13 @@ defineKernelTool(
       properties: {
         url: { type: "string", minLength: 1, maxLength: 2_048 },
         appIds: { type: "array", minItems: 1, maxItems: REPOSITORY_LIMITS.packagesPerManifest, uniqueItems: true, items: { type: "string", minLength: 1 } },
+        releasePreferences: {
+          type: "object", required: ["betaEnabled", "revision"], additionalProperties: false,
+          properties: {
+            betaEnabled: { type: "boolean" },
+            revision: { type: "string", anyOf: [{ const: "0" }, { pattern: "^[1-9][0-9]*$" }] },
+          },
+        },
         access: {
           type: "object", required: ["source", "token", "paths"], additionalProperties: false,
           properties: {
@@ -1531,7 +1581,20 @@ defineKernelTool(
     // Manifest-declared preparation survives asynchronous app work. It grants
     // no deployment authority: the exact compiled permissions are approved in
     // RepositorySetupDialog, after certified downloads have been validated.
-    startPreparedRepositorySetup(offer.reference, requester, roots, access);
+    const preferences = await getReleasePreferences();
+    const currentAuth = useAuthStore.getState();
+    if (!currentAuth.logged || !currentAuth.authorized || currentAuth.sessionGeneration !== auth.sessionGeneration) {
+      throw new KernelPolicyError("OWNER_REQUIRED", "The owner session changed while preparing the installation");
+    }
+    assertCurrentEndpointVersion(caller);
+    assertInstallOfferFlowsIdle();
+    const suppliedPreferences = args.releasePreferences as ReleasePreferences | undefined;
+    if (suppliedPreferences && (suppliedPreferences.revision !== preferences.revision || suppliedPreferences.betaEnabled !== preferences.betaEnabled)) {
+      throw new Error("Beta updates changed after the prepared selection. Refresh the app and review its releases again.");
+    }
+    // No caller-provided channel label grants admission. The shared repository
+    // loader verifies current certified membership for every manifest package.
+    startPreparedRepositorySetup(offer.reference, requester, roots, access, preferences);
     return { presented: true, requestId: crypto.randomUUID() };
   },
 );

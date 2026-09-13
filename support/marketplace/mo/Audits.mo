@@ -7,6 +7,7 @@ import Store "Store";
 import Types "Types";
 import API "API";
 import Access "Access";
+import ReleaseStore "ReleaseStore";
 import Runtime "mo:core/Runtime";
 import List "mo:core/List";
 
@@ -99,7 +100,7 @@ module {
             };
             case _ return #err("The candidate offered-source identity is incomplete.");
           };
-          nextApp := { app with approvedCandidate = ?candidate.id; updatedAtNs = now };
+          nextApp := { app with updatedAtNs = now };
           publicationChanged := true;
         };
         { candidate with state = #approved; published = true; updatedAtNs = now };
@@ -112,7 +113,7 @@ module {
         if (not candidate.published or candidate.state != #approved) return #err("Only an approved published release can be revoked.");
         // Retain the latest pointer. Falling back to old bytes would silently
         // downgrade repository clients; the publisher must issue a successor.
-        if (app.approvedCandidate == ?candidate.id) nextApp := { app with updatedAtNs = now };
+        if (ReleaseStore.references(db.channels, app.appId, candidate.id)) nextApp := { app with updatedAtNs = now };
         publicationChanged := true;
         { candidate with state = #revoked; updatedAtNs = now };
       };
@@ -123,6 +124,17 @@ module {
     }));
     let savedCandidate = must(db.candidates.update(nextCandidate));
     let savedApp = if (nextApp != app) must(db.apps.update(nextApp)) else app;
+    if (input.decision == #approved and publicationChanged) {
+      let heads = ReleaseStore.heads(db.channels, app.appId);
+      ReleaseStore.putHeads(db.channels, app.appId, { heads with betaHead = { candidateId = ?candidate.id; revision = heads.betaHead.revision + 1 } });
+    };
+    if (input.decision == #revoked) {
+      let heads = ReleaseStore.heads(db.channels, app.appId);
+      ReleaseStore.putHeads(db.channels, app.appId, {
+        stableHead = if (heads.stableHead.candidateId == ?candidate.id) ({ heads.stableHead with revision = heads.stableHead.revision + 1 }) else heads.stableHead;
+        betaHead = if (heads.betaHead.candidateId == ?candidate.id) ({ heads.betaHead with revision = heads.betaHead.revision + 1 }) else heads.betaHead;
+      });
+    };
     Rankings.refreshEligibility(db, savedApp);
     let ?audit = db.audits.get(auditId) else Runtime.trap("Saved audit missing");
     let retiredArtifacts = Retention.afterDecision(db, savedApp.appId);

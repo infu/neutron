@@ -114,13 +114,20 @@ describe("provision journal locking", () => {
   });
 
   test("serializes mainnet execution by deployer across journal paths", async () => {
+    let announceEntered!: () => void;
     let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      announceEntered = resolve;
+    });
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
     try {
-      const first = withMainnetExecutionLock(DEPLOYER, async () => held);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      const first = withMainnetExecutionLock(DEPLOYER, async () => {
+        announceEntered();
+        return held;
+      });
+      await entered;
       await expect(
         withMainnetExecutionLock(DEPLOYER, async () => "other"),
       ).rejects.toThrow("already running for deployer");

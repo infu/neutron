@@ -49,12 +49,16 @@ export type InstalledUpdateApp = Readonly<{
   version: number;
   updateSource?: string;
   packageDigest?: string;
+  releaseChannel?: "stable" | "beta";
 }>;
 
 export type FetchedRelease = Readonly<{
   source: string;
   record: RepositoryReleaseRecord;
   releaseDigest: string;
+  channel?: "stable" | "beta";
+  channelRevision?: string;
+  candidateId?: string;
 }>;
 
 type UpdateResultBase = Readonly<{
@@ -88,6 +92,10 @@ export type UpdateCheckResult =
       source: string;
       release: RepositoryReleaseRecord;
       releaseDigest: string;
+      releaseChannel?: "stable" | "beta";
+      preferenceRevision?: string;
+      channelRevision?: string;
+      candidateId?: string;
     })
   | (UpdateResultBase & {
       kind: "available";
@@ -95,11 +103,21 @@ export type UpdateCheckResult =
       source: string;
       release: RepositoryReleaseRecord;
       releaseDigest: string;
+      releaseChannel?: "stable" | "beta";
+      preferenceRevision?: string;
+      channelRevision?: string;
+      candidateId?: string;
     })
   | (UpdateResultBase & {
       kind: "not_published";
       installed: number;
       source: string;
+    })
+  | (UpdateResultBase & {
+      kind: "ahead_of_stable";
+      installed: number;
+      source: string;
+      advertised?: number;
     })
   | (UpdateResultBase & {
       kind: "source_regression";
@@ -137,6 +155,8 @@ export type UpdateReviewApp = Readonly<{
   packageBytes: number;
   packageDigest: string;
   releaseDigest: string;
+  channel?: "stable" | "beta";
+  preferenceRevision?: string;
   capabilityPlanDiff: CapabilityPlanDiffV1;
   capabilityDisclosures: readonly CapabilityInstallDisclosureWireV1[];
   permissions: readonly Permission[];

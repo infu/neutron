@@ -15,15 +15,24 @@ export function installedUpdateApps(
 ): InstalledUpdateApp[] {
   return Object.entries(registry)
     .sort(([left], [right]) => compareCanonicalText(left, right))
-    .map(([appId, entry]) => ({
-      appId,
-      name: entry.name,
-      version: entry.version,
-      ...(entry.update_source ? { updateSource: entry.update_source } : {}),
-      ...(provenance.apps[appId]?.package_digest
-        ? { packageDigest: provenance.apps[appId]!.package_digest }
-        : {}),
-    }));
+    .map(([appId, entry]) => {
+      const installedProvenance = provenance.apps[appId];
+      const releaseChannel =
+        installedProvenance?.kind === "repository" ||
+        installedProvenance?.kind === "update_source"
+          ? installedProvenance.release_channel
+          : undefined;
+      return {
+        appId,
+        name: entry.name,
+        version: entry.version,
+        ...(entry.update_source ? { updateSource: entry.update_source } : {}),
+        ...(installedProvenance?.package_digest
+          ? { packageDigest: installedProvenance.package_digest }
+          : {}),
+        ...(releaseChannel ? { releaseChannel } : {}),
+      };
+    });
 }
 
 export function watchRegistrySnapshot(
@@ -109,13 +118,29 @@ export function selectionFingerprint(
   candidates: readonly AvailableUpdate[],
 ): string {
   return JSON.stringify(
-    candidates.map(({ appId, installed, source, release, releaseDigest }) => ({
-      appId,
-      installed,
-      source,
-      release,
-      releaseDigest,
-    })),
+    candidates.map(
+      ({
+        appId,
+        installed,
+        source,
+        release,
+        releaseDigest,
+        releaseChannel,
+        preferenceRevision,
+        channelRevision,
+        candidateId,
+      }) => ({
+        appId,
+        installed,
+        source,
+        release,
+        releaseDigest,
+        releaseChannel,
+        preferenceRevision,
+        channelRevision,
+        candidateId,
+      }),
+    ),
   );
 }
 

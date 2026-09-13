@@ -137,6 +137,12 @@ export const cases: IntegrationCase[] = [{
       const uploaded = success(await ctx.publisher.upload_finish({ requestId: "referral-package", feeVersion: 1n }));
       const candidate = success(await ctx.publisher.candidate_submit({ requestId: "referral-candidate", appId, version: 100n, artifactId: uploaded.artifactId[0], sourceArtifactId: [], dependencies: [], feeVersion: 1n }));
       success(await ctx.auditor.audit_stamp({ requestId: "referral-audit", candidateId: candidate.id, expectedDigest: candidate.digest, expectedSourceDigest: candidate.sourceDigest, decision: { approved: null }, analysis: "Opaque fixture inspected", reason: [] }));
+      if (!previousPath) {
+        rejected(await ctx.firstBrowser.app_detail(appId), "app_unavailable");
+        const plan = success(await ctx.publisher.promotion_prepare({ appIds: [appId] }));
+        assert.equal(plan.entries[0].candidateId, candidate.id, "The owner promotes the exact audited beta needed by the stable purchase flow");
+        success(await ctx.publisher.release_promote({ requestId: "referral-stable", ...plan, feeVersion: 1n }));
+      }
       const purchaseRequest = { requestId: "retained-free-acquisition", appIds: [appId], ledger: ledger.canisterId, referralCode: [referrals.other.code] };
       const quote = success(await ctx.firstBrowser.purchase_quote(purchaseRequest));
       assert.equal(quote.amount, 0n);

@@ -153,7 +153,7 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_HANDOFF_CHILD !== "1") {
 
   test("legacy saved quotes display newly required access cost before any charged resume", async () => {
     const { sourceAccess: _, ...legacy } = ready;
-    freshQuote = { ...ready, sourceAccess: quoted.sourceAccess, cycles: { ...ready.cycles, total: "250000000", processing: "250000000" } };
+    freshQuote = { ...ready, sourceAccess: quoted.sourceAccess!, cycles: { ...ready.cycles, total: "250000000", processing: "250000000" } };
     const result = await client.openInstallation(legacy);
     expect(calls.map(call => call.name)).toEqual(["quoteInstallation"]);
     expect(calls[0]?.args).toEqual({ appIds: ["editor"], operationId: OPERATION });
@@ -174,4 +174,41 @@ if (process.env.NEUTRON_MARKETPLACE_INSTALL_HANDOFF_CHILD !== "1") {
     await expect(client.install(["editor"], quoted)).rejects.toThrow("does not match");
     expect(calls.map(call => call.name)).toEqual(["install"]);
   });
+  function channelReady(): InstallationQuote {
+    return { ...ready, releasePreferences: { betaEnabled: true, revision: "7" }, selection: { mode: "beta", packages: [
+      { appId: "editor", candidateId: "42", version: "112", digest: "ab".repeat(32), sourceDigest: null, channel: "beta", revision: "4" },
+      { appId: "dependency", candidateId: "39", version: "108", digest: "cd".repeat(32), sourceDigest: null, channel: "stable", revision: "2" },
+    ] } };
+  }
+  test("the private handoff carries the reviewed preference revision and exact dependency selection", async () => {
+    const original = channelReady();
+    privateReply = { result: { ...prepared, installation: original }, handoff: { ...handoff, releasePreferences: original.releasePreferences } };
+    await client.openInstallation(original);
+    expect(calls.map(call => call.name)).toEqual(["install", "apps.install_prepared", "installationOpened"]);
+    expect(calls[1]!.args.releasePreferences).toEqual({ betaEnabled: true, revision: "7" });
+    expect(calls[2]!.args.quote.selection).toEqual(original.selection);
+  });
+  test("a changed dependency in the private reply cannot replace the release selection shown for review", async () => {
+    const original = channelReady(), changed = structuredClone(original);
+    changed.selection!.packages[1]!.candidateId = "40";
+    privateReply = { result: { ...prepared, installation: changed }, handoff: { ...handoff, releasePreferences: original.releasePreferences } };
+    await expect(client.openInstallation(original)).rejects.toThrow("reviewed release selection");
+    expect(calls.map(call => call.name)).toEqual(["install"]);
+  });
+  test("missing or changed private preference revisions cannot reach the Kernel installer", async () => {
+    const original = channelReady();
+    for (const releasePreferences of [undefined, { betaEnabled: true, revision: "8" }, { betaEnabled: false, revision: "7" }]) {
+      calls.length = 0;
+      privateReply = { result: { ...prepared, installation: original }, handoff: { ...handoff, ...(releasePreferences ? { releasePreferences } : {}) } };
+      await expect(client.openInstallation(original)).rejects.toThrow("reviewed release selection");
+      expect(calls.map(call => call.name)).toEqual(["install"]);
+    }
+  });
+  test("a stale-preference private reply never opens installation even if its app IDs and URL still match", async () => {
+    const original = channelReady();
+    privateReply = { result: { ...prepared, installation: { ...original, preferenceChanged: true } }, handoff: { ...handoff, releasePreferences: original.releasePreferences } };
+    await expect(client.openInstallation(original)).rejects.toThrow("reviewed release selection");
+    expect(calls.map(call => call.name)).toEqual(["install"]);
+  });
+
 }

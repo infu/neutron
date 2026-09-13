@@ -7,20 +7,20 @@ export function PublisherIdentity({ profile }: { profile: PublisherProfile }) {
   return <div className="mp-profile-identity"><span className="mp-profile-avatar" aria-hidden="true">{profile.name.slice(0, 1).toUpperCase()}</span><div><h2>{profile.name}</h2><span className="mp-profile-id">{profile.id}</span></div></div>;
 }
 
-export function PublisherProfileDialog({ client, publisherId, discount, close, select, publisher }: {
+export function PublisherProfileDialog({ client, publisherId, discount, close, select, publisher, refreshRevision = 0 }: {
   client: MarketplaceClient; publisherId: string; discount: DiscountPreference; close: () => void;
-  select: (app: AppListing) => void; publisher: (id: string) => void;
+  select: (app: AppListing) => void; publisher: (id: string) => void; refreshRevision?: number;
 }) {
   const [revision, setRevision] = useState(0);
-  const read = useRead(publisherId, () => client.publisherProfile(publisherId), revision);
-  const catalog = useRead(publisherId, () => client.publisherCatalog(publisherId), revision);
+  const read = useRead(publisherId, () => client.publisherProfile(publisherId), revision + refreshRevision);
+  const catalog = useRead(publisherId, () => client.publisherCatalog(publisherId), revision + refreshRevision);
   const [moreApps, setMoreApps] = useState<AppListing[]>([]), [nextCursor, setNextCursor] = useState<string | null | undefined>();
   const [loadingMore, setLoadingMore] = useState(false), [pageError, setPageError] = useState("");
   const requestGeneration = useRef(0), paging = useRef(false);
   useEffect(() => {
     requestGeneration.current++; paging.current = false; setMoreApps([]); setNextCursor(undefined); setLoadingMore(false); setPageError("");
     return () => { requestGeneration.current++; };
-  }, [publisherId, revision]);
+  }, [publisherId, revision, refreshRevision]);
   const cursor = nextCursor === undefined ? catalog.data?.nextCursor : nextCursor;
   const apps = [...(catalog.data?.items ?? []), ...moreApps].filter((app, index, all) => all.findIndex(other => other.id === app.id) === index);
   async function loadMore() {
@@ -46,7 +46,7 @@ export function PublisherProfileDialog({ client, publisherId, discount, close, s
           <div><strong>{profile.statsComplete ? profile.rating === null ? "New" : `${profile.rating.toFixed(1)} ★` : "—"}</strong><span>{profile.statsComplete ? profile.ratingCount ? `${profile.ratingCount.toLocaleString()} app ratings` : "No ratings yet" : "Ratings updating"}</span></div>
           <div><strong>{profile.statsComplete ? BigInt(profile.totalUsers).toLocaleString("en-US") : "—"}</strong><span>Users</span></div>
         </div>
-        <p className="mp-muted mp-profile-stats-note">Users are distinct Neutrons that acquired an app from this publisher. Ratings combine reviews across their apps.</p>
+        <p className="mp-muted mp-profile-stats-note">Users are distinct Neutrons that acquired an app from this publisher. Ratings combine stars across their apps.</p>
         {profile.description && <p className="mp-description">{profile.description}</p>}
         <div className="mp-profile-principal"><span>Publisher principal</span><Principal value={profile.principal} /></div>
       </>}

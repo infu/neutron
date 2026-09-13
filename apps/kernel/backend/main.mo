@@ -50,6 +50,7 @@ import RouteNamespace "./http_routes/Namespace";
 import KernelMemory "./memory/kernel/v4";
 import ActivationMemory "./memory/activation/v1";
 import OwnerCycleMemory "./memory/kernel_cycle_calls/v1";
+import ReleasePreferenceMemory "./memory/release_preferences/v1";
 import OwnerCycleService "./owner_cycle_calls/Service";
 import OwnerCycleTypes "./owner_cycle_calls/Types";
 import ActivationService "./activation/Service";
@@ -119,6 +120,10 @@ module {
     public type RepositoryAccessResultV1 = RepositoryAccessTypes.AccessResult;
     public type RepositoryAccessInputV1 = RepositoryAccessTypes.Input;
     public type RepositoryAccessOutputV1 = RepositoryAccessTypes.Output;
+    public type ReleasePreferences = {
+        beta_enabled : Bool;
+        revision : Nat;
+    };
 
     // Released assembler contract: add new capability initialization through
     // separate hooks instead of requiring predecessor-generated records to
@@ -937,6 +942,7 @@ module {
         mem : KernelMemory.Mem,
         activationMem : ActivationMemory.Mem,
         ownerCycleMem : OwnerCycleMemory.Mem,
+        releasePreferenceMem : ReleasePreferenceMemory.Mem,
         runningDeploymentId : Text,
         activeAppInstanceInventory : [InstallTypes.RuntimeApp],
         canisterPrincipal : Principal,
@@ -3869,6 +3875,7 @@ module {
             inp : InstallTypes.CheckedBeginInput,
         ) : () {
             assert(inp.expected_deployment_id == runningDeploymentId);
+            assertReleasePreferencesRevision(inp.expected_release_preferences_revision);
             installs.begin(inp.journal);
         };
 
@@ -3878,6 +3885,30 @@ module {
 
         public func /*query*/kernel_settings_snapshot(()) : SettingsTypes.Snapshot {
             SettingsService.snapshot();
+        };
+
+        public func /*query*/get_release_preferences(()) : ReleasePreferences {
+            {
+                beta_enabled = releasePreferenceMem.beta_enabled;
+                revision = releasePreferenceMem.revision;
+            };
+        };
+
+        public func /*update*/set_release_preferences(beta_enabled : Bool) : ReleasePreferences {
+            if (releasePreferenceMem.beta_enabled != beta_enabled) {
+                releasePreferenceMem.beta_enabled := beta_enabled;
+                releasePreferenceMem.revision += 1;
+            };
+            get_release_preferences();
+        };
+
+        func assertReleasePreferencesRevision(expected : ?Nat) {
+            switch (expected) {
+                case (?revision) {
+                    assert (revision == releasePreferenceMem.revision);
+                };
+                case null {};
+            };
         };
 
         // Owner-only generic repository transport. Ordinary app capabilities
@@ -4338,6 +4369,7 @@ module {
                 chunk_hashes : [Blob];
                 wasm_module_hash : Blob;
                 wasm_memory_persistence : { #keep; #replace };
+                expected_release_preferences_revision : ?Nat;
             },
             /*this*/ self : actor {},
         ) : async* () {
@@ -4351,6 +4383,7 @@ module {
             };
             assert (InstallMemory.has(mem.install, inp.deployment_id));
             let deployment = { deployment_id = inp.deployment_id };
+            assertReleasePreferencesRevision(inp.expected_release_preferences_revision);
             installs.markDispatched(deployment);
             try {
                 IC.management.install_chunked_code({
@@ -4379,9 +4412,10 @@ module {
             };
         };
 
-        public func /*update*/kernel_install_code(inp: {wasm: [Nat8]; candid: Text; deployment_id : Text; wasm_memory_persistence : { #keep; #replace }}, /*this*/ self: actor {}) : async* () {
+        public func /*update*/kernel_install_code(inp: {wasm: [Nat8]; candid: Text; deployment_id : Text; wasm_memory_persistence : { #keep; #replace }; expected_release_preferences_revision : ?Nat}, /*this*/ self: actor {}) : async* () {
             assert (InstallMemory.has(mem.install, inp.deployment_id));
             let deployment = { deployment_id = inp.deployment_id };
+            assertReleasePreferencesRevision(inp.expected_release_preferences_revision);
             installs.markDispatched(deployment);
             try {
                 IC.management.install_code({
@@ -4604,6 +4638,12 @@ public type kernel_install_status_Output = ?InstallTypes.Status;
 public type kernel_settings_snapshot_Input = (());
 public type kernel_settings_snapshot_Output = SettingsTypes.Snapshot;
 
+public type get_release_preferences_Input = (());
+public type get_release_preferences_Output = ReleasePreferences;
+
+public type set_release_preferences_Input = (beta_enabled : Bool);
+public type set_release_preferences_Output = ReleasePreferences;
+
 public type kernel_repository_access_v1_Input = (input : RepositoryAccessInputV1);
 public type kernel_repository_access_v1_Output = RepositoryAccessOutputV1;
 
@@ -4724,10 +4764,11 @@ public type kernel_install_code_chunked_Input = (inp : {
                 chunk_hashes : [Blob];
                 wasm_module_hash : Blob;
                 wasm_memory_persistence : { #keep; #replace };
+                expected_release_preferences_revision : ?Nat;
             });
 public type kernel_install_code_chunked_Output = ();
 
-public type kernel_install_code_Input = (inp: {wasm: [Nat8]; candid: Text; deployment_id : Text; wasm_memory_persistence : { #keep; #replace }});
+public type kernel_install_code_Input = (inp: {wasm: [Nat8]; candid: Text; deployment_id : Text; wasm_memory_persistence : { #keep; #replace }; expected_release_preferences_revision : ?Nat});
 public type kernel_install_code_Output = ();
 
 public type kernel_connections_begin_Input = (inp : ConnectionTypes.BeginConnectionInput);

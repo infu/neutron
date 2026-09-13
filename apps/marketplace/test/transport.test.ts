@@ -34,6 +34,21 @@ const canisterId = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 const grant = (method: string, principal = canisterId) => ({ scopeKind: "exact", principal, method });
 const allGrants = () => ({ reservations: UPDATE_METHODS.map(method => grant(method)) });
 
+test("channel updates extend the exact protocol grants while preserving saved operation recovery", async () => {
+  const legacy = ["read_delegate_set", "purchase", "withdraw", "referral_get_or_create", "rating_set", "listing_save", "upload_begin", "upload_chunk", "upload_finish", "candidate_submit", "install_prepare", "repo_access_v1", "ethereum_prepare", "ethereum_verify", "ethereum_settle", "ethereum_cancel", "publisher_profile_register", "publisher_profile_update"];
+  const added = ["purchase_v2", "ethereum_prepare_v2", "rating_set_v2", "version_comment_set_v2", "version_comment_delete_v2", "candidate_submit_v2", "release_promote", "install_prepare_v2"];
+  const requests: unknown[] = [];
+  const transport = makeTransport({ canisterId, agent: {} as QueryAgent, contract: {},
+    kernel: { callTool: async () => ({ reservations: legacy.map(method => grant(method)) }) } as unknown as Kernel,
+    requestReservations: async (_kernel, request) => { requests.push(request); return allGrants(); },
+  });
+  await transport.reserve();
+  expect(requests).toEqual([{ actions: added.map(method => ({ kind: "reserve", scope: { kind: "exact", principal: canisterId, method } })) }]);
+  for (const method of legacy) expect<readonly string[]>(UPDATE_METHODS).toContain(method);
+  expect(new Set(UPDATE_METHODS).size).toBe(legacy.length + added.length);
+  for (const method of ["icrc1_transfer", "icrc2_transfer_from", "icrc2_approve", "ethereum_status", "catalog_v2"]) expect<readonly string[]>(UPDATE_METHODS).not.toContain(method);
+});
+
 test("production install review grants every update route so fresh and reinstalled apps do not prompt on opening", async () => {
   const plan = toCapabilityPlanWireV1(buildCapabilityPlan(manifest as NeutronManifest));
   const actions = installBackendCallReservationActions(plan);
@@ -63,7 +78,6 @@ test("existing exact access needs only a context-scoped read and no consent requ
   });
   await transport.reserve();
   await transport.reserve();
-  expect(UPDATE_METHODS).toHaveLength(18);
   expect(calls).toEqual(Array.from({ length: 2 }, () => ({ target: "kernel", name: "backend_calls.list", arguments: {} })));
   expect(requests).toBe(0);
 });

@@ -63,9 +63,14 @@ module {
     public func isActive(id : Nat64) : Bool { Set.contains(active, Nat64.compare, id) };
     func invoice(id : Nat64) : Types.EvmInvoice { Journal.found(Store.getEvmInvoice(db, id)) };
     func order(row : Types.EvmInvoice) : Types.Order { Journal.found(Store.getOrderById(db, row.orderId)) };
+    func savedSnapshot(row : Types.EvmInvoice) : Quotes.PurchaseSnapshot {
+      Journal.found(Quotes.decodePurchaseSnapshot(row.quoteContent));
+    };
     func savedQuote(row : Types.EvmInvoice) : API.CheckoutQuote {
-      let decoded : ?API.CheckoutQuote = from_candid(row.quoteContent);
-      Journal.found(decoded);
+      Quotes.snapshotQuote(savedSnapshot(row));
+    };
+    func savedChannelQuote(row : Types.EvmInvoice) : ?API.ChannelCheckoutQuote {
+      switch (savedSnapshot(row)) { case (#channel(value)) ?value; case (_) null };
     };
     func sweep(row : Types.EvmInvoice) : ?Types.EvmSweep {
       switch (row.currentSweepId) { case null null; case (?id) Store.getEvmSweep(db, id) };
@@ -115,6 +120,18 @@ module {
       };
       { invoices = List.toArray(rows); nextCursor = if (more) last else null };
     };
+    func channelResult(row : Types.EvmInvoice) : EvmAPI.ChannelInvoiceResult {
+      { invoice = result(row); quote = savedChannelQuote(row) };
+    };
+    public func statusV2(owner : Principal, requestId : Text) : ?EvmAPI.ChannelInvoiceResult {
+      switch (Store.getEvmInvoiceByRequest(db, owner, requestId)) { case null null; case (?row) ?channelResult(row) };
+    };
+    public func historyV2(owner : Principal, cursor : ?Nat64, limit : Nat) : EvmAPI.ChannelInvoicePage {
+      let page = history(owner, cursor, limit);
+      { invoices = Array.map<InvoiceResult, EvmAPI.ChannelInvoiceResult>(page.invoices, func(value) {
+          { invoice = value; quote = savedChannelQuote(value.invoice) };
+        }); nextCursor = page.nextCursor };
+    };
     public func quote(owner : Principal, request : API.PurchaseRequest) : API.Result<API.CheckoutQuote> {
       if (request.ledger != Minter.ckusdcLedger()) return error("payment_token", "Ethereum checkout pays canonical USDC and settles in ckUSDC.");
       switch (Store.getEvmInvoiceByRequest(db, owner, request.requestId)) {
@@ -126,6 +143,32 @@ module {
       };
       if (Store.getOrder(db, owner, request.requestId) != null) return error("payment_rail", "This request already uses IC payment. Resume that original purchase.");
       Quotes.purchase(db, marketplace, owner, request, clock());
+    };
+    public func quoteV2(owner : Principal, request : API.ChannelPurchaseRequest) : API.Result<API.ChannelCheckoutQuote> {
+      if (request.request.ledger != Minter.ckusdcLedger()) return error("payment_token", "Ethereum checkout pays canonical USDC and settles in ckUSDC.");
+      switch (Store.getEvmInvoiceByRequest(db, owner, request.request.requestId)) {
+        case (?row) {
+          if (order(row).intentHash != Quotes.channelPurchaseIntent(request.request, request.mode)) return error("request_mismatch", "This Ethereum purchase ID belongs to another selection or channel.");
+          let ?saved = savedChannelQuote(row) else return error("quote_unavailable", "The original Ethereum payment snapshot is unavailable.");
+          switch (Quotes.checkExpectedSelection(saved.selection, request.expectedSelection)) { case (#err(value)) return #err(value); case (_) {} };
+          return #ok(saved);
+        };
+        case null {};
+      };
+      if (Store.getOrder(db, owner, request.request.requestId) != null) return error("payment_rail", "This request already uses IC payment. Resume that original purchase.");
+      Quotes.purchaseV2(db, marketplace, owner, request, clock());
+    };
+    func reviewSnapshot(owner : Principal, supplied : Quotes.PurchaseSnapshot) : API.Result<Quotes.PurchaseSnapshot> {
+      switch (supplied) {
+        case (#legacy(value)) {
+          switch (quote(owner, value.request)) { case (#err(value)) #err(value); case (#ok(value)) #ok(#legacy(value)) };
+        };
+        case (#channel(value)) {
+          switch (quoteV2(owner, { request = value.quote.request; mode = value.mode; expectedSelection = ?value.selection })) {
+            case (#err(value)) #err(value); case (#ok(value)) #ok(#channel(value));
+          };
+        };
+      };
     };
     func claimCheck(buyer : Principal, items : [Types.PurchaseItem], allowedOrder : ?Nat64) : API.Result<()> {
       for (item in items.vals()) {
@@ -146,17 +189,28 @@ module {
       };
     };
     public func prepare(owner : Principal, supplied : API.CheckoutQuote, payer : Text) : async* API.Result<InvoiceResult> {
+      await* prepareSnapshot(owner, #legacy(supplied), payer);
+    };
+    public func prepareV2(owner : Principal, supplied : API.ChannelCheckoutQuote, payer : Text) : async* API.Result<EvmAPI.ChannelInvoiceResult> {
+      switch (await* prepareSnapshot(owner, #channel(supplied), payer)) {
+        case (#err(value)) #err(value);
+        case (#ok(value)) #ok({ invoice = value; quote = savedChannelQuote(value.invoice) });
+      };
+    };
+    func prepareSnapshot(owner : Principal, suppliedSnapshot : Quotes.PurchaseSnapshot, payer : Text) : async* API.Result<InvoiceResult> {
+      let supplied = Quotes.snapshotQuote(suppliedSnapshot);
       if (supplied.buyer != owner) return error("owner_mismatch", "This purchase review belongs to another Neutron.");
       let normalized = switch (Minter.normalizeAddress(payer)) { case (#ok(value)) value; case (#err(message)) return error("payer", message) };
       switch (Store.getEvmInvoiceByRequest(db, owner, supplied.request.requestId)) {
         case (?saved) {
-          if (saved.payer != normalized or not Quotes.samePurchase(supplied, savedQuote(saved))) return error("invoice_immutable", "This Ethereum invoice is immutable. Resume its original payer and reviewed quote.");
+          if (saved.payer != normalized or not Quotes.samePurchaseSnapshot(suppliedSnapshot, savedSnapshot(saved))) return error("invoice_immutable", "This Ethereum invoice is immutable. Resume its original payer and reviewed quote.");
           return #ok(result(saved));
         };
         case null {};
       };
-      let initial = switch (quote(owner, supplied.request)) { case (#ok(value)) value; case (#err(value)) return #err(value) };
-      if (not Quotes.samePurchase(initial, supplied)) return error("quote_changed", "Purchase costs changed. Review the current quote before creating payment instructions.");
+      let initialSnapshot = switch (reviewSnapshot(owner, suppliedSnapshot)) { case (#ok(value)) value; case (#err(value)) return #err(value) };
+      let initial = Quotes.snapshotQuote(initialSnapshot);
+      if (not Quotes.samePurchaseSnapshot(initialSnapshot, suppliedSnapshot)) return error("quote_changed", "Purchase costs changed. Review the current quote before creating payment instructions.");
       if (initial.amount == 0) return error("free_purchase", "Acquire free apps through the ordinary free checkout; no Ethereum deposit is needed.");
       if (initial.amount + initial.fee >= 2 ** 256) return error("ethereum_amount", "The reviewed deposit amount does not fit the Ethereum helper's uint256 amount.");
       switch (claimCheck(owner, initial.items, null)) { case (#err(value)) return #err(value); case (_) {} };
@@ -166,21 +220,22 @@ module {
       // claims before making the external payment instructions usable.
       switch (Store.getEvmInvoiceByRequest(db, owner, supplied.request.requestId)) {
         case (?saved) {
-          if (saved.payer != normalized or not Quotes.samePurchase(supplied, savedQuote(saved))) return error("invoice_immutable", "Another call prepared this request with different immutable terms.");
+          if (saved.payer != normalized or not Quotes.samePurchaseSnapshot(suppliedSnapshot, savedSnapshot(saved))) return error("invoice_immutable", "Another call prepared this request with different immutable terms.");
           return #ok(result(saved));
         };
         case null {};
       };
-      let current = switch (quote(owner, supplied.request)) { case (#ok(value)) value; case (#err(value)) return #err(value) };
-      if (not Quotes.samePurchase(current, supplied)) return error("quote_changed", "Purchase costs or ownership changed while preparing the route. Review the current quote.");
+      let currentSnapshot = switch (reviewSnapshot(owner, suppliedSnapshot)) { case (#ok(value)) value; case (#err(value)) return #err(value) };
+      let current = Quotes.snapshotQuote(currentSnapshot);
+      if (not Quotes.samePurchaseSnapshot(currentSnapshot, suppliedSnapshot)) return error("quote_changed", "Purchase costs or ownership changed while preparing the route. Review the current quote.");
       switch (claimCheck(owner, current.items, null)) { case (#err(value)) return #err(value); case (_) {} };
       let now = clock();
-      let savedOrder = Journal.must(Store.insertOrder(db, Quotes.order(current, now)));
+      let savedOrder = Journal.must(Store.insertOrder(db, Quotes.snapshotOrder(currentSnapshot, now)));
       let subaccount = Encoding.hash(to_candid("neutron.marketplace.ethereum.invoice.v1", marketplace,
         owner, savedOrder.id, savedOrder.requestId, savedOrder.intentHash, savedOrder.quoteCommitment, normalized, route));
       let row = Journal.must(Store.insertEvmInvoice(db, {
         owner; requestId = current.request.requestId; orderId = savedOrder.id; subaccount; route; payer = normalized;
-        quoteContent = to_candid(current); saleAtoms = current.amount; grossAtoms = current.amount + current.fee; sweepFee = current.fee;
+        quoteContent = Quotes.snapshotContent(currentSnapshot); saleAtoms = current.amount; grossAtoms = current.amount + current.fee; sweepFee = current.fee;
         canceledAtNs = null; acceptedReceiptId = null; entitlementGrantedAtNs = null; revenueFinalizedAtNs = null;
         currentSweepId = null; nextSweepOrdinal = 0; creditedBuyerAtoms = 0; lastBalance = null; lastBalanceAtNs = null;
         workClass = 1; nextCheckAtNs = now + idleIntervalNs; createdAtNs = now; updatedAtNs = now; lastError = null;

@@ -47,7 +47,7 @@ afterEach(async () => {
   );
 });
 
-describe("Kernel v361 NPL package metadata", () => {
+describe("Kernel v362 NPL package metadata", () => {
   test("binds exact NPL, 3V Interactive notice, HTTPS source, and build inputs", async () => {
     const fixture = await metadataFixture();
     const generated = buildKernelPackageMetadata(fixture);
@@ -108,7 +108,7 @@ describe("Kernel v361 NPL package metadata", () => {
     expect(validate_neutron_conf(packagedManifest).errors).toEqual([]);
     expect(unpacked["neutron.json"]).toEqual(fixture.packagedManifest);
     expect(packagedManifest.format).toBe(3);
-    expect(packagedManifest.version).toBe(361);
+    expect(packagedManifest.version).toBe(362);
     expect(packagedManifest.package_features).toBeUndefined();
     expect(unpacked[KERNEL_NPL_LICENSE_PATH]).toEqual(generated.license);
     expect(textDecoder.decode(unpacked[KERNEL_APPLICATION_NOTICE_PATH])).toContain(
@@ -129,7 +129,7 @@ describe("Kernel v361 NPL package metadata", () => {
         ...fixture,
         packagedManifest: jsonBytes({ ...manifest, version: 309 }),
       }),
-    ).toThrow("restricted to Kernel version 361");
+    ).toThrow("restricted to Kernel version 362");
     expect(() =>
       buildKernelPackageMetadata({
         ...fixture,
@@ -168,7 +168,7 @@ describe("Kernel v361 NPL package metadata", () => {
     ).toThrow("changed the schema binding");
   });
 
-  test("requires released roots and migration plus the independent cycle-call root", async () => {
+  test("requires released roots and migration plus the independent cycle-call and release-preference roots", async () => {
     const fixture = await metadataFixture();
     const original = JSON.parse(textDecoder.decode(fixture.packagedManifest));
     expect(original.memory.kernel.version).toBe(4);
@@ -184,8 +184,29 @@ describe("Kernel v361 NPL package metadata", () => {
     expect(original.memory.kernel_cycle_calls.version).toBe(1);
     expect(Object.keys(original.memory.kernel_cycle_calls.schemas)).toEqual(["1"]);
     expect(original.memory.kernel_cycle_calls.migrations).toEqual([]);
+    expect(original.memory.kernel_release_preferences).toEqual({
+      version: 1,
+      schemas: { "1": {
+        src: "memory/release_preferences/v1.mo",
+        hash: "6cc8abce587f3db5b9e82004f7c6eacd7fca22ac33d3324b6885064852d97fa5",
+        entry: "6cc8abce587f3db5b9e82004f7c6eacd7fca22ac33d3324b6885064852d97fa5",
+      } },
+      migrations: [],
+    });
 
     const mutations = [
+      {
+        mutate: (manifest: typeof original) => { delete manifest.memory.kernel_release_preferences; },
+        message: "reviewed memory roots",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel_release_preferences.version = 2; },
+        message: "memory kernel_release_preferences v1",
+      },
+      {
+        mutate: (manifest: typeof original) => { manifest.memory.kernel_release_preferences.schemas["1"].hash = "0".repeat(64); },
+        message: "changed the schema binding for kernel_release_preferences v1",
+      },
       {
         mutate: (manifest: typeof original) => { delete manifest.memory.kernel_cycle_calls; },
         message: "reviewed memory roots",
@@ -246,6 +267,9 @@ describe("Kernel v361 NPL package metadata", () => {
     for (const schemaPath of [
       "apps/kernel/backend/memory/activation/v1.mo",
       "apps/kernel/backend/memory/kernel/v3.mo",
+      "apps/kernel/backend/memory/kernel/v4.mo",
+      "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+      "apps/kernel/backend/memory/kernel_cycle_calls/v1.mo",
     ]) {
       expect(() => buildKernelPackageMetadata({
         ...fixture,
@@ -359,7 +383,7 @@ describe("Kernel v361 NPL package metadata", () => {
       }),
     );
 
-    await installKernelInstalledArtifactInventory(root, 361);
+    await installKernelInstalledArtifactInventory(root, 362);
     const inventoryPath = path.join(
       root,
       KERNEL_INSTALLED_ARTIFACT_INVENTORY_PACKAGE_PATH,
@@ -372,7 +396,7 @@ describe("Kernel v361 NPL package metadata", () => {
       parsed.artifacts.map((file) => [file.package_path, file] as const),
     );
 
-    expect(parsed.package).toEqual({ id: "kernel", version: 361 });
+    expect(parsed.package).toEqual({ id: "kernel", version: 362 });
     expect(byPackagePath.has("neutron.did")).toBe(false);
     expect(byPackagePath.has(`mo/${"a".repeat(64)}.mo`)).toBe(false);
     expect(
@@ -397,7 +421,7 @@ describe("Kernel v361 NPL package metadata", () => {
     }
 
     await expect(auditKernelDistForPackaging(root)).resolves.toBeUndefined();
-    await installKernelInstalledArtifactInventory(root, 361);
+    await installKernelInstalledArtifactInventory(root, 362);
     expect(new Uint8Array(await fs.readFile(inventoryPath))).toEqual(
       firstBytes,
     );
@@ -417,6 +441,21 @@ describe("Kernel v361 NPL package metadata", () => {
       expect(sourcePaths).toContain(required);
     }
     for (const required of [
+      "apps/kernel/backend/memory/release_preferences/v1.mo",
+      "apps/kernel/src/release_preferences.ts",
+      "apps/kernel/src/repository/channel_metadata.ts",
+      "apps/kernel/src/repository/channels.ts",
+      "apps/kernel/test/install_provenance_format.test.ts",
+      "apps/kernel/test/release_preferences.test.ts",
+      "apps/kernel/test/release_preferences_surface.test.ts",
+      "apps/kernel/test/release_preferences_upgrade.pocketic.test.ts",
+      "apps/kernel/test/repository_channel_legacy.pocketic.test.ts",
+      "apps/kernel/test/repository_channel_metadata.test.ts",
+      "apps/kernel/test/repository_channels.test.ts",
+      "apps/kernel/test/updates_channels.test.ts",
+      "packages/neutron-tools/src/release_channels.ts",
+      "packages/neutron-tools/src/strict_json.ts",
+      "packages/neutron-tools/test/release_channels.test.ts",
       "apps/kernel/backend/backend_calls/Memory.mo",
       "apps/kernel/backend/backend_calls/Service.mo",
       "apps/kernel/test/exclusive_reservations_memory.test.ts",
@@ -525,6 +564,9 @@ async function metadataFixture(): Promise<MetadataFixture> {
   for (const schemaPath of [
     "apps/kernel/backend/memory/activation/v1.mo",
     "apps/kernel/backend/memory/kernel/v3.mo",
+    "apps/kernel/backend/memory/kernel/v4.mo",
+    "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
+    "apps/kernel/backend/memory/kernel_cycle_calls/v1.mo",
   ]) {
     contentByPath.set(
       schemaPath,

@@ -2,6 +2,7 @@ import Test "mo:test";
 import Fixtures "Fixtures";
 import Store "../../mo/Store";
 import PublisherStore "../../mo/PublisherStore";
+import ReleaseStore "../../mo/ReleaseStore";
 import Types "../../mo/Types";
 import Catalog "../../mo/Catalog";
 import Publishing "../../mo/Publishing";
@@ -51,7 +52,10 @@ persistent actor {
       assert db.audits.size() == 0;
       assert db.candidates.get(candidate.id) == ?candidate;
       let first = Fixtures.ok(Audits.stamp(db, Fixtures.auditor(), request, 3));
-      assert first.publicationChanged and Catalog.eligible(db, first.app);
+      assert first.publicationChanged and Catalog.eligibleFor(db, first.app, #beta);
+      assert not Catalog.eligible(db, first.app);
+      assert ReleaseStore.heads(db.channels, first.app.appId).betaHead.candidateId == ?candidate.id;
+      assert ReleaseStore.heads(db.channels, first.app.appId).stableHead.candidateId == null;
       let repeat = Fixtures.ok(Audits.stamp(db, Fixtures.auditor(), request, 4));
       assert repeat.audit == first.audit and not repeat.publicationChanged and db.audits.size() == 1;
       switch (Audits.stamp(db, Fixtures.auditor(), { request with expectedDigest = "different-package" }, 4)) { case (#err(_)) {}; case _ assert false };
@@ -59,16 +63,18 @@ persistent actor {
       switch (Audits.stamp(db, Fixtures.auditor(), { request with analysis = "Changed" }, 4)) { case (#err(_)) {}; case _ assert false };
       ignore Fixtures.stored(Store.insertEntitlement(db, { owner = Fixtures.other(); appId = "testapp"; orderId = 1; kind = #paid; acquiredAtNs = 4 }));
       let next = Fixtures.candidate(db, "testapp", 101, "submit-2");
-      assert Catalog.approvedRelease(db, first.app) == ?first.candidate;
+      assert Catalog.release(db, first.app, #beta) == ?first.candidate;
       let rejected = Fixtures.ok(Audits.stamp(db, Fixtures.auditor(), { requestId = "reject-2"; candidateId = next.id; expectedDigest = next.digest; expectedSourceDigest = next.sourceDigest; decision = #rejected; analysis = "Examined source"; reason = ?"Unexpected behavior" }, 5));
       assert rejected.candidate.state == #rejected and not rejected.publicationChanged;
-      assert Catalog.eligible(db, rejected.app);
+      assert Catalog.eligibleFor(db, rejected.app, #beta);
       let revoked = Fixtures.ok(Audits.stamp(db, Fixtures.auditor(), { requestId = "revoke-1"; candidateId = candidate.id; expectedDigest = candidate.digest; expectedSourceDigest = candidate.sourceDigest; decision = #revoked; analysis = "Reexamined bytes"; reason = ?"New finding" }, 6));
-      assert revoked.candidate.state == #revoked and revoked.app.approvedCandidate == ?candidate.id;
+      assert revoked.candidate.state == #revoked;
+      assert ReleaseStore.heads(db.channels, revoked.app.appId).betaHead.candidateId == ?candidate.id;
+      assert revoked.app.approvedCandidate == null;
       assert not Catalog.eligible(db, revoked.app);
       assert Store.getEntitlement(db, Fixtures.other(), "testapp") != null;
       assert db.audits.size() == 3;
-      assert not Catalog.eligible(db, revoked.app);
+      assert not Catalog.eligibleFor(db, revoked.app, #beta);
     });
   };
 
@@ -86,7 +92,8 @@ persistent actor {
       switch (Publishing.submit(db, Fixtures.owner(), { requestId = "higher"; appId = "testapp"; version = 102; artifactId = higher.artifactId; sourceArtifactId = higher.sourceArtifactId; dependencies = []; feeVersion = 1 }, 11)) { case (#err(_)) {}; case _ assert false };
       let fresh = Fixtures.candidate(db, "testapp", 102, "successor");
       let published = Fixtures.approve(db, fresh, "approve-successor");
-      assert published.app.approvedCandidate == ?fresh.id and published.candidate.version == 102;
+      assert ReleaseStore.heads(db.channels, published.app.appId).stableHead.candidateId == ?fresh.id and published.candidate.version == 102;
+      assert published.app.approvedCandidate == null;
     });
   };
 
@@ -118,7 +125,7 @@ persistent actor {
       let hidden = Fixtures.ok(Rankings.chart(db, #free, #week, null, 1, cutoff));
       assert hidden.entries == [{ appId = "bravo"; score = 1 }];
       ignore Rankings.recordAcquisition(db, { input with owner = Principal.fromText("aaaaa-aa"); appId = "bravo"; orderId = 4; atNs = cutoff });
-      let current = Rankings.advance(Store.Use(mem, publisherMemory), cutoff, 10);
+      let current = Rankings.advance(Store.UseWithChannels(mem, publisherMemory, db.channels), cutoff, 10);
       assert current.published and current.generation > chart.generation;
       let fresh = Fixtures.ok(Rankings.chart(db, #free, #week, null, 2, cutoff));
       assert fresh.entries == [{ appId = "bravo"; score = 2 }] and not fresh.refreshing;
@@ -131,7 +138,7 @@ persistent actor {
       assert Fixtures.ok(Rankings.chart(db, #paid, #all, null, 10, cutoff + 1)).entries == [{ appId = "bravo"; score = 0 }];
       let ?bravoStats = Store.getRanking(db, "bravo") else { assert false; loop {} };
       assert bravoStats.freeAll == 2 and bravoStats.paidAll == 0;
-      ignore Rankings.advance(Store.Use(mem, publisherMemory), cutoff + Rankings.monthNs + 1, 100);
+      ignore Rankings.advance(Store.UseWithChannels(mem, publisherMemory, db.channels), cutoff + Rankings.monthNs + 1, 100);
       let ?expiredStats = Store.getRanking(db, "bravo") else { assert false; loop {} };
       assert expiredStats.free7 == 0 and expiredStats.free30 == 0 and expiredStats.freeAll == 2;
     });
@@ -182,7 +189,7 @@ persistent actor {
       let #ok(publisher) = Views.publisherApps(db, Fixtures.owner(), Fixtures.owner(), { cursor = null; limit = 10 }) else { assert false; loop {} };
       assert publisher.apps.size() == 1 and publisher.apps[0].acquisitionCounts == ?{ free = 1; paid = 1 };
       ignore Rankings.advance(db, Rankings.monthNs + 13, 10);
-      let restored = Store.Use(memory, publisherMemory);
+      let restored = Store.UseWithChannels(memory, publisherMemory, db.channels);
       let ?ranking = Store.getRanking(restored, paidApp.appId) else { assert false; loop {} };
       assert ranking.paid30 == 0 and ranking.free30 == 0;
       assert Views.app(restored, Fixtures.owner(), null, paidApp).acquisitionCounts == ?{ free = 1; paid = 1 };

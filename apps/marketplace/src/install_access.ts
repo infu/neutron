@@ -1,7 +1,6 @@
 import { Principal } from "@dfinity/principal";
 import {
   REPOSITORY_LIMITS,
-  parseRepositoryManifest,
   parseRepositorySetupUrl,
   repositoryManifestPath,
   repositoryPackagePath,
@@ -13,11 +12,15 @@ import {
 } from "neutron-tools/src/repository_access.js";
 import { hashContent } from "neutron-tools/src/hash.js";
 import { canisterOrigin } from "neutron-tools/src/runtime.js";
+import { parseRepositorySetupManifest, parseRepositoryChannelSelection, repositoryChannelSelectionPath, assertRepositoryChannelSelectionManifest } from "neutron-tools/src/release_channels.js";
+import type { ReleaseSelection } from "./view-types.ts";
 
 export type InstallAccessReadOptions = {
   host?: string;
   signal?: AbortSignal;
   fetch?: typeof fetch;
+  /** Exact reviewed roots and dependency closure from install_selection_v2. */
+  selection?: ReleaseSelection;
 };
 export type InstallAccessSelection = { url: string; source: string; paths: string[] };
 
@@ -49,10 +52,20 @@ export async function readInstallAccessSelection(
   if (reference.repo !== canister) throw new Error("The installation offer names a different package source.");
   const bytes = await readCertifiedJson(new URL(repositoryManifestPath(reference.manifest), origin), REPOSITORY_LIMITS.manifestJsonBytes, options);
   if (hashContent(bytes) !== reference.digest) throw new Error("The installation manifest does not match its saved digest.");
-  const manifest = parseRepositoryManifest(parseJson(bytes, "installation manifest"));
+  const manifest = parseRepositorySetupManifest(bytes);
   if (manifest.id !== reference.manifest) throw new Error("The source returned a different installation manifest.");
   if (!appIds.length || appIds.some(id => !manifest.packages.some(pkg => pkg.id === id))) {
     throw new Error("The installation manifest does not contain the selected apps.");
+  }
+  if (options.selection) {
+    const evidenceBytes = await readCertifiedJson(new URL(repositoryChannelSelectionPath(reference.manifest), origin), REPOSITORY_LIMITS.manifestJsonBytes, options);
+    const evidence = parseRepositoryChannelSelection(evidenceBytes);
+    assertRepositoryChannelSelectionManifest(evidence, manifest, canister, reference.digest);
+    const expected = options.selection;
+    if (evidence.mode !== expected.mode || evidence.packages.length !== expected.packages.length || evidence.packages.some(pkg => {
+      const selected = expected.packages.find(value => value.appId === pkg.id);
+      return !selected || selected.candidateId !== pkg.candidate_id || selected.version !== String(pkg.version) || selected.digest !== pkg.sha256 || selected.channel !== pkg.channel || selected.revision !== pkg.revision;
+    })) throw new Error("The certified installation selection does not match the reviewed releases and dependencies.");
   }
   return {
     url: setupUrl,

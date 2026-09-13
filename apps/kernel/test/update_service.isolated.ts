@@ -32,6 +32,7 @@ import {
 import { createStore } from "zustand/vanilla";
 import { registryApp } from "./app_registry_fixture.ts";
 import type { PreparedBrowserDeployment } from "../src/install_review/prepare_browser_deployment.ts";
+import type { ReleasePreferences } from "../src/release_preferences.ts";
 
 const SOURCE = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 const SECOND_SOURCE = "ryjl3-tyaaa-aaaaa-aaaba-cai";
@@ -44,7 +45,7 @@ type FakeAppsState = {
 type UpdateSnapshot = {
   apps: AppRegistry;
   provenance: {
-    format: 1;
+    format: 2;
     apps: Record<string, { package_digest: string }>;
   };
   deploymentId: string;
@@ -83,7 +84,18 @@ const useAppsStore = Object.assign(
 );
 
 let getSnapshotImpl: () => Promise<UpdateSnapshot>;
-let beginSessionImpl: () => Promise<Session>;
+type BeginSessionOptions = {
+  mode: "update";
+  releasePreferences: ReleasePreferences;
+  revalidateReleaseSelection: () => Promise<void>;
+};
+
+let beginSessionImpl: (options: BeginSessionOptions) => Promise<Session>;
+let releasePreferences: ReleasePreferences = { betaEnabled: false, revision: "0" };
+const releasePreferenceListeners = new Set<(
+  next: ReleasePreferences,
+  previous: ReleasePreferences | null,
+) => void>();
 let fetchReleaseImpl: (
   source: string,
   appId: string,
@@ -110,7 +122,7 @@ let getDetailsImpl: (
 mock.module(
   new URL("../src/reducer/apps.ts", import.meta.url).pathname,
   () => ({
-    beginPackageInstallSession: () => beginSessionImpl(),
+    beginPackageInstallSession: (options: BeginSessionOptions) => beginSessionImpl(options),
     getAppUpdateSnapshot: () => getSnapshotImpl(),
     useAppsStore,
   }),
@@ -122,11 +134,29 @@ mock.module(new URL("../src/updates/client.ts", import.meta.url).pathname, () =>
     release: RepositoryReleaseRecord,
     options: { signal?: AbortSignal },
   ) => fetchPackageImpl(source, release, options),
-  fetchUpdateRelease: (
+}));
+
+mock.module(new URL("../src/repository/channels.ts", import.meta.url).pathname, () => ({
+  rememberRepositoryChannelSources: () => {},
+  hasRepositoryReleaseChannelsSupport: () => false,
+  fetchEligibleUpdateRelease: async (
     source: string,
     appId: string,
-    options: { signal?: AbortSignal },
-  ) => fetchReleaseImpl(source, appId, options),
+    options: { signal?: AbortSignal; betaEnabled: boolean },
+  ) => {
+    const fetched = await fetchReleaseImpl(source, appId, options);
+    return fetched ? { ...fetched, channel: "stable" as const } : null;
+  },
+}));
+
+mock.module(new URL("../src/release_preferences.ts", import.meta.url).pathname, () => ({
+  getReleasePreferences: async () => releasePreferences,
+  subscribeReleasePreferences: (
+    listener: (next: ReleasePreferences, previous: ReleasePreferences | null) => void,
+  ) => {
+    releasePreferenceListeners.add(listener);
+    return () => releasePreferenceListeners.delete(listener);
+  },
 }));
 
 mock.module(new URL("../src/tools/app.ts", import.meta.url).pathname, () => ({
@@ -155,6 +185,7 @@ const [{
 describe("update service orchestration", () => {
   beforeEach(() => {
     clearUpdateResults();
+    releasePreferences = { betaEnabled: false, revision: "0" };
     appsStore.setState({ operationBusy: false, list: {} });
     getSnapshotImpl = async () => snapshot(appsStore.getState().list);
     beginSessionImpl = async () => {
@@ -322,6 +353,138 @@ describe("update service orchestration", () => {
     });
   });
 
+  test("changing beta preferences aborts a check and discards its late results", async () => {
+    appsStore.setState({
+      list: appRegistry({ mail: { source: SOURCE, version: 100 } }),
+    });
+    const pending = deferred<ReturnType<typeof fetchedRelease>>();
+    const started = deferred<void>();
+    let signal: AbortSignal | undefined;
+    fetchReleaseImpl = async (_source, _appId, options) => {
+      signal = options.signal;
+      started.resolve();
+      return pending.promise;
+    };
+
+    const checking = checkAppUpdates();
+    await started.promise;
+    notifyReleasePreferences({ betaEnabled: true, revision: "1" });
+    expect(signal?.aborted).toBe(true);
+    expect(useUpdateCheckStore.getState()).toMatchObject({
+      phase: "idle",
+      results: [],
+      review: null,
+    });
+
+    pending.resolve(fetchedRelease(SOURCE, release("mail", 101, packageBytes("mail"))));
+    await checking;
+    expect(useUpdateCheckStore.getState()).toMatchObject({
+      phase: "idle",
+      results: [],
+    });
+  });
+
+  test.each(["preparing", "review"] as const)(
+    "changing beta preferences during %s cancels the session and prevents deployment",
+    async (phase) => {
+      const registry = appRegistry({ mail: { source: SOURCE, version: 100 } });
+      appsStore.setState({ list: registry });
+      const bytes = packageArchive("mail", "Mail", 101, SOURCE);
+      const published = release("mail", 101, bytes);
+      fetchReleaseImpl = async () => fetchedRelease(SOURCE, published);
+      fetchPackageImpl = async () => bytes;
+      getDetailsImpl = async (_actor, archive, options) =>
+        preparedPackageDetails(archive, options);
+      const compilation = deferred<CompileResult>();
+      const compileStarted = deferred<void>();
+      let cancelled = 0;
+      let deployed = 0;
+      beginSessionImpl = async (options) => {
+        expect(options.releasePreferences).toEqual({ betaEnabled: false, revision: "0" });
+        expect(typeof options.revalidateReleaseSelection).toBe("function");
+        return {
+          baseline: {
+            state: { apps: registry },
+            runtime: { deployment_id: "deployment_before" },
+          },
+          async compile() {
+            compileStarted.resolve();
+            return phase === "preparing" ? compilation.promise : compiledResult();
+          },
+          getPreparedDeployment,
+          async deploy() {
+            deployed += 1;
+            return registry;
+          },
+          cancel() { cancelled += 1; },
+        };
+      };
+
+      await checkAppUpdates();
+      const preparing = prepareAllAvailableUpdates();
+      if (phase === "preparing") await compileStarted.promise;
+      else await preparing;
+      expect(useUpdateCheckStore.getState().phase).toBe(phase);
+
+      notifyReleasePreferences({ betaEnabled: true, revision: "1" });
+      expect(cancelled).toBe(1);
+      expect(useUpdateCheckStore.getState()).toMatchObject({
+        phase: "idle",
+        results: [],
+        review: null,
+        compiledSizeKiB: null,
+      });
+      if (phase === "preparing") {
+        compilation.resolve(compiledResult());
+        await preparing;
+      }
+      await applyPreparedUpdates();
+      expect(deployed).toBe(0);
+      expect(useUpdateCheckStore.getState()).toMatchObject({
+        phase: "idle",
+        results: [],
+        review: null,
+      });
+    },
+  );
+
+  test.each(["enabled", "toggled back"] as const)(
+    "a remotely %s beta preference invalidates the checked revision before any install session",
+    async (transition) => {
+      appsStore.setState({
+        list: appRegistry({ mail: { source: SOURCE, version: 100 } }),
+      });
+      fetchReleaseImpl = async () =>
+        fetchedRelease(SOURCE, release("mail", 101, packageBytes("mail")));
+      let sessionStarts = 0;
+      beginSessionImpl = async () => {
+        sessionStarts += 1;
+        throw new Error("Stale preferences must not open an install session");
+      };
+      await checkAppUpdates();
+      expect(useUpdateCheckStore.getState()).toMatchObject({
+        phase: "ready",
+        results: [expect.objectContaining({ preferenceRevision: "0" })],
+      });
+
+      // Another client updates the Kernel; this browser discovers the new
+      // revision on the preparation read, without a local toggle event.
+      releasePreferences = transition === "enabled"
+        ? { betaEnabled: true, revision: "1" }
+        : { betaEnabled: false, revision: "2" };
+      await prepareAllAvailableUpdates();
+      await applyPreparedUpdates();
+
+      expect(sessionStarts).toBe(0);
+      expect(useUpdateCheckStore.getState()).toMatchObject({
+        phase: "error",
+        errorStage: "prepare",
+        error: expect.stringContaining("Beta updates changed after this check"),
+        review: null,
+      });
+    },
+  );
+
   test("all available releases compile and deploy once with exact provenance", async () => {
     const registry = appRegistry({
       contacts: { source: SECOND_SOURCE, version: 100 },
@@ -433,6 +596,8 @@ describe("update service orchestration", () => {
         release_digest: releases[0].releaseDigest,
         package_digest: releases[0].release.sha256,
         checked_at: 1_700_000_000_000,
+        release_channel: "stable",
+        release_preferences_revision: "0",
       },
       mail: {
         kind: "update_source",
@@ -440,6 +605,8 @@ describe("update service orchestration", () => {
         release_digest: releases[1].releaseDigest,
         package_digest: releases[1].release.sha256,
         checked_at: 1_700_000_000_000,
+        release_channel: "stable",
+        release_preferences_revision: "0",
       },
     });
     expect(cancelled).toBe(0);
@@ -1111,9 +1278,15 @@ describe("update service orchestration", () => {
 function snapshot(apps: AppRegistry): UpdateSnapshot {
   return {
     apps,
-    provenance: { format: 1, apps: {} },
+    provenance: { format: 2, apps: {} },
     deploymentId: "deployment_before",
   };
+}
+
+function notifyReleasePreferences(next: ReleasePreferences): void {
+  const previous = releasePreferences;
+  releasePreferences = next;
+  for (const listener of releasePreferenceListeners) listener(next, previous);
 }
 
 function appRegistry(
@@ -1335,6 +1508,8 @@ function versionedCandidate(
     source,
     release: published,
     releaseDigest: hashContent(JSON.stringify(published)),
+    releaseChannel: "stable" as const,
+    preferenceRevision: "0",
   };
 }
 

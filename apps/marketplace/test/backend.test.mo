@@ -10,10 +10,15 @@ import ReadIdentity "../backend/read_identity";
 import Capabilities "mo:neutron-capabilities";
 
 let owner = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
-let broker : Capabilities.BackendCallsV1 = {
+var relayedRequest : ?Capabilities.BackendCallRequestV1 = null;
+// Released Kernels provide this v1 surface without owns_principal.
+let broker = {
     canister_principal = owner;
     can_call = func(_canister : Principal, _method : Text) : Bool { true };
-    call = func(_request : Capabilities.BackendCallRequestV1) : async* Capabilities.BackendCallResultV1 { #err({ code = "test"; message = "No network" }) };
+    call = func(request : Capabilities.BackendCallRequestV1) : async* Capabilities.BackendCallResultV1 {
+        relayedRequest := ?request;
+        #err({ code = "test"; message = "No network" });
+    };
     call_batch = func(_requests : [Capabilities.BackendCallRequestV1]) : async* [Capabilities.BackendCallResultV1] { [] };
 };
 let rootKey : Blob = "\02\79\be\66\7e\f9\dc\bb\ac\55\a0\62\95\ce\87\0b\07\02\9b\fc\db\2d\ce\28\d9\59\f2\81\5b\16\f8\17\98";
@@ -177,16 +182,41 @@ ignore freshDiscountApp.marketplace_set_discount_code({ code = ?"free10" });
 assert freshDiscountApp.marketplace_discount_code(()) == ?"FREE10";
 assert freshDiscountApp.marketplace_state(()).seed == null;
 assert freshDiscountApp.marketplace_state(()).revision == 1;
-assert App.allowed("purchase");
-assert App.allowed("repo_access_v1");
-assert App.allowed("ethereum_prepare");
-assert App.allowed("ethereum_verify");
-assert App.allowed("ethereum_settle");
-assert App.allowed("ethereum_cancel");
-assert not App.allowed("ethereum_status");
-assert not App.allowed("ethereum_history");
-assert not App.allowed("icrc1_transfer");
-assert not App.allowed("catalog");
+let legacyMethods = ["read_delegate_set", "purchase", "withdraw", "referral_get_or_create", "rating_set", "listing_save", "upload_begin", "upload_chunk", "upload_finish", "candidate_submit", "install_prepare", "repo_access_v1", "ethereum_prepare", "ethereum_verify", "ethereum_settle", "ethereum_cancel", "publisher_profile_register", "publisher_profile_update"];
+let channelMethods = ["purchase_v2", "ethereum_prepare_v2", "rating_set_v2", "version_comment_set_v2", "version_comment_delete_v2", "candidate_submit_v2", "release_promote", "install_prepare_v2"];
+let forbiddenMethods = ["ethereum_status", "ethereum_history", "icrc1_transfer", "icrc2_transfer_from", "icrc2_approve", "catalog", "catalog_v2"];
+for (method in legacyMethods.vals()) assert App.allowed(method);
+for (method in channelMethods.vals()) assert App.allowed(method);
+for (method in forbiddenMethods.vals()) assert not App.allowed(method);
+await async {
+    // Both generations preserve the exact saved protocol request and charge.
+    for (methods in [legacyMethods, channelMethods].vals()) {
+        for (method in methods.vals()) {
+            relayedRequest := null;
+            let request = { canister = production; method; args = "saved-request-bytes" : Blob; cycles = 700 : Nat };
+            switch (await* app.marketplace_call(request)) {
+                case (#err(message)) assert message == "test: No network";
+                case (_) assert false;
+            };
+            assert relayedRequest == ?request;
+        };
+    };
+    // Ledger spending and query methods cannot reach the app's broker.
+    for (method in forbiddenMethods.vals()) {
+        relayedRequest := null;
+        switch (await* app.marketplace_call({ canister = production; method; args = ""; cycles = 700 })) {
+            case (#err(message)) assert message == "This is not a marketplace update method.";
+            case (_) assert false;
+        };
+        assert relayedRequest == null;
+    };
+    relayedRequest := null;
+    switch (await* app.marketplace_call({ canister = owner; method = "purchase_v2"; args = "saved-request-bytes"; cycles = 700 })) {
+        case (#err(message)) assert message == "The marketplace changed. Resume this request using its original protocol.";
+        case (_) assert false;
+    };
+    assert relayedRequest == null;
+};
 
 // Published SDK known-answer vector: requestIdOf({pubkey, expiration,
 // targets:[production]}) followed by the IC delegation domain and SHA-256.

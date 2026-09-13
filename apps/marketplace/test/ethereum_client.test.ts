@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
 import type { MsgBusToolContext } from "neutron-tools/app";
-import { CONTRACT, checkoutType, ethereumFeesType, ethereumInvoiceResultType, encodeOpaque, type Checkout, type Info } from "../src/protocol.ts";
+import { CONTRACT, checkoutType, channelCheckoutType, ethereumFeesType, ethereumInvoiceResultType, encodeOpaque, type Checkout, type ChannelCheckout, type Info } from "../src/protocol.ts";
 import type { EthereumFees, EthereumInvoiceResult } from "../src/ethereum_protocol.ts";
 
 if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
@@ -37,6 +37,7 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
     amount: 9_000_000n, fee: 10_000n, affiliate: [], rate: [], spender: { owner: PROTOCOL, subaccount: [] },
     commitment: new Uint8Array(32).fill(7), quotedAtNs: 1n, cycles: fees.prepare,
   };
+  const channelQuote: ChannelCheckout = { quote, mode: { stable: null }, selection: [{ appId: "saved_app", candidateId: 1n, version: 1n, digest: new Uint8Array(32).fill(5), sourceDigest: [], channel: { stable: null }, revision: 1n }] };
   function invoice(): EthereumInvoiceResult {
     return { order: { requestId: quote.request.requestId, state: { prepared: null }, lastError: [], items: quote.items },
       invoice: { id: 5n, owner: OWNER, requestId: quote.request.requestId, orderId: 4n, subaccount: new Uint8Array(32).fill(3),
@@ -53,6 +54,7 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
   }
   const calls: Array<{ name: string; args: unknown[] }> = [];
   let current = invoice();
+  let currentChannel: ChannelCheckout | undefined;
   let nextCursor: [] | [bigint] = [];
   const actualTransport = await import("../src/transport.ts");
   mock.module("../src/transport.ts", () => ({ ...actualTransport, makeAgent: async () => ({}), makeTransport: () => ({
@@ -61,9 +63,10 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
       if (name === "marketplace_info") return info;
       if (name === "ethereum_fees") return fees;
       if (name === "ethereum_quote") return { ok: quote };
-      if (name === "app_detail") return { err: { code: "app_unavailable", message: "Release revoked" } };
-      if (name === "ethereum_status") return { ok: [current] };
-      if (name === "ethereum_history") return { ok: { invoices: [current], nextCursor } };
+      if (name === "ethereum_quote_v2") return { ok: channelQuote };
+      if (name === "app_detail" || name === "app_detail_v2") return { err: { code: "app_unavailable", message: "Release revoked" } };
+      if (name === "ethereum_status_v2") return { ok: [{ invoice: current, quote: currentChannel ? [currentChannel] : [] }] };
+      if (name === "ethereum_history_v2") return { ok: { invoices: [{ invoice: current, quote: currentChannel ? [currentChannel] : [] }], nextCursor } };
       throw new Error(`Unexpected query ${name}`);
     },
     update: async () => { throw new Error("A checkout read must not dispatch an update"); },
@@ -71,15 +74,17 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
   const { clearClient } = await import("../src/client.ts");
   const { ethereumQuote, ethereumFees, ethereumInvoiceView, ethereumOperationView, ethereumInvoiceStatus, ethereumStatus, ethereumHistory } = await import("../src/ethereum_client.ts");
   const context = { signal: new AbortController().signal, kernel: {
+    listTools: async () => [{ name: "updates.preferences" }],
     querySelf: async () => ({ seed: [], canister: [PROTOCOL.toText()], host: "https://icp-api.io", owner: OWNER.toText(), revision: 1 }),
+    callTool: async () => ({ betaEnabled: false, revision: "0" }),
   } } as unknown as MsgBusToolContext;
-  beforeEach(() => { clearClient(); calls.length = 0; current = invoice(); nextCursor = []; });
+  beforeEach(() => { clearClient(); calls.length = 0; current = invoice(); currentChannel = undefined; nextCursor = []; });
 
   test("the exact public Ethereum invoice Candid fields round-trip", () => {
     current.receipt = [{ id: 8n, invoiceId: 5n, eventKey: "1:hash:3", transactionHash: `0x${"12".repeat(32)}`, logIndex: 3n, blockNumber: 25_950_000n, blockHash: `0x${"34".repeat(32)}`, payer: PAYER, amount: current.invoice.grossAtoms, observedAtNs: 10n }];
     current.sweep = [{ id: 9n, invoiceId: 5n, ordinal: 0n, purpose: { sale: null }, amount: quote.amount, fee: quote.fee, attemptId: 10n, finalizedAtNs: [], createdAtNs: 10n, updatedAtNs: 10n }];
     current.attempt = [{ block: [], state: { outcome_unknown: null }, hadUnknown: true }];
-    const decoded = IDL.decode([ethereumInvoiceResultType], IDL.encode([ethereumInvoiceResultType], [current]))[0] as EthereumInvoiceResult;
+    const decoded = IDL.decode([ethereumInvoiceResultType], IDL.encode([ethereumInvoiceResultType], [current]))[0] as unknown as EthereumInvoiceResult;
     expect(decoded.invoice.route).toEqual(current.invoice.route);
     expect(decoded.invoice).toEqual(current.invoice);
     expect(decoded.receipt).toEqual(current.receipt);
@@ -97,8 +102,15 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
       ethereum_settle: { requestId: quote.request.requestId, feeVersion: 2n }, ethereum_cancel: { requestId: quote.request.requestId, feeVersion: 2n },
     })) {
       expect(CONTRACT[method]!.update).toBe(true);
-      expect(IDL.decode(CONTRACT[method]!.args, IDL.encode(CONTRACT[method]!.args, [request]))[0]).toEqual(request);
+      const decoded = IDL.decode(CONTRACT[method]!.args, IDL.encode(CONTRACT[method]!.args, [request]))[0] as unknown as typeof request;
+      expect(decoded).toEqual(request);
     }
+  });
+  test("channel Ethereum preparation keeps the legacy inner quote and exact selected identities", () => {
+    const request = { quote: channelQuote, payer: PAYER, feeVersion: 2n };
+    const decoded = IDL.decode(CONTRACT.ethereum_prepare_v2!.args, IDL.encode(CONTRACT.ethereum_prepare_v2!.args, [request]))[0] as unknown as typeof request;
+    expect(decoded).toEqual(request);
+    expect(encodeOpaque(checkoutType, channelQuote.quote)).toEqual(encodeOpaque(checkoutType, quote));
   });
   test("Ethereum review prices USDC once without an IC approval fee or Wallet backend read", async () => {
     const view = await ethereumQuote(context, { appIds: ["saved_app"], affiliateCode: "  ", operationId: quote.request.requestId, ethereum: { wallet: "browser", payerAddress: PAYER } });
@@ -110,8 +122,10 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
     expect(view.ethereum).toMatchObject({ wallet: "browser", chainId: "1", recipientPrincipal: PROTOCOL.toText(), prepareCycles: { total: "100" }, verifyCycles: { total: "50000000100" } });
     expect(view.ethereum!.helperAddress).toBeUndefined();
     expect(view.opaque).toEqual(encodeOpaque(checkoutType, quote));
-    expect(calls.find(call => call.name === "ethereum_quote")!.args).toEqual([{ requestId: quote.request.requestId, appIds: ["saved_app"], ledger: LEDGER, referralCode: [] }]);
-    expect(calls.map(call => call.name).sort()).toEqual(["app_detail", "ethereum_fees", "ethereum_quote", "marketplace_info"]);
+    expect(view.channelOpaque).toEqual(encodeOpaque(channelCheckoutType, channelQuote));
+    expect(view.releasePreferences).toEqual({ betaEnabled: false, revision: "0" });
+    expect(calls.find(call => call.name === "ethereum_quote_v2")!.args).toEqual([{ request: { requestId: quote.request.requestId, appIds: ["saved_app"], ledger: LEDGER, referralCode: [] }, mode: { stable: null }, expectedSelection: [] }]);
+    expect(calls.map(call => call.name).sort()).toEqual(["app_detail_v2", "ethereum_fees", "ethereum_quote_v2", "marketplace_info"]);
   });
   test("a missing payer prevents an ambiguous checkout review", async () => {
     await expect(ethereumQuote(context, { appIds: ["saved_app"], affiliateCode: "", ethereum: { wallet: "browser" } })).rejects.toThrow("Select the Ethereum wallet");
@@ -123,6 +137,15 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
     expect(view.warnings.some(warning => warning.includes("Current listing details"))).toBe(true);
     expect(view.ethereum).toMatchObject({ wallet: "evm_wallet", helperAddress: HELPER, minterAddress: MINTER });
     expect(view.opaque).toEqual(encodeOpaque(checkoutType, quote));
+  });
+  test("remote channel invoice recovery retains its selection without assigning today's preference", async () => {
+    currentChannel = { ...channelQuote, mode: { beta: null }, selection: channelQuote.selection.map(value => ({ ...value, channel: { beta: null } })) };
+    const retained = await ethereumInvoiceStatus(context, quote.request.requestId);
+    const view = await ethereumInvoiceView(context, retained!, "browser");
+    expect(view.channelOpaque).toEqual(encodeOpaque(channelCheckoutType, currentChannel));
+    expect(view.opaque).toEqual(encodeOpaque(checkoutType, quote));
+    expect(view.releasePreferences).toBeUndefined();
+    expect(calls.some(call => call.name === "ethereum_quote_v2")).toBe(false);
   });
   test("a retained invoice cannot change the saved checkout amount", async () => {
     current.invoice.grossAtoms += 1n;
@@ -191,6 +214,6 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_CLIENT_CHILD !== "1") {
     nextCursor = [17n];
     const page = await ethereumHistory(context, "23");
     expect(page.nextCursor).toBe("17"); expect(page.items[0]!.operationId).toBe(quote.request.requestId);
-    expect(calls.find(call => call.name === "ethereum_history")!.args).toEqual([{ cursor: [23n], limit: 24n }]);
+    expect(calls.find(call => call.name === "ethereum_history_v2")!.args).toEqual([{ cursor: [23n], limit: 24n }]);
   });
 }

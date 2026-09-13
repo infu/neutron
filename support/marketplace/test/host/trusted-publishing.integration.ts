@@ -91,6 +91,11 @@ async function setup() {
     }
     const entry = (row: any) => ({ candidateId: row.id, expectedDigest: row.digest, expectedSourceDigest: row.sourceDigest });
     const batch = (requestId: string, rows: any[]) => ({ requestId, candidates: rows.map(entry), analysis: "First-party release: exact uploaded package and source hashes verified. This test does not assert a malware inspection." });
+    const promote = async (requestId: string, appIds: string[]) => {
+      const plan = success(await trusted.promotion_prepare({ appIds }));
+      return direct("release_promote", { requestId, ...plan, feeVersion: 1n });
+    };
+    const betaDetail = async (appId: string) => success(await market.actor.app_detail_v2({ appId, mode: { beta: null } }));
     const upgrade = async (trusted = [trustedPrincipal]) => {
       await env.pic.upgradeCanister({
         canisterId: market.canisterId, wasm: market.wasmPath,
@@ -98,7 +103,7 @@ async function setup() {
         upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] },
       });
     };
-    return { ...env, admin, ordinary, buyer, ledger, market, config, trustedPrincipal, auditorPrincipal, adminPrincipal, trusted, auditor, as, charged, direct, listing, upload, candidate, entry, batch, upgrade };
+    return { ...env, admin, ordinary, buyer, ledger, market, config, trustedPrincipal, auditorPrincipal, adminPrincipal, trusted, auditor, as, charged, direct, listing, upload, candidate, entry, batch, promote, betaDetail, upgrade };
   } catch (error) { await env.shutdown(); throw error; }
 }
 
@@ -148,6 +153,7 @@ export const cases: IntegrationCase[] = [{
       rejected(await trusted.read_delegate_set({ browser: identity(95), active: true, feeVersion: 1n }), "Trusted signing identity does not impersonate a Neutron");
       const quote = { requestId: "no-purchase-bypass", appIds: [own.appId], ledger: ctx.ledger.canisterId, referralCode: [] };
       await direct("trusted_publish_batch", batch("own-published", [own.row]));
+      await ctx.promote("own-stable", [own.appId]);
       await charged(admin, "rates_refresh", { feeVersion: 1n });
       const quoted = success(await trusted.purchase_quote(quote));
       rejected(await trusted.purchase({ quote: quoted, feeVersion: 1n }), "The publishing exception does not grant free/direct paid acquisitions");
@@ -160,7 +166,7 @@ export const cases: IntegrationCase[] = [{
   async run() {
     const ctx = await setup();
     try {
-      const { pic, market, trusted, auditor, trustedPrincipal, direct, candidate, batch, upgrade } = ctx;
+      const { pic, market, trusted, auditor, trustedPrincipal, direct, candidate, batch, betaDetail, upgrade } = ctx;
       const first = await candidate("trusted_stream", 41, true);
       const second = await candidate("trusted_second", 51);
       const request = batch("publish-two", [first.row, second.row]);
@@ -176,10 +182,12 @@ export const cases: IntegrationCase[] = [{
       assert.equal(new Set(published.entries.map((item: any) => item.auditId)).size, 2);
       const auditIds = [];
       for (const item of [first, second]) {
-        const detail = success(await market.actor.app_detail(item.appId));
-        assert.ok("approved" in detail.candidate[0].state);
-        assert.equal(detail.candidate[0].published, true);
-        assert.equal(detail.app.publisher.toText(), trustedPrincipal.toText());
+        const detail = await betaDetail(item.appId);
+        assert.ok("approved" in detail.release.selected[0].state);
+        assert.equal(detail.release.selected[0].published, true);
+        assert.equal(detail.release.app.publisher.toText(), trustedPrincipal.toText());
+        assert.deepEqual(detail.release.selectedChannel, [{ beta: null }]);
+        assert.deepEqual(detail.release.stableHead.candidate, [], "Batch publication does not implicitly promote stable");
         assert.equal(detail.audit[0].auditor.toText(), trustedPrincipal.toText());
         assert.ok("approved" in detail.audit[0].decision);
         assert.match(detail.audit[0].analysis, /first.party|publisher/i, "Automatically retained audit explains its actual first-party authority");
@@ -196,6 +204,17 @@ export const cases: IntegrationCase[] = [{
       assert.ok(subnet);
       const rootKey = new Uint8Array(await pic.getPubKey(subnet));
       async function readFiles() {
+        for (const item of [first, second]) {
+          const req = { url: `/repo/v1/channels/beta/releases/${item.appId}.json`, method: "GET", headers: [], body: new Uint8Array(), certificate_version: [2] };
+          const response = await market.actor.http_request(req);
+          assert.equal(response.status_code, 200);
+          const release = JSON.parse(Buffer.from(response.body).toString("utf8"));
+          assert.equal(release.sha256, Buffer.from(item.row.digest).toString("hex"));
+          assert.equal(release.version, 100);
+          const verification = verifyRequestResponsePair(req, { status_code: response.status_code, headers: response.headers, body: Uint8Array.from(response.body) }, market.canisterId.toUint8Array(), BigInt(Math.ceil(await pic.getTime())) * 1_000_000n, 300_000_000_000n, rootKey, 2);
+          assert.equal(verification.verificationVersion, 2);
+          assert.equal((await market.actor.http_request({ ...req, url: `/repo/v1/releases/${item.appId}.json` })).status_code, 404);
+        }
         for (const artifact of [first.pkg, first.source, first.image]) {
           const req = { url: artifact.path, method: "GET", headers: [["Authorization", `Bearer ${grant.token}`]], body: new Uint8Array(), certificate_version: [2] };
           const response = await market.actor.http_request(req);
@@ -221,9 +240,9 @@ export const cases: IntegrationCase[] = [{
       assert.deepEqual(success(await trusted.trusted_publish_status({ requestId: request.requestId }))[0], published);
       assert.deepEqual(success(await trusted.trusted_publish_batch(request)), published);
       for (const [index, item] of [first, second].entries()) {
-        const detail = success(await market.actor.app_detail(item.appId));
+        const detail = await betaDetail(item.appId);
         assert.equal(detail.audit[0].id, auditIds[index], "Replay after upgrade cannot create another approval record");
-        assert.equal(detail.app.version[0], 100n);
+        assert.equal(detail.release.app.version[0], 100n);
       }
       await readFiles();
       rejected(await ctx.as(identity(96)).listing_save(ctx.listing("upgrade_hijack")), "An unrelated upgrade argument cannot take over subsidized publishing");
@@ -239,6 +258,7 @@ export const cases: IntegrationCase[] = [{
       const { pic, market, trusted, trustedPrincipal, buyer, admin, ledger, charged, direct, candidate, batch, upgrade } = ctx;
       const app = await candidate("trusted_paid", 61);
       await direct("trusted_publish_batch", batch("paid-publication", [app.row]));
+      await ctx.promote("paid-stable", [app.appId]);
       await charged(admin, "rates_refresh", { feeVersion: 1n });
       const quote = success(await relayCall(buyer, market, "purchase_quote", [{ requestId: "trusted-app-purchase", appIds: [app.appId], ledger: ledger.canisterId, referralCode: [] }]));
       assert.equal(quote.amount, 1_000_000n);
@@ -287,7 +307,7 @@ export const cases: IntegrationCase[] = [{
   async run() {
     const ctx = await setup();
     try {
-      const { market, trusted, auditor, candidate, direct, upload, batch } = ctx;
+      const { market, trusted, auditor, candidate, direct, upload, batch, betaDetail } = ctx;
       const first = await candidate("atomic_first", 71);
       await direct("trusted_publish_batch", batch("atomic-baseline", [first.row]));
       async function successor(item: Awaited<ReturnType<typeof candidate>>, byte: number) {
@@ -299,8 +319,8 @@ export const cases: IntegrationCase[] = [{
       const stale = await candidate("atomic_stale", 81);
       const nextStale = await successor(stale, 82);
       await direct("trusted_publish_batch", batch("publish-higher-second", [nextStale]));
-      const prior = success(await trusted.app_detail(first.appId));
-      assert.equal(prior.app.version[0], 100n);
+      const prior = await betaDetail(first.appId);
+      assert.equal(prior.release.app.version[0], 100n);
       assert.ok("pending" in success(await auditor.audit_candidate(nextFirst.id)).state);
       assert.ok("pending" in success(await auditor.audit_candidate(stale.row.id)).state);
       const grant = { request_id: "e7".repeat(16), token: "f8".repeat(32), paths: [first.pkg.path, first.source.path], fee_version: 1n };
@@ -311,10 +331,10 @@ export const cases: IntegrationCase[] = [{
       // first entry has approved v101 and retired that app's old blob bytes.
       await assert.rejects(() => trusted.trusted_publish_batch(request), /publication batch was not committed.*higher version/is);
       assert.deepEqual(success(await trusted.trusted_publish_status({ requestId: request.requestId })), []);
-      assert.deepEqual(success(await trusted.app_detail(first.appId)), prior, "First approval, audit, version pointer and metadata all roll back");
+      assert.deepEqual(await betaDetail(first.appId), prior, "First approval, audit, beta head and metadata all roll back");
       assert.ok("pending" in success(await auditor.audit_candidate(nextFirst.id)).state);
       assert.ok("pending" in success(await auditor.audit_candidate(stale.row.id)).state);
-      assert.equal(success(await market.actor.app_detail(stale.appId)).app.version[0], 101n, "The already-published second app is unchanged");
+      assert.equal((await betaDetail(stale.appId)).release.app.version[0], 101n, "The already-published second app is unchanged");
       const subnet = await ctx.pic.getCanisterSubnetId(market.canisterId);
       assert.ok(subnet);
       const rootKey = new Uint8Array(await ctx.pic.getPubKey(subnet));
@@ -329,7 +349,7 @@ export const cases: IntegrationCase[] = [{
       }
       const completed = await direct("trusted_publish_batch", batch("commit-after-rollback", [nextFirst]));
       assert.equal(completed.entries[0].candidateId, nextFirst.id, "A rolled-back approval remains executable under a new valid batch");
-      assert.equal(success(await market.actor.app_detail(first.appId)).app.version[0], 101n);
+      assert.equal((await betaDetail(first.appId)).release.app.version[0], 101n);
     } finally { await ctx.shutdown(); }
   },
 }];

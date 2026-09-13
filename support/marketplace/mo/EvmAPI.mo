@@ -25,6 +25,9 @@ module {
     entitled : Bool;
     earningsAvailable : Bool;
   };
+  public type ChannelInvoiceResult = { invoice : InvoiceResult; quote : ?API.ChannelCheckoutQuote };
+  public type ChannelPrepareRequest = { quote : API.ChannelCheckoutQuote; payer : Text; feeVersion : Nat };
+  public type ChannelInvoicePage = { invoices : [ChannelInvoiceResult]; nextCursor : ?Nat64 };
   public type PrepareRequest = { quote : API.CheckoutQuote; payer : Text; feeVersion : Nat };
   public type VerifyRequest = { requestId : Text; transactionHash : Text; feeVersion : Nat };
   public type OperationRequest = { requestId : Text; feeVersion : Nat };

@@ -22,6 +22,11 @@ import { kernelSetupStorage } from "../bootstrap.ts";
 import type { AttestedInstallOfferRequester } from "../install_offers/types.ts";
 import type { PreparedBrowserDeployment } from "../install_review/prepare_browser_deployment.ts";
 import {
+  getReleasePreferences,
+  subscribeReleasePreferences,
+  type ReleasePreferences,
+} from "../release_preferences.ts";
+import {
   beginRepositoryInstallSession,
   type RepositoryInstallSession,
 } from "../reducer/apps.ts";
@@ -38,6 +43,7 @@ import {
   type RepositoryClientOptions,
 } from "./client.ts";
 import type { RepositoryInstallProvenance } from "./provenance.ts";
+import { rememberRepositoryChannelSources } from "./channels.ts";
 import {
   canStartRepositoryLoad,
   repositorySetupState,
@@ -51,6 +57,7 @@ let activeDeployment: PreparedBrowserDeployment | null = null;
 let compiledPackageIds: readonly string[] = [];
 let activeExpiryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 let generation = 0;
+let activeReleasePreferences: ReleasePreferences | null = null;
 // An app's already-authorized credential and unapproved handoff are transient.
 // After a reload, the app can reopen its saved grant; the Kernel must not turn
 // an interrupted prepared handoff into another paid source-access workflow.
@@ -58,7 +65,19 @@ let preparedRequest: {
   roots: readonly string[];
   access?: RepositoryPreparedAccess;
   storage: RepositoryStorage;
+  releasePreferences?: ReleasePreferences;
 } | null = null;
+
+subscribeReleasePreferences((next) => {
+  if (!activeReleasePreferences || sameReleasePreferences(next, activeReleasePreferences)) return;
+  const { phase } = useRepositorySetupStore.getState();
+  // An approved transaction is protected by the Kernel revision guard. Keep
+  // that transaction's reconciliation alive until its result is known.
+  if (phase === "installing" || phase === "success" || phase === "idle") return;
+  generation += 1;
+  abandonActiveAttempt(false, false);
+  repositorySetupState.error("load", new Error("Release preferences changed. Reload this setup to review the current releases."));
+});
 
 export function refreshPendingRepositorySetup({
   freshCapture = false,
@@ -123,6 +142,7 @@ export function startPreparedRepositorySetup(
   offeredBy: AttestedInstallOfferRequester,
   roots: readonly string[],
   access?: RepositoryPreparedAccess,
+  releasePreferences?: ReleasePreferences,
 ): void {
   const state = useRepositorySetupStore.getState();
   if (state.phase !== "idle" || state.reference || readPendingRepositorySetup(kernelSetupStorage)) {
@@ -138,6 +158,7 @@ export function startPreparedRepositorySetup(
   preparedRequest = {
     roots: Object.freeze([...roots]),
     storage,
+    ...(releasePreferences ? { releasePreferences: Object.freeze({ ...releasePreferences }) } : {}),
     ...(access ? { access: Object.freeze({ ...access, paths: Object.freeze([...access.paths]) }) } : {}),
   };
   const pending = stagePendingRepositorySetup(storage, reference, Date.now());
@@ -169,12 +190,26 @@ export async function loadRepositorySetup(
   const abort = new AbortController();
   activeAbort = abort;
   try {
-    const session = await beginRepositoryInstallSession();
+    const releasePreferences = await getReleasePreferences();
+    if (attempt !== generation || abort.signal.aborted) return;
+    if (preparedRequest?.releasePreferences && !sameReleasePreferences(preparedRequest.releasePreferences, releasePreferences)) {
+      throw new Error("Release preferences changed since this installation was prepared. Reopen it in the app.");
+    }
+    activeReleasePreferences = releasePreferences;
+    let revalidateReleaseSelection: (() => Promise<void>) | undefined;
+    const session = await beginRepositoryInstallSession({
+      releasePreferences,
+      revalidateReleaseSelection: async () => {
+        if (!revalidateReleaseSelection) throw new Error("Repository release selection is unavailable. Reload this setup.");
+        await revalidateReleaseSelection();
+      },
+    });
     if (attempt !== generation || abort.signal.aborted) {
       session.cancel();
       return;
     }
     activeSession = session;
+    rememberRepositoryChannelSources(session.baseline.provenance);
     const fetched = await loadRepositorySetupBytes(reference, {
       ...clientOptions,
       ...(preparedRequest ? {
@@ -185,11 +220,13 @@ export async function loadRepositorySetup(
         ...(preparedRequest.access ? { preparedAccess: preparedRequest.access } : {}),
       } : {}),
       signal: abort.signal,
+      betaEnabled: releasePreferences.betaEnabled,
       onProgress(progress) {
         if (attempt === generation) repositorySetupState.progress(progress);
         clientOptions.onProgress?.(progress);
       },
     });
+    revalidateReleaseSelection = fetched.revalidateReleaseSelection;
 
     let decodedBytes = 0;
     let archiveEntries = 0;
@@ -279,6 +316,7 @@ export async function loadRepositorySetup(
             ? { publisher: Object.freeze({ ...expected.publisher }) }
             : {}),
           ...(expected.source ? { source: expected.source } : {}),
+          ...(fetchedPackage.releaseChannel ? { releaseChannel: fetchedPackage.releaseChannel } : {}),
           preparedPackage,
           capabilityPlanFingerprint: disclosures.planFingerprint,
           capabilityDisclosures: Object.freeze([
@@ -301,6 +339,8 @@ export async function loadRepositorySetup(
         manifest: fetched.manifest,
         packages,
         reconciliation,
+        releasePreferences,
+        releaseSelection: fetched.releaseSelection,
       },
       selection,
     );
@@ -478,7 +518,7 @@ export async function installRepositorySelection(): Promise<void> {
   const provenance = Object.fromEntries(
     state.loaded.packages
       .filter(({ id }) => state.selection!.selected.has(id))
-      .map(({ id, preparedPackage }) => [
+      .map(({ id, preparedPackage, releaseChannel }) => [
         id,
         {
           kind: "repository" as const,
@@ -486,6 +526,9 @@ export async function installRepositorySelection(): Promise<void> {
           manifest_id: reference.manifest,
           manifest_digest: reference.digest,
           package_digest: preparedPackage.archiveIdentity.sha256,
+          ...(releaseChannel ? { release_channel: releaseChannel } : {}),
+          ...(state.loaded!.releaseSelection?.selection ? { channel_aware: true as const } : {}),
+          ...(state.loaded!.releasePreferences ? { release_preferences_revision: state.loaded!.releasePreferences.revision } : {}),
         } satisfies RepositoryInstallProvenance,
       ]),
   );
@@ -604,6 +647,7 @@ function abandonActiveAttempt(
   activeAbort = null;
   activeSession?.cancel();
   activeSession = null;
+  activeReleasePreferences = null;
   activeCompiled = null;
   activeDeployment = null;
   compiledPackageIds = [];
@@ -614,6 +658,10 @@ function abandonActiveAttempt(
       console.warn("Unable to clear pending repository setup", error);
     }
   }
+}
+
+function sameReleasePreferences(left: ReleasePreferences, right: ReleasePreferences): boolean {
+  return left.revision === right.revision && left.betaEnabled === right.betaEnabled;
 }
 
 export function prepareRepositoryLoadState({

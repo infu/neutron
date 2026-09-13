@@ -45,6 +45,9 @@ inventory, and the canister principal.
 Kernel state is not one interchangeable blob. The `kernel` root holds nested
 service state; `kernel_activation` retains the ownership handoff; and
 `kernel_cycle_calls` retains owner-confirmed financial requests and receipts.
+`kernel_release_preferences` v1 stores `beta_enabled` (default `false`) and its
+revision. Adding that root initializes only the new preference; `kernel` v4,
+`kernel_activation` v1, and `kernel_cycle_calls` v1 restore unchanged.
 Audit the complete manifest memory declaration before a release. Do not infer
 the root list from constructor examples or a previous release note.
 
@@ -95,6 +98,13 @@ and retain the canister itself as a controller so self-upgrades remain
 possible. Controller-only recovery uses the synchronous replicated controller
 check; list/status operations use the management canister asynchronously.
 
+`get_release_preferences()` and `set_release_preferences(Bool)` use the ordinary
+owner-authorized wrappers. A changed boolean advances its durable revision;
+saving the same value does not. There is no app backend export or app/agent tool
+for changing it. The frontend exposes only a read-only `updates.preferences`
+bridge to apps. This preference controls repository release selection and never
+uninstalls or downgrades already installed packages.
+
 `backend/activation/Service.mo` implements the dispenser handoff:
 
 - `#set` requires controller authority at the Kernel entrypoint, stores one
@@ -120,6 +130,14 @@ In an activated target with a pending journal, all ordinary app scopes remain
 inactive until checked commit, including scopes whose release version and
 capability fingerprint appear unchanged. The predecessor remains usable until
 activation; aborting a staged install does not retire its usable credentials.
+
+Repository install/update admission binds `expected_release_preferences_revision`
+in the prepared operation and checks it at preparation, stage and dispatch.
+A change from another tab or device rejects an undispatched stale approval.
+It does not undo a dispatched operation: that operation retains its completion
+and recovery journal. Manual owner package imports retain their explicit review
+path. See [App Package Updates](./package-updates.md) for certified channel
+selection and the stable-only legacy repository contract.
 
 Ordinary upgrades retain committed installation identity. Uninstall followed
 by reinstall creates a new UID. `install/Service.mo` allocates new identities

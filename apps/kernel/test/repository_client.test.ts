@@ -166,6 +166,19 @@ describe("repository byte verification", () => {
     expect(packageReads).toBe(0);
   });
 
+  test("rejects duplicate manifest fields before package acquisition even with a matching byte pin", async () => {
+    const value = fixture();
+    const manifestText = new TextDecoder().decode(value.manifestBytes).replace(/"revision":\s*1/, '"revision":1,"revision":1');
+    const manifestBytes = encoder.encode(manifestText);
+    let packageReads = 0;
+    await expect(verifyRepositorySetupBytes({ ...value.reference, digest: hashContent(manifestBytes) }, {
+      readInfo: async () => value.infoBytes,
+      readManifest: async () => manifestBytes,
+      readPackage: async () => { packageReads += 1; return new Uint8Array(); },
+    })).rejects.toThrow();
+    expect(packageReads).toBe(0);
+  });
+
   test("settles and cancels sibling package reads before exposing failure", async () => {
     const packageBytes = Array.from({ length: 6 }, (_, index) =>
       encoder.encode(`package-${index}`),

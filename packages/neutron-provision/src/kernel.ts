@@ -376,6 +376,7 @@ export const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
         IDL.Record({
           journal: installJournal,
           expected_deployment_id: IDL.Text,
+          expected_release_preferences_revision: IDL.Opt(IDL.Nat),
         }),
       ],
       [IDL.Null],
@@ -401,6 +402,7 @@ export const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
         IDL.Record({
           candid: IDL.Text,
           deployment_id: IDL.Text,
+          expected_release_preferences_revision: IDL.Opt(IDL.Nat),
           wasm: IDL.Vec(IDL.Nat8),
           wasm_memory_persistence: IDL.Variant({
             keep: IDL.Null,
@@ -432,6 +434,7 @@ export const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
         IDL.Record({
           deployment_id: IDL.Text,
           chunk_hashes: IDL.Vec(IDL.Vec(IDL.Nat8)),
+          expected_release_preferences_revision: IDL.Opt(IDL.Nat),
           wasm_module_hash: IDL.Vec(IDL.Nat8),
           wasm_memory_persistence: IDL.Variant({
             keep: IDL.Null,

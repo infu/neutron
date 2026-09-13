@@ -2,13 +2,14 @@
   "format": 3,
   "id": "kernel",
   "name": "Neutron",
-  "version": 361,
+  "version": 362,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "src": "main.mo",
   "init_arg": [
     "memory_kernel",
     "memory_kernel_activation",
     "memory_kernel_cycle_calls",
+    "memory_kernel_release_preferences",
     "deployment_id",
     "active_app_instance_inventory",
     "canister_principal"
@@ -104,6 +105,14 @@
     },
     "kernel_settings_snapshot": {
       "type": "query",
+      "async": false
+    },
+    "get_release_preferences": {
+      "type": "query",
+      "async": false
+    },
+    "set_release_preferences": {
+      "type": "update",
       "async": false
     },
     "kernel_repository_access_v1": {
@@ -439,6 +448,15 @@
       "schemas": {
         "1": {
           "src": "memory/kernel_cycle_calls/v1.mo"
+        }
+      },
+      "migrations": []
+    },
+    "kernel_release_preferences": {
+      "version": 1,
+      "schemas": {
+        "1": {
+          "src": "memory/release_preferences/v1.mo"
         }
       },
       "migrations": []

@@ -323,10 +323,13 @@ export function AppUpdateCell({
       return <span>Manual</span>;
     case "current":
       return <span className="is-current">Up to date</span>;
-    case "available":
+    case "ahead_of_stable":
+      return <span>Ahead of stable — waiting for a stable release</span>;
+    case "available": {
+      const targetLabel = `${formatAppVersionLabel(result.release.version)}${result.releaseChannel === "beta" ? " (Beta)" : ""}`;
       return (
         <button
-          aria-label={`Update ${appName} to ${formatAppVersionLabel(result.release.version)}`}
+          aria-label={`Update ${appName} to ${targetLabel}`}
           className="btn settings-app-update-action"
           data-tid={`settings-update-${appId}`}
           disabled={
@@ -347,12 +350,13 @@ export function AppUpdateCell({
               ? returnFocusRef
               : undefined
           }
-          title={`Update ${appName} to ${formatAppVersionLabel(result.release.version)}`}
+          title={`Update ${appName} to ${targetLabel}`}
           type="button"
         >
-          Update
+          Update{result.releaseChannel === "beta" ? " (Beta)" : ""}
         </button>
       );
+    }
     case "not_published":
       return (
         <span title="The configured source has no release for this app">
@@ -539,7 +543,10 @@ function UpdateReviewDialog({
                   <span>
                     {formatAppVersionLabel(app.installedVersion)}
                     <span aria-hidden="true"> → </span>
-                    <strong>{formatAppVersionLabel(app.targetVersion)}</strong>
+                    <strong>
+                      {formatAppVersionLabel(app.targetVersion)}
+                      {app.channel === "beta" ? " (Beta)" : ""}
+                    </strong>
                   </span>
                 </header>
                 <CapabilityChangeSummary
@@ -880,6 +887,7 @@ function liveStatus(state: UpdateCheckState): string {
       (counts.get("source_regression") ?? 0) +
       (counts.get("cancelled") ?? 0);
     const current = counts.get("current") ?? 0;
+    const aheadOfStable = counts.get("ahead_of_stable") ?? 0;
     const notPublished = counts.get("not_published") ?? 0;
     const manual = counts.get("manual_only") ?? 0;
     const parts = [
@@ -890,6 +898,9 @@ function liveStatus(state: UpdateCheckState): string {
         ? `${unresolved} ${unresolved === 1 ? "check needs" : "checks need"} attention`
         : "",
       current > 0 ? `${current} current` : "",
+      aheadOfStable > 0
+        ? `${applicationCount(aheadOfStable)} ahead of stable — waiting for a stable release`
+        : "",
       notPublished > 0 ? `${notPublished} not published` : "",
       manual > 0 ? `${manual} manual only` : "",
     ].filter(Boolean);

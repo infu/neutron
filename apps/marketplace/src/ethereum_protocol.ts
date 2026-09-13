@@ -1,5 +1,5 @@
 import type { Principal } from "@dfinity/principal";
-import type { Checkout, Fee, Option, WireOperation, WireResult } from "./protocol.ts";
+import type { ChannelCheckout, Checkout, Fee, Option, WireOperation, WireResult } from "./protocol.ts";
 
 /** Public Candid views of the Ethereum checkout protocol. Persistent quoteContent
  * bytes belong to the protocol; the exposed quote is the frozen review payload. */
@@ -36,3 +36,5 @@ export type EthereumInvoiceResult = {
 };
 export type EthereumFees = { prepare: Fee; verify: Fee; settle: Fee; cancel: Fee };
 export type EthereumInvoicePage = { invoices: EthereumInvoiceResult[]; nextCursor: Option<bigint> };
+export type ChannelEthereumInvoiceResult = { invoice: EthereumInvoiceResult; quote: Option<ChannelCheckout> };
+export type ChannelEthereumInvoicePage = { invoices: ChannelEthereumInvoiceResult[]; nextCursor: Option<bigint> };

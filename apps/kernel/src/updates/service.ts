@@ -24,9 +24,10 @@ import { get_app_details } from "../tools/app.ts";
 import { checkForAppUpdates } from "./check.ts";
 import {
   fetchUpdatePackage,
-  fetchUpdateRelease,
   type UpdateHttpClientOptions,
 } from "./client.ts";
+import { fetchEligibleUpdateRelease, rememberRepositoryChannelSources, hasRepositoryReleaseChannelsSupport } from "../repository/channels.ts";
+import { getReleasePreferences, subscribeReleasePreferences, type ReleasePreferences } from "../release_preferences.ts";
 import {
   type UpdateCheckResult,
   type UpdateReview,
@@ -58,7 +59,15 @@ let activeProvenance: Readonly<
 > = Object.freeze({});
 let activeSelectionFingerprint = "";
 let stopReadyRegistryWatch: (() => void) | null = null;
+let checkedPreferences: ReleasePreferences | null = null;
 const UPDATE_PACKAGE_DOWNLOAD_CONCURRENCY = 6;
+
+subscribeReleasePreferences((next) => {
+  if (!checkedPreferences || useUpdateCheckStore.getState().phase === "applying") return;
+  if (next.revision !== checkedPreferences.revision || next.betaEnabled !== checkedPreferences.betaEnabled) {
+    clearUpdateResults();
+  }
+});
 
 export async function checkAppUpdates(
   clientOptions: UpdateHttpClientOptions = {},
@@ -68,6 +77,7 @@ export async function checkAppUpdates(
     return;
   }
   abandonActiveWork();
+  checkedPreferences = null;
   const attempt = ++generation;
   const abort = new AbortController();
   activeAbort = abort;
@@ -75,19 +85,26 @@ export async function checkAppUpdates(
   let registryChanged = false;
   let stopWatchingRegistry: () => void = () => undefined;
   try {
+    const preferences = await getReleasePreferences();
+    if (attempt !== generation || abort.signal.aborted) return;
+    checkedPreferences = preferences;
     const snapshot = await getAppUpdateSnapshot();
     if (attempt !== generation || abort.signal.aborted) return;
     const registry = snapshot.apps;
     const provenance = snapshot.provenance;
+    rememberRepositoryChannelSources(provenance);
     const installed = installedUpdateApps(registry, provenance);
     updateCheckState.queue(installed);
     stopWatchingRegistry = watchRegistrySnapshot(registry, abort, () => {
       registryChanged = true;
     });
     const summary = await checkForAppUpdates(installed, {
+      betaEnabled: preferences.betaEnabled,
+      preferenceRevision: preferences.revision,
       fetchRelease: (source, appId, { signal }) =>
-        fetchUpdateRelease(source, appId, {
+        fetchEligibleUpdateRelease(source, appId, {
           ...clientOptions,
+          betaEnabled: preferences.betaEnabled,
           ...(signal ? { signal } : {}),
         }),
       signal: abort.signal,
@@ -141,10 +158,14 @@ export async function retryFailedUpdateChecks(
   let registryChanged = false;
   let stopWatchingRegistry: () => void = () => undefined;
   try {
+    const preferences = await getReleasePreferences();
+    if (attempt !== generation || abort.signal.aborted) return;
+    checkedPreferences = preferences;
     const snapshot = await getAppUpdateSnapshot();
     if (attempt !== generation || abort.signal.aborted) return;
     const registry = snapshot.apps;
     const provenance = snapshot.provenance;
+    rememberRepositoryChannelSources(provenance);
     if (!updateResultsMatchRegistry(previous.results, registry)) {
       updateCheckState.clear();
       updateCheckState.error(
@@ -160,9 +181,12 @@ export async function retryFailedUpdateChecks(
       registryChanged = true;
     });
     const summary = await checkForAppUpdates(installed, {
+      betaEnabled: preferences.betaEnabled,
+      preferenceRevision: preferences.revision,
       fetchRelease: (source, appId, { signal }) =>
-        fetchUpdateRelease(source, appId, {
+        fetchEligibleUpdateRelease(source, appId, {
           ...clientOptions,
+          betaEnabled: preferences.betaEnabled,
           ...(signal ? { signal } : {}),
         }),
       signal: abort.signal,
@@ -261,7 +285,25 @@ export async function prepareSelectedUpdates(
   updateCheckState.preparing();
   let session: PackageUpdateSession | null = null;
   try {
-    session = await beginPackageInstallSession({ mode: "update" });
+    const preferences = await getReleasePreferences();
+    if (attempt !== generation || abort.signal.aborted) return;
+    if (candidates.some((candidate) => candidate.preferenceRevision !== preferences.revision)) {
+      throw new Error("Beta updates changed after this check. Check and review the releases again.");
+    }
+    const reviewClientOptions = { ...clientOptions };
+    const revalidateReleaseSelection = async (): Promise<void> => {
+      await Promise.all(candidates.map(async (candidate) => {
+        const current = await fetchEligibleUpdateRelease(candidate.source, candidate.appId, {
+          ...reviewClientOptions, betaEnabled: preferences.betaEnabled,
+        });
+        if (!current || current.channel !== candidate.releaseChannel ||
+          current.channelRevision !== candidate.channelRevision || current.candidateId !== candidate.candidateId ||
+          current.releaseDigest !== candidate.releaseDigest || !sameRelease(current.record, candidate.release)) {
+          throw new Error(`${candidate.name}'s published release changed. Check and review the releases again.`);
+        }
+      }));
+    };
+    session = await beginPackageInstallSession({ mode: "update", releasePreferences: preferences, revalidateReleaseSelection });
     if (attempt !== generation || abort.signal.aborted) {
       session.cancel();
       return;
@@ -294,13 +336,16 @@ export async function prepareSelectedUpdates(
       UPDATE_PACKAGE_DOWNLOAD_CONCURRENCY,
       async (candidate) => {
         throwIfAborted(abort.signal);
-        const currentRelease = await fetchUpdateRelease(
+        const currentRelease = await fetchEligibleUpdateRelease(
           candidate.source,
           candidate.appId,
-          { ...clientOptions, signal: abort.signal },
+          { ...clientOptions, signal: abort.signal, betaEnabled: preferences.betaEnabled },
         );
         if (
           !currentRelease ||
+          currentRelease.channel !== candidate.releaseChannel ||
+          currentRelease.channelRevision !== candidate.channelRevision ||
+          currentRelease.candidateId !== candidate.candidateId ||
           currentRelease.releaseDigest !== candidate.releaseDigest ||
           !sameRelease(currentRelease.record, candidate.release)
         ) {
@@ -400,6 +445,8 @@ export async function prepareSelectedUpdates(
           packageBytes: bytes.byteLength,
           packageDigest: currentRelease.record.sha256,
           releaseDigest: currentRelease.releaseDigest,
+          channel: currentRelease.channel ?? "stable",
+          preferenceRevision: preferences.revision,
           capabilityPlanDiff,
           capabilityDisclosures: Object.freeze([
             ...disclosures.capabilityDisclosures,
@@ -419,6 +466,9 @@ export async function prepareSelectedUpdates(
         release_digest: currentRelease.releaseDigest,
         package_digest: currentRelease.record.sha256,
         checked_at: state.checkedAt ?? Date.now(),
+        release_channel: currentRelease.channel ?? "stable",
+        release_preferences_revision: preferences.revision,
+        ...(hasRepositoryReleaseChannelsSupport(candidate.source) ? { channel_aware: true as const } : {}),
       });
     }
 
@@ -581,6 +631,7 @@ export function clearUpdateResults(): void {
   generation += 1;
   abandonActiveWork();
   updateCheckState.clear();
+  checkedPreferences = null;
 }
 
 function abandonPreparedSession(): void {
@@ -638,7 +689,6 @@ function safeUpdateError(error: unknown): Error {
   if (error instanceof Error) return error;
   return new Error("The update operation failed.");
 }
-
 function throwIfAborted(signal: AbortSignal): void {
   if (!signal.aborted) return;
   if (typeof DOMException !== "undefined") {

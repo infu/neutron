@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { hashContent } from "neutron-tools/src/hash.js";
-import { REPOSITORY_LIMITS } from "neutron-tools/repository";
+import { REPOSITORY_LIMITS, repositoryManifestPath, repositoryPackagePath } from "neutron-tools/repository";
+import { REPOSITORY_CHANNEL_SELECTION_PROTOCOL, repositoryChannelSelectionPath, type RepositoryChannelSelection } from "neutron-tools/src/release_channels.js";
 import { readInstallAccessDescriptor, readInstallAccessSelection } from "../src/install_access.ts";
+import type { ReleaseSelection } from "../src/view-types.ts";
 
 const source = "sj2r4-haaaa-aaaay-aadgq-cai";
 const other = "rrkah-fqaaa-aaaaa-aaaaq-cai";
@@ -13,7 +15,7 @@ const proof = {
   "ic-certificateexpression": "default_certification(ValidationArgs{certification:Certification{}})",
   "content-type": "application/json; charset=utf-8",
 };
-const descriptor = { protocol: "neutron-repo-access-v1", fee_version: "2", cycles: "250000000" };
+const descriptor = { protocol: "neutron-repo-access-v1" as const, fee_version: "2", cycles: "250000000" };
 const manifest = {
   protocol: "neutron-repo-v1", id: "saved-install", revision: 1, name: "Selected apps",
   packages: [
@@ -21,6 +23,7 @@ const manifest = {
     { id: "wallet", version: 123, sha256: "aa".repeat(32), size: 200 },
   ],
 };
+const betaManifest = { ...manifest, protocol: "neutron-repo-channel-manifest-v1", channel: "beta" };
 const encoded = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 const setup = (value: unknown = manifest, options: { repo?: string; id?: string; digest?: string } = {}) =>
   `https://provider.example/#repo=${options.repo ?? source}&manifest=${options.id ?? manifest.id}&digest=${options.digest ?? hashContent(encoded(value))}`;
@@ -29,6 +32,38 @@ function fixture(value: unknown, headers: Record<string, string> = proof) {
   const fetch = (async (url: string | URL | Request, init: RequestInit = {}) => {
     calls.push({ url: String(url), init });
     return new Response(encoded(value), { headers });
+  }) as typeof globalThis.fetch;
+  return { calls, fetch };
+}
+const reviewedSelection: ReleaseSelection = {
+  mode: "beta",
+  packages: [
+    { appId: "editor", candidateId: "9007199254740993", version: "111", digest: manifest.packages[0]!.sha256, sourceDigest: "cc".repeat(32), channel: "beta", revision: "9007199254740995" },
+    { appId: "wallet", candidateId: "22", version: "123", digest: manifest.packages[1]!.sha256, sourceDigest: null, channel: "stable", revision: "4" },
+  ],
+};
+function channelEvidence(selectedManifest: typeof manifest = betaManifest): RepositoryChannelSelection {
+  return {
+    protocol: REPOSITORY_CHANNEL_SELECTION_PROTOCOL, source, mode: "beta",
+    manifest_id: selectedManifest.id, manifest_sha256: hashContent(encoded(selectedManifest)),
+    packages: selectedManifest.packages.map((pkg, index) => ({
+      ...pkg, candidate_id: reviewedSelection.packages[index]!.candidateId,
+      channel: reviewedSelection.packages[index]!.channel, revision: reviewedSelection.packages[index]!.revision,
+    })),
+  };
+}
+const selectionReadUrls = [
+  `${origin}${repositoryManifestPath(manifest.id)}`,
+  `${origin}${repositoryChannelSelectionPath(manifest.id)}`,
+];
+function selectionFixture(evidence: unknown = channelEvidence(), options: { headers?: Record<string, string>; status?: number; error?: Error; manifest?: typeof manifest } = {}) {
+  const calls: string[] = [];
+  const fetch = (async (url: string | URL | Request) => {
+    const href = String(url); calls.push(href);
+    if (href === selectionReadUrls[0]) return new Response(encoded(options.manifest ?? betaManifest), { headers: proof });
+    if (href !== selectionReadUrls[1]) throw new Error(`Unexpected metadata request: ${href}`);
+    if (options.error) throw options.error;
+    return new Response(encoded(evidence), { headers: options.headers ?? proof, status: options.status ?? 200 });
   }) as typeof globalThis.fetch;
   return { calls, fetch };
 }
@@ -52,6 +87,78 @@ test("verifies a saved manifest and includes exactly its roots and resolved depe
   // The provider URL, package bodies and individual dependency metadata are
   // unnecessary: the protocol already retained the exact closure in one hash.
   expect(calls).toHaveLength(1);
+});
+
+test("binds the reviewed release snapshot to certified selection evidence for every dependency", async () => {
+  for (const mode of ["stable", "beta"] as const) {
+    const selectedManifest = mode === "beta" ? betaManifest : manifest;
+    const selection = structuredClone(reviewedSelection), evidence = channelEvidence(selectedManifest);
+    selection.mode = mode; evidence.mode = mode;
+    if (mode === "stable") {
+      for (const pkg of selection.packages) pkg.channel = "stable";
+      for (const pkg of evidence.packages) pkg.channel = "stable";
+    }
+    // Package order is immaterial; exact candidate and revision decimals stay strings.
+    evidence.packages.reverse();
+    const { fetch, calls } = selectionFixture(evidence, { manifest: selectedManifest }), url = setup(selectedManifest);
+    expect(await readInstallAccessSelection(url, source, ["editor"], { fetch, selection })).toEqual({
+      url, source, paths: manifest.packages.map(pkg => repositoryPackagePath(pkg.sha256)).sort(),
+    });
+    expect(calls).toEqual(selectionReadUrls);
+  }
+});
+
+test("beta selection evidence cannot authorize a legacy stable manifest even when its digest matches", async () => {
+  const { fetch, calls } = selectionFixture(channelEvidence(manifest), { manifest });
+  await expect(readInstallAccessSelection(setup(), source, ["editor"], { fetch, selection: reviewedSelection })).rejects.toThrow();
+  expect(calls).toEqual(selectionReadUrls);
+});
+
+test("rejects selection evidence that differs from the reviewed mode, identities or dependency closure", async () => {
+  const replacements: ReleaseSelection[] = [
+    { ...reviewedSelection, mode: "stable" },
+    { ...reviewedSelection, packages: reviewedSelection.packages.slice(0, 1) },
+    { ...reviewedSelection, packages: [...reviewedSelection.packages, { ...reviewedSelection.packages[1]!, appId: "browser" }] },
+    ...[
+      { candidateId: "23" }, { version: "124" }, { digest: "dd".repeat(32) },
+      { channel: "beta" as const }, { revision: "5" },
+    ].map(change => ({ ...reviewedSelection, packages: [reviewedSelection.packages[0]!, { ...reviewedSelection.packages[1]!, ...change }] })),
+  ];
+  for (const selection of replacements) {
+    const { fetch, calls } = selectionFixture();
+    await expect(readInstallAccessSelection(setup(betaManifest), source, ["editor"], { fetch, selection })).rejects.toThrow("reviewed releases and dependencies");
+    expect(calls).toEqual(selectionReadUrls);
+  }
+});
+
+test("rejects certified selection evidence bound to another source, manifest or package bytes", async () => {
+  const evidence = channelEvidence();
+  for (const changed of [
+    { ...evidence, source: other },
+    { ...evidence, manifest_id: "another-install" },
+    { ...evidence, manifest_sha256: "dd".repeat(32) },
+    { ...evidence, packages: evidence.packages.slice(0, 1) },
+    ...[{ sha256: "dd".repeat(32) }, { version: 124 }, { size: 201 }].map(change => ({
+      ...evidence, packages: [evidence.packages[0]!, { ...evidence.packages[1]!, ...change }],
+    })),
+  ]) {
+    const { fetch, calls } = selectionFixture(changed);
+    await expect(readInstallAccessSelection(setup(betaManifest), source, ["editor"], { fetch, selection: reviewedSelection })).rejects.toThrow();
+    expect(calls).toEqual(selectionReadUrls);
+  }
+});
+
+test("missing, uncertified, malformed or interrupted selection evidence never falls back to legacy admission", async () => {
+  for (const fixture of [
+    selectionFixture({}, { status: 404 }),
+    selectionFixture(channelEvidence(), { headers: { "content-type": "application/json" } }),
+    selectionFixture(channelEvidence(), { headers: { ...proof, "ic-certificateexpression": "default_certification(ValidationArgs{certification:no_certification})" } }),
+    selectionFixture({ ...channelEvidence(), mode: "unsupported" }),
+    selectionFixture(channelEvidence(), { error: new Error("Selection reply interrupted") }),
+  ]) {
+    await expect(readInstallAccessSelection(setup(betaManifest), source, ["editor"], { fetch: fixture.fetch, selection: reviewedSelection })).rejects.toThrow();
+    expect(fixture.calls).toEqual(selectionReadUrls);
+  }
 });
 
 test("validates the saved source before requesting any metadata", async () => {
@@ -92,7 +199,7 @@ test("rejects redirected or substituted responses without trusting their certifi
   for (const property of [{ redirected: true }, { url: `https://${other}.icp0.io/repo/v1/access.json` }]) {
     const response = new Response(encoded(descriptor), { headers: proof });
     for (const [key, value] of Object.entries(property)) Object.defineProperty(response, key, { value });
-    await expect(readInstallAccessDescriptor(source, { fetch: (async () => response) as typeof fetch })).rejects.toThrow("different metadata resource");
+    await expect(readInstallAccessDescriptor(source, { fetch: Object.assign(async () => response, { preconnect: () => {} }) })).rejects.toThrow("different metadata resource");
   }
 });
 

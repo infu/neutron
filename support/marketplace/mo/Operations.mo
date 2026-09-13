@@ -55,7 +55,12 @@ module {
     };
     func savedPurchase(order : Types.Order) : ?API.CheckoutQuote {
       let ?record = Store.getQuoteRecord(db, order.owner, #purchase, order.requestId, order.quoteCommitment) else return null;
-      from_candid(record.content);
+      let ?snapshot = Quotes.decodePurchaseSnapshot(record.content) else return null;
+      ?Quotes.snapshotQuote(snapshot);
+    };
+    func savedChannelPurchase(order : Types.Order) : ?API.ChannelCheckoutQuote {
+      let ?record = Store.getQuoteRecord(db, order.owner, #purchase, order.requestId, order.quoteCommitment) else return null;
+      switch (Quotes.decodePurchaseSnapshot(record.content)) { case (?#channel(value)) ?value; case (_) null };
     };
     func savedWithdrawal(withdrawal : Types.Withdrawal) : ?API.WithdrawalQuote {
       let request : API.WithdrawalRequest = { requestId = withdrawal.requestId; ledger = withdrawal.ledger; to = withdrawal.to; totalDebit = withdrawal.totalDebit };
@@ -74,6 +79,12 @@ module {
     public func purchaseStatus(owner : Principal, requestId : Text) : ?API.PurchaseResult {
       switch (Store.getOrder(db, owner, requestId)) { case null null; case (?order) ?purchaseResult(order) };
     };
+    func channelPurchaseResult(order : Types.Order) : API.ChannelPurchaseResult {
+      { purchase = purchaseResult(order); quote = savedChannelPurchase(order) };
+    };
+    public func purchaseStatusV2(owner : Principal, requestId : Text) : ?API.ChannelPurchaseResult {
+      switch (Store.getOrder(db, owner, requestId)) { case null null; case (?order) ?channelPurchaseResult(order) };
+    };
     public func withdrawalStatus(owner : Principal, requestId : Text) : ?API.WithdrawalResult {
       switch (Store.getWithdrawal(db, owner, requestId)) { case null null; case (?value) ?withdrawalResult(value) };
     };
@@ -89,6 +100,21 @@ module {
         case null {};
       };
       Quotes.purchase(db, marketplace, owner, request, clock());
+    };
+    public func purchaseQuoteV2(owner : Principal, request : API.ChannelPurchaseRequest) : API.Result<API.ChannelCheckoutQuote> {
+      if (Store.getEvmInvoiceByRequest(db, owner, request.request.requestId) != null) return error("payment_rail", "This purchase uses Ethereum. Resume its original Ethereum invoice.");
+      switch (Store.getOrder(db, owner, request.request.requestId)) {
+        case (?saved) {
+          if (saved.intentHash != Quotes.channelPurchaseIntent(request.request, request.mode)) return error("request_mismatch", "This purchase ID belongs to another selection or channel. Retain its original request to recover it.");
+          if (frozen(saved.state, saved.currentAttempt, purchases.isActive(saved.id))) {
+            let ?quote = savedChannelPurchase(saved) else return error("quote_unavailable", "The original payment snapshot is unavailable. Inspect its saved attempt; do not create a replacement purchase.");
+            switch (Quotes.checkExpectedSelection(quote.selection, request.expectedSelection)) { case (#err(value)) return #err(value); case (_) {} };
+            return #ok(quote);
+          };
+        };
+        case null {};
+      };
+      Quotes.purchaseV2(db, marketplace, owner, request, clock());
     };
     public func withdrawalQuote(owner : Principal, request : API.WithdrawalRequest) : API.Result<API.WithdrawalQuote> {
       switch (Store.getWithdrawal(db, owner, request.requestId)) {
@@ -123,6 +149,23 @@ module {
       if (purchases.isActive(order.id) or order.state == #complete) return #ok(purchaseResult(order));
       switch (await* purchases.run(order.id)) {
         case (#ok(value)) #ok(purchaseResult(value));
+        case (#err(message)) error("purchase_interrupted", message);
+      };
+    };
+    public func purchaseV2(owner : Principal, supplied : API.ChannelCheckoutQuote) : async* API.Result<API.ChannelPurchaseResult> {
+      if (supplied.quote.buyer != owner) return error("owner_mismatch", "The purchase review belongs to another Neutron.");
+      let expected = switch (purchaseQuoteV2(owner, {
+        request = supplied.quote.request; mode = supplied.mode; expectedSelection = ?supplied.selection;
+      })) { case (#err(value)) return #err(value); case (#ok(value)) value };
+      if (not Quotes.sameChannelPurchase(supplied, expected)) return error("quote_changed", "Purchase costs or release selection changed. Review a fresh quote under this same request ID before continuing.");
+      let order = switch (Purchases.prepare(db, Quotes.channelOrder(expected, clock()))) {
+        case (#err(message)) return error("purchase_prepare", message);
+        case (#ok(value)) value;
+      };
+      retain(owner, order.requestId, #purchase, expected.quote.commitment, to_candid(expected));
+      if (purchases.isActive(order.id) or order.state == #complete) return #ok(channelPurchaseResult(order));
+      switch (await* purchases.run(order.id)) {
+        case (#ok(value)) #ok(channelPurchaseResult(value));
         case (#err(message)) error("purchase_interrupted", message);
       };
     };

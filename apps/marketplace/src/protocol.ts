@@ -17,17 +17,28 @@ const historyCursor = IDL.Variant({ start: IDL.Null, after: nat64, done: IDL.Nul
 const app = rec({ appId: text, publisher: principal, publisherProfile: opt(rec({ publisherId: text, name: text })), title: text, summary: text, description: text, priceUsdMicros: nat, revision: nat64, version: opt(nat), iconUrl: opt(text), screenshots: vec(text), iconArtifact: opt(nat64), screenshotArtifacts: vec(nat64), ratingCount: nat, ratingTotal: nat, acquisitionCounts: opt(rec({ free: nat, paid: nat })), owned: bool, visible: bool });
 const publisherProfile = rec({ publisherId: text, name: text, description: text, principal, ratingCount: nat, ratingTotal: nat, totalUsers: nat, statsComplete: bool, createdAtNs: int, updatedAtNs: int });
 const candidate = rec({ id: nat64, appId: text, version: nat, publisher: principal, digest: blob, sourceDigest: opt(blob), state: variant("pending", "approved", "rejected", "revoked"), createdAtNs: int });
+const channelMode = variant("stable", "beta");
+const releaseHead = rec({ revision: nat64, candidate: opt(candidate), releaseNotes: text });
+const channelApp = rec({ app, stableHead: releaseHead, betaHead: releaseHead, selected: opt(candidate), selectedChannel: opt(channelMode) });
+const channelAppPage = rec({ apps: vec(channelApp), nextCursor: opt(nat64) });
+const releaseSelection = rec({ appId: text, candidateId: nat64, version: nat, digest: blob, sourceDigest: opt(blob), channel: channelMode, revision: nat64 });
 const audit = rec({ auditor: principal, decision: variant("approved", "rejected", "revoked"), analysis: text, reason: opt(text), createdAtNs: int });
 const rating = rec({ stars: nat, review: text });
+const ratingSummary = rec({ one: nat, two: nat, three: nat, four: nat, five: nat, count: nat, total: nat, complete: bool });
+const commentIdentity = { appId: text, candidateId: nat64, version: nat, digest: blob };
+const versionComment = rec({ id: nat64, owner: principal, ...commentIdentity, text, createdAtNs: int, updatedAtNs: int });
 const purchaseRequest = rec({ requestId: text, appIds: vec(text), ledger: principal, referralCode: opt(text) });
 const purchaseItem = rec({ appId: text, listingRevision: nat64, publisher: principal, priceUsdMicros: nat, paidAtoms: nat, developerAtoms: nat, affiliateAtoms: nat, burnAtoms: nat, releaseDigest: blob });
 const rate = rec({ id: nat64, ledger: principal, symbol: text, usdRate: nat, decimals: IDL.Nat32, observedAtNs: int, refreshedAtNs: int, lastError: opt(text) });
 export const checkoutType = rec({ request: purchaseRequest, buyer: principal, items: vec(purchaseItem), amount: nat, fee: nat, affiliate: opt(principal), rate: opt(rate), spender: account, commitment: blob, cycles: feeType, quotedAtNs: int });
+export const channelCheckoutType = rec({ quote: checkoutType, mode: channelMode, selection: vec(releaseSelection) });
+const channelPurchaseRequest = rec({ request: purchaseRequest, mode: channelMode, expectedSelection: opt(vec(releaseSelection)) });
 const operationState = variant("prepared", "funding_required", "dispatched", "outcome_unknown", "failed", "complete");
 const order = rec({ requestId: text, state: operationState, lastError: opt(text), items: vec(purchaseItem) });
 const attempt = rec({ block: opt(nat), state: variant("prepared", "dispatched", "outcome_unknown", "no_effect", "succeeded"), hadUnknown: bool });
 const nextAction = IDL.Variant({ none: IDL.Null, await_current_call: IDL.Null, funding_required: IDL.Null, review_fee: IDL.Null, wait_ledger_time: nat64, review_terms: IDL.Null, retry_same_attempt: IDL.Null, review_required: IDL.Null });
 const purchaseResult = rec({ order, attempt: opt(attempt), quote: opt(checkoutType), active: bool, nextAction });
+const channelPurchaseResult = rec({ purchase: purchaseResult, quote: opt(channelCheckoutType) });
 const ethereumRoute = rec({ chainId: nat, minter: principal, helper: text, minterAddress: text, token: text, ledger: principal, decimals: IDL.Nat8 });
 export const ethereumInvoiceType = rec({
   id: nat64, owner: principal, requestId: text, orderId: nat64, subaccount: blob, route: ethereumRoute,
@@ -44,6 +55,7 @@ export const ethereumInvoiceResultType = rec({ order, invoice: ethereumInvoiceTy
   payment: rec({ amountAtoms: nat, saleAtoms: nat, sweepFeeAtoms: nat, approve: ethereumTransaction, deposit: ethereumTransaction }),
   active: bool, nextAction: variant("pay_ethereum", "verify_ethereum", "wait_wrapping", "settle", "fee_shortfall", "review_required", "none"), entitled: bool, earningsAvailable: bool,
 });
+export const channelEthereumInvoiceResultType = rec({ invoice: ethereumInvoiceResultType, quote: opt(channelCheckoutType) });
 export const ethereumFeesType = rec({ prepare: feeType, verify: feeType, settle: feeType, cancel: feeType });
 const withdrawalRequest = rec({ requestId: text, ledger: principal, to: account, totalDebit: nat });
 export const withdrawalType = rec({ request: withdrawalRequest, owner: principal, fee: nat, netAmount: nat, available: nat, commitment: blob, cycles: feeType });
@@ -53,6 +65,9 @@ const feeVersion = rec({ feeVersion: nat });
 const opRequest = rec({ requestId: text });
 const charge = rec({ cycles: nat, processingCycles: nat, storageCycles: nat, coverageUntilNs: int });
 const upload = rec({ id: nat64, requestId: text, appId: text, digest: blob, size: nat64, uploadedBytes: nat64, state: variant("uploading", "attached", "aborted"), artifactId: opt(nat64), charge });
+const candidateRequest = rec({ requestId: text, appId: text, version: nat, artifactId: nat64, sourceArtifactId: opt(nat64), dependencies: vec(rec({ appId: text, minVersion: nat })), feeVersion: nat });
+const promotionEntry = rec({ appId: text, candidateId: nat64, version: nat, digest: blob, sourceDigest: opt(blob), packageSize: nat64, sourceSize: opt(nat64), dependencies: vec(rec({ appId: text, minVersion: nat })), expectedBetaRevision: nat64, expectedStableCandidate: opt(nat64), expectedStableRevision: nat64 });
+const promotionReceipt = rec({ id: nat64, owner: principal, publisher: principal, requestId: text, operation: text, channel: text, entries: vec(promotionEntry), createdAtNs: int });
 const read = (args: IDL.Type[], output: IDL.Type) => ({ args, returns: [output] });
 const update = (args: IDL.Type[], output: IDL.Type) => ({ ...read(args, result(output)), update: true });
 /** Public Candid DTOs only. Query result records deliberately omit unused internal fields. */
@@ -61,6 +76,11 @@ export const CONTRACT: Contract = {
   fee_quote: read([rec({ operation: variant("update", "upload", "purchase", "withdraw", "grant"), processingBytes: nat, newStorageBytes: nat })], feeType),
   catalog_query: read([rec({ search: text, tier: variant("free", "paid"), window: variant("week", "month", "all"), cursor: opt(cursor), limit: nat })], result(rec({ apps: vec(app), nextCursor: opt(cursor), asOfNs: int, generation: nat64, refreshing: bool }))),
   app_detail: read([text], result(rec({ app, candidate: opt(candidate), audit: opt(audit), rating: opt(rating) }))),
+  catalog_query_v2: read([rec({ request: rec({ search: text, tier: variant("free", "paid"), window: variant("week", "month", "all"), cursor: opt(cursor), limit: nat }), mode: channelMode })], result(rec({ apps: vec(channelApp), nextCursor: opt(cursor), asOfNs: int, generation: nat64, refreshing: bool }))),
+  app_detail_v2: read([rec({ appId: text, mode: channelMode })], result(rec({ release: channelApp, audit: opt(audit), rating: opt(rating) }))),
+  library_query_v2: read([rec({ request: pageRequest, mode: channelMode })], result(channelAppPage)),
+  publisher_apps_v2: read([rec({ request: pageRequest, mode: channelMode })], result(channelAppPage)),
+  publisher_profile_apps_v2: read([rec({ request: rec({ publisherId: text, cursor: opt(nat64), limit: nat }), mode: channelMode })], result(channelAppPage)),
   library_query: read([pageRequest], result(rec({ apps: vec(app), nextCursor: opt(nat64) }))),
   publisher_apps: read([pageRequest], result(rec({ apps: vec(app), nextCursor: opt(nat64) }))),
   publisher_profile: read([text], result(publisherProfile)),
@@ -78,6 +98,13 @@ export const CONTRACT: Contract = {
   ethereum_status: read([opRequest], result(opt(ethereumInvoiceResultType))),
   ethereum_history: read([pageRequest], result(rec({ invoices: vec(ethereumInvoiceResultType), nextCursor: opt(nat64) }))),
   purchase_quote: read([purchaseRequest], result(checkoutType)),
+  purchase_quote_v2: read([channelPurchaseRequest], result(channelCheckoutType)),
+  purchase_v2: update([rec({ quote: channelCheckoutType, feeVersion: nat })], channelPurchaseResult),
+  purchase_status_v2: read([opRequest], result(opt(channelPurchaseResult))),
+  ethereum_quote_v2: read([channelPurchaseRequest], result(channelCheckoutType)),
+  ethereum_prepare_v2: update([rec({ quote: channelCheckoutType, payer: text, feeVersion: nat })], channelEthereumInvoiceResultType),
+  ethereum_status_v2: read([opRequest], result(opt(channelEthereumInvoiceResultType))),
+  ethereum_history_v2: read([pageRequest], result(rec({ invoices: vec(channelEthereumInvoiceResultType), nextCursor: opt(nat64) }))),
   purchase_status: read([opRequest], result(opt(purchaseResult))),
   withdraw_quote: read([withdrawalRequest], result(withdrawalType)),
   withdraw_status: read([opRequest], result(opt(withdrawalResult))),
@@ -88,11 +115,22 @@ export const CONTRACT: Contract = {
   referral_quote: read([text], result(rec({ code: text, affiliate: principal, discountBps: nat, termsVersion: nat }))),
   referral_get_or_create: update([feeVersion], rec({ code: text })),
   rating_set: update([rec({ appId: text, stars: nat, review: text, feeVersion: nat })], rating),
+  rating_summary_v2: read([text], result(ratingSummary)),
+  rating_set_v2: update([rec({ appId: text, stars: nat, feeVersion: nat })], rating),
+  version_comments_v2: read([rec({ ...commentIdentity, cursor: opt(nat64), limit: nat })], result(rec({ comments: vec(versionComment), nextCursor: opt(nat64), ownComment: opt(versionComment) }))),
+  version_comment_set_v2: update([rec({ ...commentIdentity, text, feeVersion: nat })], versionComment),
+  version_comment_delete_v2: update([rec({ ...commentIdentity, feeVersion: nat })], IDL.Null),
   listing_save: update([rec({ appId: text, title: text, summary: text, description: text, priceUsdMicros: nat, iconArtifact: opt(nat64), screenshots: vec(nat64), expectedRevision: opt(nat64), feeVersion: nat })], app),
   upload_begin: update([rec({ requestId: text, appId: text, digest: blob, size: nat64, mediaType: text, purpose: variant("package", "source", "image"), feeVersion: nat })], upload),
   upload_chunk: update([rec({ requestId: text, offset: nat64, bytes: blob, feeVersion: nat })], upload),
   upload_finish: update([rec({ requestId: text, feeVersion: nat })], upload),
-  candidate_submit: update([rec({ requestId: text, appId: text, version: nat, artifactId: nat64, sourceArtifactId: opt(nat64), dependencies: vec(rec({ appId: text, minVersion: nat })), feeVersion: nat })], candidate),
+  candidate_submit: update([candidateRequest], candidate),
+  candidate_submit_v2: update([rec({ request: candidateRequest, releaseNotes: text })], candidate),
+  promotion_prepare: read([rec({ appIds: vec(text) })], result(rec({ entries: vec(promotionEntry) }))),
+  promotion_status: read([opRequest], result(opt(promotionReceipt))),
+  release_promote: update([rec({ requestId: text, entries: vec(promotionEntry), feeVersion: nat })], promotionReceipt),
+  install_selection_v2: read([rec({ appIds: vec(text), mode: channelMode })], result(rec({ appIds: vec(text), mode: channelMode, selection: vec(releaseSelection) }))),
+  install_prepare_v2: update([rec({ request: rec({ requestId: text, appIds: vec(text), feeVersion: nat }), mode: channelMode, selection: vec(releaseSelection) })], rec({ canister: principal, manifestId: text, digest: text, setupUrl: text, appIds: vec(text) })),
   install_prepare: update([rec({ requestId: text, appIds: vec(text), feeVersion: nat })], rec({ canister: principal, manifestId: text, digest: text, setupUrl: text, appIds: vec(text) })),
   repo_access_v1: update([rec({ request_id: text, token: text, paths: vec(text), fee_version: nat })], rec({ request_id: text, paths: vec(text), accepted_cycles: nat })),
 };
@@ -103,9 +141,20 @@ export type Fee = { feeVersion: bigint; processingCycles: bigint; storageCycles:
 export type Token = { ledger: Principal; symbol: string; decimals: number; fee: bigint; rateSymbol: string; burnAccount: Option<{ owner: Principal; subaccount: Option<Uint8Array> }> };
 export type Info = { version: bigint; canister: Principal; tokens: Token[]; fees: Record<string, bigint>; referralTerms: { version: bigint; discountBps: bigint; affiliateBps: bigint; developerBps: bigint } };
 export type WireApp = { appId: string; publisher: Principal; publisherProfile?: Option<{ publisherId: string; name: string }>; title: string; summary: string; description: string; priceUsdMicros: bigint; revision: bigint; version: Option<bigint>; iconUrl: Option<string>; screenshots: string[]; iconArtifact: Option<bigint>; screenshotArtifacts: bigint[]; ratingCount: bigint; ratingTotal: bigint; acquisitionCounts?: Option<{ free: bigint; paid: bigint }>; owned: boolean; visible: boolean };
+export type WireChannelMode = { stable: null } | { beta: null };
+export type WireCandidate = { id: bigint; appId: string; version: bigint; publisher: Principal; digest: Uint8Array; sourceDigest: Option<Uint8Array>; state: Record<string, null>; createdAtNs: bigint };
+export type WireReleaseHead = { revision: bigint; candidate: Option<WireCandidate>; releaseNotes: string };
+export type WireChannelApp = { app: WireApp; stableHead: WireReleaseHead; betaHead: WireReleaseHead; selected: Option<WireCandidate>; selectedChannel: Option<WireChannelMode> };
+export type WireReleaseSelection = { appId: string; candidateId: bigint; version: bigint; digest: Uint8Array; sourceDigest: Option<Uint8Array>; channel: WireChannelMode; revision: bigint };
+export type WireRatingSummary = { one: bigint; two: bigint; three: bigint; four: bigint; five: bigint; count: bigint; total: bigint; complete: boolean };
+export type WireVersionComment = { id: bigint; owner: Principal; appId: string; candidateId: bigint; version: bigint; digest: Uint8Array; text: string; createdAtNs: bigint; updatedAtNs: bigint };
+export type WirePromotionEntry = { appId: string; candidateId: bigint; version: bigint; digest: Uint8Array; sourceDigest: Option<Uint8Array>; packageSize: bigint; sourceSize: Option<bigint>; dependencies: Array<{ appId: string; minVersion: bigint }>; expectedBetaRevision: bigint; expectedStableCandidate: Option<bigint>; expectedStableRevision: bigint };
+export type WirePromotionReceipt = { id: bigint; owner: Principal; publisher: Principal; requestId: string; operation: string; channel: string; entries: WirePromotionEntry[]; createdAtNs: bigint };
 export type WirePublisherProfile = { publisherId: string; name: string; description: string; principal: Principal; ratingCount: bigint; ratingTotal: bigint; totalUsers: bigint; statsComplete: boolean; createdAtNs: bigint; updatedAtNs: bigint };
 export type PurchaseItem = { appId: string; listingRevision: bigint; publisher: Principal; priceUsdMicros: bigint; paidAtoms: bigint; developerAtoms: bigint; affiliateAtoms: bigint; burnAtoms: bigint; releaseDigest: Uint8Array };
 export type Checkout = { request: { requestId: string; appIds: string[]; ledger: Principal; referralCode: Option<string> }; buyer: Principal; items: PurchaseItem[]; amount: bigint; fee: bigint; affiliate: Option<Principal>; rate: Option<{ id: bigint; ledger: Principal; symbol: string; usdRate: bigint; decimals: number; observedAtNs: bigint; refreshedAtNs: bigint; lastError: Option<string> }>; spender: { owner: Principal; subaccount: Option<Uint8Array> }; commitment: Uint8Array; cycles: Fee; quotedAtNs: bigint };
+export type ChannelCheckout = { quote: Checkout; mode: WireChannelMode; selection: WireReleaseSelection[] };
+export type ChannelPurchaseResult = { purchase: WireResult; quote: Option<ChannelCheckout> };
 export type WithdrawQuote = { request: { requestId: string; ledger: Principal; to: { owner: Principal; subaccount: Option<Uint8Array> }; totalDebit: bigint }; owner: Principal; fee: bigint; netAmount: bigint; available: bigint; commitment: Uint8Array; cycles: Fee };
 export type WireOperation = { requestId: string; state: Record<string, null>; lastError: Option<string>; items?: PurchaseItem[] };
 export type WireResult = { order?: WireOperation; withdrawal?: WireOperation; attempt: Option<{ block: Option<bigint>; state: Record<string, null>; hadUnknown: boolean }>; quote?: Option<Checkout | WithdrawQuote>; active?: boolean; nextAction?: Record<string, null | bigint> };

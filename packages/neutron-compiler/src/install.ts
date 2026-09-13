@@ -343,6 +343,7 @@ export type KernelInstallCodeRequest = {
   candid: string;
   deployment_id: string;
   wasm_memory_persistence: CandidWasmMemoryPersistence;
+  expected_release_preferences_revision?: [] | [bigint];
 };
 
 export type CandidWasmMemoryPersistence =
@@ -372,11 +373,13 @@ export type KernelInstallCodeChunkedRequest = {
   chunk_hashes: Uint8Array[];
   wasm_module_hash: Uint8Array;
   wasm_memory_persistence: CandidWasmMemoryPersistence;
+  expected_release_preferences_revision?: [] | [bigint];
 };
 
 export type CheckedInstallJournalRequest = {
   journal: InstallJournal;
   expected_deployment_id: string;
+  expected_release_preferences_revision?: [] | [bigint];
 };
 
 export type KernelInstallReservationsPrepareRequest = {
@@ -586,6 +589,8 @@ export type DeployPreparedPackagesInput = {
   deploymentBuildRecord?: CompleteDeploymentBuildRecord;
   /** Exact running deployment checked atomically when the journal is recorded. */
   expectedDeploymentId: string;
+  /** Repository preference revision reviewed for this install, as canonical Nat text. */
+  expectedReleasePreferencesRevision?: string;
   /** Maximum wait for the IC to compile and activate the dispatched actor. */
   verifyTimeoutMs?: number;
   onStep?: (step: DeployPackageStep) => void;
@@ -3731,6 +3736,7 @@ export async function compileAndDeployPreparedPackages({
   vetKeysEnvironment,
   stagedAssets,
   expectedDeploymentId,
+  expectedReleasePreferencesRevision,
   verifyTimeoutMs,
   onStep,
   onProgress,
@@ -3768,6 +3774,9 @@ export async function compileAndDeployPreparedPackages({
     deploymentBuildRecord: preparedBuild.record,
     ...(stagedAssets ? { stagedAssets } : {}),
     expectedDeploymentId,
+    ...(expectedReleasePreferencesRevision !== undefined
+      ? { expectedReleasePreferencesRevision }
+      : {}),
     ...(verifyTimeoutMs !== undefined ? { verifyTimeoutMs } : {}),
     ...(onStep ? { onStep } : {}),
     ...(onProgress ? { onProgress } : {}),
@@ -3825,10 +3834,14 @@ export async function deployPreparedPackages({
   stagedAssets = [],
   deploymentBuildRecord,
   expectedDeploymentId,
+  expectedReleasePreferencesRevision,
   verifyTimeoutMs = DEFAULT_DEPLOYMENT_ACTIVATION_TIMEOUT_MS,
   onStep,
   onProgress,
 }: DeployPreparedPackagesInput): Promise<DeployPreparedPackagesResult> {
+  const releasePreferencesRevision = releasePreferencesRevisionForInstall(
+    expectedReleasePreferencesRevision,
+  );
   const deploymentCompiled = snapshotCompileResultForDeployment(compiled);
   assertCurrentAssemblerCompileResult(deploymentCompiled);
   assertBackendCallInstallReservationsTarget(
@@ -3918,6 +3931,9 @@ export async function deployPreparedPackages({
     candid: deploymentCompiled.candid,
     deploymentId: deploymentCompiled.deploymentId,
     persistenceMode: deploymentCompiled.persistenceMode,
+    ...(expectedReleasePreferencesRevision !== undefined
+      ? { expectedReleasePreferencesRevision }
+      : {}),
   });
   const stableAsset = createTextAsset(
     "/pkg/neutron.most",
@@ -4055,6 +4071,7 @@ export async function deployPreparedPackages({
   const beginRequest = {
     journal,
     expected_deployment_id: expectedDeploymentId,
+    expected_release_preferences_revision: releasePreferencesRevision,
   };
   try {
     await actor.kernel_install_begin_checked(beginRequest);
@@ -4798,18 +4815,23 @@ function prepareInstallCodeDispatch({
   candid,
   deploymentId,
   persistenceMode,
+  expectedReleasePreferencesRevision,
 }: {
   /** Exact deterministic gzip bytes already bound into the build record. */
   transportWasm: Uint8Array;
   candid: string;
   deploymentId: string;
   persistenceMode: NeutronPersistenceMode;
+  expectedReleasePreferencesRevision?: string;
 }): InstallCodeDispatch {
   const request = installCodeRequestWithTransport({
     transportWasm,
     candid,
     deploymentId,
     persistenceMode,
+    ...(expectedReleasePreferencesRevision !== undefined
+      ? { expectedReleasePreferencesRevision }
+      : {}),
   });
   if (installCodeRequestFitsIngress(request)) {
     return { kind: "inline", request };
@@ -4833,6 +4855,9 @@ function prepareInstallCodeDispatch({
       chunk_hashes: chunks.map(({ sha256 }) => sha256),
       wasm_module_hash: sha256Bytes(request.wasm),
       wasm_memory_persistence: candidWasmMemoryPersistence(persistenceMode),
+      expected_release_preferences_revision: releasePreferencesRevisionForInstall(
+        expectedReleasePreferencesRevision,
+      ),
     },
   };
 }
@@ -4881,11 +4906,13 @@ export function prepareInstallCodeRequest({
   candid,
   deploymentId,
   persistenceMode = "classical",
+  expectedReleasePreferencesRevision,
 }: {
   wasm: Uint8Array;
   candid: string;
   deploymentId: string;
   persistenceMode?: NeutronPersistenceMode;
+  expectedReleasePreferencesRevision?: string;
 }): KernelInstallCodeRequest {
   const { transportWasm } = prepareDeterministicWasmTransport(wasm);
   const request = installCodeRequestWithTransport({
@@ -4893,6 +4920,9 @@ export function prepareInstallCodeRequest({
     candid,
     deploymentId,
     persistenceMode,
+    ...(expectedReleasePreferencesRevision !== undefined
+      ? { expectedReleasePreferencesRevision }
+      : {}),
   });
   if (!installCodeRequestFitsIngress(request)) {
     throw installCodeIngressError(request);
@@ -4905,18 +4935,33 @@ function installCodeRequestWithTransport({
   candid,
   deploymentId,
   persistenceMode,
+  expectedReleasePreferencesRevision,
 }: {
   transportWasm: Uint8Array;
   candid: string;
   deploymentId: string;
   persistenceMode: NeutronPersistenceMode;
+  expectedReleasePreferencesRevision?: string;
 }): KernelInstallCodeRequest {
   return {
     wasm: transportWasm,
     candid,
     deployment_id: deploymentId,
     wasm_memory_persistence: candidWasmMemoryPersistence(persistenceMode),
+    expected_release_preferences_revision: releasePreferencesRevisionForInstall(
+      expectedReleasePreferencesRevision,
+    ),
   };
+}
+
+function releasePreferencesRevisionForInstall(
+  revision: string | undefined,
+): [] | [bigint] {
+  if (revision === undefined) return [];
+  if (typeof revision !== "string" || !/^(0|[1-9][0-9]*)$/.test(revision)) {
+    throw new Error("Expected release preferences revision must be canonical Nat text");
+  }
+  return [BigInt(revision)];
 }
 
 function installCodeRequestFitsIngress(

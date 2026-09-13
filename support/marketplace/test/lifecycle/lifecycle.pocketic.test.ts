@@ -27,9 +27,10 @@ import { createKernelRuntimeConfig, encodeKernelRuntimeConfig, isolatedFrameOrig
 import { createCertifiedAssetReader } from "neutron-tools/src/certified_asset.js";
 import { parseRepositorySetupUrl, repositoryPackagePath, repositoryManifestPath, repositoryInfoPath } from "neutron-tools/repository";
 import { verifyRepositorySetupBytes } from "../../../../apps/kernel/src/repository/client.ts";
+import { fetchEligibleUpdateRelease } from "../../../../apps/kernel/src/repository/channels.ts";
 import { createRepositoryAccessFetcher } from "../../../../apps/kernel/src/repository_access/client.ts";
 import type { RepositoryAccessReply } from "neutron-tools/src/repository_access.js";
-import { fetchUpdatePackage, fetchUpdateRelease } from "../../../../apps/kernel/src/updates/client.ts";
+import { fetchUpdatePackage } from "../../../../apps/kernel/src/updates/client.ts";
 import { checkForAppUpdates } from "../../../../apps/kernel/src/updates/check.ts";
 import { loadRuntimeDeployment } from "../../../../apps/kernel/src/runtime_deployment.ts";
 import { compileFixture, prepareAsh } from "../../scripts/test-ash-runtime.ts";
@@ -146,7 +147,12 @@ test("real marketplace paid packages install, reinstall and upgrade together aft
       const response = await publisher.call("rawCall", [market.canisterId, name, new Uint8Array(IDL.encode(method.argTypes, [request])), 100_000_000n]);
       return success<any>(IDL.decode(method.retTypes, Uint8Array.from(response))[0]);
     }
+    async function promote(requestId: string, appIds: string[]) {
+      const prepared = await publishCall("promotion_prepare", { appIds });
+      return publishCall("release_promote", { requestId, entries: prepared.entries, feeVersion: 1n });
+    }
     await paidCall("read_delegate_set", { browser: readIdentity, active: true, feeVersion: 1n });
+    await publishCall("publisher_profile_register", { publisherId: "lifecyclepublisher", name: "Lifecycle publisher", description: "Local checked-install fixture", feeVersion: 1n });
     await publishCall("rates_refresh", { feeVersion: 1n });
     const ids = ["paid_alpha", "paid_beta"];
     async function publish(appId: string, version: number) {
@@ -161,6 +167,7 @@ test("real marketplace paid packages install, reinstall and upgrade together aft
       return pkg;
     }
     const originals = await Promise.all(ids.map(id => publish(id, 100)));
+    await promote("paid-lifecycle-originals-stable", ids);
     const quote = success<any>(await market.call("purchase_quote", [{ requestId: "paid-lifecycle-acquisition", appIds: ids, ledger: ledger.canisterId, referralCode: [] }], readIdentity));
     expect(quote.amount).toBe(2_000_000n);
     // Deterministic local ledger balance/allowance setup. This test qualifies
@@ -213,12 +220,14 @@ test("real marketplace paid packages install, reinstall and upgrade together aft
       if (name === "repo_package" && process.env.MARKETPLACE_LIFECYCLE_WITNESS_FILE) await writeFile(process.env.MARKETPLACE_LIFECYCLE_WITNESS_FILE, JSON.stringify({ canister: market.canisterId.toText(), argument, rootKey: [...rootKey], result }, (_key, value) => typeof value === "bigint" ? String(value) : value instanceof Uint8Array ? [...value] : value));
       return result;
     } });
+    const channelMetadata = (assetPath: string) => reader("repo_channel_metadata", index => ({ path: assetPath, index })).readRaw(assetPath);
     async function selection(requestId: string, appIds: string[]) {
       const prepared = await paidCall("install_prepare", { requestId, appIds, feeVersion: 1n });
       const reference = parseRepositorySetupUrl(prepared.setupUrl);
       const loaded = await verifyRepositorySetupBytes(reference, {
         readInfo: () => reader("repo_info", index => ({ index })).readRaw(repositoryInfoPath()),
         readManifest: id => reader("repo_manifest", index => ({ id, index })).readRaw(repositoryManifestPath(id)),
+        readChannelMetadata: channelMetadata,
         readPackage: async (digest, resourcePaths) => {
           const packagePath = repositoryPackagePath(digest);
           expect(await reader("repo_package", index => ({ sha256: digest, index })).readRaw(packagePath)).toBeUndefined();
@@ -227,6 +236,8 @@ test("real marketplace paid packages install, reinstall and upgrade together aft
           return new Uint8Array(await response.arrayBuffer());
         },
       });
+      expect(loaded.releaseSelection.selection?.mode).toBe("stable");
+      await loaded.revalidateReleaseSelection();
       return loaded.packages.map(pkg => preparePackageInstall(pkg.bytes, { expectedIdentity: pkg.metadata }));
     }
     async function registry() { return await direct.readJsonAsset(neutron, "/system/apps.json") as Record<string, any>; }
@@ -276,6 +287,7 @@ test("real marketplace paid packages install, reinstall and upgrade together aft
 
     console.log("marketplace lifecycle: audited successors and grouped Settings transport without Marketplace app");
     const successors = await Promise.all(ids.map(id => publish(id, 101)));
+    await promote("paid-lifecycle-successors-stable", ids);
     // Load the real Kernel runtime descriptor from its committed certified HTTP.
     // Only network routing is adapted to PocketIC's isolated control transport.
     const runtimeUrl = `http://${neutron.toText()}.localhost:8000`;
@@ -290,7 +302,7 @@ test("real marketplace paid packages install, reinstall and upgrade together aft
       return new Response(result.body, { status: result.status_code, headers: result.headers });
     }, runtimeUrl);
     const beforeUpdates = await registry();
-    const checks = await checkForAppUpdates(ids.map((id, index) => ({ appId: id, name: beforeUpdates[id].name, version: beforeUpdates[id].version, updateSource: beforeUpdates[id].update_source, packageDigest: sha256(originals[index]!.archive) })), { fetchRelease: (source, id, options) => fetchUpdateRelease(source, id, { ...options, fetch: sourceFetch as typeof fetch, timeoutMs: 120_000 }) });
+    const checks = await checkForAppUpdates(ids.map((id, index) => ({ appId: id, name: beforeUpdates[id].name, version: beforeUpdates[id].version, updateSource: beforeUpdates[id].update_source, packageDigest: sha256(originals[index]!.archive) })), { fetchRelease: (source, id, options) => fetchEligibleUpdateRelease(source, id, { ...options, fetch: sourceFetch as typeof fetch, betaEnabled: false, metadataReader: channelMetadata, timeoutMs: 120_000 }) });
     expect(checks.results.map(result => result.kind)).toEqual(["available", "available"]);
     const candidates = checks.results.filter((result): result is Extract<typeof result, { kind: "available" }> => result.kind === "available");
     const groupPaths = candidates.map(candidate => repositoryPackagePath(candidate.release.sha256));

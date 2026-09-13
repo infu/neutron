@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  BetaUpdatesChoice,
   KernelUiModeChoices,
   KernelUiModeSettings,
 } from "../src/settings/KernelUiModeSettings.tsx";
@@ -50,13 +51,13 @@ test("Kernel UI mode remains usable when browser storage is denied", () => {
   expect(store.getState().mode).toBe("developer");
 });
 
-test("Settings exposes developer mode as an accessible Interface switch", () => {
+test("Advanced users exposes developer mode and a default-off beta updates switch", () => {
   const normalHtml = renderToStaticMarkup(<KernelUiModeSettings />);
-  expect(normalHtml).toContain(">Interface</strong>");
+  expect(normalHtml).toContain(">Advanced users</strong>");
   expect(normalHtml).toContain('data-tid="settings-interface-toggle"');
   expect(normalHtml).toContain('aria-expanded="false"');
   expect(normalHtml).toContain(
-    "Control how much technical detail Kernel shows",
+    "Developer mode and beta updates",
   );
   expect(normalHtml).toContain(
     "Enable developer mode",
@@ -66,6 +67,13 @@ test("Settings exposes developer mode as an accessible Interface switch", () => 
   expect(normalSwitch).toContain('type="checkbox"');
   expect(normalSwitch).not.toContain('checked=""');
   expect(normalHtml).not.toContain("settings-ui-mode-normal");
+  expect(normalHtml).toContain("Beta updates");
+  expect(normalHtml).toContain("Settings updates and Marketplace");
+  expect(normalHtml).toContain("off keeps installed apps and their data");
+  const betaSwitch = inputMarkup(normalHtml, "settings-beta-updates-enabled");
+  expect(betaSwitch).toContain('role="switch"');
+  expect(betaSwitch).toContain('disabled=""');
+  expect(betaSwitch).not.toContain('checked=""');
 
   const developerHtml = renderToStaticMarkup(
     <KernelUiModeChoices mode="developer" onChange={() => undefined} />,
@@ -73,6 +81,22 @@ test("Settings exposes developer mode as an accessible Interface switch", () => 
   expect(inputMarkup(developerHtml, "settings-ui-mode-developer")).toContain(
     'checked=""',
   );
+});
+
+test("beta updates shows the saved preference and disables changes while saving", () => {
+  const html = renderToStaticMarkup(
+    <BetaUpdatesChoice
+      betaEnabled={true}
+      disabled={true}
+      onChange={() => undefined}
+      saving={true}
+    />,
+  );
+  const input = inputMarkup(html, "settings-beta-updates-enabled");
+  expect(input).toContain('checked=""');
+  expect(input).toContain('disabled=""');
+  expect(input).toContain('aria-describedby="settings-beta-updates-description"');
+  expect(html).toContain('role="status">Saving…');
 });
 
 function memoryStorage(values: Map<string, string>): KernelUiModeStorage {

@@ -37,6 +37,11 @@ import Repository "./Repository";
 import Store "./Store";
 import Types "./Types";
 import Views "./Views";
+import ReleaseStore "./ReleaseStore";
+import FeedbackStore "./FeedbackStore";
+import Feedback "./Feedback";
+import Map "mo:core/Map";
+import Text "mo:core/Text";
 
 persistent actor class Marketplace(initial : Types.Init) = this {
   // These roots are retained on upgrades. Constructors never substitute
@@ -44,8 +49,16 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   let publisherMemory = PublisherStore.init();
   let memory = Initialization.memory(initial, Time.now(), publisherMemory);
   let certificationMemory = Http.init();
-  transient let db = Store.Use(memory, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  let feedbackMemory = FeedbackStore.init();
+  transient let db = Store.UseWithChannels(memory, publisherMemory, releaseMemory);
   transient let source = Principal.fromActor(this);
+  transient let feedback = Feedback.Service(db, feedbackMemory, func(appId, candidateId, version, digest) {
+    let ?candidate = Store.getCandidate(db, candidateId) else return false;
+    candidate.appId == appId and candidate.version == version and candidate.digest == digest and
+      candidate.state == #approved and candidate.published and
+      ReleaseStore.references(db.channels, appId, candidateId);
+  });
   transient let operations = Operations.Service(db, source, Time.now);
   transient let repository = Repository.Service(db, certificationMemory, source);
   transient let http = Http.Store(certificationMemory, {
@@ -141,6 +154,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
         try {
           await async {
             ignore Publishers.advance(db, 500);
+            ignore feedback.advance(500);
             ignore await* jobs.tick();
             // This is an internal work batch, not a limit on purchases or apps.
             // A backlog retains its coherent generation until caught up.
@@ -173,6 +187,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   // Bounded, idempotent backfill also runs on upgrades. Existing purchases and
   // ratings remain authoritative; reads never rebuild portfolio statistics.
   ignore Publishers.advance(db, 500);
+  ignore feedback.advance(500);
   http.initialize();
   repository.initialize(http);
   armTimer<system>();
@@ -215,6 +230,23 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   public shared query ({ caller }) func publisher_profile_apps(request : API.PublisherPageRequest) : async API.Result<API.AppPage> {
     Views.publicPublisherApps(db, source, viewer(caller), request);
   };
+  public shared query ({ caller }) func catalog_query_v2(input : API.ChannelCatalogRequest) : async API.Result<API.ChannelCatalogPage> {
+    Views.catalogFor(db, source, viewer(caller), input.request, Time.now(), input.mode);
+  };
+  public shared query ({ caller }) func app_detail_v2(input : API.ChannelDetailRequest) : async API.Result<API.ChannelAppDetail> {
+    Views.detailFor(db, source, viewer(caller), input.appId, input.mode);
+  };
+  public shared query ({ caller }) func library_query_v2(input : API.ChannelPageRequest) : async API.Result<API.ChannelAppPage> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    Views.libraryFor(db, source, owner, input.request, input.mode);
+  };
+  public shared query ({ caller }) func publisher_apps_v2(input : API.ChannelPageRequest) : async API.Result<API.ChannelAppPage> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    Views.publisherAppsFor(db, source, owner, input.request, input.mode);
+  };
+  public shared query ({ caller }) func publisher_profile_apps_v2(input : API.ChannelPublisherPageRequest) : async API.Result<API.ChannelAppPage> {
+    Views.publicPublisherAppsFor(db, source, viewer(caller), input.request, input.mode);
+  };
   public shared ({ caller }) func publisher_profile_register(request : API.PublisherRegister) : async API.Result<API.PublisherProfile> {
     let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
@@ -246,10 +278,33 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   };
   public shared ({ caller }) func rating_set(request : API.RatingRequest) : async API.Result<Types.Rating> {
     let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (feedback.validateLegacyReview(request.review)) { case (#err(value)) return #err(value); case (_) {} };
     switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
-    switch (Ratings.set(db, owner, request.appId, request.stars, request.review, Time.now())) {
-      case (#ok(value)) #ok(value); case (#err(message)) failure("rating", message);
-    };
+    feedback.setLegacyRating(owner, request.appId, request.stars, request.review, Time.now());
+  };
+  public query func rating_summary_v2(appId : Text) : async API.Result<FeedbackStore.Histogram> { feedback.histogram(appId) };
+  public shared ({ caller }) func rating_set_v2(request : { appId : Text; stars : Nat; feeVersion : Nat }) : async API.Result<Types.Rating> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    feedback.setRating(owner, request.appId, request.stars, Time.now());
+  };
+  public shared query ({ caller }) func version_comments_v2(request : FeedbackStore.CommentPageRequest) : async API.Result<FeedbackStore.CommentPage> {
+    feedback.comments(viewer(caller), request);
+  };
+  public shared ({ caller }) func version_comment_set_v2(request : FeedbackStore.CommentRequest) : async API.Result<FeedbackStore.Comment> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    feedback.commentSet(owner, request, Time.now());
+  };
+  public shared ({ caller }) func version_comment_delete_v2(request : FeedbackStore.Release and { feeVersion : Nat }) : async API.Result<()> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    feedback.commentDelete(owner, request);
+  };
+  public shared ({ caller }) func admin_feedback_cutover(_request : API.FeeVersion) : async API.Result<()> {
+    if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can activate the feedback client cutover after its stable release.");
+    feedback.activateLegacyTextCutover();
+    #ok(());
   };
   public shared ({ caller }) func referral_get_or_create(request : API.FeeVersion) : async API.Result<Types.Referral> {
     let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
@@ -265,6 +320,20 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   public shared query ({ caller }) func purchase_quote(request : API.PurchaseRequest) : async API.Result<API.CheckoutQuote> {
     let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     operations.purchaseQuote(owner, request);
+  };
+  public shared query ({ caller }) func purchase_quote_v2(request : API.ChannelPurchaseRequest) : async API.Result<API.ChannelCheckoutQuote> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    operations.purchaseQuoteV2(owner, request);
+  };
+  public shared ({ caller }) func purchase_v2(request : API.ChannelPurchaseExecute) : async API.Result<API.ChannelPurchaseResult> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (fixedCharge<system>(#purchase, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    await* operations.purchaseV2(owner, request.quote);
+  };
+  public shared query ({ caller }) func purchase_status_v2(request : API.OperationRequest) : async API.Result<?API.ChannelPurchaseResult> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    if (Store.getEvmInvoiceByRequest(db, owner, request.requestId) != null) return failure("payment_rail", "Use ethereum_status_v2 for this invoice.");
+    #ok(operations.purchaseStatusV2(owner, request.requestId));
   };
   public shared ({ caller }) func purchase(request : API.PurchaseExecute) : async API.Result<API.PurchaseResult> {
     let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
@@ -284,6 +353,24 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   public shared query ({ caller }) func ethereum_quote(request : API.PurchaseRequest) : async API.Result<API.CheckoutQuote> {
     let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     ethereum.quote(owner, request);
+  };
+  public shared query ({ caller }) func ethereum_quote_v2(request : API.ChannelPurchaseRequest) : async API.Result<API.ChannelCheckoutQuote> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    ethereum.quoteV2(owner, request);
+  };
+  public shared ({ caller }) func ethereum_prepare_v2(request : EvmAPI.ChannelPrepareRequest) : async API.Result<EvmAPI.ChannelInvoiceResult> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (Billing.accept<system>(EvmBilling.quote(Store.config(db).fees).prepare, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    await* ethereum.prepareV2(owner, request.quote, request.payer);
+  };
+  public shared query ({ caller }) func ethereum_status_v2(request : API.OperationRequest) : async API.Result<?EvmAPI.ChannelInvoiceResult> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    #ok(ethereum.statusV2(owner, request.requestId));
+  };
+  public shared query ({ caller }) func ethereum_history_v2(request : EvmAPI.HistoryRequest) : async API.Result<EvmAPI.ChannelInvoicePage> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    if (request.limit == 0) return failure("invalid_page", "Choose a positive invoice history page size.");
+    #ok(ethereum.historyV2(owner, request.cursor, request.limit));
   };
   public shared ({ caller }) func ethereum_prepare(request : EvmAPI.PrepareRequest) : async API.Result<EvmAPI.InvoiceResult> {
     let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
@@ -394,6 +481,84 @@ persistent actor class Marketplace(initial : Types.Init) = this {
       case (#err(message)) failure("candidate", message);
       case (#ok(value)) { changedApp(value.appId); #ok(value) };
     };
+  };
+  public shared ({ caller }) func candidate_submit_v2(input : API.CandidateRequestV2) : async API.Result<Types.Candidate> {
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    let existing = Store.getCandidateByRequest(db, owner, input.request.requestId);
+    switch (existing) {
+      case (?candidate) if (ReleaseStore.notes(db.channels, candidate.id) != input.releaseNotes) return failure("request_conflict", "This candidate already has different release notes.");
+      case null switch (Publishers.requireProfile(db, owner)) { case (#err(value)) return #err(value); case (_) {} };
+    };
+    switch (publisherCharge<system>(caller, #update, to_candid(input), input.request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    switch (Publishing.submit(db, owner, input.request, Time.now())) {
+      case (#err(message)) failure("candidate", message);
+      case (#ok(value)) {
+        if (existing == null) ReleaseStore.putNotes(db.channels, value.id, input.releaseNotes);
+        changedApp(value.appId);
+        #ok(value);
+      };
+    };
+  };
+  public shared ({ caller }) func trusted_publish_beta_batch(request : API.BetaPublishRequest) : async API.Result<API.BetaPublishReceipt> {
+    if (not Access.isTrustedPublisher(db, caller)) return failure("trusted_publisher_required", "Only the configured first-party publisher can publish this batch.");
+    if (request.operation != "publish" or request.channel != "beta") return failure("request_conflict", "This endpoint publishes beta only.");
+    switch (Map.get(db.channels.betaReceipts, ReleaseStore.requestCompare, (caller, request.requestId))) {
+      case (?receipt) {
+        if (receipt.analysis != request.analysis or receipt.entries.size() != request.candidates.size()) return failure("request_conflict", "This beta request already identifies different evidence.");
+        var index = 0;
+        for (entry in receipt.entries.vals()) {
+          let expected = request.candidates[index];
+          if (entry.candidateId != expected.candidateId or entry.digest != expected.expectedDigest or entry.sourceDigest != expected.expectedSourceDigest) return failure("request_conflict", "This beta request already identifies different package bytes.");
+          index += 1;
+        };
+        return #ok(receipt);
+      };
+      case null {};
+    };
+    for (entry in request.candidates.vals()) {
+      switch (Store.getCandidate(db, entry.candidateId)) {
+        case (?candidate) {
+          if (candidate.published and ReleaseStore.heads(db.channels, candidate.appId).betaHead.candidateId != ?candidate.id) {
+            return failure("candidate_not_beta", "An existing stable or superseded release cannot be relabeled as a new beta publication.");
+          };
+        };
+        case null {};
+      };
+    };
+    switch (BatchPublishing.publish(db, caller, { request with requestId = "beta-v1:" # request.requestId }, Time.now())) {
+      case (#err(value)) #err(value);
+      case (#ok(value)) {
+        let receipt : API.BetaPublishReceipt = { value.batch with requestId = request.requestId; operation = "publish"; channel = "beta" };
+        Map.add(db.channels.betaReceipts, ReleaseStore.requestCompare, (caller, request.requestId), receipt);
+        certificates.removeArtifacts(value.retiredArtifacts);
+        for (appId in value.appIds.vals()) changedApp(appId);
+        #ok(receipt);
+      };
+    };
+  };
+  public shared query ({ caller }) func trusted_publish_beta_status(request : API.OperationRequest) : async API.Result<?API.BetaPublishReceipt> {
+    if (not Access.isTrustedPublisher(db, caller)) return failure("trusted_publisher_required", "Only the configured publisher can read this batch.");
+    #ok(Map.get(db.channels.betaReceipts, ReleaseStore.requestCompare, (caller, request.requestId)));
+  };
+  public shared query ({ caller }) func promotion_prepare(request : API.PromotionPrepare) : async API.Result<API.PromotionPlan> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    BatchPublishing.preparePromotion(db, owner, request);
+  };
+  public shared ({ caller }) func release_promote(request : API.PromotionRequest) : async API.Result<API.PromotionReceipt> {
+    let owner = switch (publisher(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    switch (BatchPublishing.promote(db, owner, request, Time.now())) {
+      case (#err(value)) #err(value);
+      case (#ok(value)) {
+        certificates.removeArtifacts(value.retiredArtifacts);
+        for (appId in value.appIds.vals()) changedApp(appId);
+        #ok(value.receipt);
+      };
+    };
+  };
+  public shared query ({ caller }) func promotion_status(request : API.OperationRequest) : async API.Result<?API.PromotionReceipt> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    #ok(Map.get(db.channels.promotions, ReleaseStore.requestCompare, (owner, request.requestId)));
   };
   public shared ({ caller }) func trusted_publish_batch(request : API.TrustedPublishRequest) : async API.Result<Types.PublishBatch> {
     switch (BatchPublishing.publish(db, caller, request, Time.now())) {
@@ -517,6 +682,20 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
     switch (charge<system>(#update, to_candid(request), 0, request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     repository.prepare(http, owner, request, Time.now());
+  };
+  public shared query ({ caller }) func install_selection_v2(request : API.ChannelInstallQuery) : async API.Result<API.ChannelInstallSelection> {
+    let owner = switch (Access.readOwner(db, caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    repository.selection(owner, request);
+  };
+  public shared ({ caller }) func install_prepare_v2(input : API.ChannelInstallRequest) : async API.Result<API.InstallResult> {
+    let owner = switch (writer(caller)) { case (#err(value)) return #err(value); case (#ok(value)) value };
+    switch (charge<system>(#update, to_candid(input), 0, input.request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
+    repository.prepareV2(http, owner, input, Time.now());
+  };
+  public query func repo_channel_metadata(request : { path : Text; index : Nat }) : async Repository.CertifiedRead {
+    if (request.path != "/repo/v1/channels.json" and not Text.startsWith(request.path, #text "/repo/v1/channels/")) Runtime.trap("This endpoint reads fixed channel metadata paths only");
+    if (not Http.validPath(request.path)) Runtime.trap("Invalid channel metadata path");
+    repository.read(request.path, request.index);
   };
   public shared ({ caller }) func rates_refresh(_request : API.FeeVersion) : async API.Result<[Rates.RefreshResult]> {
     if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can request an extra oracle refresh.");

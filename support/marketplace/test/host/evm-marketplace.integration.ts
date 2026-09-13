@@ -95,6 +95,8 @@ export const cases: IntegrationCase[] = [{
         }
         const candidate = await charged(publisher, "candidate_submit", { requestId: `${appId}-candidate`, appId, version: 100n, artifactId: artifacts[0], sourceArtifactId: [artifacts[1]], dependencies: [], feeVersion: 1n });
         success(await auditor.audit_stamp({ requestId: `${appId}-audit`, candidateId: candidate.id, expectedDigest: candidate.digest, expectedSourceDigest: candidate.sourceDigest, decision: { approved: null }, analysis: "Locally inspected fixture artifact", reason: [] }));
+        const promotion = success(await relayCall(publisher, market, "promotion_prepare", [{ appIds: [appId] }]));
+        await charged(publisher, "release_promote", { requestId: `${appId}-stable`, entries: promotion.entries, feeVersion: 1n });
         return { appId, candidate, bytes };
       }
       const first = await publish("ethereum_paid", 61);

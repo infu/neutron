@@ -4156,6 +4156,71 @@ test("deploy rejects a backend-call reservation for its target before I/O", asyn
   expect(calls).toEqual([]);
 });
 
+for (const transport of ["direct", "chunked"] as const) {
+  for (const revision of [undefined, "0", "123456789012345678901234567890"]) {
+    test(`deploy carries preference revision ${revision ?? "absent"} through admission and ${transport} dispatch`, async () => {
+      const prepared = preparePackageInstall(helloPackageFiles());
+      const calls: string[] = [];
+      const compiled = {
+        ...compiledFixture(prepared),
+        ...(transport === "chunked" ? { wasm: pseudoRandomBytes(2 * 1024 * 1024) } : {}),
+      };
+      const actor = journalActor({ calls, deploymentId: compiled.deploymentId, compiled });
+      const revisions: ([] | [bigint] | undefined)[] = [];
+      const begin = actor.kernel_install_begin_checked.bind(actor);
+      actor.kernel_install_begin_checked = async (request) => {
+        revisions.push(request.expected_release_preferences_revision);
+        return begin(request);
+      };
+      const dispatch = transport === "direct"
+        ? actor.kernel_install_code.bind(actor)
+        : actor.kernel_install_code_chunked.bind(actor);
+      if (transport === "direct") {
+        actor.kernel_install_code = async (request) => {
+          revisions.push(request.expected_release_preferences_revision);
+          return (dispatch as KernelPackageInstaller["kernel_install_code"])(request);
+        };
+      } else {
+        actor.kernel_install_code_chunked = async (request) => {
+          revisions.push(request.expected_release_preferences_revision);
+          return (dispatch as KernelPackageInstaller["kernel_install_code_chunked"])(request);
+        };
+      }
+      await deployPreparedPackages({
+        actor,
+        packages: [prepared],
+        compiled,
+        existingApps: {},
+        existingBrowserSurfaceOriginAppIds: [],
+        expectedDeploymentId: "old-deployment",
+        ...(revision !== undefined ? { expectedReleasePreferencesRevision: revision } : {}),
+      });
+      const expected: [] | [bigint] = revision === undefined ? [] : [BigInt(revision)];
+      expect(revisions).toEqual([expected, expected]);
+    });
+  }
+}
+
+test.each(["", "01", "-1", "+1", "1.0", "1e3", " 1", "1\n", 1, null])(
+  "deploy rejects malformed preference revision %p before I/O",
+  async (revision) => {
+    const prepared = preparePackageInstall(helloPackageFiles());
+    const calls: string[] = [];
+    const compiled = compiledFixture(prepared);
+    const actor = journalActor({ calls, deploymentId: compiled.deploymentId, compiled });
+    await expect(deployPreparedPackages({
+      actor,
+      packages: [prepared],
+      compiled,
+      existingApps: {},
+      existingBrowserSurfaceOriginAppIds: [],
+      expectedDeploymentId: "old-deployment",
+      expectedReleasePreferencesRevision: revision as string,
+    })).rejects.toThrow("Expected release preferences revision must be canonical Nat text");
+    expect(calls).toEqual([]);
+  },
+);
+
 test("deploy uses journal-bound management chunks above the ingress limit", async () => {
   const prepared = preparePackageInstall(helloPackageFiles());
   const calls: string[] = [];
@@ -7015,7 +7080,9 @@ function journalActor({
     },
     async kernel_install_begin_checked(input) {
       calls.push("begin");
-      const fingerprint = JSON.stringify(input);
+      const fingerprint = JSON.stringify(input, (_key, value) =>
+        typeof value === "bigint" ? value.toString() : value,
+      );
       if (journal !== null) {
         if (fingerprint === checkedBeginFingerprint) return;
         throw new Error("A different install journal is already pending");

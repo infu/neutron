@@ -37,7 +37,8 @@
     "license:check": "bun scripts/check_license_boundaries.ts",
     "typecheck": "tsc -b --pretty false",
     "test:marketplace": "npm --workspace neutron-marketplace run typecheck && npm --workspace neutron-marketplace test && npm --workspace neutron-marketplace run test:protocol && npm --workspace neutron-marketplace run test:browser && npm --workspace neutron-marketplace-protocol test",
-    "test:feedback": "npm --workspace neutron-feedback run typecheck && npm --workspace neutron-feedback test && npm --workspace neutron-feedback run test:browser && npm --workspace neutron-feedback-protocol test && npm --workspace neutron-feedback run test:protocol"
+    "test:feedback": "npm --workspace neutron-feedback run typecheck && npm --workspace neutron-feedback test && npm --workspace neutron-feedback run test:browser && npm --workspace neutron-feedback-protocol test && npm --workspace neutron-feedback run test:protocol",
+    "updates:promote": "npm --workspace neutron-marketplace-protocol run production:promote --"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

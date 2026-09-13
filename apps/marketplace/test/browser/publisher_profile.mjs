@@ -35,7 +35,7 @@ const client={
  publisherProfile:async id=>{state.calls.push(['publisherProfile',id]);return {...profile}},
  publisherCatalog:async(id,cursor)=>{state.calls.push(['publisherCatalog',id,cursor??null]);return cursor?{items:[entries[2]],nextCursor:null}:{items:entries.slice(0,2),nextCursor:'public-page-2'}},
  ownPublisherProfile:async()=>{state.calls.push(['ownPublisherProfile']);return state.profile},
- publisherApps:async()=>{state.calls.push(['publisherApps']);return {items:[],nextCursor:null}},
+ publisherApps:async()=>{state.calls.push(['publisherApps']);return {items:[],nextCursor:null}},pendingPromotions:async()=>[],
  quotePublisherProfile:async input=>{state.quotes.push({...input});if(state.failQuote){state.failQuote=false;throw Error('Profile quote temporarily unavailable.')}state.latestInput=input;state.latestQuote={input,operation:state.profile?'update':'register',cycles:{...cycles}};return state.latestQuote},
  savePublisherProfile:async(input,quote)=>{state.writes.push({input:{...input},sameInput:input===state.latestInput,sameQuote:quote===state.latestQuote,operation:quote.operation,quotedInput:quote.input});if(state.failSave){state.failSave=false;throw Error('Profile update temporarily unavailable.')}if(state.holdSave)await new Promise(resolve=>state.releaseSave=resolve);state.profile={...profile,...input};return {...state.profile}},
  library:async()=>({items:[],nextCursor:null}),earnings:()=>unexpected('earnings'),quotePublication:()=>unexpected('quotePublication'),publish:()=>unexpected('publish'),
@@ -43,7 +43,7 @@ const client={
 };
 createRoot(document.getElementById('root')).render(<App client={client}/>);
 `;
-const transport = `export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler});export const removeExposedTool=name=>window.marketplaceTools.delete(name);export const copyToClipboard=async text=>{window.profileFixture.copies.push(text)};export const connectEthereumProvider=()=>{throw Error('Unexpected browser wallet connection')};`;
+const transport = `export const onAppStateChange=(topic,listener)=>{const listeners=window.marketplaceStateListeners??=new Map();listeners.set(topic,listener);return()=>listeners.delete(topic)}; export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler});export const removeExposedTool=name=>window.marketplaceTools.delete(name);export const copyToClipboard=async text=>{window.profileFixture.copies.push(text)};export const connectEthereumProvider=()=>{throw Error('Unexpected browser wallet connection')};`;
 await build({ stdin: { contents: fixture, loader: "tsx", resolveDir: root }, bundle: true, format: "esm", jsx: "automatic", outfile: join(out, "main.js"), logLevel: "warning", plugins: [
   { name: "local-only-profile-transport", setup(build) {
     build.onResolve({ filter: /^neutron-tools\/app$/ }, () => ({ path: "transport", namespace: "fixture" }));

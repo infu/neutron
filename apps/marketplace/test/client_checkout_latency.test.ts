@@ -49,6 +49,9 @@ if (process.env.NEUTRON_MARKETPLACE_CHECKOUT_LATENCY_CHILD !== "1") {
       commitment: new Uint8Array(32).fill(7), quotedAtNs: 1n, cycles: fee,
     };
   }
+  const candidate = () => ({ id: 1n, appId: "editor", version: 117n, publisher: PROTOCOL, digest: new Uint8Array(32).fill(5), sourceDigest: [], state: { approved: null }, createdAtNs: 1n });
+  const channelApp = (app: WireApp) => ({ app, stableHead: { revision: 1n, candidate: [candidate()], releaseNotes: "" }, betaHead: { revision: 0n, candidate: [], releaseNotes: "" }, selected: [candidate()], selectedChannel: [{ stable: null }] });
+  const selection = () => [{ appId: "editor", candidateId: 1n, version: 117n, digest: new Uint8Array(32).fill(5), sourceDigest: [], channel: { stable: null }, revision: 1n }];
   function deferred<T>() {
     let resolve!: (value: T) => void;
     const promise = new Promise<T>(done => { resolve = done; });
@@ -75,9 +78,12 @@ if (process.env.NEUTRON_MARKETPLACE_CHECKOUT_LATENCY_CHILD !== "1") {
     query: async (name: string, args: unknown[] = []) => {
       calls.push({ name, args });
       if (name === "marketplace_info") return info;
-      if (name === "catalog_query") return { ok: { apps, nextCursor: [], asOfNs: 1n, refreshing: false } };
+      if (name === "catalog_query_v2") return { ok: { apps: apps.map(channelApp), nextCursor: [], asOfNs: 1n, refreshing: false } };
       if (name === "app_detail") return detail();
-      if (name === "purchase_quote" || name === "ethereum_quote") return pricing(args[0] as Checkout["request"]);
+      if (name === "app_detail_v2") { const value = await detail() as any; return "err" in value ? value : { ok: { release: channelApp(value.ok.app), audit: [], rating: [] } }; }
+      if (name === "rating_summary_v2") return { ok: { one: 0n, two: 0n, three: 0n, four: 1n, five: 1n, count: 2n, total: 9n, complete: true } };
+      if (name === "version_comments_v2") return { ok: { comments: [], nextCursor: [], ownComment: [] } };
+      if (name === "purchase_quote_v2" || name === "ethereum_quote_v2") { const request = args[0] as { request: Checkout["request"]; mode: unknown }; const value = await pricing(request.request) as any; return "err" in value ? value : { ok: { quote: value.ok, mode: request.mode, selection: selection() } }; }
       if (name === "ethereum_fees") return { prepare: fee, verify: fee, settle: fee, cancel: fee };
       throw new Error(`Unexpected query ${name}`);
     },
@@ -94,6 +100,8 @@ if (process.env.NEUTRON_MARKETPLACE_CHECKOUT_LATENCY_CHILD !== "1") {
   const { clearClient, protocolClient } = await import("../src/client.ts");
   const { ethereumQuote } = await import("../src/ethereum_client.ts");
   const context = () => ({ signal: new AbortController().signal, kernel: {
+    listTools: async () => [{ name: "updates.preferences" }],
+    callTool: async () => ({ betaEnabled: false, revision: "0" }),
     querySelf: async (name: string) => {
       if (name === "marketplace_state") return { seed: [], canister: [PROTOCOL.toText()], host: "https://icp-api.io", owner: OWNER.toText(), revision: 1 };
       if (name === "marketplace_discount_code") { discountReads++; return savedDiscount === null ? [] : [savedDiscount]; }
@@ -126,14 +134,14 @@ if (process.env.NEUTRON_MARKETPLACE_CHECKOUT_LATENCY_CHILD !== "1") {
     const pending = client.quotePurchase({ appIds: ["editor"], token: "ckUSDC" });
     await nextTurn();
     // Neither independent read has replied yet: both must already be dispatched.
-    expect(calls.map(call => call.name)).toEqual(["purchase_quote"]);
+    expect(calls.map(call => call.name)).toEqual(["purchase_quote_v2"]);
     expect(walletReads).toEqual([{ ledger: LEDGER.toText(), owner: OWNER.toText() }]);
-    expect((calls[0]!.args[0] as Checkout["request"]).referralCode).toEqual(["WELCOME"]);
+    expect((calls[0]!.args[0] as { request: Checkout["request"] }).request.referralCode).toEqual(["WELCOME"]);
     expect(discountReads).toBe(1);
     quoteGate.resolve({ ok: currentQuote });
     walletGate.resolve({ ...walletInfo, balanceAtoms: "9019999" });
     const view = await pending;
-    expect(calls.map(call => call.name)).toEqual(["purchase_quote"]);
+    expect(calls.map(call => call.name)).toEqual(["purchase_quote_v2"]);
     expect(view.items[0]).toMatchObject({ title: "Editor", publisherId: "aae", publisherName: "aae", priceUsdMicros: "10000000" });
     expect(view.payment.atoms).toBe("9000000");
     expect(view.totalDebit.atoms).toBe("9020000");
@@ -180,7 +188,7 @@ if (process.env.NEUTRON_MARKETPLACE_CHECKOUT_LATENCY_CHILD !== "1") {
     const client = await protocolClient(context());
     calls.length = 0;
     const view = await client.quotePurchase({ appIds: ["editor"], token: "ckUSDC" });
-    expect(calls.map(call => call.name)).toEqual(["purchase_quote", "app_detail"]);
+    expect(calls.map(call => call.name)).toEqual(["purchase_quote_v2", "app_detail_v2"]);
     expect(discountReads).toBe(2);
     expect(view.affiliateCode).toBe("SECOND");
     expect(walletReads).toHaveLength(1);
@@ -197,7 +205,7 @@ if (process.env.NEUTRON_MARKETPLACE_CHECKOUT_LATENCY_CHILD !== "1") {
       appIds: ["editor"], ethereum: { wallet: "browser", payerAddress: "0xe70ab51ef2d86e70d834b4ac809d75e362ca23f2" },
     });
     await expect(result).rejects.toThrow(`Canonical rejection: ${code}`);
-    expect(calls.map(call => call.name)).toEqual(rail === "ic" ? ["purchase_quote"] : ["ethereum_quote", "ethereum_fees"]);
+    expect(calls.map(call => call.name)).toEqual(rail === "ic" ? ["purchase_quote_v2"] : ["ethereum_quote_v2", "ethereum_fees"]);
     expect(discountReads).toBe(1);
   });
 
@@ -224,7 +232,7 @@ if (process.env.NEUTRON_MARKETPLACE_CHECKOUT_LATENCY_CHILD !== "1") {
     const client = await warmed();
     balance = async () => { throw new Error("Current Wallet balance unavailable"); };
     await expect(client.quotePurchase({ appIds: ["editor"], token: "ckUSDC" })).rejects.toThrow("Current Wallet balance unavailable");
-    expect(calls.map(call => call.name)).toEqual(["purchase_quote"]);
+    expect(calls.map(call => call.name)).toEqual(["purchase_quote_v2"]);
     expect(walletReads).toHaveLength(1);
   });
 

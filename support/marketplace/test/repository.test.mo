@@ -3,6 +3,7 @@ import API "../mo/API";
 import Audits "../mo/Audits";
 import Encoding "../mo/Encoding";
 import Http "../mo/Http";
+import ReleaseStore "../mo/ReleaseStore";
 import Repository "../mo/Repository";
 import Store "../mo/Store";
 import PublisherStore "../mo/PublisherStore";
@@ -64,6 +65,9 @@ persistent actor RepositoryTests {
     let linked = F.stored(db.candidates.update({ candidate with dependencies }));
     ignore F.approve(db, linked, requestId # "-audit");
     let ?approved = Store.getCandidate(db, linked.id) else Runtime.trap("Approved fixture candidate missing");
+    let heads = ReleaseStore.heads(db.channels, appId);
+    assert heads.stableHead.candidateId == ?approved.id;
+    assert heads.betaHead.candidateId == ?approved.id;
     approved;
   };
 

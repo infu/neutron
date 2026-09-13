@@ -3631,6 +3631,10 @@ button:focus-visible,
     }
 }
 
+.settings-ui-mode + .settings-ui-mode {
+    margin-top: 18px;
+}
+
 .settings-ui-mode-switch,
 .settings-theme-nav-switch {
     appearance: none;

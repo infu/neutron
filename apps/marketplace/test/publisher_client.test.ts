@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Principal } from "@dfinity/principal";
 import { IDL } from "@dfinity/candid";
 import type { MsgBusToolContext } from "neutron-tools/app";
-import { CONTRACT, type Info, type WireApp, type WirePublisherProfile } from "../src/protocol.ts";
+import { CONTRACT, type Info, type WireApp, type WirePublisherProfile, type WireChannelApp, type WireCandidate } from "../src/protocol.ts";
 import type { PublisherProfileInput, PublisherProfileQuote } from "../src/view-types.ts";
 
 // Isolate the transport mock from other client suites in the same Bun process.
@@ -36,6 +36,12 @@ if (process.env.NEUTRON_MARKETPLACE_PUBLISHER_CLIENT_CHILD !== "1") {
     ratingCount: 2n, ratingTotal: 9n, acquisitionCounts: [{ free: 3n, paid: 0n }], owned: false, visible: true,
   });
   const input: PublisherProfileInput = { id: "aae", name: "AAE", description: "Independent Neutron apps" };
+  const preferences = { betaEnabled: false, revision: "0" };
+  const pageCursor = (page: string) => JSON.stringify({ page, releasePreferences: preferences });
+  function channelApp(app: WireApp): WireChannelApp {
+    const candidate: WireCandidate = { id: 1n, appId: app.appId, version: app.version[0]!, publisher: owner, digest: new Uint8Array(32).fill(1), sourceDigest: [], state: { approved: null }, createdAtNs: 1n };
+    return { app, stableHead: { revision: 1n, candidate: [candidate], releaseNotes: "" }, betaHead: { revision: 0n, candidate: [], releaseNotes: "" }, selected: [candidate], selectedChannel: [{ stable: null }] };
+  }
   const calls: Array<{ kind: "query" | "update" | "reserve"; method: string; args: any[]; cycles?: bigint }> = [];
   const kernelReads: string[] = [];
   let ownProfile: WirePublisherProfile | null = null;
@@ -52,9 +58,12 @@ if (process.env.NEUTRON_MARKETPLACE_PUBLISHER_CLIENT_CHILD !== "1") {
       if (method === "marketplace_info") return info;
       if (method === "publisher_profile_for") return { ok: ownProfile ? [ownProfile] : [] };
       if (method === "publisher_profile") return { ok: publicProfile };
-      if (method === "publisher_profile_apps") return { ok: { apps: catalogApps, nextCursor: catalogCursor } };
-      if (method === "catalog_query") return { ok: { apps: catalogApps, nextCursor: [], asOfNs: 0n, refreshing: false } };
+      if (method === "publisher_profile_apps_v2") return { ok: { apps: catalogApps.map(channelApp), nextCursor: catalogCursor } };
+      if (method === "catalog_query_v2") return { ok: { apps: catalogApps.map(channelApp), nextCursor: [], asOfNs: 0n, refreshing: false } };
       if (method === "app_detail") return { ok: { app: catalogApps.find(value => value.appId === args[0])!, candidate: [], audit: [], rating: [] } };
+      if (method === "app_detail_v2") return { ok: { release: channelApp(catalogApps.find(value => value.appId === args[0].appId)!), audit: [], rating: [] } };
+      if (method === "rating_summary_v2") return { ok: { one: 0n, two: 0n, three: 0n, four: 1n, five: 1n, count: 2n, total: 9n, complete: true } };
+      if (method === "version_comments_v2") return { ok: { comments: [], nextCursor: [], ownComment: [] } };
       throw new Error(`Unexpected direct query ${method}`);
     },
     reserve: async () => { calls.push({ kind: "reserve", method: "reserve", args: [] }); },
@@ -84,6 +93,8 @@ if (process.env.NEUTRON_MARKETPLACE_PUBLISHER_CLIENT_CHILD !== "1") {
     },
     updateSelf: async () => { throw new Error("Profile reads/writes must not store another Neutron backend profile"); },
     listApps: async () => { kernelReads.push("listApps"); return { apps: [{ id: "wallet" }] }; },
+    listTools: async (target: string) => { expect(target).toBe("kernel"); kernelReads.push("listTools"); return [{ name: "updates.preferences" }]; },
+    callTool: async (request: unknown) => { expect(request).toEqual({ target: "kernel", name: "updates.preferences", arguments: {} }); kernelReads.push("updates.preferences"); return preferences; },
   } } as unknown as MsgBusToolContext;
 
   beforeEach(() => {
@@ -123,16 +134,16 @@ if (process.env.NEUTRON_MARKETPLACE_PUBLISHER_CLIENT_CHILD !== "1") {
     const client = await protocolClient(context);
     expect(await client.ownPublisherProfile()).toBeNull();
     expect((await client.publisherProfile("aae")).totalUsers).toBe("9007199254740993");
-    const page = await client.publisherCatalog("aae", "9007199254740992");
-    expect(page.nextCursor).toBe("9007199254740993");
+    const page = await client.publisherCatalog("aae", pageCursor("9007199254740992"));
+    expect(page.nextCursor).toBe(pageCursor("9007199254740993"));
     expect(page.items.map(value => ({ id: value.id, publisherId: value.publisherId, publisherName: value.publisherName, installed: value.installed }))).toEqual([
       { id: "wallet", publisherId: "aae", publisherName: "AAE", installed: true },
       { id: "uniswap", publisherId: "aae", publisherName: "AAE", installed: false },
     ]);
-    expect(calls.map(call => call.method)).toEqual(["marketplace_info", "publisher_profile_for", "publisher_profile", "publisher_profile_apps"]);
-    expect(calls.at(-1)?.args).toEqual([{ publisherId: "aae", cursor: [9_007_199_254_740_992n], limit: 24n }]);
+    expect(calls.map(call => call.method)).toEqual(["marketplace_info", "publisher_profile_for", "publisher_profile", "publisher_profile_apps_v2"]);
+    expect(calls.at(-1)?.args).toEqual([{ request: { publisherId: "aae", cursor: [9_007_199_254_740_992n], limit: 24n }, mode: { stable: null } }]);
     expect(calls[1]?.args[0].toText()).toBe(owner.toText());
-    expect(kernelReads).toEqual(["marketplace_state", "listApps"]);
+    expect(kernelReads).toEqual(["marketplace_state", "listTools", "updates.preferences", "listApps", "listTools", "updates.preferences"]);
     expect(calls.every(call => call.kind === "query")).toBe(true);
   });
 
@@ -145,7 +156,8 @@ if (process.env.NEUTRON_MARKETPLACE_PUBLISHER_CLIENT_CHILD !== "1") {
     expect(page.items[0]).toMatchObject({ publisherId: "aae", publisherName: "AAE" });
     expect(page.items[1]).toMatchObject({ publisherId: null, publisherName: null, publisher: owner.toText() });
     expect(await client.detail("wallet")).toMatchObject({ publisherId: "aae", publisherName: "AAE" });
-    expect(calls.map(call => call.method)).toEqual(["marketplace_info", "catalog_query", "app_detail"]);
+    expect(calls.map(call => call.method)).toEqual(["marketplace_info", "catalog_query_v2", "app_detail_v2", "rating_summary_v2", "version_comments_v2"]);
+    expect(calls.find(call => call.method === "app_detail_v2")?.args).toEqual([{ appId: "wallet", mode: { stable: null } }]);
     expect(calls.every(call => call.kind === "query")).toBe(true);
   });
 
@@ -204,7 +216,7 @@ if (process.env.NEUTRON_MARKETPLACE_PUBLISHER_CLIENT_CHILD !== "1") {
     const quoted = await client.quotePublisherProfile(input);
     await expect(client.savePublisherProfile({ ...input, description: "Not reviewed" }, quoted)).rejects.toThrow("details changed");
     for (const field of ["total", "processing", "storage", "schedule"] as const) {
-      const altered: PublisherProfileQuote = { ...quoted, cycles: { ...quoted.cycles, [field]: String(BigInt(quoted.cycles[field]) + 1n) } };
+      const altered: PublisherProfileQuote = { ...quoted, cycles: { ...quoted.cycles, [field]: String(BigInt(quoted.cycles[field]!) + 1n) } };
       await expect(client.savePublisherProfile(input, altered)).rejects.toThrow("cost changed");
     }
     info.fees.updateByte = 20n;
@@ -225,7 +237,7 @@ if (process.env.NEUTRON_MARKETPLACE_PUBLISHER_CLIENT_CHILD !== "1") {
   });
 
   test("profile Candid contracts preserve exact principal, nat counts, optional owner result, and write shapes", () => {
-    const roundtrip = (method: string, kind: "args" | "returns", values: unknown[]) => {
+    const roundtrip = (method: string, kind: "args" | "returns", values: unknown[]): unknown[] => {
       const types = CONTRACT[method]![kind]; return IDL.decode(types, IDL.encode(types, values));
     };
     for (const method of ["publisher_profile", "publisher_profile_for", "publisher_profile_apps"]) expect(CONTRACT[method]!.update).toBeUndefined();
@@ -247,7 +259,7 @@ if (process.env.NEUTRON_MARKETPLACE_PUBLISHER_CLIENT_CHILD !== "1") {
     const oldPage = IDL.Variant({ ok: IDL.Record({ apps: IDL.Vec(legacyApp), nextCursor: IDL.Opt(IDL.Nat64) }), err: IDL.Record({ code: IDL.Text, message: IDL.Text }) });
     const old = app("wallet"); delete old.publisherProfile;
     const bytes = IDL.encode([oldPage], [{ ok: { apps: [old], nextCursor: [] } }]);
-    const decoded = IDL.decode(CONTRACT.publisher_apps!.returns, bytes)[0] as { ok: { apps: WireApp[] } };
+    const decoded = IDL.decode(CONTRACT.publisher_apps!.returns, bytes)[0] as unknown as { ok: { apps: Array<Omit<WireApp, "screenshotArtifacts"> & { screenshotArtifacts: BigUint64Array }> } };
     expect(decoded.ok.apps[0]).toEqual({ ...old, publisherProfile: [], screenshotArtifacts: new BigUint64Array() });
   });
 }

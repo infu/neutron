@@ -124,6 +124,14 @@ export const cases: IntegrationCase[] = [{
         if (image) await direct("listing_save", { ...listing(appId, price), iconArtifact: [image.id], screenshots: [image.id], expectedRevision: [saved.revision] });
         const candidate = await direct("candidate_submit", { requestId: `${appId}-candidate`, appId, version: 100n, artifactId: pkg.id, sourceArtifactId: [source.id], dependencies: [], feeVersion: 1n });
         success(await auditor.audit_stamp({ requestId: `${appId}-audit`, candidateId: candidate.id, expectedDigest: candidate.digest, expectedSourceDigest: candidate.sourceDigest, decision: { approved: null }, analysis: "Inspected fixture byte identities", reason: [] }));
+        // Current-code fixtures publish approvals to beta. The CORS scenario
+        // exercises legacy stable acquisition and setup, so its owner promotes
+        // those exact releases before recording the state to preserve. The
+        // deployed predecessor already publishes stable on audit approval.
+        if (!previousProtocolPath) {
+          const plan = await direct("promotion_prepare", { appIds: [appId] });
+          await direct("release_promote", { requestId: `${appId}-stable`, ...plan, feeVersion: 1n });
+        }
         return { appId, candidate, pkg, source, image };
       }
 

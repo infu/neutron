@@ -42,8 +42,9 @@ Ordinary update methods authenticate the actual Neutron caller. Assigned CLI
 auditors and administrators authenticate their own role principals at dedicated
 exempt endpoints. Those endpoints can be called directly without attached
 cycles; an existing canister admin remains valid. The admin exemption covers
-exactly `admin_auditor_set`, `admin_reserve_app`, `admin_set_burn_account`, and
-`rates_refresh`. Their retained `feeVersion` field is compatibility data, not a
+`admin_auditor_set`, `admin_reserve_app`, `admin_set_burn_account`, `rates_refresh`,
+and the explicit rollout action `admin_feedback_cutover`. Their retained
+`feeVersion` field is compatibility data, not a
 funding requirement. No admin or auditor UI is part of the marketplace app.
 A browser client cannot register itself for another account by knowing that
 account's public ID.
@@ -130,8 +131,10 @@ purchases, withdrawals and daily forwarding. `main.mo` should remain wiring.
 
 Internal persistent storage retains domain records, immutable content and
 unfinished operation journals. Its implementation is outside this specification.
-Only current approved and pending-review package/source content is retained;
-superseded bytes are removed without deleting purchases or audit history.
+Both current channel heads and pending-review candidates retain package/source
+content; unreferenced superseded bytes retire without deleting purchases or
+audit history. [Release Channels](release-channels.md) defines stable/beta
+selection, atomic promotion and version-comment retention.
 
 Purchase success orchestrates accounting, entitlement and ranking changes in one
 await-free segment. Lower-level accounting and ranking modules never initiate

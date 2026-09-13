@@ -94,6 +94,7 @@ test("release checks use one fixed credentialless certified asset path", async (
   ]);
   expect(new Headers(requestedInit?.headers).has("authorization")).toBe(false);
   expect(fetched).toEqual({
+    channel: "stable",
     source: SOURCE,
     record,
     releaseDigest: hashContent(serializeRepositoryReleaseRecord(record)),
@@ -177,6 +178,14 @@ test("release checks reject encoded aliases and malformed encoded response paths
       }),
     ).rejects.toMatchObject({ code: "wrong_origin" });
   }
+});
+
+test("a missing release is accepted only from its exact certified response path", async () => {
+  const response = new Response("", { status: 404, headers: certifiedHeaders() });
+  Object.defineProperty(response, "url", { value: "https://example.com/repo/v1/releases/mail.json" });
+  await expect(fetchUpdateRelease(SOURCE, "mail", {
+    fetch: (async () => response) as unknown as typeof fetch,
+  })).rejects.toMatchObject({ code: "wrong_origin" });
 });
 
 test("release checks reject a valid record for a different app ID", async () => {
