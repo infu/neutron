@@ -78,6 +78,7 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
     },
     query: async (name: string, args: unknown[] = []) => {
       events.push(`query:${name}`); if (queryError) throw queryError;
+      if (name === "operation_history") return { purchases: observed?.order ? [observed] : [], withdrawals: observed?.withdrawal ? [observed] : [], nextPurchaseCursor: { done: null }, nextWithdrawalCursor: { done: null } };
       if (name === "purchase_quote_v2") { quoteRequests.push(args); return { ...quoteChannel!, quote: freshPurchase ?? quoteChannel!.quote }; }
       if (name === "purchase_quote") {
         const saved = stored.get(`operation:${OPERATION}`);
@@ -97,7 +98,9 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
     },
   };
   mock.module("../src/client.ts", () => ({ ...actualClient, protocolClient: async () => client, randomId: () => (++idCounter).toString(16).padStart(32, "0") }));
-  const { runPurchase, runWithdrawal, resumeOperation, operationStatus } = await import("../src/actions.ts");
+  const { runPurchase, runWithdrawal, resumeOperation, operationStatus, recentOperations } = await import("../src/actions.ts");
+  const { dismissOperation } = await import("../src/dismiss.ts");
+  const { deleteDraftFixture } = await import("./intent-fixture.ts");
   function context(root = false): MsgBusToolContext {
     return {
       agentMode: root, signal: new AbortController().signal,
@@ -106,10 +109,12 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       kernel: {
         listTools: async () => [{ name: "updates.preferences" }],
         querySelf: async (name: string, args: unknown[]) => {
+          if (name === "marketplace_drafts") return { items: [...stored].map(([id, value]) => ({ id, value })), nextCursor: [] };
           if (name !== "marketplace_draft") throw new Error(`Unexpected self query ${name}`);
           const saved = stored.get(args[0] as string); return saved === undefined ? [] : [saved];
         },
         updateSelf: async (name: string, args: Array<{ id: string; value: Uint8Array; expected?: Uint8Array; revision?: string }>) => {
+          if (name === "marketplace_delete_operation") return deleteDraftFixture(stored, args[0]);
           const { id, value } = args[0]!;
           if (name === "marketplace_revise_draft") {
             if (JSON.stringify([...stored.get(id) ?? []]) !== JSON.stringify([...args[0]!.expected ?? []])) return { err: "The saved operation changed." };
@@ -292,7 +297,7 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       expect((await resumeOperation(context(), OPERATION)).state).toBe("complete");
       expect(walletCalls).toHaveLength(2);
       expect(walletCalls[1]!.arguments).toEqual(first);
-      expect(idCounter).toBe(1);
+      expect(idCounter).toBe(2); // Original funding ID plus a local dispatch claim.
     });
 
     test("lost purchase response reconciles its dispatched attempt without another Wallet call", async () => {
@@ -365,6 +370,84 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
   });
 
   describe("purchase activity without a payment", () => {
+    for (const kind of ["purchase", "withdrawal"] as const) test(`cancellation during the ${kind} claim does not leave a phantom payment`, async () => {
+      const ctx = context(), controller = new AbortController(); ctx.signal = controller.signal;
+      const original = ctx.kernel.updateSelf.bind(ctx.kernel);
+      ctx.kernel.updateSelf = (async (...args: Parameters<typeof original>) => {
+        const result = await original(...args);
+        if (args[0] === "marketplace_revise_draft") {
+          const saved = JSON.parse(new TextDecoder().decode((args[1]![0] as { value: Uint8Array }).value));
+          if (saved.progress?.pendingDispatch || saved.pendingDispatch) controller.abort(new Error("Checkout closed before dispatch"));
+        }
+        return result;
+      }) as typeof ctx.kernel.updateSelf;
+      await expect(kind === "purchase" ? runPurchase(ctx, view(checkout())) : runWithdrawal(ctx, withdrawalView(withdrawal()))).rejects.toThrow("before dispatch");
+      await dismissOperation(context(), kind === "purchase" ? OPERATION : WITHDRAWAL);
+      expect(stored.size).toBe(0);
+      expect(updates).toHaveLength(0);
+    });
+    test("X deletes a legacy approval intent and revisions; protocol history cannot rebuild its notification", async () => {
+      await runPurchase(context(true), view(checkout()));
+      const previous = storedPurchase() as ReturnType<typeof storedPurchase> & { progress?: unknown };
+      delete previous.progress;
+      stored.set(`operation:${OPERATION}`, new TextEncoder().encode(JSON.stringify(previous)));
+      stored.set(`history:operation:${OPERATION}:legacy`, new TextEncoder().encode(JSON.stringify(previous)));
+      observed = result("funding_required", "purchase", "funding_required");
+      expect(await recentOperations(context())).toHaveLength(1);
+      await dismissOperation(context(), OPERATION);
+      expect([...stored.keys()].some(key => key.includes(OPERATION))).toBe(false);
+      expect(await recentOperations(context())).toEqual([]);
+      await dismissOperation(context(), OPERATION);
+      expect(stored.size).toBe(0);
+      expect(walletCalls).toHaveLength(0);
+      expect(updates).toHaveLength(0);
+    });
+
+    test("X deletes a settled purchase without importing it again from financial history", async () => {
+      await runPurchase(context(), view(checkout())); observed = updateResult;
+      await dismissOperation(context(), OPERATION);
+      expect(stored.size).toBe(0);
+      expect(await recentOperations(context())).toEqual([]);
+      expect(walletCalls).toHaveLength(1);
+      expect(updates).toHaveLength(1);
+    });
+
+    test("a stuck free acquisition has no committed purchase funds and can be deleted", async () => {
+      updateError = new Error("Free acquisition reply lost");
+      await runPurchase(context(), view(checkout(0n)));
+      await dismissOperation(context(), OPERATION);
+      expect(stored.size).toBe(0);
+      expect(walletCalls).toHaveLength(0);
+    });
+
+    test("unresolved dispatch and unavailable status leave every recovery byte intact", async () => {
+      updateError = new Error("Purchase reply lost");
+      await runPurchase(context(), view(checkout()));
+      const before = new Map(stored);
+      await expect(dismissOperation(context(), OPERATION)).rejects.toThrow("unresolved");
+      // An earlier no-effect observation cannot hide the new in-flight claim.
+      observed = { ...result("funding_required", "purchase", "funding_required"), attempt: [{ block: [], state: { no_effect: null }, hadUnknown: false }] };
+      await expect(dismissOperation(context(), OPERATION)).rejects.toThrow("unresolved");
+      queryError = new Error("Status offline");
+      await expect(dismissOperation(context(), OPERATION)).rejects.toThrow("offline");
+      expect(stored).toEqual(before);
+    });
+
+    test("a resume waiting for its quote cannot recreate a checkout dismissed in another tile", async () => {
+      const ctx = context(true);
+      await runPurchase(ctx, view(checkout()));
+      const original = client.query;
+      client.query = async (name, args) => {
+        const response = await original(name, args);
+        if (name === "purchase_quote") await dismissOperation(ctx, OPERATION);
+        return response;
+      };
+      try { await expect(resumeOperation(ctx, OPERATION)).rejects.toThrow("dismissed"); }
+      finally { client.query = original; }
+      expect(stored.size).toBe(0);
+      expect(walletCalls).toHaveLength(0);
+      expect(updates).toHaveLength(0);
+    });
     test("an explicitly rejected allowance stays canceled after status reload without any financial call", async () => {
       fundingReplies = ["rejected"];
       const canceled = await runPurchase(context(), view(checkout()));
@@ -378,7 +461,7 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       expect(updates).toHaveLength(0);
     });
 
-    test("approval completed before an interrupted purchase is dismissible without discarding its saved request", async () => {
+    test("approval completed before an interrupted purchase is dismissible before its saved request is deleted", async () => {
       const ctx = context(), controller = new AbortController();
       ctx.signal = controller.signal;
       const call = ctx.kernel.callTool.bind(ctx.kernel);
@@ -395,6 +478,8 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       expect(stored.has(`operation:${OPERATION}`)).toBe(true);
       expect(updates).toHaveLength(0);
       expect(walletCalls).toHaveLength(1);
+      await dismissOperation(context(), OPERATION);
+      expect([...stored.keys()].some(key => key.includes(OPERATION))).toBe(false);
     });
 
     test("a lost purchase reply remains recovery work even before the protocol status becomes visible", async () => {
@@ -417,7 +502,7 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       expect(updates[1]!.request.quote).toEqual(updates[0]!.request.quote);
     });
 
-    test("legacy checkout can be dismissed as an observation and later payment evidence resurfaces", async () => {
+    test("legacy checkout is deletable only while no payment evidence exists", async () => {
       await runPurchase(context(true), view(checkout()));
       const previous = JSON.parse(new TextDecoder().decode(stored.get(`operation:${OPERATION}`)!));
       delete previous.progress;
@@ -425,7 +510,7 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       const legacy = await operationStatus(context(true), OPERATION);
       expect(legacy.canDismiss).toBe(true);
       expect(legacy.checkoutCanceled).not.toBe(true);
-      expect(legacy.message).toContain("currently recorded");
+      expect(legacy.message).toContain("payment is recorded");
       observed = { ...result("outcome_unknown", "purchase", "review_required"), attempt: [{ block: [], state: { outcome_unknown: null }, hadUnknown: true }] };
       const unresolved = await operationStatus(context(true), OPERATION);
       expect(unresolved).toMatchObject({ state: "pending", nextAction: "none" });
@@ -590,10 +675,14 @@ if (process.env.NEUTRON_MARKETPLACE_ACTION_TEST_CHILD !== "1") {
       observed = { ...result(state, "purchase", "funding_required"), attempt: [{ block: [], state: { [state === "failed" ? "no_effect" : "outcome_unknown"]: null }, hadUnknown: true }] };
       updateResult = observed; updateError = null; fundingReplies = ["rejected"];
       await resumeOperation(context(), OPERATION);
-      expect(stored.get(`operation:${OPERATION}`)).toEqual(old);
-      expect(events).not.toContain("revise");
+      const before = JSON.parse(new TextDecoder().decode(old));
+      const after = JSON.parse(new TextDecoder().decode(stored.get(`operation:${OPERATION}`)!));
+      expect(after.quote).toEqual(before.quote);
+      expect(after.funding).toEqual(before.funding);
+      expect(after.scope).toEqual(before.scope);
+      expect((await operationStatus(context(), OPERATION)).canDismiss).not.toBe(true);
       expect(walletCalls.every(call => call.arguments.requestId === walletCalls[0]!.arguments.requestId)).toBe(true);
-      expect(idCounter).toBe(1);
+      expect(idCounter).toBe(state === "outcome_unknown" ? 3 : 2); // Claims do not rotate the funding identity.
     });
 
     test("root missing evidence returns the original instruction, while terminal expired rejection requires a new exact reviewed instruction", async () => {

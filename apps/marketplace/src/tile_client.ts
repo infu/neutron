@@ -127,6 +127,7 @@ export function createMarketplaceClient(): MarketplaceClient {
     quotePurchase: args => invoke(false, "quotePurchase", args), purchase: (quote, connection) => quote.ethereum?.wallet === "browser" ? connection ? browserPurchase(connection, quote) : Promise.reject(new Error("Connect the original browser wallet before paying.")) : invoke(true, "purchase", { quote }),
     operation: operationId => invoke(false, "operation", { operationId }), recentOperations: () => invoke(false, "recentOperations"), resumeOperation: (operationId, connection) => connection ? browserPurchase(connection, undefined, operationId) : invoke(true, "resumeOperation", { operationId }),
     cancelEthereumCheckout: operationId => invoke(true, "ethereumCancel", { operationId }),
+    dismissOperation: operationId => invoke(true, "dismissOperation", { operationId }),
     verifyEthereumTransaction: (operationId, transactionHash) => invoke(true, "ethereumVerifyOriginal", { operationId, transactionHash }),
     quoteInstallation: (appIds, operationId) => invoke(false, "quoteInstallation", { appIds, ...(operationId ? { operationId } : {}) }),
     install, openInstallation, rate: (appId, stars, text) => invoke(true, "rate", { appId, stars, text }),

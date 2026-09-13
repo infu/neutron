@@ -60,7 +60,8 @@ const client={
  operation:async id=>{state.calls.push(['operation',id]);return state.operations.find(item=>item.operationId===id)??{operationId:id,state:'pending',message:'Waiting for the original payment.',nextAction:'resume'}},
  resumeOperation:async id=>{state.calls.push(['resumeOperation',id]);const result={operationId:id,state:'complete',message:'Your app is ready.',nextAction:'none'};state.operations=[result,...state.operations.filter(item=>item.operationId!==id)];return result;},
  cancelEthereumCheckout:async id=>{state.calls.push(['cancelEthereumCheckout',id]);const canceled={operationId:id,paymentRail:'ethereum',state:'failed',nextAction:'none',checkoutCanceled:true,message:'Checkout canceled.'};state.operations=state.operations.map(item=>item.operationId===id?canceled:item);sessionStorage.setItem('canceledCheckoutFixture',JSON.stringify(state.operations));return canceled;},
- recentOperations:async()=>{state.calls.push(['recentOperations']);return [...state.operations,...state.installations.map(installResult),...(state.restored&&!state.operations.some(item=>item.operationId==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[])];},
+ recentOperations:async()=>{state.calls.push(['recentOperations']);if(scenario.get('notifications')==='persistent'){const rows=await (await fetch('/notification-store')).json();if(state.deferActivityRead){state.deferActivityRead=false;await new Promise(resolve=>state.activityReadRelease=resolve);}return rows;}return [...state.operations,...state.installations.map(installResult),...(state.restored&&!state.operations.some(item=>item.operationId==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')?[{operationId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',state:'pending',message:'Saved withdrawal awaits confirmation.',nextAction:'resume'}]:[])];},
+ dismissOperation:async id=>{state.calls.push(['dismissOperation',id]);if(scenario.get('notifications')==='persistent'){const response=await fetch('/notification-store?id='+id,{method:'DELETE'});if(!response.ok)throw Error(await response.text());return;}state.operations=state.operations.filter(item=>item.operationId!==id);sessionStorage.setItem('canceledCheckoutFixture',JSON.stringify(state.operations));},
  quoteInstallation:async(ids,operationId)=>{const saved=state.installations.find(item=>operationId?item.operationId===operationId:JSON.stringify(item.appIds)===JSON.stringify(ids));const quote=saved??{operationId:operationId??(state.installationQuotes.length+1).toString(16).padStart(32,'0'),appIds:[...ids],canisterId:session.canisterId,owner:principal,cycles,fee:{feeVersion:'1',processingCycles:cycles.processing,storageCycles:'0',totalCycles:cycles.total,processingBytes:'1024',newStorageBytes:'0'}};state.installationQuotes.push(quote);return quote;},
  install:async(ids,quote)=>{if(!state.installationQuotes.includes(quote)||JSON.stringify(ids)!==JSON.stringify(quote.appIds))throw Error('Install must retain the exact reviewed quote and app selection.');state.calls.push(['install',ids,quote.operationId]);let saved=state.installations.find(item=>item.operationId===quote.operationId);if(!saved){saved={...quote,setupUrl:'https://example.invalid/#manifest='+quote.operationId,cycles:{...cycles,total:'0',processing:'0'},fee:{...quote.fee,totalCycles:'0',processingCycles:'0'}};state.installations.push(saved);}return installResult(saved)},
  rate:async (...args)=>{state.calls.push(['rate',...args])},
@@ -81,7 +82,18 @@ await build({ stdin: { contents: fixture, loader: "tsx", resolveDir: root }, bun
   } }, sassPlugin(),
 ] });
 const html = '<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/fixture.css"><style>html,body,#root{margin:0;height:100%;background:#06080b}</style></head><body><div id="root"></div><script type="module" src="/fixture.js"></script></body></html>';
+const notificationStore = { operations: [], deletions: [], fail: false };
 const server = createServer(async (req, res) => {
+  if (req.url === '/static/icon.webp') { res.setHeader('content-type','image/webp'); res.end(await readFile(join(root,'apps/marketplace/public/static/icon.webp'))); return; }
+  if (req.url.startsWith('/notification-store')) {
+    if (req.method === 'DELETE') {
+      if (notificationStore.fail) { res.writeHead(503); res.end('Could not delete the saved checkout. Try again.'); return; }
+      const id = new URL(req.url, 'http://localhost').searchParams.get('id');
+      notificationStore.operations = notificationStore.operations.filter(item => item.operationId !== id);
+      notificationStore.deletions.push(id);
+    }
+    res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(notificationStore.operations)); return;
+  }
   try { if (req.url === "/fixture.js" || req.url === "/fixture.css") { res.setHeader("content-type", req.url.endsWith("css") ? "text/css" : "text/javascript"); res.end(await readFile(join(output, req.url.slice(1)))); } else { res.setHeader("content-type", "text/html"); res.end(html); } }
   catch { res.writeHead(404); res.end(); }
 });
@@ -521,42 +533,51 @@ try {
   await page.evaluate(() => sessionStorage.removeItem('canceledCheckoutFixture'));
   checks.push('Cancel checkout removes the unpaid card and badge immediately, survives app refresh and browser reload, and later payment evidence restores recovery without another cancellation or payment.');
 
-  await page.goto(url);
-  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
-  await page.evaluate(() => {
-    window.marketplaceFixture.operations = [
-      {operationId:'11111111111111111111111111111111',state:'approval_required',nextAction:'resume',canDismiss:true,message:'An ICP approval is saved. No marketplace payment is recorded.'},
-      {operationId:'22222222222222222222222222222222',state:'failed',nextAction:'none',checkoutCanceled:true,message:'The IC approval was rejected before payment.'},
-    ];
-    sessionStorage.setItem('canceledCheckoutFixture', JSON.stringify(window.marketplaceFixture.operations));
-  });
-  await page.getByRole('button', { name: 'Refresh marketplace', exact: true }).click();
+  notificationStore.operations = [
+    {operationId:'1'.repeat(32),state:'approval_required',nextAction:'resume',canDismiss:true,message:'An ICP approval is saved. No marketplace payment is recorded.'},
+    {operationId:'2'.repeat(32),state:'pending',nextAction:'resume',canDismiss:true,ethereumWallet:'browser',ethereumTransactionHash:'0x'+'11'.repeat(32),message:'USDC approval confirmed. No payment has been made.'},
+    {operationId:'3'.repeat(32),state:'pending',nextAction:'resume',canDismiss:false,message:'The original ICP payment outcome is unknown.'},
+    {operationId:'4'.repeat(32),state:'complete',nextAction:'none',message:'Purchase settled.'},
+  ];
+  await page.goto(`${url}/?notifications=persistent`);
+  await page.getByRole('button', { name: 'Atlas', exact: true }).waitFor();
   await activityTab.click();
-  await page.getByText('An ICP approval is saved. No marketplace payment is recorded.', { exact: true }).waitFor();
-  assert.equal(await page.locator('.mp-activity-card').count(), 1, 'a fully rejected IC approval needs no activity card');
-  await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
-  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
-  assert.equal(await page.locator('.mp-notification-badge').count(), 0);
-  await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
-  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
-  await page.reload();
-  await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
-  await activityTab.click();
-  await page.getByRole('heading', { name: "You're all caught up", exact: true }).waitFor();
-  assert.equal(await page.locator('.mp-notification-badge').count(), 0, 'dismissed approval-only history remains quiet after browser reload');
-  await page.evaluate(() => {
-    window.marketplaceFixture.operations[0] = {...window.marketplaceFixture.operations[0],state:'pending',canDismiss:false,message:'The original ICP payment outcome is unknown.'};
-  });
-  await page.getByRole('button', { name: 'Refresh activity', exact: true }).click();
-  await page.getByText('The original ICP payment outcome is unknown.', { exact: true }).waitFor();
-  assert.equal(await page.locator('.mp-notification-badge').textContent(), '1');
-  assert.equal(await page.getByRole('button', { name: 'Dismiss notification', exact: true }).count(), 0, 'a submitted or uncertain payment retains recovery');
-  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), []);
-  await page.evaluate(() => {
-    sessionStorage.removeItem('canceledCheckoutFixture');
-    for (const key of Object.keys(localStorage)) if (key.startsWith('marketplace:activity-dismissed:')) localStorage.removeItem(key);
-  });
-  checks.push('Rejected IC approvals disappear; approval-only reminders can be dismissed across refresh/reload, while later unknown payments resurface and retain recovery without replay.');
+  const approvalCard = page.locator('.mp-activity-card').filter({hasText:'An ICP approval is saved.'});
+  await approvalCard.waitFor();
+  assert.equal(await page.getByRole('button', { name:'Dismiss notification', exact:true }).count(), 3);
+  notificationStore.fail = true;
+  await approvalCard.getByRole('button', {name:'Dismiss notification'}).click();
+  await approvalCard.getByText('Could not delete the saved checkout. Try again.', {exact:true}).waitFor();
+  assert.equal(notificationStore.operations.length, 4, 'failed deletion retains both storage and the visible card');
+  notificationStore.fail = false;
+  await page.evaluate(() => window.marketplaceFixture.deferActivityRead = true);
+  await page.getByRole('button', {name:'Refresh activity',exact:true}).click();
+  await page.waitForFunction(() => typeof window.marketplaceFixture.activityReadRelease === 'function');
+  await approvalCard.getByRole('button', {name:'Dismiss notification'}).click();
+  await approvalCard.waitFor({state:'detached'});
+  await page.evaluate(() => window.marketplaceFixture.activityReadRelease());
+  await page.locator('.mp-activity-card').filter({hasText:'USDC approval confirmed.'}).getByRole('button', {name:'Dismiss notification'}).click();
+  await page.locator('.mp-activity-card').filter({hasText:'Purchase settled.'}).getByRole('button', {name:'Dismiss notification'}).click();
+  await page.waitForFunction(() => document.querySelectorAll('.mp-activity-card').length === 1);
+  assert.deepEqual(notificationStore.operations.map(item=>item.operationId), ['3'.repeat(32)], 'X deletes records from the Neutron fixture; it never stores hidden IDs');
+  assert.equal(await page.getByRole('button', {name:'Dismiss notification',exact:true}).count(), 0, 'uncertain payment retains its recovery action');
+  assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key=>key.startsWith('marketplace:activity-dismissed:'))), []);
+  await page.screenshot({path:join(output,'notifications-after-delete.png')});
+  // A wholly new browser context has no dismissal preference or session storage.
+  const freshBrowser = await browser.newContext({viewport:{width:960,height:760}});
+  const freshPage = await freshBrowser.newPage();
+  await freshPage.route('**/*', route => route.request().url().startsWith(url) ? route.continue() : route.abort());
+  await freshPage.goto(`${url}/?notifications=persistent`);
+  await freshPage.getByRole('button', {name:'Activity',exact:true}).click();
+  await freshPage.getByText('The original ICP payment outcome is unknown.', {exact:true}).waitFor();
+  assert.equal(await freshPage.locator('.mp-activity-card').count(), 1, 'deleted notifications stay gone after all browser memory is replaced');
+  assert.deepEqual(await freshPage.evaluate(() => window.marketplaceFixture.purchased), []);
+  notificationStore.operations = [];
+  await freshPage.getByRole('button', {name:'Refresh activity',exact:true}).click();
+  await freshPage.getByRole('heading', {name:"You're all caught up",exact:true}).waitFor();
+  await freshPage.screenshot({path:join(output,'notifications-empty-fresh-browser.png')});
+  await freshBrowser.close();
+  checks.push('X permanently deletes approval-only and completed notification records; deletion failures remain visible, stale reads cannot revive cleared records, and a fresh browser retains only unfinished payment recovery.');
 
   await page.goto(`${url}/?discount=delayed`);
   await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();

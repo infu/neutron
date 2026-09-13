@@ -2,7 +2,8 @@ import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
 import { matchesSavedDiscount } from "./discount.ts";
 import { protocolClient, randomId, cycleView } from "./client.ts";
 import { scope, assertScope, authorize, assertPurchaseReleasePreferences, purchaseChannel, sameChannelSelection, type Scope } from "./actions.ts";
-import { loadIntent, saveIntent, reviseIntent, listIntents } from "./store.ts";
+import { loadIntent, saveIntent, saveChildIntent, reviseIntent, listIntents } from "./store.ts";
+import { needsPaymentRecovery } from "./notification-state.ts";
 import { checkoutType, decodeOpaque, type Checkout } from "./protocol.ts";
 import { ethereumQuote, ethereumInvoiceView, ethereumInvoiceStatus, ethereumOperationView, ethereumFees, ethereumHistory, retainedEthereumInvoice } from "./ethereum_client.ts";
 import type { EthereumInvoiceResult, ChannelEthereumInvoiceResult } from "./ethereum_protocol.ts";
@@ -115,7 +116,7 @@ function fundingJournal(context: MsgBusToolContext, saved: SavedEthereum): Ether
       if (existing) return { claimed: false, record: existing.record };
       await assertPurchaseReleasePreferences(context, saved.quote);
       const next = { claimNonce: randomId(), record };
-      try { await saveIntent(context.kernel, storageKey, next); }
+      try { await saveChildIntent(context.kernel, storageKey, next, key(saved.quote.operationId), saved); }
       catch (error) {
         const observed = await loadIntent<JournalEntry>(context.kernel, storageKey);
         if (!observed) throw error;
@@ -133,19 +134,22 @@ function fundingJournal(context: MsgBusToolContext, saved: SavedEthereum): Ether
     },
   };
 }
+function depositNeedsRecovery(record: EthereumFundingRecord): boolean {
+  return record.state !== "reverted" && !(["prepared", "rejected"].includes(record.state) && !record.transactionHash && !record.receipt);
+}
 function stepResult(saved: SavedEthereum, record: EthereumFundingRecord): OperationResult {
-  return { operationId: saved.quote.operationId, appIds: saved.quote.appIds, ethereumWallet: saved.source, ...(saved.source === "browser" && record.state === "rejected" && !record.transactionHash ? { canceledBeforeSubmission: true } : {}), ...(record.transactionHash ? { ethereumTransactionHash: record.transactionHash } : {}), state: record.state === "reverted" || record.state === "rejected" ? "failed" : "pending", nextAction: record.state === "reverted" || record.state === "rejected" || record.state === "unknown" && !record.transactionHash ? "review" : "resume", message: record.message ?? "Retain the original Ethereum transaction and continue its receipt check." };
+  return { operationId: saved.quote.operationId, appIds: saved.quote.appIds, ethereumWallet: saved.source, canDismiss: record.step.kind === "approval" || !depositNeedsRecovery(record), ...(saved.source === "browser" && record.state === "rejected" && !record.transactionHash ? { canceledBeforeSubmission: true } : {}), ...(record.transactionHash ? { ethereumTransactionHash: record.transactionHash } : {}), state: record.state === "reverted" || record.state === "rejected" ? "failed" : "pending", nextAction: record.state === "reverted" || record.state === "rejected" || record.state === "unknown" && !record.transactionHash ? "review" : "resume", message: record.message ?? "Retain the original Ethereum transaction and continue its receipt check." };
 }
 /** Canceling an invoice does not cancel an already dispatched Ethereum request.
  * A quiet protocol snapshot must not erase that locally retained evidence. */
 async function savedInvoiceView(context: MsgBusToolContext, result: EthereumInvoiceResult, saved?: SavedEthereum | null): Promise<OperationResult> {
   const view = ethereumOperationView(result, saved?.source);
-  if (!view.checkoutCanceled || !saved) return view;
+  if (!saved || !view.canDismiss || result.entitled || (result.invoice.creditedBuyerAtoms > 0n && !result.active && "none" in result.nextAction)) return view;
   const deposit = await fundingJournal(context, saved).read("deposit");
-  if (!deposit || deposit.state === "rejected" && !deposit.transactionHash && !deposit.receipt) return view;
+  if (!deposit || !depositNeedsRecovery(deposit)) return view;
   const { checkoutCanceled: _canceled, ...retained } = view;
-  return { ...retained, ...(deposit.transactionHash ? { ethereumTransactionHash: deposit.transactionHash } : {}), nextAction: "review",
-    message: "Checkout canceled. The original Ethereum payment still has a saved wallet request. Check its original transaction before treating the payment as resolved; do not send another payment.",
+  return { ...retained, canDismiss: false, ...(deposit.transactionHash ? { ethereumTransactionHash: deposit.transactionHash } : {}), nextAction: "review",
+    message: "The original Ethereum payment still has a saved wallet request. Check its original transaction before treating the payment as resolved; do not send another payment.",
   };
 }
 async function verify(context: MsgBusToolContext, saved: SavedEthereum, result: EthereumInvoiceResult): Promise<OperationResult> {
@@ -230,10 +234,10 @@ export async function ethereumSavedStatus(context: MsgBusToolContext, id: string
     || (result.invoice.lastBalance[0] ?? 0n) > 0n || result.invoice.creditedBuyerAtoms > 0n)) return savedInvoiceView(context, result, saved);
   const journal = fundingJournal(context, saved), record = await journal.read("deposit") ?? await journal.read("approval");
   if (record) return stepResult(saved, record);
-  return result ? ethereumOperationView(result, saved.source) : { operationId: id, appIds: saved.quote.appIds, ethereumWallet: saved.source, state: "pending", nextAction: "resume", message: "The original Ethereum checkout is saved. Continue it to recover invoice preparation without another payment." };
+  return result ? savedInvoiceView(context, result, saved) : { operationId: id, appIds: saved.quote.appIds, ethereumWallet: saved.source, state: "pending", nextAction: "resume", canDismiss: true, message: "The original Ethereum checkout is saved. Continue it to recover invoice preparation without another payment." };
 }
 export async function recentEthereumPurchases(context: MsgBusToolContext): Promise<OperationResult[]> {
-  const client = await protocolClient(context), rows = await listIntents<unknown>(context.kernel), results: OperationResult[] = (await ethereumHistory(context)).items;
+  const client = await protocolClient(context), rows = await listIntents<unknown>(context.kernel), results: OperationResult[] = (await ethereumHistory(context)).items.filter(needsPaymentRecovery);
   for (const row of rows) if (row.id.startsWith("ethereum:operation:")) {
     const saved = row.value as SavedEthereum;
     if (saved.scope.canister === client.state.canisterId && saved.scope.owner === client.state.owner) { const result = await ethereumSavedStatus(context, saved.quote.operationId); if (result) results.push(result); }

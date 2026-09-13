@@ -12,7 +12,7 @@ import { PublisherProfileDialog } from "./components/publisher_profile.tsx";
 import { PublisherLink } from "./components/app_card.tsx";
 import { InstallControl } from "./components/install.tsx";
 import { NotificationsPanel, NotificationBell } from "./components/notifications.tsx";
-import { canDismissNotification, notificationAttentionCount, notificationFingerprint, readDismissedNotifications, visibleNotifications, type DismissedNotifications } from "./notification-state.ts";
+import { canDismissNotification, notificationAttentionCount, visibleNotifications } from "./notification-state.ts";
 import { DiscountCodeDialog, discountPercent, noDiscount } from "./components/discount.tsx";
 import { AgentReviewHost } from "./components/agent_review.tsx";
 import { AppIcon, EmptyState, ErrorNote, Icon, Loading, dateLabel, errorMessage, useRead } from "./components/primitives.tsx";
@@ -27,9 +27,11 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
   const [revision, setRevision] = useState(0);
   const [discount, setDiscount] = useState<DiscountPreference>(noDiscount), [discountOpen, setDiscountOpen] = useState(false), [discountRevision, setDiscountRevision] = useState(0);
   const discountGeneration = useRef(0);
-  const [observations, setObservations] = useState<Record<string, OperationResult>>({}), [activityError, setActivityError] = useState("");
-  const [dismissedState, setDismissedState] = useState<{ key: string; entries: DismissedNotifications } | null>(null);
+  // A null observation only fences reads already in flight during deletion.
+  // The next fresh read drops it; no dismissed IDs are saved in the browser.
+  const [observations, setObservations] = useState<Record<string, OperationResult | null>>({}), [activityError, setActivityError] = useState("");
   const observationSequence = useRef(0), observationVersions = useRef<Record<string, number>>({});
+  const deletedOperations = useRef(new Set<string>());
   const [initializing, setInitializing] = useState(true), [setupError, setSetupError] = useState("");
   const setupInFlight = useRef<Promise<Session> | null>(null);
   const [detail, setDetail] = useState<AppListing | null>(null), [checkout, setCheckout] = useState<AppListing[] | null>(null);
@@ -60,11 +62,13 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
     if (!saved.data) return;
     const fresh = saved.data;
     const superseded = fresh.operations.filter(item => (observationVersions.current[item.operationId] ?? 0) <= fresh.startedAt);
-    if (!superseded.length) return;
+    const removed = Object.keys(observationVersions.current).filter(id => !fresh.operations.some(item => item.operationId === id) && observationVersions.current[id]! <= fresh.startedAt);
+    if (!superseded.length && !removed.length) return;
     for (const item of superseded) observationVersions.current[item.operationId] = ++observationSequence.current;
     setObservations(current => {
       const next = { ...current };
       for (const item of superseded) delete next[item.operationId];
+      for (const id of removed) if (next[id] === null) delete next[id];
       return next;
     });
     setActive(current => {
@@ -79,6 +83,7 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
   useEffect(() => {
     let alive = true;
     setActive(null); setObservations({}); observationVersions.current = {}; setDiscount(noDiscount); setActivityError("");
+    deletedOperations.current.clear();
     setInitializing(true); setSetupError(""); setSession(null);
     void client.initialize().then((value) => {
       if (alive) { setSession(value); setSetupError(value.connectionError ?? ""); }
@@ -95,24 +100,26 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
     return () => { alive = false; };
   }, [client, session?.canisterId, session?.account, session?.connected, discountRevision]);
   function changeDiscount(value: DiscountPreference) { ++discountGeneration.current; setDiscount(value); }
-  const operations = [...Object.values(observations).reverse(), ...(saved.data?.operations ?? [])];
+  const operations = [...Object.values(observations).filter((item): item is OperationResult => item !== null).reverse(), ...(saved.data?.operations ?? []).filter(item => observations[item.operationId] !== null)];
   const notificationStorageKey = session?.account ? `marketplace:activity-dismissed:${JSON.stringify([session.host, session.canisterId, session.account])}` : null;
   useEffect(() => {
-    if (!notificationStorageKey) { setDismissedState(null); return; }
-    let entries: DismissedNotifications = {};
-    try { entries = readDismissedNotifications(localStorage, notificationStorageKey); } catch { /* Browser storage may be unavailable. */ }
-    setDismissedState({ key: notificationStorageKey, entries });
+    if (notificationStorageKey) {
+      try { localStorage.removeItem(notificationStorageKey); } catch { /* Dismissal no longer depends on browser storage. */ }
+    }
   }, [notificationStorageKey]);
-  const dismissed = dismissedState?.key === notificationStorageKey ? dismissedState.entries : {};
-  const notifications = visibleNotifications(operations, dismissed);
+  const notifications = visibleNotifications(operations);
   const attentionCount = notificationAttentionCount(notifications);
-  function dismissOperation(operation: OperationResult) {
+  async function dismissOperation(operation: OperationResult) {
     const latest = operations.find(item => item.operationId === operation.operationId);
-    if (!notificationStorageKey || !latest || !canDismissNotification(latest) || notificationFingerprint(latest) !== notificationFingerprint(operation)) return;
-    const entries = { ...dismissed, [operation.operationId]: notificationFingerprint(latest) };
-    setDismissedState({ key: notificationStorageKey, entries });
-    try { localStorage.setItem(notificationStorageKey, JSON.stringify(entries)); }
-    catch { setActivityError("Dismissed for this session. This browser could not remember the change after a reload."); }
+    if (!latest || !canDismissNotification(latest)) throw new Error("The payment status changed. Refresh activity before dismissing it.");
+    await client.dismissOperation(operation.operationId);
+    // Ignore callbacks from a checkout already open in this frame when X won.
+    deletedOperations.current.add(operation.operationId);
+    observationVersions.current[operation.operationId] = ++observationSequence.current;
+    setObservations(current => ({ ...current, [operation.operationId]: null }));
+    setActive(current => current?.result.operationId === operation.operationId ? null : current);
+    setActivityError("");
+    setRevision(value => value + 1);
   }
   useEffect(() => {
     if (active?.result.state !== "pending" || active.result.installation) return;
@@ -169,6 +176,7 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
     finally { installActive.current = false; setInstalling(false); }
   }
   function onOperation(result: OperationResult, resume?: () => Promise<OperationResult>) {
+    if (deletedOperations.current.has(result.operationId)) return;
     setActive({ result, resume });
     setRevision((v) => v + 1);
     recordObservation(result);
@@ -181,7 +189,9 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
     finally { await connection.close().catch(() => undefined); }
   }
   async function observe(action: Promise<OperationResult>) {
+    const startedAt = observationSequence.current;
     const result = await action;
+    if ((observationVersions.current[result.operationId] ?? 0) > startedAt) return;
     onOperation(result, active?.result.operationId === result.operationId ? active.resume : undefined);
     return result;
   }

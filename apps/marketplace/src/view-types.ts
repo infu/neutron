@@ -95,7 +95,7 @@ export type OperationResult = {
   canceledBeforeSubmission?: boolean;
   /** Checkout was canceled or its approval rejected with no observed payment or outstanding work. Later payment evidence can reopen recovery. */
   checkoutCanceled?: boolean;
-  /** This observation can be dismissed from Activity without deleting its saved recovery intent. New payment evidence must reappear. */
+  /** No unfinished payment needs this saved checkout. Dismissal deletes its local intent and revision history after a fresh status check. */
   canDismiss?: boolean;
   settlement?: { state: "pending" | "complete" | "failed"; message: string };
 };
@@ -150,6 +150,7 @@ export interface MarketplaceClient {
   purchase(quote: PurchaseQuote, browserConnection?: EthereumProviderConnection): Promise<OperationResult>;
   operation(operationId: string): Promise<OperationResult>;
   recentOperations(): Promise<OperationResult[]>;
+  dismissOperation(operationId: string): Promise<void>;
   resumeOperation(operationId: string, browserConnection?: EthereumProviderConnection): Promise<OperationResult>;
   cancelEthereumCheckout(operationId: string): Promise<OperationResult>;
   verifyEthereumTransaction(operationId: string, transactionHash: string): Promise<OperationResult>;

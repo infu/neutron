@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 123,
+  "version": 124,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
@@ -297,6 +297,14 @@
       "async": false
     },
     "marketplace_save_draft": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_save_draft_child": {
+      "type": "update",
+      "async": false
+    },
+    "marketplace_delete_operation": {
       "type": "update",
       "async": false
     },

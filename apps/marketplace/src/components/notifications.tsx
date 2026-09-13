@@ -14,7 +14,7 @@ export type NotificationsPanelProps = {
   onResume: (operation: OperationResult) => ActionResult;
   onVerify: (operation: OperationResult, transactionHash: string) => ActionResult;
   onCancel: (operation: OperationResult) => ActionResult;
-  onDismiss: (operation: OperationResult) => void;
+  onDismiss: (operation: OperationResult) => ActionResult;
 };
 
 export function NotificationBell() {
@@ -45,7 +45,7 @@ function NotificationCard({ operation, onCheck, onResume, onVerify, onCancel, on
   const showStatusCheck = !complete || settlement?.state === "pending" || settlement?.state === "failed";
   const canResume = !operation.entitled && (operation.nextAction === "resume" || operation.nextAction === "review");
   return <article className={`mp-activity-card${complete ? " is-complete" : ""}`} aria-label={`${notificationTitle(operation)}${operation.appIds?.length ? `: ${operation.appIds.join(", ")}` : ""}`}>
-    <div className="mp-activity-card-heading"><span className="mp-activity-state-icon">{complete ? <Icon name="check" /> : <NotificationBell />}</span><div><h3>{notificationTitle(operation)}</h3>{operation.appIds?.length ? <p className="mp-activity-apps">{operation.appIds.map(id => id.replaceAll("_", " ")).join(" · ")}</p> : null}</div>{canDismissNotification(operation) && <button type="button" className="mp-icon-button" style={{ marginLeft: "auto" }} aria-label="Dismiss notification" title="Dismiss notification" disabled={busy} onClick={() => onDismiss(operation)}><Icon name="close" /></button>}</div>
+    <div className="mp-activity-card-heading"><span className="mp-activity-state-icon">{complete ? <Icon name="check" /> : <NotificationBell />}</span><div><h3>{notificationTitle(operation)}</h3>{operation.appIds?.length ? <p className="mp-activity-apps">{operation.appIds.map(id => id.replaceAll("_", " ")).join(" · ")}</p> : null}</div>{canDismissNotification(operation) && <button type="button" className="mp-icon-button" style={{ marginLeft: "auto" }} aria-label="Dismiss notification" title="Dismiss notification" disabled={busy} onClick={() => void run(() => onDismiss(operation))}><Icon name="close" /></button>}</div>
     <p className="mp-activity-message">{operation.message}</p>
     {settlement && <p className={`mp-activity-settlement${settlement.state === "failed" ? " is-failed" : ""}`}>{settlement.message}</p>}
     {error && <ErrorNote error={error} />}

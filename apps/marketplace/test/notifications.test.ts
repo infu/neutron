@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { OperationResult } from "../src/view-types.ts";
-import { canDismissNotification, canRecoverEthereumPayment, isCanceledBeforeSubmission, isCanceledCheckout, notificationAttentionCount, notificationFingerprint, notificationTitle, readDismissedNotifications, visibleNotifications } from "../src/notification-state.ts";
+import { canDismissNotification, canRecoverEthereumPayment, isCanceledBeforeSubmission, isCanceledCheckout, notificationAttentionCount, notificationTitle, needsPaymentRecovery, visibleNotifications } from "../src/notification-state.ts";
 
 const canceled: OperationResult = { operationId: "1234567890abcdef1234567890abcdef", state: "failed", nextAction: "review", message: "The browser wallet declined this transaction before submission.", ethereumWallet: "browser", canceledBeforeSubmission: true };
 const hash = `0x${"a".repeat(64)}`;
@@ -36,27 +36,21 @@ test("new payment evidence overrides a canceled checkout marker without hiding r
   }
 });
 
-test("approval-only reminder can be dismissed and restored as a preference without erasing its intent", () => {
+test("allowance-only activity can be deleted even when approval has an on-chain hash", () => {
   const approval: OperationResult = { operationId: "a".repeat(32), state: "approval_required", nextAction: "resume", canDismiss: true, message: "No protocol payment is recorded." };
-  const original = structuredClone(approval);
-  const stored = JSON.stringify({ [approval.operationId]: notificationFingerprint(approval) });
-  const dismissed = readDismissedNotifications({ getItem: () => stored }, "this-neutron");
   expect(canDismissNotification(approval)).toBe(true);
-  expect(visibleNotifications([approval], dismissed)).toEqual([]);
-  expect(notificationAttentionCount([approval], dismissed)).toBe(0);
-  expect(approval).toEqual(original);
+  expect(canDismissNotification({ ...approval, ethereumTransactionHash: hash })).toBe(true);
+  expect(needsPaymentRecovery(approval)).toBe(false);
   const dispatch = { ...approval, state: "pending" as const, canDismiss: false };
-  expect(visibleNotifications([dispatch], dismissed)).toEqual([dispatch]);
-  const paid = { ...approval, ledgerBlock: "999" };
-  expect(canDismissNotification(paid)).toBe(false);
-  expect(visibleNotifications([paid], dismissed)).toEqual([paid]);
+  expect(canDismissNotification(dispatch)).toBe(false);
+  expect(needsPaymentRecovery(dispatch)).toBe(true);
+  expect(visibleNotifications([dispatch, approval])).toEqual([dispatch]);
 });
 
 test("completed activity is clearable only after required settlement finishes", () => {
   const complete: OperationResult = { operationId: "a".repeat(32), state: "complete", nextAction: "none", message: "Complete", ledgerBlock: "999" };
   expect(canDismissNotification(complete)).toBe(true);
   expect(canDismissNotification({ ...complete, canDismiss: true, settlement: { state: "pending", message: "Wrapping remains pending" } })).toBe(false);
-  expect(readDismissedNotifications({ getItem: () => "invalid" }, "this-neutron")).toEqual({});
 });
 
 test("cancellation prose alone never hides uncertain or previously submitted payments", () => {

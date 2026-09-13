@@ -1,23 +1,14 @@
 import type { OperationResult } from "./view-types.ts";
 
-export type DismissedNotifications = Record<string, string>;
 export function canDismissNotification(operation: OperationResult): boolean {
   if (operation.state === "complete") return !operation.settlement || operation.settlement.state === "complete";
-  if (operation.ethereumTransactionHash || operation.ledgerBlock || operation.entitled || operation.settlement) return false;
+  if (operation.settlement && operation.settlement.state !== "complete") return false;
   return operation.canDismiss === true;
 }
-/** Dismiss only this observation, never the financial intent itself. */
-export function notificationFingerprint(operation: OperationResult): string {
-  return JSON.stringify([operation.state, operation.nextAction, operation.message, operation.ethereumTransactionHash,
-    operation.ledgerBlock, operation.entitled, operation.settlement?.state, operation.settlement?.message]);
-}
-
-export function readDismissedNotifications(storage: Pick<Storage, "getItem">, key: string): DismissedNotifications {
-  try {
-    const value: unknown = JSON.parse(storage.getItem(key) ?? "{}");
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    return Object.fromEntries(Object.entries(value).filter(([id, fingerprint]) => /^[0-9a-f]{32}$/.test(id) && typeof fingerprint === "string"));
-  } catch { return {}; }
+/** Historical accounting is not an inbox. Only unfinished payments need a
+ * recovery notification when this Neutron has no saved checkout. */
+export function needsPaymentRecovery(operation: OperationResult): boolean {
+  return !canDismissNotification(operation);
 }
 
 /** A wallet's explicit pre-submission refusal can leave its invoice retained
@@ -46,18 +37,17 @@ export function isCanceledCheckout(operation: OperationResult): boolean {
 }
 
 /** Pass the latest observations first; each retained request appears once. */
-export function visibleNotifications(operations: readonly OperationResult[], dismissed: DismissedNotifications = {}): OperationResult[] {
+export function visibleNotifications(operations: readonly OperationResult[]): OperationResult[] {
   const seen = new Set<string>();
   return operations.filter(operation => {
     if (seen.has(operation.operationId)) return false;
     seen.add(operation.operationId);
-    return !operation.installation && !isCanceledBeforeSubmission(operation) && !isCanceledCheckout(operation)
-      && !(canDismissNotification(operation) && dismissed[operation.operationId] === notificationFingerprint(operation));
+    return !operation.installation && !isCanceledBeforeSubmission(operation) && !isCanceledCheckout(operation);
   });
 }
 
-export function notificationAttentionCount(operations: readonly OperationResult[], dismissed: DismissedNotifications = {}): number {
-  return visibleNotifications(operations, dismissed).filter(operation => operation.state !== "complete" || operation.settlement?.state === "failed").length;
+export function notificationAttentionCount(operations: readonly OperationResult[]): number {
+  return visibleNotifications(operations).filter(operation => operation.state !== "complete" || operation.settlement?.state === "failed").length;
 }
 
 export function notificationTitle(operation: OperationResult): string {

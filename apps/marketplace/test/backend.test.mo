@@ -8,6 +8,7 @@ import MigrateV1 "../backend/memory/state/v1_to_v2";
 import App "../backend/main";
 import ReadIdentity "../backend/read_identity";
 import Capabilities "mo:neutron-capabilities";
+import Array "mo:core/Array";
 
 let owner = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
 var relayedRequest : ?Capabilities.BackendCallRequestV1 = null;
@@ -83,6 +84,42 @@ switch (restored.marketplace_revise_draft({ id = "purchase-1"; expected = "origi
 assert restored.marketplace_draft("purchase-1") == ?"changed";
 let restoredRevision = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker; wallet_custody_signing = signer } });
 assert restoredRevision.marketplace_draft("history:purchase-1:revision-1") == ?"original";
+// Dismissal physically deletes this operation and all of its revisions while
+// preserving unrelated purchases, installation journals and memory identity.
+let deletedId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+let deletionRoots = ["operation:" # deletedId, "ethereum:operation:" # deletedId, "ethereum:step:" # deletedId # ":approval", "ethereum:step:" # deletedId # ":deposit"];
+for (id in deletionRoots.vals()) {
+    ignore app.marketplace_save_draft({ id; value = "original" });
+    ignore app.marketplace_revise_draft({ id; expected = "original"; value = "changed"; revision = "first" });
+};
+let deletionSnapshot = Array.map<Text, App.Draft>(deletionRoots, func(id) { { id; value = "changed" } });
+let unrelated : App.Draft = { id = "operation:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"; value = "unrelated" };
+ignore app.marketplace_save_draft(unrelated);
+ignore app.marketplace_revise_draft({ id = deletionRoots[3]; expected = "changed"; value = "deposit dispatched"; revision = "second" });
+switch (app.marketplace_delete_operation({ id = deletedId; expected = deletionSnapshot })) { case (#err(_)) {}; case (_) assert false };
+assert app.marketplace_draft(deletionRoots[0]) == ?"changed";
+assert app.marketplace_draft("history:" # deletionRoots[3] # ":second") == ?"changed";
+let currentSnapshot = Array.map<Text, App.Draft>(deletionRoots, func(id) { { id; value = if (id == deletionRoots[3]) "deposit dispatched" else "changed" } });
+assert app.marketplace_delete_operation({ id = deletedId; expected = currentSnapshot }) == #ok(deletedId);
+let afterDismissal = App.Init({ stable_memory = { state = memory }; capabilities = { backend_calls = broker; wallet_custody_signing = signer } });
+for (id in deletionRoots.vals()) {
+    assert afterDismissal.marketplace_draft(id) == null;
+    assert afterDismissal.marketplace_draft("history:" # id # ":first") == null;
+    assert afterDismissal.marketplace_draft("history:" # id # ":second") == null;
+};
+assert afterDismissal.marketplace_draft(unrelated.id) == ?unrelated.value;
+assert afterDismissal.marketplace_state(()).seed == ?seed;
+assert afterDismissal.marketplace_delete_operation({ id = deletedId; expected = [] }) == #ok(deletedId);
+// A late wallet reply cannot recreate the next step after deletion.
+switch (afterDismissal.marketplace_save_draft_child({ parent = deletionSnapshot[1]; draft = deletionSnapshot[3] })) { case (#err(_)) {}; case (_) assert false };
+assert afterDismissal.marketplace_draft(deletionRoots[3]) == null;
+// A new deposit claim between the snapshot and delete prevents partial erasure.
+ignore app.marketplace_save_draft(deletionSnapshot[1]);
+assert app.marketplace_save_draft_child({ parent = deletionSnapshot[1]; draft = deletionSnapshot[3] }) == #ok(deletionRoots[3]);
+switch (app.marketplace_delete_operation({ id = deletedId; expected = [deletionSnapshot[1]] })) { case (#err(_)) {}; case (_) assert false };
+assert app.marketplace_draft(deletionRoots[1]) == ?"changed";
+assert app.marketplace_draft(deletionRoots[3]) == ?"changed";
+assert app.marketplace_delete_operation({ id = deletedId; expected = [deletionSnapshot[1], deletionSnapshot[3]] }) == #ok(deletedId);
 // Opaque draft bytes retain their exact installation diagnostics and revision
 // history on restoration.
 let originalInstall : Blob = "{\"version\":1,\"setupUrl\":null}";

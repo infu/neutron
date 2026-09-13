@@ -67,8 +67,14 @@ export async function ethereumInvoiceView(context: MsgBusToolContext, result: Re
 }
 export function ethereumOperationView(result: EthereumInvoiceResult, source?: EthereumWalletSource): OperationResult {
   const receipt = first(result.receipt), detail = first(result.invoice.lastError) ?? first(result.order.lastError);
+  const invoice = result.invoice;
+  const hasPayment = !!receipt || invoice.acceptedReceiptId.length > 0 || invoice.currentSweepId.length > 0 || invoice.nextSweepOrdinal > 0n
+    || result.sweep.length > 0 || result.attempt.length > 0 || invoice.entitlementGrantedAtNs.length > 0 || invoice.revenueFinalizedAtNs.length > 0
+    || (first(invoice.lastBalance) ?? 0n) > 0n || invoice.creditedBuyerAtoms > 0n;
+  const refunded = invoice.canceledAtNs.length > 0 && !result.active && "none" in result.nextAction && invoice.creditedBuyerAtoms > 0n;
   const identity = {
     paymentRail: "ethereum" as const, operationId: result.invoice.requestId, appIds: result.quote.request.appIds, entitled: result.entitled,
+    canDismiss: result.entitled ? result.earningsAvailable : !hasPayment || refunded,
     ...(source ? { ethereumWallet: source } : {}), ...(receipt ? { ethereumTransactionHash: receipt.transactionHash } : {}),
   };
   if (result.entitled) return {
