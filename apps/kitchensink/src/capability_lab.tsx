@@ -67,8 +67,8 @@ export type CapabilityRuntime = {
 };
 
 const BACKGROUND = "app:kitchensink:background" as const;
-const ICP_LEDGER = "ryjl3-tyaaa-aaaaa-aaaba-cai";
-const ICP_FEE_METHOD = "icrc1_fee";
+const NNS_GOVERNANCE_CANISTER = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+const NETWORK_ECONOMICS_METHOD = "get_network_economics_parameters";
 
 export function CapabilityPage({
   id,
@@ -149,13 +149,13 @@ function PublicIngressPage({ runtime }: { runtime: CapabilityRuntime }) {
 
 function BackendCallsPage({ runtime }: { runtime: CapabilityRuntime }) {
   const operation = useOperation();
-  const [target, setTarget] = useState(ICP_LEDGER);
+  const [target, setTarget] = useState(NNS_GOVERNANCE_CANISTER);
 
   const reserveAndProbe = () => operation.run("reservation and call", () =>
     requestBackendCallReservations({
       actions: [{
         kind: "reserve",
-        scope: { kind: "exact", principal: target.trim(), method: ICP_FEE_METHOD },
+        scope: { kind: "exact", principal: target.trim(), method: NETWORK_ECONOMICS_METHOD },
       }],
       call: { method: "backend_probe", args: [target.trim()] },
     }),
@@ -166,21 +166,22 @@ function BackendCallsPage({ runtime }: { runtime: CapabilityRuntime }) {
       status="setup"
       statusLabel="Owner approval"
       purpose="Give the backend one exact inter-canister call route without exposing an actor constructor or raw call primitive."
-      boundary="The injected handle captures this installed app. Every dispatch rechecks the exact reservation, runtime toggle, target, sizes, and concurrency. The Neutron canister itself and system targets are rejected."
+      boundary="The injected handle captures this installed app. Every dispatch rechecks the reservation, runtime toggle, target, sizes, and concurrency. Another app's principal reservation blocks every method, including reads."
       declaration={'"backend_calls": {\n  "api": 1,\n  "reservation_scopes": ["exact"],\n  "max_concurrency": 1\n}'}
       evidence={<EvidenceList items={[
         { label: "Target", value: <code>{target || "not set"}</code> },
-        { label: "Winning scope", value: <code>exact principal + icrc1_fee</code> },
+        { label: "Reservation", value: <code>exact principal + get_network_economics_parameters</code> },
         { label: "Backend handle", value: <code>BackendCallsV1</code> },
         { label: "Caller canister", value: <code>{runtime.canisterId ?? "loading"}</code> },
       ]} />}
     >
       <p className="nt-text">
-        The default is the ICP ledger, available on mainnet and Neutron's local NNS bootstrap.
-        Approval and the first fee read share one review flow. The reservation remains if the probe itself fails.
+        The default is NNS Governance, available on mainnet and Neutron's local NNS bootstrap.
+        Approval and the first network-economics read share one review flow. The reservation remains if the probe itself fails.
+        Ledger reads and funding use the separate Wallet demos.
       </p>
       <label className="nt-field">
-        <span className="nt-label">Ledger canister</span>
+        <span className="nt-label">NNS Governance canister</span>
         <input
           className="nt-input"
           spellCheck={false}
@@ -195,7 +196,7 @@ function BackendCallsPage({ runtime }: { runtime: CapabilityRuntime }) {
           onClick={() => void reserveAndProbe()}
           type="button"
         >
-          Review access and read fee
+          Review access and read parameters
         </button>
         <button
           className="nt-button nt-button--secondary"
@@ -212,7 +213,7 @@ function BackendCallsPage({ runtime }: { runtime: CapabilityRuntime }) {
             requestBackendCallReservations({
               actions: [{
                 kind: "release",
-                scope: { kind: "exact", principal: target.trim(), method: ICP_FEE_METHOD },
+                scope: { kind: "exact", principal: target.trim(), method: NETWORK_ECONOMICS_METHOD },
               }],
             }),
           )}

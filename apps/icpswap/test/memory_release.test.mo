@@ -12,6 +12,7 @@ import ActionsMemory "../backend/memory/icpswap_actions/v1";
 // be constructed and every synchronous method type-checked and exercised.
 let stubCalls : Caps.BackendCallsV1 = {
     canister_principal = Principal.fromText("aaaaa-aa");
+    owns_principal = func(_ : Principal) : Bool { false };
     can_call = func(_ : Principal, _ : Text) : Bool = false;
     call = func(_ : Caps.BackendCallRequestV1) : async* Caps.BackendCallResultV1 {
         #err({ code = "stub"; message = "calls are not dispatched in tests" });

@@ -46,6 +46,7 @@ persistent actor RefillMain {
             public var dispatched : [Capabilities.CallRequest] = [];
             public var next = 0;
             public var throwNext = false;
+            public var excludedCustody : ?Principal = null;
             public var onNextFee : ?(() -> async* ()) = null;
             func call(input : Capabilities.CallRequest) : async* Capabilities.CallResult {
                 assert input.cycles == 0;
@@ -77,6 +78,9 @@ persistent actor RefillMain {
             };
             let calls : Capabilities.BackendCalls = {
                 canister_principal = owner;
+                owns_principal = func(canister : Principal) : Bool {
+                    excludedCustody != ?canister and (canister == icp or canister == cyclesLedger or canister == cmc);
+                };
                 can_call = func(canister : Principal, method : Text) : Bool {
                     (canister == icp and (method == "icrc1_transfer" or method == "icrc1_fee")) or
                     (canister == cmc and (method == "notify_top_up" or method == "notify_mint_cycles")) or
@@ -120,6 +124,39 @@ persistent actor RefillMain {
         assert view(preparedApp.wallet_refill_prepare_v1(unapproved)).phase == #prepared;
         rejected(await* preparedApp.wallet_refill_continue_v1(unapproved.id));
         assert untouched.next == 0;
+
+        // Exact method access to ICP/CMC/TCYCLES is insufficient: reserve the
+        // whole route before creating the payment block that CMC will settle.
+        let custody = Fixture([]);
+        let custodyRequest = request(61, #icp_to_tcycles, owner);
+        let custodyApp = Main.Init(custody.env);
+        let custodyPrepared = view(custodyApp.wallet_refill_prepare_v1(custodyRequest));
+        for (principal in [icp, cmc, cyclesLedger].vals()) {
+            custody.excludedCustody := ?principal;
+            rejected(await* custodyApp.wallet_refill_execute_v1(custodyRequest.id));
+            assert custody.next == 0;
+            assert view(custodyApp.wallet_refill_status_v1(custodyRequest.id)) == custodyPrepared;
+            let ?saved = Map.get(custody.memory.commands, Blob.compare, custodyRequest.id) else Runtime.trap("Missing custody fixture");
+            assert saved.source_args == null and saved.source_block == null;
+        };
+        // Revocation during the fee await must also stop the subsequent ICP
+        // debit while retaining the same resumable request and unfrozen args.
+        let custodyRace = Fixture([
+            icpFee, icpFee,
+            { canister = icp; method = "icrc1_transfer"; result = #ok(to_candid(paid)) },
+            { canister = cmc; method = "notify_top_up"; result = #ok(to_candid(toppedUp)) },
+        ]);
+        let custodyRaceRequest = request(62, #icp_topup, target);
+        let custodyRaceApp = Main.Init(custodyRace.env);
+        ignore view(custodyRaceApp.wallet_refill_prepare_v1(custodyRaceRequest));
+        custodyRace.onNextFee := ?(func() : async* () { custodyRace.excludedCustody := ?cmc });
+        assert view(await* custodyRaceApp.wallet_refill_execute_v1(custodyRaceRequest.id)).phase == #transfer_pending;
+        assert custodyRace.next == 1;
+        let ?blockedPayment = Map.get(custodyRace.memory.commands, Blob.compare, custodyRaceRequest.id) else Runtime.trap("Missing blocked payment");
+        assert blockedPayment.source_args == null and blockedPayment.source_block == null;
+        custodyRace.excludedCustody := null;
+        assert view(await* Main.Init(custodyRace.env).wallet_refill_continue_v1(custodyRaceRequest.id)).phase == #complete;
+        assert custodyRace.next == 4;
         let savedPrepared = view(preparedApp.wallet_refill_status_v1(unapproved.id));
         assert view(await* preparedApp.wallet_refill_action_v1(#prepare(unapproved))) == savedPrepared;
         rejected(await* preparedApp.wallet_refill_action_v1(#continue_(unapproved.id)));

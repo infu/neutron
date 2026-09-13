@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { gzipSync } from "node:zlib";
 import { disposeMotokoCompiler, loadMotoko } from "neutron-motoko-wasm";
 import {
   getDependencies,
@@ -16,6 +17,7 @@ const execute = promisify(execFile);
 const cwd = process.cwd();
 const testRoot = path.resolve("test/motoko");
 const compiledIcTests = [
+  "custody_calls_test.mo",
   "transfer_journal_test.mo",
   "refill_main_test.mo",
   "bridge_test.mo",
@@ -165,7 +167,9 @@ async function runIcTest(wasm: Uint8Array, temporary: string): Promise<void> {
     const effectiveCanister = { CanisterId: Buffer.from(canister.canister_id.toUint8Array()).toString("base64") };
     const installMethod = methods.get("install_code")!;
     await call(management, "install_code", new Uint8Array(IDL.encode(installMethod.argTypes, [{
-      mode: { install: null }, canister_id: canister.canister_id, wasm_module: wasm,
+      // Main integration fixtures can exceed the IC's 2 MiB ingress limit.
+      // install_code accepts gzip Wasm while retaining the normal IC limits.
+      mode: { install: null }, canister_id: canister.canister_id, wasm_module: gzipSync(wasm),
       arg: new Uint8Array(IDL.encode([], [])), sender_canister_version: [],
     }])), effectiveCanister);
     const reply = await call(canister.canister_id, "run", new Uint8Array(IDL.encode([], [])), effectiveCanister);

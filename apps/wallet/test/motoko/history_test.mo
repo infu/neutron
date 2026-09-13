@@ -579,6 +579,7 @@ Map.add(historyMem.ledgers, Principal.compare, ckerc20Ledger, ckerc20HistoryLedg
 Map.add(historyMem.ledgers, Principal.compare, ckethLedger, ckethHistoryLedger);
 let historyCalls : Capabilities.BackendCalls = {
     canister_principal = walletPrincipal;
+    owns_principal = func(_canister : Principal) : Bool { false };
     can_call = func(_canister : Principal, _method : Text) : Bool { false };
     call = func(_request : Capabilities.CallRequest) : async* Capabilities.CallResult {
         #err({ code = "unused"; message = "unused" });

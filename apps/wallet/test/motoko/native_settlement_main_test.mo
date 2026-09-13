@@ -115,6 +115,7 @@ persistent actor NativeSettlementMain {
             };
             let calls : Capabilities.BackendCalls = {
                 canister_principal = Principal.fromActor(NativeSettlementMain);
+                owns_principal = func(_target : Principal) : Bool { true };
                 can_call = func(_target : Principal, _method : Text) : Bool { true };
                 call;
                 call_batch = func(requests : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] {

@@ -12,6 +12,7 @@ import {
   CONNECTIONS_MAX_PROVIDERS_GLOBAL,
   VETKEYS_MAX_SLOTS_GLOBAL,
   publicIngressResourceId,
+  type NeutronBackendCallReservation,
 } from "neutron-tools/src/capabilities/catalog.js";
 import {
   ASSEMBLER_ID,
@@ -2184,6 +2185,74 @@ test("assembler preflights backend-call install defaults", () => {
   ).toThrow(
     "Assembly backend_calls install reservation method::shared_reserved_method is declared by both reservation_owner_a and reservation_owner_b",
   );
+});
+
+function backendCallReservationApp(
+  appId: string,
+  reservations: NeutronBackendCallReservation[],
+): AssemblyManifest {
+  const app = backendCallReservationLimitApp(appId, 0);
+  app.capabilities!.backend_calls!.reservation_scopes = [
+    "principal",
+    "method",
+    "exact",
+  ];
+  app.capabilities!.backend_calls!.install_reservations = reservations;
+  return app;
+}
+
+for (const principalFirst of [true, false]) {
+  for (const method of ["icrc1_transfer", "icrc1_fee"]) {
+    test(`assembler rejects ${method} access to another app's reserved principal (${principalFirst ? "principal" : "exact"} declared first)`, () => {
+      const principal = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+      // Assembly canonicalizes app order by ID before checking claims.
+      const walletId = principalFirst ? "a_wallet" : "z_wallet";
+      const wallet = backendCallReservationApp(walletId, [
+        { kind: "principal", principal },
+      ]);
+      const caller = backendCallReservationApp("caller", [
+        { kind: "exact", principal, method },
+      ]);
+      expect(() => assemble([kernelConfig, wallet, caller])).toThrow(
+        `Assembly backend_calls install reservation exact:${principal}:${method} for caller conflicts with exclusive principal reservation principal:${principal}: for ${walletId}`,
+      );
+    });
+  }
+}
+
+test("assembler permits the principal owner to declare narrower reservations", () => {
+  const principal = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+  const wallet = backendCallReservationApp("wallet", [
+    { kind: "principal", principal },
+    { kind: "exact", principal, method: "icrc1_transfer" },
+    { kind: "method", method: "icrc1_fee" },
+  ]);
+  expect(() => assemble([kernelConfig, wallet])).not.toThrow();
+});
+
+test("assembler permits method-wide declarations alongside an exclusive principal", () => {
+  const wallet = backendCallReservationApp("wallet", [
+    { kind: "principal", principal: "ryjl3-tyaaa-aaaaa-aaaba-cai" },
+  ]);
+  const caller = backendCallReservationApp("caller", [
+    { kind: "method", method: "icrc1_transfer" },
+  ]);
+  // Runtime principal ownership limits this method grant to unreserved targets.
+  expect(() => assemble([kernelConfig, wallet, caller])).not.toThrow();
+  expect(() => assemble([kernelConfig, caller, wallet])).not.toThrow();
+});
+
+test("assembler permits separate exact methods and unrelated principal targets", () => {
+  const principal = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+  const first = backendCallReservationApp("first", [
+    { kind: "exact", principal, method: "icrc1_transfer" },
+    { kind: "principal", principal: "r7inp-6aaaa-aaaaa-aaabq-cai" },
+  ]);
+  const second = backendCallReservationApp("second", [
+    { kind: "exact", principal, method: "icrc1_fee" },
+  ]);
+  expect(() => assemble([kernelConfig, first, second])).not.toThrow();
+  expect(() => assemble([kernelConfig, second, first])).not.toThrow();
 });
 
 test("assembler preflights stable_store global declaration ceilings", () => {

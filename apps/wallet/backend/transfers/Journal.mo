@@ -176,6 +176,7 @@ module {
 
         public let backend_calls : Capabilities.BackendCalls = {
             canister_principal = base.canister_principal;
+            owns_principal = base.owns_principal;
             can_call = base.can_call;
             call = execute;
             call_batch = func(requests : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] {

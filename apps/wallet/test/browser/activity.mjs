@@ -63,6 +63,10 @@ function kernelFixture({ owner, ledger, appOrigin }) {
     channel.port1.onmessage = ({ data: message }) => {
       state.calls.push(message);
       try {
+        if (message.type === "exec" && message.payload.action === "tools.call" && message.payload.payload.name === "backend_calls.list") {
+          channel.port1.postMessage({ type: "response", id: message.id, ok: { reservations: [ledger, "um5iw-rqaaa-aaaaq-qaaba-cai", "rkp4c-7iaaa-aaaaa-aaaca-cai"].map(principal => ({ scopeKind: "principal", principal })) } });
+          return;
+        }
         if (message.type !== "neutron:self-call:exec") throw Error(`Unexpected Kernel route: ${message.type}`);
         let ok, error;
         try { ok = result(message); }
@@ -117,7 +121,7 @@ try {
   const requests = state.calls.filter(call => call.method === "wallet_history_page").map(call => call.args[0]);
   assert.deepEqual(requests.map(request => [request.limit, request.before?.id ?? null]),
     [["40", null], ["20", null], ["40", "981"], ["20", "981"], ["40", "961"], ["20", "961"], ["40", "941"], ["20", "941"]]);
-  assert(state.calls.every(call => ["wallet_read_v1", "wallet_transfers_pending_v2", "wallet_history_page", "wallet_history_status"].includes(call.method)));
+  assert(state.calls.every(call => ["wallet_read_v1", "wallet_transfers_pending_v2", "wallet_history_page", "wallet_history_status"].includes(call.method) || (call.type === "exec" && call.payload.action === "tools.call" && call.payload.payload.name === "backend_calls.list")));
   checks.push("Load more reaches all 65 records through exact cursors, exposes the oldest block, clears recovered status errors, and makes only read calls.");
   assert.deepEqual(errors, []);
   await writeFile(`${out}/results.json`, JSON.stringify({ checks, errors }, null, 2));

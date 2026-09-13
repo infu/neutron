@@ -238,6 +238,7 @@ persistent actor Self {
             };
             let calls : Caps.BackendCallsV1 = {
                 canister_principal = owner;
+                owns_principal = func(_ : Principal) : Bool { false };
                 can_call = func(_ : Principal, _ : Text) : Bool { true };
                 call = response;
                 call_batch = func(batch : [Client.CallRequest]) : async* [Client.CallResult] {
