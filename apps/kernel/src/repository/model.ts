@@ -24,6 +24,7 @@ export type VerifiedRepositoryPackage = {
   rawSize: number;
   publisher?: { name: string; website?: string };
   source?: string;
+  releaseChannel?: "stable" | "beta";
   preparedPackage: RepositoryPreparedPackage;
   permissions: readonly Permission[];
   capabilityPlanFingerprint: string;

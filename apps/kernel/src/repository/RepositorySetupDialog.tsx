@@ -335,6 +335,7 @@ function RepositoryReview({
                       </>
                     ) : null}
                     {formatAppVersionLabel(pkg.version)}
+                    {pkg.releaseChannel === "beta" ? " · Beta" : ""}
                   </span>
                 </div>
                 {uiMode === "developer" || !final || automatic ? (

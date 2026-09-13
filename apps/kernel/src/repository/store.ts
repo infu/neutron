@@ -1,11 +1,13 @@
 import { create } from "zustand";
 import type {
   RepositoryInfo,
-  RepositoryManifest,
   RepositorySetupReference,
 } from "neutron-tools/repository";
+import type { RepositorySetupManifest } from "neutron-tools/src/release_channels.js";
 import type { AttestedInstallOfferRequester } from "../install_offers/types.ts";
 import type { DeploymentBuildReviewInput } from "../install_review/deployment_build_review.ts";
+import type { ReleasePreferences } from "../release_preferences.ts";
+import type { VerifiedRepositoryReleaseSelection } from "./channels.ts";
 import type {
   RepositoryReconciliation,
   RepositorySelection,
@@ -43,9 +45,11 @@ export function canStartRepositoryLoad(
 
 export type LoadedRepositorySetup = {
   info: RepositoryInfo;
-  manifest: RepositoryManifest;
+  manifest: RepositorySetupManifest;
   packages: readonly VerifiedRepositoryPackage[];
   reconciliation: RepositoryReconciliation;
+  releasePreferences?: ReleasePreferences;
+  releaseSelection?: VerifiedRepositoryReleaseSelection;
 };
 
 type RepositorySetupState = {

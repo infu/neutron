@@ -13,7 +13,9 @@ both the endpoint and auditor authority. An auditor buying an app, changing a
 publisher listing or calling an unrelated update does not receive a blanket
 exemption. Configured administrators may call `admin_auditor_set`,
 `admin_reserve_app`, `admin_set_burn_account`, and `rates_refresh` directly from
-their authenticated CLI identity without attached cycles. Those four endpoints
+their authenticated CLI identity without attached cycles. The explicit feedback
+rollout action `admin_feedback_cutover` has the same admin-only exemption; see
+[Release Channels](release-channels.md#feedback). These endpoints
 retain `feeVersion` for compatibility without a fee or funding check. Existing
 canister admins remain valid, and their attached cycles are left unaccepted.
 The marketplace app has no auditor or admin interface.
@@ -33,15 +35,16 @@ admission decision; app-ID ownership and package validity still apply.
    rejected. Rejection requires a nonempty reason.
 4. Developers can query their candidate's status, report and rejection reason,
    correct it and submit a new candidate for review.
-5. One assigned auditor's approval makes the exact candidate eligible for
-   publication. An app with no approved release stays outside the marketplace
-   catalog and rankings.
+5. One assigned auditor's approval publishes the exact candidate as beta.
+   Stable requires a separate publisher promotion of that current beta.
+   Discovery and rankings use the viewer's selected channel mode; stable users
+   do not see a beta-only app. See [Release Channels](release-channels.md).
 
 Candidate identity and published release identity are separate. Corrections
 produce a new candidate/hash without overwriting the rejected candidate or stamp.
 Once a version is published, its bytes are immutable and changed bytes require a
 higher app release version. A later candidate awaiting review does not displace
-the previous approved release.
+either current channel head.
 
 Revocation blocks ordinary downloads of the affected package, including reads
 using previously issued grants, while retaining its audit history and authorized
@@ -89,8 +92,9 @@ retained analysis identifies the automated checks actually performed. Automatic
 first-party approval does not claim a manual malware review. Other publishers
 continue through the assigned-auditor workflow above.
 
-A compatible Kernel and app release set is approved and made visible in one
-catalog transaction. Each stamp binds its candidate and package/source digests;
+A compatible Kernel and app release set is approved and made visible as beta in
+one catalog transaction, and promoted to stable together after qualification.
+Each stamp binds its candidate and package/source digests;
 the batch request retains the exact set for recovery after an interrupted reply.
 Repeating an unchanged publication verifies the existing releases without
 creating another release or audit history entry.
@@ -100,20 +104,20 @@ creating another release or audit history entry.
 Use app/publisher ownership, immutable package candidates, published releases,
 auditor assignments and append-only stamp records in the shared database.
 Release publication checks that the stamp still names the exact bytes and that
-the version can advance. Update the approved pointer, certificate metadata and
+the version can advance. Update the beta head, certificate metadata and
 ranking eligibility in one local commit. Stale concurrent submissions cannot
 replace already-published bytes at the same version.
 
-The marketplace retains the current approved package and offered source, plus
-candidates still awaiting review. After a replacement is approved, superseded
-package/source content is removed when no other current release or pending
+The marketplace retains both channel heads' packages and offered sources, plus
+candidates still awaiting review. After either head changes, superseded
+package/source content is removed when no other channel head or pending
 candidate references it. Shared content is not removed while another live
 reference needs it. A completed upload awaiting candidate submission also retains
 its exact bytes. Upload-to-candidate associations distinguish these staged files
 from consumed upload history, including when identical source bytes are reused.
 Rejecting a candidate releases its content if no live reference remains; the
-rejection report and candidate identity remain readable. Listing images are
-separate from package-version retention.
+rejection report and candidate identity remain readable. Release listing media
+is also retained while referenced by an offered head.
 Purchase ownership, payment receipts, candidate identities and audit reports
 remain available as records. Existing local release archives and the old source
 canister's historical public artifacts remain release evidence.

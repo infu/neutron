@@ -1,15 +1,18 @@
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
-import { checkoutType, withdrawalType, encodeOpaque, decodeOpaque, first, type Checkout, type WithdrawQuote, type WireResult, type Option } from "./protocol.ts";
+import { checkoutType, channelCheckoutType, withdrawalType, encodeOpaque, decodeOpaque, first, type Checkout, type ChannelCheckout, type ChannelPurchaseResult, type WithdrawQuote, type WireResult, type Option } from "./protocol.ts";
 import { protocolClient, operationView, randomId, ProtocolError } from "./client.ts";
 import { loadIntent, listIntents, saveIntent, reviseIntent } from "./store.ts";
 import { createPurchaseFundingRequest, parseFundingResult, requestFunding, rootFundingInstruction, spenderAccountText, type PurchaseFundingRequest, type FundingInstruction, type FundingResult } from "./wallet.ts";
 import type { OperationResult, PurchaseQuote, WithdrawalQuote } from "./view-types.ts";
+import { assertReleasePreferencesUnchanged, parseReleasePreferences, readReleasePreferences, releasePreferencesEqual } from "./release_preferences.ts";
 
 export type Scope = { canister: string; owner: string; callerApp: string; installation: string; root: boolean };
 type PurchaseProgress = {
   version: 1;
   /** Written before requesting collection. A missing reply must remain recoverable. */
   dispatch: "not_requested" | "requested" | "rejected";
+  /** The same allowance request remains recoverable after a preference change. */
+  fundingDispatch?: "requested";
   fundingResult?: FundingResult;
   rejection?: string;
 };
@@ -40,6 +43,42 @@ export async function authorize(context: MsgBusToolContext, review: JsonObject, 
     if (approved.approved !== true) throw new Error("The marketplace action was declined before dispatch.");
   }
   context.signal?.throwIfAborted();
+}
+/** Legacy saved financial identities remain recoverable without assigning them
+ * today's channel. New quote views always carry their original preference. */
+export async function assertPurchaseReleasePreferences(context: MsgBusToolContext, quote: PurchaseQuote): Promise<void> {
+  if (quote.channelOpaque && !quote.releasePreferences) throw new Error("This retained purchase has no original release preference. Reconcile its existing payment; review a fresh selection before starting another financial effect.");
+  if (quote.releasePreferences) assertReleasePreferencesUnchanged(parseReleasePreferences(quote.releasePreferences), await readReleasePreferences(context));
+}
+export function purchaseChannel(quote: PurchaseQuote): ChannelCheckout | undefined {
+  if (!quote.channelOpaque) return undefined;
+  const channel = decodeOpaque<ChannelCheckout>(channelCheckoutType, quote.channelOpaque);
+  const inner = decodeOpaque<Checkout>(checkoutType, quote.opaque);
+  if (JSON.stringify(encodeOpaque(checkoutType, inner)) !== JSON.stringify(encodeOpaque(checkoutType, channel.quote))) throw new Error("The retained channel selection differs from its exact purchase quote.");
+  if (quote.releasePreferences && quote.releasePreferences.betaEnabled !== ("beta" in channel.mode)) throw new Error("The purchase selection differs from its original release preference.");
+  return channel;
+}
+export function sameChannelSelection(left: ChannelCheckout | undefined, right: ChannelCheckout | undefined): boolean {
+  if (!left || !right) return left === right;
+  return JSON.stringify(encodeOpaque(channelCheckoutType, left)) === JSON.stringify(encodeOpaque(channelCheckoutType, { ...right, quote: left.quote }));
+}
+async function refreshPurchase(client: Awaited<ReturnType<typeof protocolClient>>, previous: Checkout, channel?: ChannelCheckout) {
+  if (!channel) return { wire: await client.query<Checkout>("purchase_quote", [previous.request]), channel: undefined };
+  const fresh = await client.query<ChannelCheckout>("purchase_quote_v2", [{ request: previous.request, mode: channel.mode, expectedSelection: [channel.selection] }]);
+  if (!sameChannelSelection(channel, fresh)) throw new Error("The original release selection changed. Retain this purchase ID and review a new selection before another payment.");
+  return { wire: fresh.quote, channel: fresh };
+}
+function samePurchasePreferences(left: PurchaseQuote, right: PurchaseQuote): boolean {
+  return left.releasePreferences && right.releasePreferences
+    ? releasePreferencesEqual(left.releasePreferences, right.releasePreferences)
+    : left.releasePreferences === right.releasePreferences;
+}
+function purchaseWasDispatched(saved: PurchaseIntent, observed: WireResult | null): boolean {
+  const attempt = observed ? first(observed.attempt) : null;
+  if (attempt?.state.no_effect === null && attempt.hadUnknown === false && !observed?.active) return false;
+  const state = Object.keys(observed?.order?.state ?? {})[0];
+  return observed?.active === true || ["dispatched", "outcome_unknown"].includes(state ?? "")
+    || saved.progress?.dispatch === "requested";
 }
 function samePurchase(left: Checkout, right: Checkout): boolean {
   // Mirrors the protocol's executable comparison. Display-only observation
@@ -103,7 +142,7 @@ async function dispatchError(context: MsgBusToolContext, kind: "purchase" | "wit
     // ledger outcome, otherwise explain that dispatch was rejected before it.
     try {
       const client = await protocolClient(context);
-      const observed = first(await client.query<Option<WireResult>>(`${kind}_status`, [{ requestId: operationId }]));
+      const observed = kind === "purchase" ? (await client.purchaseWireStatus(operationId))?.purchase ?? null : first(await client.query<Option<WireResult>>("withdraw_status", [{ requestId: operationId }]));
       if (observed) return { ...operationView(observed), message: `${message} ${operationView(observed).message}` };
       if (!error.code.endsWith("_interrupted")) return { operationId, state: "failed", nextAction: "review", canDismiss: kind === "purchase", message: `${message} No protocol ledger attempt is recorded for this request.` };
     } catch { /* Preserve uncertainty if the status observation is unavailable. */ }
@@ -120,18 +159,22 @@ export async function runPurchase(context: MsgBusToolContext, supplied: Purchase
   if (saved && saved.kind !== "purchase") throw new Error("This operation ID already identifies a withdrawal.");
   if (saved) {
     assertScope(saved.scope, currentScope);
+    if (!samePurchasePreferences(saved.quote, supplied)) throw new Error("Resume this purchase with its original release preference and selected packages.");
+    if (!sameChannelSelection(purchaseChannel(saved.quote), purchaseChannel(supplied))) throw new Error("Resume this purchase with its original release selection and packages.");
     const previous = decodeOpaque<Checkout>(checkoutType, saved.quote.opaque), proposed = decodeOpaque<Checkout>(checkoutType, supplied.opaque);
     if (saved.quote.commitment !== supplied.commitment || !samePurchase(previous, proposed)) {
       if (purchaseIntent(previous) !== purchaseIntent(proposed)) throw new Error("This operation has different purchase inputs. Resume its original terms.");
       // The protocol returns the frozen original quote for active or uncertain
       // attempts. Only its fresh canonical response can authorize a revision.
-      const authoritative = await client.query<Checkout>("purchase_quote", [previous.request]);
+      const fresh = await refreshPurchase(client, previous, purchaseChannel(saved.quote)), authoritative = fresh.wire;
       if (!samePurchase(proposed, authoritative)) throw new Error("This operation has an existing quote. Resume its original terms or review the protocol's current costs.");
-      const canonical = await client.purchaseView(authoritative);
+      const canonical = await client.purchaseView(authoritative, false, undefined, saved.quote.releasePreferences, fresh.channel);
       if (canonical.commitment !== supplied.commitment) throw new Error("The reviewed commitment differs from the protocol quote.");
       if (saved.funding) canonical.warnings.push("An earlier approval may remain for the previous quote. These updated terms use their own bounded Wallet approval.");
       const replacement: PurchaseIntent = { ...saved, quote: canonical, funding: fundingFor(authoritative), progress: { version: 1, dispatch: "not_requested" } };
+      await assertPurchaseReleasePreferences(context, canonical);
       await authorize(context, { kind: "purchase", quote: canonical as unknown as JsonObject }, true);
+      await assertPurchaseReleasePreferences(context, canonical);
       await reviseIntent(context.kernel, key, saved, replacement);
       saved = replacement; reviewedRevision = true; fundingResult = undefined;
     }
@@ -140,7 +183,7 @@ export async function runPurchase(context: MsgBusToolContext, supplied: Purchase
     if (wire.buyer.toText() !== currentScope.owner || wire.request.requestId !== operationId || String(wire.amount) !== supplied.payment.atoms || wire.request.ledger.toText() !== client.token(supplied.token).ledger.toText()) throw new Error("The reviewed purchase does not match its retained protocol quote.");
     // Review text is derived from the exact quote that the protocol will execute.
     // Caller-provided labels and allocations must never authorize other terms.
-    const canonical = await client.purchaseView(wire);
+    const canonical = await client.purchaseView(wire, false, undefined, supplied.releasePreferences, purchaseChannel(supplied));
     if (canonical.commitment !== supplied.commitment || JSON.stringify(canonical.appIds) !== JSON.stringify(supplied.appIds)) throw new Error("The purchase display does not match the selected apps and original quote.");
     const funding = fundingFor(wire);
     saved = { version: 1, kind: "purchase", scope: currentScope, quote: canonical, funding, progress: { version: 1, dispatch: "not_requested" } };
@@ -148,35 +191,45 @@ export async function runPurchase(context: MsgBusToolContext, supplied: Purchase
     await saveIntent(context.kernel, key, saved);
   }
   const original = decodeOpaque<Checkout>(checkoutType, saved.quote.opaque);
-  const observed = first(await client.query<Option<WireResult>>("purchase_status", [{ requestId: operationId }]));
+  const observed = (await client.purchaseWireStatus(operationId))?.purchase ?? null;
   if (observed && operationView(observed).state === "complete") return purchaseObservation(operationId, observed, saved);
   if (observed && operationView(observed).nextAction === "none") return purchaseObservation(operationId, observed, saved);
+  const dispatched = purchaseWasDispatched(saved, observed);
+  if (!dispatched && saved.progress?.fundingDispatch !== "requested") await assertPurchaseReleasePreferences(context, saved.quote);
   if (!reviewedRevision) await authorize(context, { kind: "purchase", quote: saved.quote as unknown as JsonObject });
   const state = observed?.order ? Object.keys(observed.order.state)[0] : null;
   // Once dispatched, let the protocol reconcile its same immutable ledger attempt.
   let confirmedFunding = saved.progress?.fundingResult;
   if (saved.funding && !["dispatched", "outcome_unknown"].includes(state ?? "") && !(saved.progress?.dispatch === "requested" && !observed)) {
-    if (context.agentMode && fundingResult === undefined) return { operationId, state: "approval_required", nextAction: "resume", canDismiss: purchaseObservation(operationId, observed, saved).canDismiss === true, message: "Authorize this exact Wallet allowance from the root agent, then call marketplace_purchase_v1 with the same operation ID and the raw fundingResult.", fundingInstructions: [rootFundingInstruction(saved.funding)] };
-    let funded = context.agentMode ? parseFundingResult(fundingResult, saved.funding.requestId, currentScope.callerApp) : await requestFunding(context.kernel, saved.funding);
+    if (saved.quote.releasePreferences && saved.progress?.fundingDispatch !== "requested") {
+      await assertPurchaseReleasePreferences(context, saved.quote);
+      saved = await savePurchaseProgress(context, saved, { ...saved.progress, version: 1, dispatch: saved.progress?.dispatch ?? "requested", fundingDispatch: "requested" });
+    }
+    const originalFunding = saved.funding!;
+    if (context.agentMode && fundingResult === undefined) return { operationId, state: "approval_required", nextAction: "resume", canDismiss: purchaseObservation(operationId, observed, saved).canDismiss === true, message: "Authorize this exact Wallet allowance from the root agent, then call marketplace_purchase_v1 with the same operation ID and the raw fundingResult.", fundingInstructions: [rootFundingInstruction(originalFunding)] };
+    let funded = context.agentMode ? parseFundingResult(fundingResult, originalFunding.requestId, currentScope.callerApp) : await requestFunding(context.kernel, originalFunding);
     const now = BigInt(Date.now()) * 1_000_000n;
-    const expiredRejection = funded.status === "rejected" && now >= BigInt(saved.funding.validUntilNs);
-    const expiredApproval = funded.status === "approved" && now >= BigInt(saved.funding.route.expiresAtNs);
+    const expiredRejection = funded.status === "rejected" && now >= BigInt(originalFunding.validUntilNs);
+    const expiredApproval = funded.status === "approved" && now >= BigInt(originalFunding.route.expiresAtNs);
     if (expiredRejection || expiredApproval) {
       // A timestamp alone never authorizes rotation. Wallet must have returned
       // a terminal result, and the protocol must independently prove no effect.
-      const latest = first(await client.query<Option<WireResult>>("purchase_status", [{ requestId: operationId }]));
+      const latest = (await client.purchaseWireStatus(operationId))?.purchase ?? null;
       const attempt = latest ? first(latest.attempt) : null;
       const noEffect = attempt?.state.no_effect === null && attempt.hadUnknown === false;
       const noAttempt = !latest || (!attempt && ["prepared", "funding_required", "failed"].includes(Object.keys(latest.order?.state ?? {})[0] ?? ""));
       if (latest && (latest.active || operationView(latest).nextAction === "none" || (!noAttempt && !noEffect))) return operationView(latest);
       const mayRenew = expiredRejection ? noAttempt || noEffect : noEffect && latest?.nextAction?.funding_required === null;
       if (mayRenew) {
-        const authoritative = await client.query<Checkout>("purchase_quote", [original.request]);
+        const authoritative = (await refreshPurchase(client, original, purchaseChannel(saved.quote))).wire;
         if (!samePurchase(original, authoritative)) throw new Error("Purchase costs changed. Continue this same operation to review the updated quote before renewing its approval.");
         const replacement: PurchaseIntent = { ...saved, quote: { ...saved.quote, warnings: [...saved.quote.warnings, "The previous Wallet approval expired. Renewing requires another bounded approval and its ledger fee; the purchase keeps its original request ID."] }, funding: fundingFor(original), progress: { version: 1, dispatch: "not_requested" } };
+        await assertPurchaseReleasePreferences(context, replacement.quote);
         await authorize(context, { kind: "purchase", quote: replacement.quote as unknown as JsonObject }, true);
+        await assertPurchaseReleasePreferences(context, replacement.quote);
         await reviseIntent(context.kernel, key, saved, replacement);
         saved = replacement;
+        if (saved.quote.releasePreferences) saved = await savePurchaseProgress(context, saved, { version: 1, dispatch: "not_requested", fundingDispatch: "requested" });
         if (context.agentMode) return { operationId, state: "approval_required", nextAction: "resume", canDismiss: true, message: "The expired approval was retained in history. Authorize this replacement Wallet request, then continue the SAME purchase ID with its raw fundingResult.", fundingInstructions: [rootFundingInstruction(saved.funding!)] };
         funded = await requestFunding(context.kernel, saved.funding!);
       }
@@ -186,23 +239,28 @@ export async function runPurchase(context: MsgBusToolContext, supplied: Purchase
       // refusal so a reload cannot revive it as an unfinished purchase.
       // Legacy journals did not record dispatch. A newly rejected approval
       // cannot prove that an earlier invocation never reached collection.
-      const progress: PurchaseProgress = { version: 1, dispatch: saved.progress?.dispatch ?? "requested", fundingResult: funded };
+      const progress: PurchaseProgress = { ...saved.progress, version: 1, dispatch: saved.progress?.dispatch ?? "requested", fundingResult: funded };
       saved = await savePurchaseProgress(context, saved, progress);
       if (funded.status === "rejected") return purchaseObservation(operationId, observed, saved);
       return { operationId, state: "pending", nextAction: "resume", canDismiss: progress.dispatch === "not_requested",
         message: funded.message ?? (progress.dispatch === "not_requested" ? "The Wallet allowance result is not confirmed. Purchase payment has not been requested." : "The Wallet allowance result is not confirmed. Check this original purchase before any further payment.") };
     }
     confirmedFunding = funded;
+    saved = await savePurchaseProgress(context, saved, { ...saved.progress, version: 1, dispatch: saved.progress?.dispatch ?? "requested", fundingResult: funded });
     if (context.signal?.aborted) {
-      saved = await savePurchaseProgress(context, saved, { version: 1, dispatch: saved.progress?.dispatch ?? "requested", fundingResult: funded });
       context.signal.throwIfAborted();
     }
   }
   context.signal?.throwIfAborted();
-  saved = await savePurchaseProgress(context, saved, { version: 1, dispatch: "requested", ...(confirmedFunding ? { fundingResult: confirmedFunding } : {}) });
+  if (!dispatched) await assertPurchaseReleasePreferences(context, saved.quote);
+  saved = await savePurchaseProgress(context, saved, { ...saved.progress, version: 1, dispatch: "requested", ...(confirmedFunding ? { fundingResult: confirmedFunding } : {}) });
   context.signal?.throwIfAborted();
   try {
-    return purchaseObservation(operationId, await client.update<WireResult>("purchase", { quote: original }, original.cycles), saved);
+    const channel = purchaseChannel(saved.quote);
+    const result = channel
+      ? (await client.update<ChannelPurchaseResult>("purchase_v2", { quote: channel }, original.cycles)).purchase
+      : await client.update<WireResult>("purchase", { quote: original }, original.cycles);
+    return purchaseObservation(operationId, result, saved);
   } catch (error) {
     const result = await dispatchError(context, "purchase", operationId, error);
     if (error instanceof ProtocolError && result.canDismiss === true) {
@@ -250,7 +308,7 @@ export async function operationStatus(context: MsgBusToolContext, operationId: s
   const saved = await loadIntent<SavedIntent>(context.kernel, `operation:${id(operationId)}`);
   const names = saved ? [saved.kind === "purchase" ? "purchase_status" : "withdraw_status"] : ["purchase_status", "withdraw_status"];
   for (const name of names) {
-    const result = first(await client.query<Option<WireResult>>(name, [{ requestId: operationId }]));
+    const result = name === "purchase_status" ? (await client.purchaseWireStatus(operationId))?.purchase ?? null : first(await client.query<Option<WireResult>>(name, [{ requestId: operationId }]));
     if (result) {
       const view = name === "purchase_status" ? purchaseObservation(operationId, result, saved?.kind === "purchase" ? saved : undefined) : operationView(result);
       if (saved && JSON.stringify(saved.scope) !== JSON.stringify(scope(context, client.state.canisterId!, client.state.owner)) && view.nextAction === "resume") return { ...view, nextAction: "none", message: `${view.message} Continue from the original ${saved.scope.callerApp} ${saved.scope.root ? "root agent" : "application"} so its saved Wallet authority remains unchanged.` };
@@ -287,13 +345,13 @@ export async function resumeOperation(context: MsgBusToolContext, operationId: s
   if (!saved) {
     // Restores original protocol quotes after uninstall. Never invent another financial request.
     const client = await protocolClient(context);
-    const purchase = first(await client.query<Option<WireResult>>("purchase_status", [{ requestId: operationId }]));
+    const retained = await client.purchaseWireStatus(operationId), purchase = retained?.purchase;
     if (purchase) {
       const view = operationView(purchase);
       if (view.state === "complete" || view.nextAction === "none") return view;
       const quote = first(purchase.quote ?? []);
       if (!quote || !("buyer" in quote)) throw new Error("The original purchase quote is unavailable. Do not recreate its payment.");
-      return runPurchase(context, await client.purchaseView(quote), fundingResult);
+      return runPurchase(context, await client.purchaseView(quote, false, undefined, undefined, retained?.channel), fundingResult);
     }
     const withdrawal = first(await client.query<Option<WireResult>>("withdraw_status", [{ requestId: operationId }]));
     if (withdrawal) {
@@ -309,8 +367,8 @@ export async function resumeOperation(context: MsgBusToolContext, operationId: s
   assertScope(saved.scope, scope(context, client.state.canisterId!, client.state.owner));
   if (saved.kind === "purchase") {
     const previous = decodeOpaque<Checkout>(checkoutType, saved.quote.opaque);
-    const fresh = await client.query<Checkout>("purchase_quote", [previous.request]);
-    return runPurchase(context, samePurchase(previous, fresh) ? saved.quote : await client.purchaseView(fresh), fundingResult);
+    const fresh = await refreshPurchase(client, previous, purchaseChannel(saved.quote));
+    return runPurchase(context, samePurchase(previous, fresh.wire) ? saved.quote : await client.purchaseView(fresh.wire, false, undefined, saved.quote.releasePreferences, fresh.channel), fundingResult);
   }
   const previous = decodeOpaque<WithdrawQuote>(withdrawalType, saved.quote.opaque);
   const fresh = await client.query<WithdrawQuote>("withdraw_quote", [previous.request]);

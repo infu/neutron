@@ -6,6 +6,7 @@ import Encoding "../mo/Encoding";
 import Http "../mo/Http";
 import Retention "../mo/Retention";
 import PublisherStore "../mo/PublisherStore";
+import ReleaseStore "../mo/ReleaseStore";
 import Store "../mo/Store";
 import Types "../mo/Types";
 import Array "mo:core/Array";
@@ -31,7 +32,8 @@ persistent actor {
   var candidateId : ?Nat64 = null;
   var paths : [Text] = [];
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(memory, publisherMemory);
+  let channelMemory = ReleaseStore.init();
+  transient let db = Store.Use(memory, publisherMemory, channelMemory);
   transient let http = Http.Store(httpMemory, {
     artifact = func(path : Text) : ?Http.Artifact { Certification.artifact(db, path) };
     authorize = func(path : Text, bearer : ?Text) : Bool { Access.authorizeHttp(db, path, bearer) };
@@ -70,7 +72,7 @@ persistent actor {
     let package = artifact(Blob.fromArray(Array.tabulate<Nat8>(Certification.CHUNK_BYTES + 17, func(i) { if (i < Certification.CHUNK_BYTES) 65 else 66 })), "application/octet-stream");
     let source = artifact("private-offered-source", "application/gzip");
     let image = artifact("public-listing-image", "image/png");
-    let app = stored(Store.insertApp(db, {
+    ignore stored(Store.insertApp(db, {
       appId; owner = publisher; title = "Certification test"; summary = "Fixture"; description = "";
       priceUsdMicros = 1_000_000; revision = 1; approvedCandidate = null; visible = true;
       iconArtifact = ?image.id; screenshots = []; ratingCount = 0; ratingTotal = 0;
@@ -82,7 +84,10 @@ persistent actor {
       dependencies = []; state = #approved; published = true; createdAtNs = 1; updatedAtNs = 1;
     }));
     candidateId := ?value.id;
-    ignore stored(db.apps.update({ app with approvedCandidate = candidateId }));
+    ReleaseStore.putHeads(db.channels, appId, {
+      stableHead = { candidateId; revision = 1 };
+      betaHead = { candidateId = null; revision = 0 };
+    });
     ignore stored(Store.insertEntitlement(db, { owner = buyer; appId; orderId = 1; kind = #paid; acquiredAtNs = 2 }));
     paths := [Access.artifactPath(package, #package), Access.artifactPath(source, #source), Access.artifactPath(image, #image)];
     for ((owner, purpose, token) in ([
@@ -125,7 +130,11 @@ persistent actor {
       state = #approved; published = true; createdAtNs = 6; updatedAtNs = 6;
     }));
     let ?app = Store.getApp(db, appId) else Runtime.trap("Fixture app missing");
-    ignore stored(db.apps.update({ app with approvedCandidate = ?successor.id; updatedAtNs = 6 }));
+    ignore stored(db.apps.update({ app with updatedAtNs = 6 }));
+    let previousHeads = ReleaseStore.heads(db.channels, appId);
+    ReleaseStore.putHeads(db.channels, appId, {
+      previousHeads with stableHead = { candidateId = ?successor.id; revision = previousHeads.stableHead.revision + 1 };
+    });
     let retired = Retention.afterDecision(db, appId);
     certification.removeArtifacts(retired);
     paths := [Access.artifactPath(package, #package), Access.artifactPath(source, #source), paths[2]];

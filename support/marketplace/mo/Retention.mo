@@ -5,6 +5,7 @@ import Runtime "mo:core/Runtime";
 import Set "mo:core/Set";
 import Store "./Store";
 import Types "./Types";
+import ReleaseStore "./ReleaseStore";
 
 module {
   func active(db : Store.DB, candidate : Types.Candidate) : Bool {
@@ -12,10 +13,7 @@ module {
     // is published. The latest pointer also remains meaningful if revoked:
     // revocation must never fall back to an earlier release.
     if (candidate.state == #pending) return true;
-    switch (Store.getApp(db, candidate.appId)) {
-      case (?app) app.approvedCandidate == ?candidate.id;
-      case null false;
-    };
+    ReleaseStore.references(db.channels, candidate.appId, candidate.id);
   };
 
   func uploadHasCandidate(db : Store.DB, upload : Types.Upload, id : Nat64) : Bool {
@@ -41,6 +39,17 @@ module {
     // an image or another publisher's upload awaiting candidate submission.
     if (db.apps.by_icon_artifact.rangeIter(range, null).next() != null) return true;
     if (db.apps.by_screenshot.rangeIter(range, null).next() != null) return true;
+    for ((_, candidate) in db.candidates.iterPrimary(#fwd, null)) {
+      if (active(db, candidate)) {
+        switch (Store.getListing(db, candidate.appId, candidate.listingRevision)) {
+          case null {};
+          case (?listing) {
+            if (listing.iconArtifact == ?id) return true;
+            for (image in listing.screenshots.vals()) if (image == id) return true;
+          };
+        };
+      };
+    };
     for (upload in db.uploads.by_artifact.rangeIter(range, null)) {
       if (upload.state == #attached and (upload.purpose == #image or not uploadHasCandidate(db, upload, id))) return true;
     };
@@ -59,7 +68,7 @@ module {
     let ids = Set.empty<Nat64>();
     let range = { gt = null; gte = ?appId; lt = null; lte = ?appId; dir = #fwd };
     for (candidate in db.candidates.by_app.rangeIter(range, null)) {
-      if (app.approvedCandidate != ?candidate.id and candidate.state != #pending) {
+      if (not active(db, candidate)) {
         Set.add(ids, Nat64.compare, candidate.artifactId);
         switch (candidate.sourceArtifactId) { case (?id) Set.add(ids, Nat64.compare, id); case null {} };
       };

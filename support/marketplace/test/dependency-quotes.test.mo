@@ -9,6 +9,7 @@ import Quotes "../mo/Quotes";
 import Repository "../mo/Repository";
 import Store "../mo/Store";
 import PublisherStore "../mo/PublisherStore";
+import ReleaseStore "../mo/ReleaseStore";
 import Types "../mo/Types";
 import F "motoko/Fixtures";
 import Array "mo:core/Array";
@@ -21,7 +22,7 @@ persistent actor DependencyQuoteTests {
   type Context = { db : Store.DB; repo : Repository.Service; http : Http.Store };
 
   func setup() : Context {
-    let db = Store.Use(F.memory(), PublisherStore.init());
+    let db = Store.Use(F.memory(), PublisherStore.init(), ReleaseStore.init());
     let token : Types.TokenConfig = {
       ledger = F.other(); symbol = "ckUSDC"; decimals = 6; fee = 10_000;
       rateSymbol = "USDC"; burnAccount = null;

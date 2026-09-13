@@ -18,6 +18,9 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
     }
   }, 35_000);
 } else {
+  const actualClient = await import("../src/client.ts");
+  const actualActions = await import("../src/actions.ts");
+  const actualEthereumClient = await import("../src/ethereum_client.ts");
   type Data = Record<string, any>;
   const OPERATION = "12".repeat(16);
   const registered = new Map<string, { specification: Data; handler: (args: Data, context: Data) => Promise<Data> }>();
@@ -33,17 +36,20 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
     publishAppStateChange: async () => undefined,
   }));
   mock.module("../src/client.ts", () => ({
+    ...actualClient,
     initialize: invoke("initialize"), configured: invoke("configured"), connect: invoke("connect"), randomId: () => OPERATION,
     discount: invoke("discount", { code: "SAVED", active: true, discountBps: 1000 }),
     setDiscountCode: invoke("setDiscountCode", { code: "CHANGED", active: true, discountBps: 1000 }),
     protocolClient: async () => ({
       quotePurchase: invoke("icQuote", quote()), quoteWithdrawal: invoke("withdrawQuote"), update: invoke("update"),
       query: async (...args: any[]) => { calls.push({ name: "icQuery", args }); return icOriginal ? [icOriginal] : []; },
+      purchaseWireStatus: async (...args: any[]) => { calls.push({ name: "icQuery", args }); return icOriginal ? { purchase: icOriginal } : null; },
       purchaseView: async (wire: Data) => wire,
     }),
   }));
   mock.module("../src/store.ts", () => ({ loadIntent: async (_kernel: unknown, key: string) => stored.get(key) ?? null }));
   mock.module("../src/actions.ts", () => ({
+    ...actualActions,
     runPurchase: invoke("icPurchase"), runWithdrawal: invoke("icWithdrawal"), operationStatus: invoke("icStatus", { operationId: OPERATION, state: "pending" }),
     operationHistory: invoke("icHistory", { purchases: [], withdrawals: [], nextPurchaseCursor: "done", nextWithdrawalCursor: "done" }),
     recentOperations: async () => icRecent, resumeOperation: invoke("icResume"),
@@ -55,6 +61,7 @@ if (process.env.NEUTRON_MARKETPLACE_SERVICE_TEST_CHILD !== "1") {
     ethereumJournalRecord: invoke("journalRecord"), finishEthereumBrowser: invoke("browserVerify"), settleEthereumPurchase: invoke("ethSettle"), cancelEthereumPurchase: invoke("ethCancel"), verifyEthereumTransaction: invoke("ethVerifyOriginal"),
   }));
   mock.module("../src/ethereum_client.ts", () => ({
+    ...actualEthereumClient,
     ethereumInvoiceStatus: async () => original,
     ethereumHistory: async (...args: any[]) => { calls.push({ name: "ethHistory", args }); return { items: ethereum ? [ethereum] : [], nextCursor: ethereumCursor }; },
   }));

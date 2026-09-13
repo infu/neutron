@@ -9,6 +9,7 @@ import Journal "../../mo/PaymentStore";
 import Purchases "../../mo/Purchases";
 import Rates "../../mo/Rates";
 import PublisherStore "../../mo/PublisherStore";
+import ReleaseStore "../../mo/ReleaseStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
 import Withdrawals "../../mo/Withdrawals";
@@ -20,7 +21,8 @@ persistent actor class PaymentHarness(config : Types.Config) = self {
   var failFinalization = false;
   var failWithdrawalFinalization = false;
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(memory, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   transient let marketplace = Principal.fromActor(self);
   transient let client = Ledger.client();
   transient let purchases = Purchases.Engine(db, client, marketplace, Time.now, func(order, block, now) {

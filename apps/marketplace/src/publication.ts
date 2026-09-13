@@ -6,7 +6,7 @@ import type { PublicationInput } from "./view-types.ts";
 import { validateListingText } from "./listing-text.ts";
 
 export type ArtifactInput = { requestId: string; role: "package" | "source" | "icon" | "screenshot"; name: string; size: number; digest: number[]; mediaType: string; purpose: "package" | "source" | "image" };
-export type PublicationPlan = { requestId: string; appId: string; title: string; summary: string; description: string; priceUsdMicros: string; artifacts: ArtifactInput[]; version: string | null; dependencies: Array<{ appId: string; minVersion: string }> };
+export type PublicationPlan = { requestId: string; appId: string; title: string; summary: string; description: string; /** Absent in retained publication plans created before release notes were supported. */ releaseNotes?: string; priceUsdMicros: string; artifacts: ArtifactInput[]; version: string | null; dependencies: Array<{ appId: string; minVersion: string }> };
 export const UPLOAD_CHUNK_BYTES = 48 * 1024; // Leaves room for base64 and message metadata under the existing bus envelope.
 export const NEUTRON_PACKAGE_MEDIA_TYPE = "application/vnd.neutron.package";
 export async function preparePublication(input: PublicationInput): Promise<PublicationPlan> {
@@ -40,7 +40,7 @@ export async function preparePublication(input: PublicationInput): Promise<Publi
     artifacts.push({ requestId: randomId(), role, name: file.name, size: file.size, digest: [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))], mediaType, purpose: image ? "image" : role as "package" | "source" });
   }
   if (input.sourceFile && !input.packageFile) throw new Error("Upload the offered source together with its exact package release.");
-  return { requestId: randomId(), appId: input.appId, title: input.title, summary: input.summary, description: input.description, priceUsdMicros: String(price), artifacts, version, dependencies };
+  return { requestId: randomId(), appId: input.appId, title: input.title, summary: input.summary, description: input.description, releaseNotes: input.releaseNotes, priceUsdMicros: String(price), artifacts, version, dependencies };
 }
 export function publicationFiles(input: PublicationInput): File[] { return [...(input.packageFile ? [input.packageFile] : []), ...(input.sourceFile ? [input.sourceFile] : []), ...(input.iconFile ? [input.iconFile] : []), ...input.screenshotFiles]; }
 export function base64(bytes: Uint8Array): string { let text = ""; for (const byte of bytes) text += String.fromCharCode(byte); return btoa(text); }

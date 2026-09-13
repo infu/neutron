@@ -14,7 +14,7 @@ const output = process.env.MARKETPLACE_BROWSER_ARTIFACTS || "/tmp/neutron-market
 const listingExcerpt = "Find the connections in your research. Explore ideas with agent tools and keep the full context close at hand. ".repeat(3).slice(0, 255);
 const listingDescription = "Bring your research together in a workspace built for discovery.\n\nExplore your notes, connect ideas and use agent tools to work with your knowledge.\n\n".repeat(40).slice(0, 5000);
 await mkdir(output, { recursive: true });
-const transport = `export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler}); export const removeExposedTool=name=>window.marketplaceTools.delete(name); export const copyToClipboard=text=>{const state=window.marketplaceFixture;state.copies.push({text,active:navigator.userActivation.isActive});return state.copyFailure?Promise.reject(Error('Clipboard temporarily unavailable.')):Promise.resolve();}; export const connectEthereumProvider=()=>{throw Error('Unexpected browser wallet connection in IC checkout regression')};`;
+const transport = `export const onAppStateChange=(topic,listener)=>{const listeners=window.marketplaceStateListeners??=new Map();listeners.set(topic,listener);return()=>listeners.delete(topic)}; export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler}); export const removeExposedTool=name=>window.marketplaceTools.delete(name); export const copyToClipboard=text=>{const state=window.marketplaceFixture;state.copies.push({text,active:navigator.userActivation.isActive});return state.copyFailure?Promise.reject(Error('Clipboard temporarily unavailable.')):Promise.resolve();}; export const connectEthereumProvider=()=>{throw Error('Unexpected browser wallet connection in IC checkout regression')};`;
 const fixture = `
 import React from 'react';
 import {createRoot} from 'react-dom/client';
@@ -47,9 +47,9 @@ const client={
  setDiscountCode:async input=>{const code=input.trim().toUpperCase();state.discountSaves.push(code);if(code&&code!=='QUIET-CODE'&&code!=='OTHER-CODE')throw Error(code==='SELF-CODE'?'You cannot use your own affiliate code.':'That discount code was not found.');state.discountCode=code||null;if(code)localStorage.setItem('discountCode',code);else localStorage.removeItem('discountCode');return discount(state.discountCode);},
  initialize:async()=>{state.initializations++;if(scenario.get('setup')==='fatal'&&state.initializations===1)throw Error('Neutron is temporarily unavailable.');if(scenario.get('setup')==='delegate')return {...session,connected:false,connectionError:'Read access could not be prepared.'};return session;},configure:async x=>({...session,...x}),connect:async()=>{state.connections++;return session;},
  catalog:async input=>{state.calls.push(['catalog',input]);if(scenario.get('catalog')==='paid-error'&&input.tier==='paid'&&!state.paidReadFailed){state.paidReadFailed=true;throw Error('Paid charts are temporarily unavailable.');}const matches=entries.filter(x=>(input.tier==='free'?x[3]==='0':x[3]!=='0')&&x[1].toLowerCase().includes(input.search.toLowerCase()));const paged=scenario.get('catalog')==='paged';return {items:(paged?(input.cursor?matches.slice(1):matches.slice(0,1)):matches).map(listing),nextCursor:paged&&!input.cursor&&matches.length>1?input.tier+'-next':null,asOf:'2026-09-10T00:00:00Z',warning:'Rankings are refreshing. These results share the displayed snapshot time.'}},
- detail:async id=>({...listing(entries.find(x=>x[0]===id)),description:${JSON.stringify(listingDescription)},screenshots:[],audit:{auditor:principal,verdict:'approved',analysis:'The submitted package was checked for malware. No malicious behavior was found in this review.',date:'2026-09-10T00:00:00Z',packageHash:'a'.repeat(64)},ownRating:null}),
+ detail:async id=>{state.calls.push(['detail',id]);return ({...listing(entries.find(x=>x[0]===id)),description:${JSON.stringify(listingDescription)},screenshots:[],audit:{auditor:principal,verdict:'approved',analysis:'The submitted package was checked for malware. No malicious behavior was found in this review.',date:'2026-09-10T00:00:00Z',packageHash:'a'.repeat(64)},ownRating:null})},
  library:async()=>({items:entries.filter(x=>state.owned.includes(x[0])).map(x=>({...listing(x),acquiredAt:'2026-09-10',installedVersion:state.installed.includes(x[0])?'1':null,available:true})),nextCursor:null}),
- publisherApps:async()=>({items:[],nextCursor:null}),
+ publisherApps:async()=>({items:[],nextCursor:null}),pendingPromotions:async()=>[],
  ownPublisherProfile:async()=>({id:'aae',name:'AAE',description:'Apps for your Neutron.',principal,rating:4.8,ratingCount:42,totalUsers:'1234',statsComplete:true}),
  publisherProfile:async()=>({id:'aae',name:'AAE',description:'Apps for your Neutron.',principal,rating:4.8,ratingCount:42,totalUsers:'1234',statsComplete:true}),
  publisherCatalog:async()=>({items:entries.map(listing),nextCursor:null}),
@@ -593,6 +593,20 @@ try {
   await page.getByRole("region", { name: "Top paid", exact: true }).getByRole("button", { name: "Try again", exact: true }).click();
   await page.getByRole("button", { name: 'Atlas', exact: true }).waitFor();
   checks.push("One chart's read error does not block the other chart, and its retry recovers in place.");
+
+  await page.getByRole("button", { name: 'Atlas', exact: true }).click();
+  const currentDetail = page.getByRole('dialog', { name: 'Atlas', exact: true });
+  await currentDetail.getByRole('heading', { name: 'About this app', exact: true }).waitFor();
+  const readsBeforeFocus = await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='detail').length);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForFunction(count => window.marketplaceFixture.calls.filter(call=>call[0]==='detail').length > count, readsBeforeFocus);
+  await currentDetail.waitFor();
+  const readsBeforePreference = await page.evaluate(() => window.marketplaceFixture.calls.filter(call=>call[0]==='catalog').length);
+  await page.evaluate(() => window.marketplaceStateListeners.get('kernel.release-preferences')({revision:'9'}));
+  await currentDetail.waitFor({state:'detached'});
+  await page.waitForFunction(count => window.marketplaceFixture.calls.filter(call=>call[0]==='catalog').length > count, readsBeforePreference);
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), []);
+  checks.push('Focus refreshes open release details. Kernel preference invalidation closes stale details and rereads storefronts without purchasing.');
 
   await page.goto(`${url}/?setup=delegate`);
   await page.getByText("Read access could not be prepared.", { exact: true }).waitFor();

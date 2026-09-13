@@ -10,6 +10,7 @@ import {
   canisterOrigin,
 } from "neutron-tools/src/runtime.js";
 import { normalizeUpdateSourcePrincipal } from "neutron-tools/src/schema.js";
+import { repositoryBetaReleasePath } from "neutron-tools/src/release_channels.js";
 import {
   REMOTE_NEUTRON_PACKAGE_DECODE_LIMITS,
 } from "neutron-compiler/src/install.js";
@@ -28,6 +29,7 @@ export type UpdateHttpClientOptions = Readonly<{
   timeoutMs?: number;
   resourcePaths?: readonly string[];
   approvedAccess?: readonly RepositoryAccessApproval[];
+  channel?: "stable" | "beta";
 }>;
 
 export async function fetchUpdateRelease(
@@ -36,7 +38,7 @@ export async function fetchUpdateRelease(
   options: UpdateHttpClientOptions = {},
 ): Promise<FetchedRelease | null> {
   const origin = sourceOrigin(source);
-  const url = new URL(repositoryReleasePath(appId), origin);
+  const url = new URL(options.channel === "beta" ? repositoryBetaReleasePath(appId) : repositoryReleasePath(appId), origin);
   const response = await boundedGet(url, {
     ...options,
     accept: "application/json",
@@ -67,6 +69,7 @@ export async function fetchUpdateRelease(
     source,
     record,
     releaseDigest: hashContent(response.bytes),
+    channel: options.channel ?? "stable",
   });
 }
 
@@ -176,13 +179,6 @@ async function boundedGet(
   }
 
   assertGatewayCertificationV2(response);
-  if (response.status === 404 && options.notFound) return null;
-  if (!response.ok) {
-    throw new UpdateCheckError(
-      "unavailable",
-      `The update source returned HTTP ${response.status}.`,
-    );
-  }
   if (response.redirected) {
     throw new UpdateCheckError(
       "redirected",
@@ -206,6 +202,13 @@ async function boundedGet(
         "The update response came from a different origin.",
       );
     }
+  }
+  if (response.status === 404 && options.notFound) return null;
+  if (!response.ok) {
+    throw new UpdateCheckError(
+      "unavailable",
+      `The update source returned HTTP ${response.status}.`,
+    );
   }
 
   options.validateResponse?.(response);

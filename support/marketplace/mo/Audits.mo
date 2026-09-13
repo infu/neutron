@@ -1,12 +1,12 @@
 // All rights reserved. See ../LICENSE.
 import Catalog "Catalog";
 import Publishing "Publishing";
-import Rankings "Rankings";
-import Retention "Retention";
+import ReleaseTransitions "ReleaseTransitions";
 import Store "Store";
 import Types "Types";
 import API "API";
 import Access "Access";
+import ReleaseStore "ReleaseStore";
 import Runtime "mo:core/Runtime";
 import List "mo:core/List";
 
@@ -99,7 +99,7 @@ module {
             };
             case _ return #err("The candidate offered-source identity is incomplete.");
           };
-          nextApp := { app with approvedCandidate = ?candidate.id; updatedAtNs = now };
+          nextApp := { app with updatedAtNs = now };
           publicationChanged := true;
         };
         { candidate with state = #approved; published = true; updatedAtNs = now };
@@ -112,7 +112,7 @@ module {
         if (not candidate.published or candidate.state != #approved) return #err("Only an approved published release can be revoked.");
         // Retain the latest pointer. Falling back to old bytes would silently
         // downgrade repository clients; the publisher must issue a successor.
-        if (app.approvedCandidate == ?candidate.id) nextApp := { app with updatedAtNs = now };
+        if (ReleaseStore.references(db.channels, app.appId, candidate.id)) nextApp := { app with updatedAtNs = now };
         publicationChanged := true;
         { candidate with state = #revoked; updatedAtNs = now };
       };
@@ -123,9 +123,8 @@ module {
     }));
     let savedCandidate = must(db.candidates.update(nextCandidate));
     let savedApp = if (nextApp != app) must(db.apps.update(nextApp)) else app;
-    Rankings.refreshEligibility(db, savedApp);
     let ?audit = db.audits.get(auditId) else Runtime.trap("Saved audit missing");
-    let retiredArtifacts = Retention.afterDecision(db, savedApp.appId);
+    let retiredArtifacts = ReleaseTransitions.afterAudit(db, savedApp, savedCandidate, input.decision, publicationChanged);
     #ok({ audit; candidate = savedCandidate; app = savedApp; publicationChanged; retiredArtifacts });
   };
 

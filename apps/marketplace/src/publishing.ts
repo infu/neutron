@@ -21,6 +21,14 @@ function uploadRequest(plan: PublicationPlan, index: number) {
   const file = plan.artifacts[index]!;
   return { requestId: file.requestId, appId: plan.appId, digest: Uint8Array.from(file.digest), size: BigInt(file.size), mediaType: file.mediaType, purpose: { [file.purpose]: null } };
 }
+function candidateRequest(client: Client, plan: PublicationPlan, artifactId: bigint, sourceArtifactId: Option<bigint>) {
+  const request = { requestId: plan.requestId, appId: plan.appId, version: BigInt(plan.version!), artifactId, sourceArtifactId, dependencies: plan.dependencies.map(d => ({ appId: d.appId, minVersion: BigInt(d.minVersion) })) };
+  // Legacy saved plans must replay their original candidate_submit identity.
+  // New plans use the additive endpoint so notes belong to this exact candidate.
+  return plan.releaseNotes === undefined
+    ? { method: "candidate_submit", request }
+    : { method: "candidate_submit_v2", request: { request: { ...request, feeVersion: client.info.fees.version }, releaseNotes: plan.releaseNotes } };
+}
 async function existingApp(client: Client, appId: string): Promise<WireApp | null> {
   try { return (await client.detailWire(appId)).app; }
   catch (error) { if (error instanceof ProtocolError && ["not_found", "app_not_found"].includes(error.code)) return null; throw error; }
@@ -41,9 +49,12 @@ export async function quotePublication(context: MsgBusToolContext, plan: Publica
     for (let offset = 0; offset < file.size; offset += UPLOAD_CHUNK_BYTES) processing += (await client.estimateUpdate("upload_chunk", { requestId: file.requestId, offset: BigInt(offset), bytes: new Uint8Array(Math.min(UPLOAD_CHUNK_BYTES, file.size - offset)) })).processingCycles;
   }
   if (plan.artifacts.some(f => f.purpose === "image")) processing += (await client.estimateUpdate("listing_save", { ...listingRequest(plan, current), expectedRevision: [0n], iconArtifact: plan.artifacts.some(f => f.role === "icon") ? [0n] : current?.iconArtifact ?? [], screenshots: plan.artifacts.some(f => f.role === "screenshot") ? plan.artifacts.filter(f => f.role === "screenshot").map(() => 0n) : current?.screenshotArtifacts ?? [] })).processingCycles;
-  if (plan.version) processing += (await client.estimateUpdate("candidate_submit", { requestId: plan.requestId, appId: plan.appId, version: BigInt(plan.version), artifactId: 0n, sourceArtifactId: plan.artifacts.some(f => f.role === "source") ? [0n] : [], dependencies: plan.dependencies.map(d => ({ appId: d.appId, minVersion: BigInt(d.minVersion) })) })).processingCycles;
+  if (plan.version) {
+    const submission = candidateRequest(client, plan, 0n, plan.artifacts.some(f => f.role === "source") ? [0n] : []);
+    processing += (await client.estimateUpdate(submission.method, submission.request)).processingCycles;
+  }
   const total: Fee = { ...base, processingCycles: processing, storageCycles: storage, totalCycles: processing + storage };
-  return { cycles: cycleView(total), bytes: plan.artifacts.reduce((sum, f) => sum + f.size, 0), coverageEndsAt: new Date(Date.now() + 365 * 86400000).toISOString(), warnings: ["One assigned auditor must approve the exact release before it appears in the store.", "The operator funds storage after the prepaid first year."], opaque: plan };
+  return { cycles: cycleView(total), bytes: plan.artifacts.reduce((sum, f) => sum + f.size, 0), coverageEndsAt: new Date(Date.now() + 365 * 86400000).toISOString(), warnings: [...(plan.version ? ["One assigned auditor must approve the exact release before it becomes available as beta. Test it, then choose Release to make it stable."] : []), ...(plan.artifacts.length ? ["The operator funds storage after the prepaid first year."] : [])], opaque: plan };
 }
 async function saved(context: MsgBusToolContext, requestId: string): Promise<SavedPublication> {
   const value = await loadIntent<SavedPublication>(context.kernel, `publication:${requestId}`);
@@ -115,6 +126,9 @@ export async function finishPublication(context: MsgBusToolContext, requestId: s
     if (icon !== first(current.iconArtifact) || desired.map(String).join(",") !== current.screenshotArtifacts.map(String).join(",")) await client.update("listing_save", { appId: plan.appId, title: plan.title, summary: plan.summary, description: plan.description, priceUsdMicros: BigInt(plan.priceUsdMicros), iconArtifact: some(icon), screenshots: desired, expectedRevision: [current.revision] });
   }
   const packageArtifact = artifacts.find(a => a.role === "package");
-  if (packageArtifact && plan.version) await client.update("candidate_submit", { requestId: plan.requestId, appId: plan.appId, version: BigInt(plan.version), artifactId: packageArtifact.id, sourceArtifactId: some(artifacts.find(a => a.role === "source")?.id), dependencies: plan.dependencies.map(d => ({ appId: d.appId, minVersion: BigInt(d.minVersion) })) });
-  return { message: packageArtifact ? "Your release was submitted for review. It becomes available after an assigned auditor approves it." : "Your listing changes are saved." };
+  if (packageArtifact && plan.version) {
+    const submission = candidateRequest(client, plan, packageArtifact.id, some(artifacts.find(a => a.role === "source")?.id));
+    await client.update(submission.method, submission.request);
+  }
+  return { message: packageArtifact ? "Your release was submitted for review. Once approved, it becomes available as beta. Test it, then choose Release to make it stable." : "Your listing changes are saved." };
 }

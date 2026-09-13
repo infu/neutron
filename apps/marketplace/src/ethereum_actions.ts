@@ -1,13 +1,13 @@
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
 import { matchesSavedDiscount } from "./discount.ts";
 import { protocolClient, randomId, cycleView } from "./client.ts";
-import { scope, assertScope, authorize, type Scope } from "./actions.ts";
+import { scope, assertScope, authorize, assertPurchaseReleasePreferences, purchaseChannel, sameChannelSelection, type Scope } from "./actions.ts";
 import { loadIntent, saveIntent, reviseIntent, listIntents } from "./store.ts";
 import { checkoutType, decodeOpaque, type Checkout } from "./protocol.ts";
-import { ethereumQuote, ethereumInvoiceView, ethereumInvoiceStatus, ethereumOperationView, ethereumFees, ethereumHistory } from "./ethereum_client.ts";
-import type { EthereumInvoiceResult } from "./ethereum_protocol.ts";
+import { ethereumQuote, ethereumInvoiceView, ethereumInvoiceStatus, ethereumOperationView, ethereumFees, ethereumHistory, retainedEthereumInvoice } from "./ethereum_client.ts";
+import type { EthereumInvoiceResult, ChannelEthereumInvoiceResult } from "./ethereum_protocol.ts";
 import { buildEthereumFundingPlan, principalToEthereumWord, createEthereumFundingWallet, readEthereumFundingWalletState, mergeEthereumFundingRecords, executeEvmFundingStep, type EthereumFundingPlan, type EthereumFundingRecord, type EthereumFundingKind, type EthereumFundingJournal } from "./ethereum.ts";
-import type { OperationResult, PurchaseQuote, EthereumPurchaseSelection, EthereumWalletSource } from "./view-types.ts";
+import type { OperationResult, PurchaseQuote, PurchaseSelection, EthereumPurchaseSelection, EthereumWalletSource } from "./view-types.ts";
 
 type SavedEthereum = { version: 1; kind: "ethereum_purchase"; scope: Scope; quote: PurchaseQuote; source: EthereumWalletSource; requestIds: { approval: string; deposit: string }; plan: EthereumFundingPlan | null };
 type JournalEntry = { claimNonce: string; record: EthereumFundingRecord };
@@ -19,7 +19,7 @@ export async function ethereumPayer(context: MsgBusToolContext): Promise<string>
   if (!account) throw new Error("Create the main EVM Wallet account before paying with it.");
   return account.address;
 }
-export async function quoteEthereumPurchase(context: MsgBusToolContext, input: { appIds: string[]; affiliateCode?: string | undefined; ethereum: EthereumPurchaseSelection; operationId?: string }): Promise<PurchaseQuote> {
+export async function quoteEthereumPurchase(context: MsgBusToolContext, input: { appIds: string[]; affiliateCode?: string | undefined; ethereum: EthereumPurchaseSelection; operationId?: string; selection?: PurchaseSelection }): Promise<PurchaseQuote> {
   if (input.operationId && await loadIntent(context.kernel, `operation:${operationId(input.operationId)}`)) throw new Error("This operation ID already belongs to an IC payment. Resume its original payment rail.");
   const saved = input.operationId ? await loadIntent<SavedEthereum>(context.kernel, key(operationId(input.operationId))) : null;
   if (saved) {
@@ -69,10 +69,14 @@ async function prepare(context: MsgBusToolContext, supplied?: PurchaseQuote, id?
     if (supplied.ethereum.wallet === "browser") assertBrowser(context);
     const wire = decodeOpaque<Checkout>(checkoutType, supplied.opaque);
     if (wire.buyer.toText() !== currentScope.owner || wire.request.requestId !== requestId) throw new Error("The checkout does not belong to this Neutron and operation.");
-    const canonical = await ethereumQuote(context, { appIds: wire.request.appIds, affiliateCode: wire.request.referralCode[0] ?? "", ethereum: supplied.ethereum, operationId: requestId });
+    await assertPurchaseReleasePreferences(context, supplied);
+    const channel = purchaseChannel(supplied);
+    const canonical = await ethereumQuote(context, { appIds: wire.request.appIds, affiliateCode: wire.request.referralCode[0] ?? "", ethereum: supplied.ethereum, operationId: requestId, retained: supplied });
+    if (!sameChannelSelection(channel, purchaseChannel(canonical))) throw new Error("The Ethereum checkout release selection changed. Retain its original identity and review the selected packages again.");
     if (canonical.commitment !== supplied.commitment || canonical.totalDebit.atoms !== supplied.totalDebit.atoms || JSON.stringify(canonical.ethereum) !== JSON.stringify(supplied.ethereum)) throw new Error("The Ethereum checkout costs or payer changed. Review a fresh quote before preparing it.");
     if (supplied.ethereum.wallet === "evm_wallet" && (await ethereumPayer(context)).toLowerCase() !== supplied.ethereum.payerAddress.toLowerCase()) throw new Error("The reviewed EVM payer changed.");
     await authorize(context, { kind: "purchase", quote: canonical as unknown as JsonObject });
+    await assertPurchaseReleasePreferences(context, canonical);
     saved = { version: 1, kind: "ethereum_purchase", scope: currentScope, source: supplied.ethereum.wallet, quote: canonical, requestIds: { approval: randomId(), deposit: randomId() }, plan: null };
     await saveIntent(context.kernel, key(requestId), saved);
   } else assertScope(saved.scope, currentScope);
@@ -81,12 +85,19 @@ async function prepare(context: MsgBusToolContext, supplied?: PurchaseQuote, id?
   if (!result) {
     const fees = await ethereumFees(context);
     if (String(fees.prepare.totalCycles) !== saved.quote.ethereum!.prepareCycles.total) throw new Error("The invoice preparation cycle cost changed. Review current costs before continuing.");
-    result = await client.update<EthereumInvoiceResult>("ethereum_prepare", { quote: decodeOpaque<Checkout>(checkoutType, saved.quote.opaque), payer: saved.quote.ethereum!.payerAddress }, fees.prepare);
+    await assertPurchaseReleasePreferences(context, saved.quote);
+    const channel = purchaseChannel(saved.quote);
+    result = channel
+      ? retainedEthereumInvoice(await client.update<ChannelEthereumInvoiceResult>("ethereum_prepare_v2", { quote: channel, payer: saved.quote.ethereum!.payerAddress }, fees.prepare))
+      : await client.update<EthereumInvoiceResult>("ethereum_prepare", { quote: decodeOpaque<Checkout>(checkoutType, saved.quote.opaque), payer: saved.quote.ethereum!.payerAddress }, fees.prepare);
   }
-  const canonical = await ethereumInvoiceView(context, result, saved.source), plan = planFor(result, client.info.canister.toText(), saved.requestIds);
+  const canonical = { ...await ethereumInvoiceView(context, result, saved.source), ...(saved.quote.releasePreferences ? { releasePreferences: saved.quote.releasePreferences } : {}) }, plan = planFor(result, client.info.canister.toText(), saved.requestIds);
+  if (!sameChannelSelection(purchaseChannel(saved.quote), purchaseChannel(canonical))) throw new Error("The retained Ethereum invoice differs from its original release selection. Reconcile the original payment without authorizing another one.");
   if (saved.plan && JSON.stringify(saved.plan) !== JSON.stringify(plan)) throw new Error("The protocol changed a saved invoice's Ethereum payment call. Do not pay again.");
   if (!saved.plan) {
+    await assertPurchaseReleasePreferences(context, saved.quote);
     await authorize(context, { kind: "purchase", quote: canonical as unknown as JsonObject }, true);
+    await assertPurchaseReleasePreferences(context, saved.quote);
     const replacement = { ...saved, quote: canonical, plan };
     await reviseIntent(context.kernel, key(requestId), saved, replacement); saved = replacement;
   }
@@ -102,6 +113,7 @@ function fundingJournal(context: MsgBusToolContext, saved: SavedEthereum): Ether
       validateRecord(saved, record); const storageKey = journalKey(saved.quote.operationId, record.step.kind);
       const existing = await loadIntent<JournalEntry>(context.kernel, storageKey);
       if (existing) return { claimed: false, record: existing.record };
+      await assertPurchaseReleasePreferences(context, saved.quote);
       const next = { claimNonce: randomId(), record };
       try { await saveIntent(context.kernel, storageKey, next); }
       catch (error) {
@@ -157,7 +169,17 @@ async function executeEthereum(context: MsgBusToolContext, quote?: PurchaseQuote
   if (result.entitled || result.active) return savedInvoiceView(context, result, saved);
   if ("settle" in result.nextAction) return invoiceAction(context, saved.quote.operationId, "settle");
   if (!("pay_ethereum" in result.nextAction || "verify_ethereum" in result.nextAction)) return savedInvoiceView(context, result, saved);
-  const journal = fundingJournal(context, saved), wallet = createEthereumFundingWallet(context);
+  const journal = fundingJournal(context, saved), originalWallet = createEthereumFundingWallet(context);
+  const wallet = new Proxy(originalWallet, { get(target, property) {
+    if (property === "sendTransaction") return async (...args: Parameters<typeof originalWallet.sendTransaction>) => {
+      // A retained unsigned EVM Wallet request can ask for a fresh review.
+      // Status and chain reads stay usable after a preference change.
+      await assertPurchaseReleasePreferences(context, saved.quote);
+      return originalWallet.sendTransaction(...args);
+    };
+    const value = Reflect.get(target, property, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
   const depositExisting = await journal.read("deposit");
   if (!depositExisting) {
     const existingApproval = await journal.read("approval");

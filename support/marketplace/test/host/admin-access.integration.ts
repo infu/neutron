@@ -128,11 +128,32 @@ export const cases: IntegrationCase[] = [{
         requestId: "admin-access-candidate", appId: listing.appId, version: 100n,
         artifactId, sourceArtifactId: [sourceArtifactId], dependencies: [], feeVersion: 1n,
       });
+      denied(await anonymous.app_detail(listing.appId), "app_unavailable", "An unaudited app is absent from public stable reads");
+      denied(await relayCall(canisterAdmin, market, "promotion_prepare", [{ appIds: [listing.appId] }]), "release_unavailable", "An unaudited candidate is unavailable for promotion");
       succeeded(await auditor.audit_stamp({
         requestId: "admin-access-audit", candidateId: candidate.id, expectedDigest: candidate.digest,
         expectedSourceDigest: candidate.sourceDigest, decision: { approved: null },
         analysis: "Local authorization fixture", reason: [],
       }));
+      denied(await anonymous.app_detail(listing.appId), "app_unavailable", "Audit approval publishes beta without making the app stable");
+      const promotion = {
+        requestId: "admin-access-promotion",
+        ...succeeded(await relayCall(canisterAdmin, market, "promotion_prepare", [{ appIds: [listing.appId] }])),
+        feeVersion: 1n,
+      };
+      assert.equal(promotion.entries.length, 1);
+      assert.equal(promotion.entries[0].candidateId, candidate.id);
+      assert.deepEqual(promotion.entries[0].digest, candidate.digest);
+      assert.deepEqual(promotion.entries[0].sourceDigest, candidate.sourceDigest);
+      for (const [label, actor] of [["Signing admin", admin], ["Auditor", auditor]] as const) {
+        denied(await actor.promotion_prepare({ appIds: [listing.appId] }), "publisher_required", `${label} cannot prepare another publisher's stable promotion`);
+        denied(await actor.release_promote(promotion), "neutron_required", `${label} cannot bypass the publisher identity requirement for promotion`);
+      }
+      denied(await relayCall(canisterAdmin, market, "release_promote", [promotion], 0n), "cycles_required", "Canister admins must fund ordinary stable promotion");
+      const promoted = await charged("release_promote", promotion);
+      assert.equal(promoted.channel, "stable");
+      assert.equal(promoted.owner.toText(), canisterAdmin.canisterId.toText());
+      assert.equal(succeeded(await anonymous.app_detail(listing.appId)).candidate[0].id, candidate.id, "Owner promotion exposes the exact candidate to public stable reads");
       const purchaseRequest = { requestId: "ordinary-admin-purchase", appIds: [listing.appId], ledger: ledger.canisterId, referralCode: [] };
       const directQuote = succeeded(await admin.purchase_quote(purchaseRequest));
       assert.equal(directQuote.amount, 0n);

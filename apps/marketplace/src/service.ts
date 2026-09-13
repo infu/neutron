@@ -13,8 +13,9 @@ import { ethereumHistory, ethereumInvoiceStatus } from "./ethereum_client.ts";
 import type { EthereumFundingKind, EthereumFundingRecord } from "./ethereum.ts";
 import { first, type Option, type WireResult } from "./protocol.ts";
 import { beginPublication, beginArtifact, writeArtifact, finishPublication, quotePublication } from "./publishing.ts";
+import { quotePromotion, pendingPromotions, promote } from "./promotion.ts";
 import type { PublicationPlan } from "./publication.ts";
-import type { PurchaseQuote, WithdrawalQuote, PublicationQuote, PublisherProfileInput, PublisherProfileQuote, PaymentToken, AppTier, RankingWindow, EthereumPurchaseSelection, InstallationQuote } from "./view-types.ts";
+import type { PurchaseQuote, WithdrawalQuote, PublicationQuote, PublisherProfileInput, PublisherProfileQuote, PaymentToken, AppTier, RankingWindow, EthereumPurchaseSelection, InstallationQuote, PromotionQuote, ReleaseIdentity, PurchaseSelection } from "./view-types.ts";
 
 const string = { type: "string" }, id = { type: "string", pattern: "^[0-9a-f]{32}$" }, token = { type: "string", enum: ["ICP", "ckBTC", "ckUSDC"] };
 const object = (properties: JsonObject = {}, required: string[] = Object.keys(properties)): JsonObject => ({ type: "object", properties, required, additionalProperties: false });
@@ -62,6 +63,9 @@ async function uiRead(context: MsgBusToolContext, method: string, args: JsonObje
   switch (method) {
     case "catalog": return client.catalog(args as unknown as { tier: AppTier; window: RankingWindow; search: string; cursor?: string });
     case "detail": return client.detail(String(args.appId));
+    case "publisherDetail": return client.publisherDetail(String(args.appId));
+    case "comments": return client.comments(String(args.appId), args.release as unknown as ReleaseIdentity, typeof args.cursor === "string" ? args.cursor : undefined);
+    case "pendingPromotions": return pendingPromotions(context);
     case "library": return client.library(typeof args.cursor === "string" ? args.cursor : undefined);
     case "publisherApps": return client.publisherApps(typeof args.cursor === "string" ? args.cursor : undefined);
     case "publisherProfile": return client.publisherProfile(text(args.id));
@@ -71,11 +75,11 @@ async function uiRead(context: MsgBusToolContext, method: string, args: JsonObje
     case "earnings": return client.earnings();
     case "quotePurchase": {
       if (args.ethereum) {
-        const input = args as unknown as { appIds: string[]; affiliateCode?: string | undefined; ethereum: EthereumPurchaseSelection };
+        const input = args as unknown as { appIds: string[]; affiliateCode?: string | undefined; ethereum: EthereumPurchaseSelection; selection?: PurchaseSelection };
         if (input.ethereum.wallet === "browser") requireMarketplaceTile(context);
         return quoteEthereumPurchase(context, input);
       }
-      return client.quotePurchase(args as unknown as { appIds: string[]; token: PaymentToken; affiliateCode?: string });
+      return client.quotePurchase(args as unknown as { appIds: string[]; token: PaymentToken; affiliateCode?: string; selection?: PurchaseSelection });
     }
     case "quoteInstallation": return quoteInstallation(context, args.appIds as string[], typeof args.operationId === "string" ? args.operationId : undefined);
     case "quoteWithdrawal": return client.quoteWithdrawal(args as unknown as { token: PaymentToken; amountAtoms: string; destination: string });
@@ -120,7 +124,10 @@ async function uiWrite(context: MsgBusToolContext, method: string, args: JsonObj
     case "resumeOperation": return resume(context, String(args.operationId));
     case "install": return prepareInstallationForTile(context, args.appIds as string[], args.quote as unknown as InstallationQuote);
     case "installationOpened": return markInstallationOpened(context, args.quote as unknown as InstallationQuote);
-    case "rate": await client.update("rating_set", { appId: String(args.appId), stars: BigInt(Number(args.stars)), review: String(args.text) }); return null;
+    case "rate": return client.rate(String(args.appId), Number(args.stars), String(args.text));
+    case "comment": return client.comment(String(args.appId), args.release as unknown as ReleaseIdentity, String(args.text));
+    case "quotePromotion": return quotePromotion(context, String(args.appId));
+    case "promote": return promote(context, args.quote as unknown as PromotionQuote);
     case "createReferralCode": return (await client.update<{ code: string }>("referral_get_or_create", {})).code;
     case "savePublisherProfile": return client.savePublisherProfile(args.input as unknown as PublisherProfileInput, args.quote as unknown as PublisherProfileQuote);
     case "beginPublication": return beginPublication(context, args.quote as unknown as PublicationQuote);
@@ -165,11 +172,11 @@ register("marketplace_purchase_v1", "Acquire marketplace apps", "Acquire free or
     return resumeOperation(context, text(args.operationId), args.fundingResult);
   }
   const client = await protocolClient(context);
-  const original = first(await client.query<Option<WireResult>>("purchase_status", [{ requestId: text(args.operationId) }]));
+  const original = await client.purchaseWireStatus(text(args.operationId));
   if (original) {
-    const wire = first(original.quote ?? []);
+    const wire = first(original.purchase.quote ?? []);
     if (!wire || !("buyer" in wire)) throw new Error("The original purchase quote is unavailable. Do not recreate its payment.");
-    const quote = await client.purchaseView(wire);
+    const quote = await client.purchaseView(wire, false, undefined, undefined, original.channel);
     if (JSON.stringify(quote.appIds) !== JSON.stringify(args.appIds) || quote.token !== args.token || !matchesSavedDiscount(quote.affiliateCode, typeof args.affiliateCode === "string" ? args.affiliateCode : undefined)) throw new Error("These inputs differ from the original protocol purchase.");
     return resumeOperation(context, text(args.operationId), args.fundingResult);
   }
@@ -220,8 +227,14 @@ register("marketplace_withdraw_v1", "Withdraw marketplace earnings", "Withdraw a
 });
 register("marketplace_install_quote_v1", "Review installation preparation cost", "Read the combined cycle cost of preparing selected apps and their private download access. No charged update occurs. Neutron presents one final package-permission and installation review.", { appIds: { type: "array", items: string }, operationId: id }, ["appIds"], reads, async (args, context) => quoteInstallation(context, args.appIds as string[], typeof args.operationId === "string" ? args.operationId : undefined));
 register("marketplace_install_v1", "Install acquired apps", "Review the combined preparation and source-access cycle cost, then open the generic Neutron package review with the selected entitled apps. Normal agents use owner approval; Root agents use scoped authorization. Retain operationId after an interrupted reply or closed review; access is reused and no apps are purchased.", { appIds: { type: "array", items: string }, operationId: id, quote: { type: "object", additionalProperties: true } }, ["appIds"], reviewed, async (args, context) => installApplications(context, args.appIds as string[], args.quote as unknown as InstallationQuote | undefined, typeof args.operationId === "string" ? args.operationId : undefined));
-register("marketplace_rate_v1", "Rate an acquired app", "Save one editable 1–5 star review for an app this Neutron acquired free or paid. Charges the fixed protocol update estimate through Neutron.", { appId: string, stars: { type: "integer", minimum: 1, maximum: 5 }, review: string }, ["appId", "stars", "review"], writes, async (args, context) => {
+register("marketplace_rate_v1", "Rate an acquired app", "Save this Neutron's permanent editable 1–5 star app rating. Pass an empty review; written comments must use marketplace_comment_v2 with the exact displayed release identity. Charges the fixed protocol update estimate through Neutron.", { appId: string, stars: { type: "integer", minimum: 1, maximum: 5 }, review: string }, ["appId", "stars", "review"], writes, async (args, context) => {
   const client = await protocolClient(context);
-  await client.update("rating_set", { appId: text(args.appId), stars: BigInt(Number(args.stars)), review: text(args.review) });
+  await client.rate(text(args.appId), Number(args.stars), text(args.review));
+  return { saved: true };
+});
+const commentProperties = { appId: string, candidateId: string, version: string, digest: string };
+register("marketplace_comments_v2", "Read app version comments", "Read comments for the exact candidate/version/package digest returned by app details. Retired versions have no comment archive.", { ...commentProperties, cursor: string }, Object.keys(commentProperties), reads, async (args, context) => (await protocolClient(context)).comments(text(args.appId), { candidateId: text(args.candidateId), version: text(args.version), digest: text(args.digest) }, typeof args.cursor === "string" ? args.cursor : undefined));
+register("marketplace_comment_v2", "Comment on an offered app version", "Save this Neutron's comment for the exact offered candidate/version/package digest returned by app details. An empty comment removes your comment. App stars remain unchanged.", { ...commentProperties, text: string }, [...Object.keys(commentProperties), "text"], writes, async (args, context) => {
+  await (await protocolClient(context)).comment(text(args.appId), { candidateId: text(args.candidateId), version: text(args.version), digest: text(args.digest) }, text(args.text));
   return { saved: true };
 });

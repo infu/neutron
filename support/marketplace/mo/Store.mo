@@ -10,12 +10,14 @@ import StableBlob "mo:ashroot/stable_blob";
 import IndexCore "mo:ashroot/index_core";
 import Generated "../.ashroot/lib";
 import PublisherStore "./PublisherStore";
+import ReleaseStore "./ReleaseStore";
 import Types "./Types";
 
 module {
   public type Mem = Generated.Mem;
   public type DB = Generated.DB and {
     publishers : PublisherStore.DB;
+    channels : ReleaseStore.Mem;
     publisherApps : (Principal, ?Nat64) -> Iter.Iter<(Nat64, Types.App)>;
   };
   public type Error = Types.Error;
@@ -36,11 +38,14 @@ module {
 
   // Construct once as a transient actor value. Existing retained records are
   // restored directly; initialization is never used as an upgrade fallback.
-  public func Use(mem : Mem, publisherMem : PublisherStore.Mem) : DB {
+  public func Use(mem : Mem, publisherMem : PublisherStore.Mem, channels : ReleaseStore.Mem) : DB {
     let ?retained = mem.store.value else Runtime.trap("Marketplace storage is not initialized");
+    let generated = Generated.Use(mem, retained);
+    ReleaseStore.bootstrap(channels, generated.apps.iterPrimary(#fwd, null));
     {
-      Generated.Use(mem, retained) with
+      generated with
       publishers = PublisherStore.Use(publisherMem);
+      channels;
       // Existing ownership index stores (owner, physical row slot). Retain that
       // slot as the cursor, including across sparse IDs or deleted row reuse.
       publisherApps = func(owner : Principal, after : ?Nat64) : Iter.Iter<(Nat64, Types.App)> {

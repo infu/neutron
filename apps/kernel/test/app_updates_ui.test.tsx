@@ -186,6 +186,84 @@ test("update results are joined to rows by app id and expose one-app actions", (
   expect(html).not.toContain("Update All");
 });
 
+test.each(["normal", "developer"] as const)(
+  "%s mode identifies beta update actions without labeling stable releases beta",
+  (mode) => {
+    useKernelUiModeStore.setState({ mode });
+    const html = renderSurface(
+      {
+        ...idleState,
+        phase: "ready",
+        results: [
+          { ...available("mail", "Mail", 102), releaseChannel: "beta" },
+          { ...available("contacts", "Contacts", 101), releaseChannel: "stable" },
+          available("calendar", "Calendar", 101),
+        ],
+      },
+      [
+        { appId: "mail", appName: "Mail", updateSource: SOURCE },
+        { appId: "contacts", appName: "Contacts", updateSource: SOURCE },
+        { appId: "calendar", appName: "Calendar", updateSource: SOURCE },
+      ],
+    );
+
+    expect(html).toContain('aria-label="Update Mail to v0.1.2 (Beta)"');
+    expect(html).toContain('title="Update Mail to v0.1.2 (Beta)"');
+    expect(html.match(/>Update \(Beta\)<\/button>/gu)).toHaveLength(1);
+    expect(html).toContain('aria-label="Update Contacts to v0.1.1"');
+    expect(html).toContain('aria-label="Update Calendar to v0.1.1"');
+    expect(html.match(/>Update<\/button>/gu)).toHaveLength(2);
+  },
+);
+
+test.each(["normal", "developer"] as const)(
+  "%s mode presents ahead-of-stable results and announces the waiting status",
+  (mode) => {
+    useKernelUiModeStore.setState({ mode });
+    const html = renderSurface(
+      {
+        ...idleState,
+        phase: "ready",
+        checkedAt: 1,
+        results: [
+          {
+            kind: "ahead_of_stable",
+            appId: "mail",
+            name: "Mail",
+            installed: 102,
+            source: SOURCE,
+            advertised: 101,
+          },
+          {
+            kind: "ahead_of_stable",
+            appId: "contacts",
+            name: "Contacts",
+            installed: 102,
+            source: SOURCE,
+          },
+        ],
+      },
+      [
+        { appId: "mail", appName: "Mail", updateSource: SOURCE },
+        { appId: "contacts", appName: "Contacts", updateSource: SOURCE },
+      ],
+    );
+
+    expect(
+      html.match(/>Ahead of stable — waiting for a stable release<\/span>/gu),
+    ).toHaveLength(2);
+    expect(html).toContain(
+      'data-tid="app-updates-status">Update check complete: 2 apps ahead of stable — waiting for a stable release.</div>',
+    );
+    expect(html.match(/aria-live="polite"/gu)).toHaveLength(1);
+    expect(html).not.toContain("checks need attention");
+    expect(html).not.toContain("Source behind");
+    expect(html).not.toContain('data-tid="settings-update-mail"');
+    expect(html).not.toContain('data-tid="settings-update-contacts"');
+    expect(html).not.toContain('data-tid="settings-upgrade-all"');
+  },
+);
+
 test("verified updates expose one bulk upgrade action", () => {
   const state: UpdateState = {
     ...idleState,
@@ -375,6 +453,26 @@ test("verified review and apply stay in the consolidated per-app update flow", (
   expect(html).toContain("Update 1 app");
   expect(html).not.toContain("Update All");
 });
+
+test.each(["normal", "developer"] as const)(
+  "%s mode labels the beta target version in update review",
+  (mode) => {
+    useKernelUiModeStore.setState({ mode });
+    const html = renderSurface(
+      reviewState([
+        reviewApp({ appId: "mail", name: "Mail", channel: "beta" }),
+        reviewApp({ appId: "contacts", name: "Contacts", channel: "stable" }),
+        reviewApp({ appId: "calendar", name: "Calendar" }),
+      ]),
+    );
+
+    expect(html.match(/<strong>v0\.1\.1 \(Beta\)<\/strong>/gu)).toHaveLength(1);
+    expect(html.match(/<strong>v0\.1\.1<\/strong>/gu)).toHaveLength(2);
+    expect(html.indexOf("v0.1.1 (Beta)")).toBeLessThan(
+      html.indexOf('data-tid="app-updates-apply"'),
+    );
+  },
+);
 
 test("bulk review stays plural and preserves a bulk return target", () => {
   const html = renderSurface(
@@ -611,6 +709,7 @@ function available(appId: string, name: string, version: number) {
 function reviewApp(input: {
   appId: string;
   name: string;
+  channel?: "stable" | "beta";
   currentUpdateSource?: string;
   targetUpdateSource?: string;
   permissions?: Permission[];
@@ -629,6 +728,7 @@ function reviewApp(input: {
     installedVersion: 100,
     targetVersion: 101,
     source: SOURCE,
+    ...(input.channel ? { channel: input.channel } : {}),
     ...(currentUpdateSource ? { currentUpdateSource } : {}),
     ...(targetUpdateSource ? { targetUpdateSource } : {}),
     packageBytes: 2_048,

@@ -161,6 +161,12 @@ export const cases: IntegrationCase[] = [{
       const candidate = success(await ctx.publisher.candidate_submit({ requestId: "retained-candidate", appId: retained.appId, version: 100n, artifactId: pkg.artifactId[0], sourceArtifactId: source.artifactId, dependencies: [], feeVersion: 1n }));
       const batchInput = { requestId: "retained-batch", candidates: [{ candidateId: candidate.id, expectedDigest: candidate.digest, expectedSourceDigest: candidate.sourceDigest }], analysis: "Inspected fixture package and source digests." };
       const receipt = success(await ctx.publisher.trusted_publish_batch(batchInput));
+      if (!previousPath) {
+        // The predecessor published stable on approval. Current fixture setup
+        // explicitly promotes the beta before exercising legacy acquisition.
+        const promotion = success(await ctx.publisher.promotion_prepare({ appIds: [retained.appId] }));
+        success(await ctx.publisher.release_promote({ requestId: "retained-promote", entries: promotion.entries, feeVersion: 1n }));
+      }
       const quote = success(await ctx.browser.purchase_quote({ requestId: "retained-acquisition", appIds: [retained.appId], ledger: ledger.canisterId, referralCode: [] }));
       success(await ctx.call("purchase", { quote, feeVersion: 1n }));
       const grant = { request_id: "a1".repeat(16), token: "b2".repeat(32), paths: [pkg.path, source.path], fee_version: 1n };
@@ -200,6 +206,11 @@ export const cases: IntegrationCase[] = [{
       assert.equal(corrected.revision, retained.revision + 1n);
       const detail = success(await ctx.browser.app_detail(retained.appId));
       assert.equal(detail.candidate[0].id, candidate.id);
+      assert.equal(detail.app.summary, retainedInput.summary, "The public release keeps its saved listing revision after a draft edit");
+      assert.equal(detail.app.description, retainedInput.description);
+      const draftDetail = success(await ctx.publisher.app_detail(retained.appId));
+      assert.equal(draftDetail.app.summary, corrected.summary, "Publisher detail remains the live listing editor read path");
+      assert.equal(draftDetail.app.description, corrected.description);
       assert.deepEqual(success(await ctx.publisher.trusted_publish_batch(batchInput)), receipt, "Listing edits do not change the old package publication receipt");
     } finally { await env.shutdown(); }
   },

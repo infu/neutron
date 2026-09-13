@@ -49,7 +49,12 @@ Uninstall still removes app-local journals and browser signing data.
   paid-purchase or free-acquisition counts; reinstalls and retries do not add to
   them. The publisher ID beneath an app's name opens its profile, description,
   principal, portfolio rating, total users and audited apps. Listing icons and
-  screenshots are served from the marketplace. Checkout
+  screenshots are served from the marketplace. Discovery, app details and new
+  installations follow **Advanced users → Beta updates** in Neutron Settings.
+  Beta updates are off by default. Enabling them selects a newer available beta;
+  otherwise the latest stable release is shown. Release descriptions, screenshots
+  and notes belong to the selected package, while ownership and prices stay
+  app-wide. Checkout
   shows the token price, ledger fees, referral discount, developer/affiliate
   shares and allocation toward burning NTN before purchase. **Discount code**
   validates an affiliate code directly with the protocol and remembers it in
@@ -67,7 +72,9 @@ Uninstall still removes app-local journals and browser signing data.
   Install handoffs do not create a persistent status card; the existing Install
   control reopens the saved selection. **Refresh cost** retains the original request. **Prepare latest selection**
   explicitly reviews a new request if the old release is unavailable or newer
-  releases are wanted. Installed apps update through Neutron Settings.
+  releases are wanted. Installed apps update through Neutron Settings. Turning
+  beta updates off never downgrades an installed beta: the library shows that it
+  is ahead of stable until a suitable stable release is available.
 - **Publish:** first set up this Neutron's publisher profile. Choose an available
   ID containing 3–20 lowercase letters (`a`–`z`) and a public name. The ID and name
   are permanent; the description can be edited later. Review the profile's cycle
@@ -75,7 +82,10 @@ Uninstall still removes app-local journals and browser signing data.
   and matching offered source, and add an icon or screenshots. List prices are free or
   $1–$50 before discounts. Review upload costs before submitting; uploads prepay
   the first year of storage, and the operator funds storage afterward without
-  annual renewal. Rejected submissions display the auditor's reason.
+  annual renewal. An approved upload becomes the current beta. **Release vN**
+  promotes that exact beta package and source to stable after a separate cycle
+  review. The saved release request retains its version and hashes across an
+  interrupted response. Rejected submissions display the auditor's reason.
 - **Earnings:** obtain a referral code, inspect available/reserved earnings and
   review withdrawals. The ledger fee comes out of the chosen withdrawal debit.
   Self-referrals are not allowed.
@@ -86,14 +96,20 @@ Uninstall still removes app-local journals and browser signing data.
   payment evidence brings a dismissed checkout back into Activity.
 
 Free and paid acquisitions include future approved updates. Either kind of
-owner can leave one editable rating. Upload review retains the selected files
+owner can leave one editable, permanent app rating. The average, total count and
+five star-count buckets include ratings across releases. Text comments belong
+to the displayed version. Stable and beta versions keep separate threads while
+offered; replacing the last channel offering a version deletes that version's
+comments. Promoting the same beta to stable keeps its comments.
+
+Upload review retains the selected files
 and quote while the app remains open, including when switching tabs; use
 **Continue this upload** after an interrupted reply.
 
 A publisher's total users counts distinct Neutron principals that acquired at
 least one of its apps, free or paid. Acquiring another app from that publisher,
 reinstalling or retrying does not add another user. The portfolio rating combines
-all of its apps' review totals and review counts, so each review has equal weight;
+all of its apps' rating totals and rating counts, so each rating has equal weight;
 it is not an unweighted average of app ratings. These statistics are maintained
 when acquisitions and ratings change, so profile reads do not scan the portfolio.
 
@@ -115,7 +131,8 @@ before calling them; atomic amounts are decimal strings.
 | `marketplace_operation_v1`, `marketplace_history_v1` | Read original outcomes and recover their IDs |
 | `marketplace_withdraw_v1` | Review and withdraw earnings |
 | `marketplace_install_quote_v1`, `marketplace_install_v1` | Quote exact preparation cycles and offer installation with scoped owner/Root review |
-| `marketplace_rate_v1` | Rate acquired apps |
+| `marketplace_rate_v1` | Set permanent stars for an acquired app; `review` must be empty |
+| `marketplace_comments_v2`, `marketplace_comment_v2` | Read or edit comments for an exact candidate, version and digest; empty text deletes the owner's comment |
 
 `marketplace_publisher_v1` accepts the permanent `publisherId` and an optional
 `cursor`; follow `nextCursor` to read more apps. It returns the principal, permanent
@@ -124,6 +141,13 @@ Neutron count. `totalUsers` is an exact decimal string. If `statsComplete` is fa
 historical counters are still rebuilding; the partial values do not establish a
 zero audience or a final rating. Profile and app-page queries go directly to the
 protocol; checking installation status uses the existing Kernel app list.
+
+The Kernel owns the beta preference. Marketplace discovers and reads its
+`updates.preferences` tool and treats `kernel.release-preferences` events as
+invalidation notices. Each new quote or install checks the current preference;
+saved financial requests retain their original channel and complete release
+selection. Changing the preference does not silently create a replacement
+purchase or authorize a new payment for the old selection.
 
 For a new IC or Ethereum purchase, omitting `affiliateCode` uses this Neutron's
 remembered discount. An explicit empty string buys without a code for that

@@ -7,6 +7,7 @@ import Assets "../mo/Assets";
 import Billing "../mo/Billing";
 import Store "../mo/Store";
 import PublisherStore "../mo/PublisherStore";
+import ReleaseStore "../mo/ReleaseStore";
 import Types "../mo/Types";
 
 persistent actor {
@@ -26,7 +27,7 @@ persistent actor {
       priceUsdMicros = 1_000_000; revision = 1; approvedCandidate = null; visible = false;
       iconArtifact = null; screenshots = []; ratingCount = 0; ratingTotal = 0; createdAtNs = 0; updatedAtNs = 0;
     };
-    switch (Store.insertApp(Store.Use(mem, publisherMemory), app)) { case (#ok(_)) {}; case (#err(e)) Runtime.trap(debug_show(e)) };
+    switch (Store.insertApp(Store.Use(mem, publisherMemory, ReleaseStore.init()), app)) { case (#ok(_)) {}; case (#err(e)) Runtime.trap(debug_show(e)) };
     mem;
   };
   func input(requestId : Text) : API.UploadBegin {
@@ -42,13 +43,13 @@ persistent actor {
     Test.test(func () {
       let publisherMemory = PublisherStore.init();
       let mem = memory(publisherMemory);
-      let db = Store.Use(mem, publisherMemory);
+      let db = Store.Use(mem, publisherMemory, ReleaseStore.init());
       let first = start(db, input("file"));
       assert first.uploadedBytes == 0 and first.charge.coveredBytes == 6;
       let ?unbound = Store.getUploadByRequest(db, owner(), "file") else Runtime.trap("Upload missing");
       assert unbound.candidateId == null;
       assert must(Assets.chunk(db, owner(), { requestId = "file"; offset = 0; bytes = "abc"; feeVersion = 1 }, 11)).uploadedBytes == 3;
-      let restored = Store.Use(mem, publisherMemory);
+      let restored = Store.Use(mem, publisherMemory, db.channels);
       assert must(Assets.status(restored, owner(), "file")).uploadedBytes == 3;
       assert must(Assets.chunk(restored, owner(), { requestId = "file"; offset = 0; bytes = "abc"; feeVersion = 1 }, 12)).uploadedBytes == 3;
       switch (Assets.chunk(restored, owner(), { requestId = "file"; offset = 0; bytes = "xxx"; feeVersion = 1 }, 13)) { case (#err(_)) {}; case (_) assert false };
@@ -56,7 +57,7 @@ persistent actor {
       assert must(Assets.chunk(restored, owner(), { requestId = "file"; offset = 3; bytes = "def"; feeVersion = 1 }, 15)).uploadedBytes == 6;
       let completed = must(Assets.finish(restored, owner(), { requestId = "file"; feeVersion = 1 }, 16));
       assert completed.state == #attached and completed.uploadedBytes == 6;
-      assert must(Assets.finish(Store.Use(mem, publisherMemory), owner(), { requestId = "file"; feeVersion = 1 }, 17)) == completed;
+      assert must(Assets.finish(Store.Use(mem, publisherMemory, db.channels), owner(), { requestId = "file"; feeVersion = 1 }, 17)) == completed;
       assert start(restored, input("file")) == completed;
       assert restored.uploads.size() == 1 and restored.charges.size() == 1 and restored.artifacts.size() == 1;
       let ?attachedUpload = Store.getUploadByRequest(restored, owner(), "file") else Runtime.trap("Upload missing");
@@ -72,7 +73,7 @@ persistent actor {
   public func upload_intent_and_ownership_are_preserved() : async Test.Metrics {
     Test.test(func () {
       let publisherMemory = PublisherStore.init();
-      let db = Store.Use(memory(publisherMemory), publisherMemory);
+      let db = Store.Use(memory(publisherMemory), publisherMemory, ReleaseStore.init());
       ignore start(db, input("owned"));
       switch (Assets.estimateNewStorage(db, owner(), { input("owned") with size = 7 })) { case (#err(e)) assert e.code == "request_conflict"; case (_) assert false };
       switch (Assets.estimateNewStorage(db, other(), input("other"))) { case (#err(e)) assert e.code == "publisher_required"; case (_) assert false };
@@ -86,7 +87,7 @@ persistent actor {
   public func a_declared_digest_does_not_grant_an_existing_private_artifact() : async Test.Metrics {
     Test.test(func () {
       let publisherMemory = PublisherStore.init();
-      let db = Store.Use(memory(publisherMemory), publisherMemory);
+      let db = Store.Use(memory(publisherMemory), publisherMemory, ReleaseStore.init());
       ignore start(db, input("original"));
       ignore must(Assets.chunk(db, owner(), { requestId = "original"; offset = 0; bytes = "abcdef"; feeVersion = 1 }, 11));
       let original = must(Assets.finish(db, owner(), { requestId = "original"; feeVersion = 1 }, 12));
@@ -104,7 +105,7 @@ persistent actor {
   public func wrong_digest_never_attaches_unverified_bytes() : async Test.Metrics {
     Test.test(func () {
       let publisherMemory = PublisherStore.init();
-      let db = Store.Use(memory(publisherMemory), publisherMemory);
+      let db = Store.Use(memory(publisherMemory), publisherMemory, ReleaseStore.init());
       ignore start(db, input("bad"));
       ignore must(Assets.chunk(db, owner(), { requestId = "bad"; offset = 0; bytes = "ghijkl"; feeVersion = 1 }, 11));
       switch (Assets.finish(db, owner(), { requestId = "bad"; feeVersion = 1 }, 12)) { case (#err(e)) assert e.code == "digest_mismatch"; case (_) assert false };
@@ -118,7 +119,7 @@ persistent actor {
     Test.test(func () {
       let publisherMemory = PublisherStore.init();
       let mem = memory(publisherMemory);
-      let db = Store.Use(mem, publisherMemory);
+      let db = Store.Use(mem, publisherMemory, ReleaseStore.init());
       ignore start(db, input("retired"));
       ignore must(Assets.chunk(db, owner(), { requestId = "retired"; offset = 0; bytes = "abcdef"; feeVersion = 1 }, 11));
       let completed = must(Assets.finish(db, owner(), { requestId = "retired"; feeVersion = 1 }, 12));
@@ -133,7 +134,7 @@ persistent actor {
         content = #bytes("ghijkl"); publicLegacy = false; createdAtNs = 13;
       })) { case (#ok(value)) value; case (#err(e)) Runtime.trap(debug_show(e)) };
       assert replacement.id != artifactId;
-      let restored = Store.Use(mem, publisherMemory);
+      let restored = Store.Use(mem, publisherMemory, db.channels);
       let quote = Billing.quote(Store.config(restored).fees, #upload, 1, 0);
       for (result in [
         Assets.status(restored, owner(), "retired"),

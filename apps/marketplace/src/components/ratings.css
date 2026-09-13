@@ -1,0 +1,30 @@
+@layer app {
+  .mp-rating-distribution { display: grid; grid-template-columns: minmax(78px, 110px) minmax(0, 1fr); align-items: center; gap: 26px; }
+  .mp-rating-summary { display: flex; flex-direction: column; color: var(--mp-muted); font-size: 11px; min-width: 0; }
+  .mp-rating-summary-average { color: var(--nt-text-strong); font-size: 48px; line-height: 1.1; letter-spacing: -.05em; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mp-rating-summary-average.mp-rating-unrated { font-size: 22px; letter-spacing: -.02em; }
+  .mp-rating-summary-count { margin-top: 12px; overflow-wrap: anywhere; }
+  .mp-rating-histogram { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 27px minmax(12px, 1fr) minmax(18px, max-content); gap: 7px 9px; min-width: 0; }
+  .mp-rating-bucket { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; color: var(--mp-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .mp-rating-bucket-stars { white-space: nowrap; }
+  .mp-rating-bucket-stars > span { color: #e3c17b; }
+  .mp-rating-bucket-count { text-align: right; overflow-wrap: anywhere; min-width: 0; }
+  .mp-rating-bar { height: 6px; overflow: hidden; border-radius: 4px; background: var(--mp-line); }
+  .mp-rating-bar > span { display: block; height: 100%; border-radius: inherit; background: #e3c17b; }
+  .mp-version-comments { border-top: 1px solid var(--mp-line); padding-top: 18px; }
+  .mp-version-comment { padding: 13px 14px; background: var(--mp-paper); border-radius: 9px; min-width: 0; }
+  .mp-version-comment > header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 7px; }
+  .mp-version-comment > header > .mp-principal { flex: 1; min-width: 0; }
+  .mp-version-comment > header > span { font-size: 10px; }
+  .mp-version-comment-own { border-left: 2px solid var(--nt-accent); }
+  .mp-version-comment p { overflow-wrap: anywhere; }
+  .mp-detail-version { display: inline-flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; }
+  .mp-detail-version .mp-badge, .mp-modal-footer > .mp-release-beta { color: #dacafc; background: #332747; white-space: nowrap; }
+  @media (max-width: 420px) {
+    .mp-rating-distribution { grid-template-columns: minmax(65px, 82px) minmax(0, 1fr); gap: 14px; }
+    .mp-rating-histogram { grid-template-columns: 23px minmax(12px, 1fr) minmax(16px, max-content); column-gap: 5px; }
+    .mp-rating-bucket { font-size: 10px; }
+    .mp-rating-summary-average { font-size: 42px; }
+    .mp-rating-summary-average.mp-rating-unrated { font-size: 19px; }
+  }
+}

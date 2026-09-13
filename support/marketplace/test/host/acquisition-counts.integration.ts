@@ -102,6 +102,12 @@ export const cases: IntegrationCase[] = [{
       const uploaded = success(await publisher.upload_finish({ requestId: "counts-package", feeVersion: 1n }));
       const candidate = success(await publisher.candidate_submit({ requestId: "counts-candidate", appId, version: 100n, artifactId: uploaded.artifactId[0], sourceArtifactId: [], dependencies: [], feeVersion: 1n }));
       success(await auditor.audit_stamp({ requestId: "counts-audit", candidateId: candidate.id, expectedDigest: candidate.digest, expectedSourceDigest: candidate.sourceDigest, decision: { approved: null }, analysis: "Opaque test fixture inspected", reason: [] }));
+      if (!previousPath) {
+        // Current approval offers beta; this legacy acquisition fixture needs
+        // an explicitly promoted stable release before its v1 checkout.
+        const promotion = success(await publisher.promotion_prepare({ appIds: [appId] }));
+        success(await publisher.release_promote({ requestId: "counts-promote", entries: promotion.entries, feeVersion: 1n }));
+      }
       const freeQuote = await call(firstBuyer, "purchase_quote", { requestId: "count-free-acquisition", appIds: [appId], ledger: ledger.canisterId, referralCode: [] }, 0n);
       assert.equal(freeQuote.amount, 0n);
       const freePurchase = await call(firstBuyer, "purchase", { quote: freeQuote, feeVersion: 1n });

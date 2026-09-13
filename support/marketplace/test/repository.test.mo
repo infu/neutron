@@ -3,6 +3,7 @@ import API "../mo/API";
 import Audits "../mo/Audits";
 import Encoding "../mo/Encoding";
 import Http "../mo/Http";
+import ReleaseStore "../mo/ReleaseStore";
 import Repository "../mo/Repository";
 import Store "../mo/Store";
 import PublisherStore "../mo/PublisherStore";
@@ -27,7 +28,7 @@ persistent actor RepositoryTests {
   func setup() : Context {
     let memory = F.memory();
     let publisherMemory = PublisherStore.init();
-    let db = Store.Use(memory, publisherMemory);
+    let db = Store.Use(memory, publisherMemory, ReleaseStore.init());
     let certification = Http.init();
     let repo = Repository.Service(db, certification, Principal.fromActor(RepositoryTests));
     let http = Http.Store(certification, {
@@ -64,6 +65,9 @@ persistent actor RepositoryTests {
     let linked = F.stored(db.candidates.update({ candidate with dependencies }));
     ignore F.approve(db, linked, requestId # "-audit");
     let ?approved = Store.getCandidate(db, linked.id) else Runtime.trap("Approved fixture candidate missing");
+    let heads = ReleaseStore.heads(db.channels, appId);
+    assert heads.stableHead.candidateId == ?approved.id;
+    assert heads.betaHead.candidateId == ?approved.id;
     approved;
   };
 

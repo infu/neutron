@@ -18,6 +18,7 @@ entitlement, or update subscription from the setup protocol alone.
 | Contract | Implementation |
 | --- | --- |
 | Wire types, closed JSON schemas, resource paths, link parsing, expiry and bounds | [`repository.ts`](../packages/neutron-tools/src/repository.ts) |
+| Channel descriptor, heads, beta manifest and exact setup selection | [`release_channels.ts`](../packages/neutron-tools/src/release_channels.ts) |
 | Certified Candid resource verification | [`certified_asset.ts`](../packages/neutron-tools/src/certified_asset.ts) |
 | Anonymous retrieval and package transport selection | [`repository/client.ts`](../apps/kernel/src/repository/client.ts) |
 | Setup lifecycle, prepared app handoff, selection and review | [`repository/service.ts`](../apps/kernel/src/repository/service.ts), [`repository/model.ts`](../apps/kernel/src/repository/model.ts) |
@@ -84,10 +85,23 @@ URLs. Its methods map to these certified-tree keys:
 | `repo_manifests` | `/repo/v1/manifests.json` |
 | `repo_manifest` | `/repo/v1/manifests/<manifest-id>.json` |
 | `repo_package` | `/repo/v1/packages/<sha256>.neutron` |
+| Optional `repo_channel_metadata` | Fixed channel descriptor, app-head and manifest-selection paths |
 
 Setup reads information, the selected manifest and its packages. It does not
-use the manifest index as a discovery catalog. The separate update path reads
-`/repo/v1/releases/<app-id>.json` over HTTP.
+use the manifest index as a discovery catalog. Stable updates read
+`/repo/v1/releases/<app-id>.json` over HTTP; opted-in beta updates use the
+separate channel metadata and beta release path.
+
+`repo_channel_metadata` is a fixed optional query, with verified production-node
+method absence or certified descriptor absence preserving legacy v1 setup.
+Channel-aware sources require full certified descriptor, head and exact
+selection evidence binding the source, preference mode, complete package set
+and manifest digest. A failed read or proof cannot select legacy handling.
+Stable manifests retain v1; beta manifests require
+`protocol: "neutron-repo-channel-manifest-v1"` and `channel: "beta"`, which old
+closed v1 parsers reject. Successor Kernels verify the channel evidence and
+bind the Neutron's durable preference revision through installation admission.
+See [Release Channels](../support/marketplace/spec/release-channels.md#certified-repository-contract).
 
 Metadata queries use a dedicated anonymous agent, not the owner's Internet
 Identity actor. The transport omits cookies, referrers and caches. This prevents

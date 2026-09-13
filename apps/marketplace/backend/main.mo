@@ -36,7 +36,12 @@ module {
     public type AppBackendEnvironment = {
         stable_memory : { state : Memory.Mem };
         capabilities : {
-            backend_calls : Capabilities.BackendCallsV1;
+            // Keep the required surface compatible with released Kernels.
+            // Marketplace uses only these original v1 broker members.
+            backend_calls : {
+                canister_principal : Principal;
+                call : Capabilities.BackendCallRequestV1 -> async* Capabilities.BackendCallResultV1;
+            };
             wallet_custody_signing : Capabilities.WalletCustodySigningV1;
         };
     };
@@ -44,6 +49,7 @@ module {
     public func allowed(method : Text) : Bool {
         switch (method) {
             case ("read_delegate_set" or "purchase" or "withdraw" or "referral_get_or_create" or "rating_set" or "listing_save" or "upload_begin" or "upload_chunk" or "upload_finish" or "candidate_submit" or "install_prepare" or "repo_access_v1" or "ethereum_prepare" or "ethereum_verify" or "ethereum_settle" or "ethereum_cancel" or "publisher_profile_register" or "publisher_profile_update" or "admin_auditor_set" or "admin_reserve_app" or "admin_set_burn_account" or "rates_refresh") true;
+            case ("purchase_v2" or "ethereum_prepare_v2" or "rating_set_v2" or "version_comment_set_v2" or "version_comment_delete_v2" or "candidate_submit_v2" or "release_promote" or "install_prepare_v2") true;
             case (_) false;
         };
     };

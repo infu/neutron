@@ -11,6 +11,7 @@ import Encoding "./Encoding";
 import Http "./Http";
 import Store "./Store";
 import Types "./Types";
+import ReleaseStore "./ReleaseStore";
 
 module {
   public type Purpose = { #buyer; #publisher; #auditor };
@@ -123,7 +124,7 @@ module {
   func candidateVisible(db : Store.DB, candidate : Types.Candidate) : Bool {
     if (not candidate.published or candidate.state != #approved) return false;
     let ?app = Store.getApp(db, candidate.appId) else return false;
-    Catalog.eligible(db, app);
+    app.visible and ReleaseStore.references(db.channels, app.appId, candidate.id);
   };
   func candidateAccessible(db : Store.DB, owner : Principal, candidate : Types.Candidate, purpose : Purpose) : Bool {
     switch (purpose) {
@@ -166,6 +167,25 @@ module {
         };
         for (app in db.apps.by_screenshot.rangeIter(range, null)) {
           if (referencesImage(app, artifact.id) and Catalog.eligible(db, app)) return true;
+        };
+        // A stable listing may reference different images from the publisher's
+        // current beta draft. Both offered listing revisions remain public.
+        for ((_, app) in db.apps.iterPrimary(#fwd, null)) {
+          if (app.visible) {
+            let heads = ReleaseStore.heads(db.channels, app.appId);
+            for (head in [heads.stableHead, heads.betaHead].vals()) {
+              switch (Catalog.atHead(db, app, head)) {
+                case null {};
+                case (?candidate) switch (Store.getListing(db, app.appId, candidate.listingRevision)) {
+                  case null {};
+                  case (?listing) {
+                    if (listing.iconArtifact == ?artifact.id) return true;
+                    for (id in listing.screenshots.vals()) if (id == artifact.id) return true;
+                  };
+                };
+              };
+            };
+          };
         };
         false;
       };

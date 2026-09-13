@@ -7,6 +7,7 @@ import Text "mo:core/Text";
 import Catalog "./Catalog";
 import Store "./Store";
 import PublisherStore "./PublisherStore";
+import ReleaseStore "./ReleaseStore";
 import Types "./Types";
 
 module {
@@ -50,7 +51,7 @@ module {
   // on upgrade; fresh init arguments must never replace existing marketplace data.
   public func memory(initial : Types.Init, now : Int, publishers : PublisherStore.Mem) : Store.Mem {
     let retained = Store.init(initial);
-    let db = Store.Use(retained, publishers);
+    let db = Store.Use(retained, publishers, ReleaseStore.init());
     switch (initial.trustedPublishingPrincipal) {
       case null {};
       case (?principal) {

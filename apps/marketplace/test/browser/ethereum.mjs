@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const output = process.env.MARKETPLACE_ETHEREUM_BROWSER_ARTIFACTS || "/tmp/neutron-marketplace-ui/ethereum-browser";
 await mkdir(output, { recursive: true });
 const transport = `
-  export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler});
+  export const onAppStateChange=(topic,listener)=>{const listeners=window.marketplaceStateListeners??=new Map();listeners.set(topic,listener);return()=>listeners.delete(topic)}; export const exposeTool=(name,options,handler)=>window.marketplaceTools.set(name,{options,handler});
   export const removeExposedTool=name=>window.marketplaceTools.delete(name);export const copyToClipboard=()=>Promise.reject(Error('Unexpected clipboard action in this regression'));
   export const connectEthereumProvider=()=>window.ethereumFixture.connectBrowser();
 `;
@@ -58,7 +58,7 @@ const client={
  catalog:async input=>({items:input.tier==='paid'?[{...app,owned:state.owned}]:[],nextCursor:null}),
  detail:async()=>({...app,owned:state.owned,description:'A local checkout test.',screenshots:[],audit:null}),
  library:async()=>({items:state.owned?[{...app,owned:true,acquiredAt:'2026-09-10',installedVersion:null,available:true}]:[],nextCursor:null}),
- publisherApps:async()=>({items:[],nextCursor:null}),earnings:async()=>({referralCode:null,affiliateDiscountBps:1000,affiliateShareBps:3000,balances:[]}),
+ publisherApps:async()=>({items:[],nextCursor:null}),pendingPromotions:async()=>[],earnings:async()=>({referralCode:null,affiliateDiscountBps:1000,affiliateShareBps:3000,balances:[]}),
  recentOperations:async()=>[],operation:async()=>{state.events.push('status');return state.observed??observe();},
  quotePurchase:async input=>{
   state.events.push('quote');state.quotes.push(input);

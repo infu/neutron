@@ -6,7 +6,7 @@ updates, Neutron. They do not create or upgrade canisters. These scripts default
 to a review before updates; add `--execute` after inspecting that exact request.
 The separate Blast syntax and immediate-call behavior are documented below.
 
-Assigned auditors call audit endpoints directly. The four admin-only endpoints
+Assigned auditors call audit endpoints directly. The admin-only endpoints
 listed below also accept direct authenticated CLI calls without attached cycles.
 Ordinary publisher and user updates go
 through the installed marketplace app's `marketplace_marketplace_call` method on
@@ -57,8 +57,9 @@ cannot substitute a different package for the stamp. Use `rejected` or `revoked`
 with a nonempty `--reason FILE` where appropriate. Every stamp needs nonempty
 analysis. Keep the same request ID and inputs if its update reply is interrupted;
 a different decision requires a different request ID. `--execute` submits the
-reviewed decision. One approval publishes that exact release; revocation blocks
-ordinary downloads while retaining authorized audit access.
+reviewed decision. One approval makes that exact release available as beta;
+the publisher separately promotes it to stable. Revocation blocks ordinary
+downloads through either channel while retaining authorized audit access.
 
 ## Publisher uploads
 
@@ -80,7 +81,7 @@ request ID, files and listing after an interruption. A completed upload/candidat
 is not auditor approval. Do not invent new upload identities to recover lost
 responses. Keep this journal private because it contains unpublished package bytes.
 
-## First-party catalog publication
+## First-party beta catalog publication
 
 The assigned existing Blast identity 0 is
 `y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe`.
@@ -118,27 +119,110 @@ current listing fields before checking the older revision, without creating a
 second listing revision. A conflicting intervening edit instead requires a new
 review and must not be overwritten by the old saved request.
 
-The workflow validates exact archives, manifests, dependencies and memory
-migration structure, plus declared offered-source bytes and build inputs. It
-stages changed candidates, then promotes the selected set in one atomic
-`trusted_publish_batch` update. Its audit analysis identifies these automated
+The channel-aware source protocol must be upgraded and verified before this
+workflow can publish beta. It validates exact archives, manifests, dependencies
+and memory migration structure, plus declared offered-source bytes and build
+inputs. It stages changed candidates, then publishes the selected beta set in one atomic
+`trusted_publish_beta_batch` update. Its audit analysis identifies these automated
 checks; it never claims a manual malware or application-behavior review.
+Stable heads remain unchanged. Exact existing stable releases in a catalog are
+reported unchanged with their stable provenance; no duplicate beta is created.
 
-Request IDs and private journals default deterministically from the exact selected
-releases and listing inputs. `--request ID --journal FILE` can instead select an
-explicit retained pair. After a lost response, rerun with the same files and
-inputs. Do not rebuild or change versions to recover it. The journal reconciles
-the original batch before any promotion retry. A revoked or superseded release
+Request IDs and private journals bind `operation: "publish"`, `channel: "beta"`,
+the exact selected releases and listing inputs. `--request ID --journal FILE`
+can instead select an explicit retained pair. After a lost response, rerun with
+the same files and inputs. Do not rebuild or change versions to recover it. The journal reconciles
+the original batch before any publication retry. A revoked or superseded release
 does not trigger automatic reapproval.
 
-Certified HTTP postflight verifies current release records, every package, and
-every declared source artifact. The second publication must report receipt-v2
-`batch_id: null` and every package/source `unchanged`, with matching version,
+Certified HTTP postflight verifies the channel descriptor, current selected
+release records, every package, and every declared source artifact. The second
+publication must report receipt-v2 `batch_id: null` and every package/source
+`unchanged`, with matching version,
 path, size, and SHA-256. This means no new upload, candidate, audit, or publication
 batch. A new CLI process can still obtain a cycle-free own-publisher authorization
 grant to verify private downloads; the credential stays in memory and does not
 appear in the receipt. Local verification requires `--host URL --root-key FILE`
 and checks against that explicit root key.
+
+### Legacy Marketplace publication recovery
+
+Rerun with the original catalog, listing inputs, archives and offered-source
+bytes. Before choosing a beta identity, the CLI detects the predecessor's
+`.neutron/marketplace-publications/<old-catalog-hash>.json` and uses its saved
+request ID, including a previously custom ID. For a custom journal:
+
+```sh
+npm run updates:publish -- --journal "$LEGACY_PUBLICATION_JOURNAL"
+```
+
+Retain any original `--catalog` and `--listings` arguments. Omit `--request` to
+read the saved ID. The root command already enables `--execute`; the workspace
+`production:review` command keeps remote reads query-only and stops if private
+artifacts require a new access grant. Execution may obtain the existing
+cycle-free artifact-access grant for full certified verification.
+
+Recovery uses `trusted_publish_status` and the original stable release,
+package and source paths. It preserves the original journal bytes and never
+stages candidates, replays a stable publication or starts beta. Success returns
+receipt-v2 with `operation: "reconcile_legacy_publish"`, `channel: "stable"`,
+`batch_id: null`, and every package/source `unchanged`; `reconciled_batch_id`
+identifies the original batch, or is null for an originally unchanged catalog.
+Keep this receipt with the original journal and repeat to verify the same result.
+
+A missing original receipt after a requested commit remains unresolved. A
+partial workflow that never requested commit is explicitly unfinished; it is
+not converted into beta. Both block publication until resolved. Request,
+artifact, source or proof mismatches also stop recovery. Never relabel or delete
+the original journal to bypass that outcome. This is recovery within Marketplace,
+separate from the legacy SushiOS source command.
+
+### Stable promotion
+
+From the repository root, select one app or an explicit compatible group:
+
+```sh
+npm run updates:promote -- kernel wallet
+npm run updates:promote -- kernel wallet --execute
+npm run updates:promote -- kernel wallet --execute
+```
+
+The default performs remote reads and writes a local frozen review journal.
+It records current beta candidate IDs, versions, package/source digests and
+sizes, dependencies, and expected beta/stable revisions. Review the output;
+`--execute` uses that saved selection in `release_promote`, after querying
+`promotion_status`. Promotion changes stable references atomically and
+does not build, upload or alter artifacts. Stable dependencies must already be
+available or be included in the same transaction, including transitive needs.
+There is no implicit all-app selection.
+
+The command uses the same catalog, source and Blast identity as publication.
+`--catalog FILE`, `--journal FILE`, and `--request ID` select explicit retained
+configuration; local verification requires `--host URL --root-key FILE`.
+The default journal is
+`.neutron/marketplace-publications/promote-stable-<group-digest>.json` at the
+repository root, keyed by operation, channel, source and sorted app IDs.
+
+If beta changes before commit, the frozen selection conflicts. A lost reply
+must be reconciled under the same request and journal; a committed request
+returns its original receipt without replaying its mutation. Later beta
+publication does not change that receipt, and later stable publication cannot
+be rolled back by retrying it. A changed stable head fails current postflight.
+Use `--refresh` without `--execute` to review a later beta after the prior outcome
+is verified, after a definitive protocol rejection without commit, or when the
+old review was never executed. The previous journal is retained beside its
+replacement. Network failures and lost responses remain unknown outcomes and
+cannot be discarded through refresh.
+
+Promotion emits `neutron-update-source-publish-v2` with `operation: "promote"`
+and `channel: "stable"`. Changed rows are `promoted`; source artifacts remain
+`unchanged`. Repeat `--execute` against the same saved selection and require
+`batch_id: null`, every package/source `unchanged`, and exact matching paths,
+versions, lengths and digests. Both operations share a local per-source lock,
+including custom journal names. Operators must still ensure that no publisher
+runs concurrently on another machine.
+
+### First-party earnings and legacy source
 
 The same Blast identity can read `earnings_query`, request `withdraw_quote`, and
 call `withdraw` directly for its own credit. Inspect the live schema, choose the
@@ -151,6 +235,37 @@ account as owner or create a new withdrawal to recover an uncertain one.
 Use the old-source transition command only for the separately reviewed migration
 of installed users' source pointers. This catalog command never mutates the old
 source and never uploads paid package bytes there.
+
+## Channel protocol rollout
+
+The channel source upgrade and the compatible app release set are separate
+deployment steps. The historical [production release record](spec/production-release.md)
+does not establish that this successor is deployed or published.
+
+1. Qualify a state-preserving protocol upgrade from the deployed predecessor.
+   Preserve the existing database, publisher and certification roots. The new
+   channel root bootstraps existing approved references as stable, retains
+   revocation, and starts beta empty. Preserve grants, uploads, purchases and
+   receipts. Verify the descriptor and unchanged stable v1 projection after
+   upgrading the source, before publishing any app beta.
+2. Package and test the compatible Kernel/Marketplace successor set, including
+   all persistent roots and supported stable or beta schema predecessors.
+   Publish the set atomically as beta and require its verified no-op repeat.
+   Existing Kernels have no Beta updates setting, so initial testers need an
+   intentional owner-reviewed staging path. Never use reinstall or downgrade.
+3. Qualify those exact beta bytes and promote the compatible set together.
+   Require the promotion no-op repeat. Old Kernels discover the successors
+   through the stable v1 path and gain the default-off preference on upgrade.
+4. Once the successor Marketplace client is available through stable, an
+   administrator can explicitly call `admin_feedback_cutover({feeVersion})`.
+   This rejects new nonempty versionless review text with an update-required
+   error before restartable maintenance deletes legacy review text. It retains
+   stars and all acquisition records. The source upgrade alone does not enable
+   this cutover. See [Release Channels](spec/release-channels.md#feedback).
+
+Stage a new Dispenser starter separately only when future Neutrons should start
+with the new stable set. The complete release and starter workflow is
+[App Package Updates](../../doc/package-updates.md).
 
 ## Admin calls and initial source transition
 
@@ -171,6 +286,10 @@ from the protocol's operating balance. No default recipient or publisher is
 guessed. Existing canister-admin callers remain accepted. `operator.ts relay`
 handles other allowed charged methods through Neutron; it is not an admin
 impersonation mechanism.
+
+The separately timed `admin_feedback_cutover` endpoint is also a direct,
+authenticated, cycle-exempt administrator call. It has no dedicated operator
+subcommand; inspect its live Candid and follow the rollout prerequisites above.
 
 ### Blast CLI
 

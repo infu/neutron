@@ -6,6 +6,7 @@ import Types "Types";
 import Rankings "Rankings";
 import Publishers "Publishers";
 import Pricing "Pricing";
+import ReleaseStore "ReleaseStore";
 
 module {
   public type Result<T> = { #ok : T; #err : Text };
@@ -73,14 +74,39 @@ module {
   };
 
   public func approvedRelease(db : Store.DB, app : Types.App) : ?Types.Candidate {
-    let ?candidateId = app.approvedCandidate else return null;
+    release(db, app, #stable_);
+  };
+
+  public func atHead(db : Store.DB, app : Types.App, head : ReleaseStore.Head) : ?Types.Candidate {
+    let ?candidateId = head.candidateId else return null;
     let ?candidate = db.candidates.get(candidateId) else return null;
     if (candidate.appId != app.appId or not candidate.published or candidate.state != #approved) return null;
     ?candidate;
   };
 
+  public func release(db : Store.DB, app : Types.App, mode : ReleaseStore.Mode) : ?Types.Candidate {
+    let heads = ReleaseStore.heads(db.channels, app.appId);
+    let stableCandidate = atHead(db, app, heads.stableHead);
+    if (mode == #stable_) return stableCandidate;
+    switch (stableCandidate, atHead(db, app, heads.betaHead)) {
+      case (null, beta) beta;
+      case (existing, null) existing;
+      case (?existing, ?beta) if (beta.version > existing.version) ?beta else ?existing;
+    };
+  };
+
+  public func selection(db : Store.DB, app : Types.App, mode : ReleaseStore.Mode) : ?ReleaseStore.Selection {
+    let ?candidate = release(db, app, mode) else return null;
+    let heads = ReleaseStore.heads(db.channels, app.appId);
+    let isStable = heads.stableHead.candidateId == ?candidate.id;
+    ?{ appId = candidate.appId; candidateId = candidate.id; version = candidate.version; digest = candidate.digest; sourceDigest = candidate.sourceDigest; channel = if (isStable) #stable_ else #beta; revision = if (isStable) heads.stableHead.revision else heads.betaHead.revision };
+  };
+
   public func eligible(db : Store.DB, app : Types.App) : Bool {
-    app.visible and approvedRelease(db, app) != null;
+    eligibleFor(db, app, #stable_);
+  };
+  public func eligibleFor(db : Store.DB, app : Types.App, mode : ReleaseStore.Mode) : Bool {
+    app.visible and release(db, app, mode) != null;
   };
 
   func sameListing(app : Types.App, input : ListingInput) : Bool {

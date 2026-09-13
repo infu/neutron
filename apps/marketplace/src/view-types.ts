@@ -1,15 +1,27 @@
 import type { EthereumProviderConnection } from "neutron-tools/app";
+import type { ReleasePreferences } from "./release_preferences.ts";
 /** Browser view models. Monetary atomic values remain exact decimal strings. */
 export type RankingWindow = "week" | "month" | "all";
 export type AppTier = "free" | "paid";
 export type PaymentToken = "ICP" | "ckBTC" | "ckUSDC";
 export type Money = { atoms: string; decimals: number; symbol: string };
 export type Page<T> = { items: T[]; nextCursor: string | null; asOf?: string; warning?: string };
+export type ReleaseIdentity = { candidateId: string; version: string; digest: string; sourceDigest?: string | null };
+export type ReleaseSelectionPackage = ReleaseIdentity & { appId: string; sourceDigest: string | null; channel: "stable" | "beta"; revision: string };
+export type ReleaseSelection = { mode: "stable" | "beta"; packages: ReleaseSelectionPackage[] };
+export type PurchaseSelection = { releasePreferences: ReleasePreferences; packages: ReleaseSelectionPackage[] };
+export type VersionComment = { id: string; owner: string; text: string; createdAt: string; updatedAt: string };
+export type RatingBuckets = { one: string; two: string; three: string; four: string; five: string };
 export type AppListing = {
   id: string; title: string; summary: string; category: string; publisher: string;
   publisherId?: string | null; publisherName?: string | null;
   priceUsdMicros: string; iconUrl?: string; version: string;
   rating: number | null; ratingCount: number;
+  channel?: "stable" | "beta";
+  releaseSelection?: ReleaseSelectionPackage;
+  releasePreferences?: ReleasePreferences;
+  ratingBuckets?: RatingBuckets;
+  ratingHistogramComplete?: boolean;
   /** Acquisition recorded by Marketplace, independent of local installation. */
   owned?: boolean;
   /** Current Kernel installation; omitted when the installed-app read fails. */
@@ -30,11 +42,17 @@ export type AppDetail = AppListing & {
   description: string; screenshots: { url: string; caption?: string }[];
   website?: string; sourceUrl?: string; audit: AuditView | null;
   releaseNotes?: string; ownRating?: { stars: number; text: string } | null;
+  selectedRelease?: ReleaseIdentity;
+  comments?: Page<VersionComment>;
+  ownComment?: VersionComment | null;
 };
 export type LibraryApp = AppListing & { acquiredAt: string; installedVersion: string | null; available: boolean; unavailableReason?: string };
 export type PublishedApp = AppListing & {
   status: "draft" | "uploading" | "in_review" | "approved" | "rejected" | "revoked";
   rejectionReason?: string; coverageEndsAt?: string;
+  stableVersion?: string | null; betaVersion?: string | null; candidateVersion?: string | null;
+  stableAvailable?: boolean; betaAvailable?: boolean;
+  betaRelease?: ReleaseIdentity;
 };
 export type Session = { configured: boolean; canisterId: string; host: string; account: string | null; connected: boolean; connectionError?: string | null };
 export type DiscountPreference = { code: string | null; active: boolean; discountBps: number; affiliate: string | null; error: string | null };
@@ -55,6 +73,10 @@ export type PurchaseQuote = {
   priceObservedAt?: string; warnings: string[]; ethereum?: EthereumPurchaseTerms;
   /** Preserves the exact protocol quote for same-ID execution and recovery. */
   opaque: unknown;
+  /** Selection preference captured when this purchase was prepared; retained during financial recovery. */
+  releasePreferences?: ReleasePreferences;
+  channelOpaque?: unknown;
+  selection?: ReleaseSelection;
 };
 export type OperationResult = {
   operationId: string; state: "complete" | "pending" | "approval_required" | "review_required" | "failed";
@@ -85,6 +107,7 @@ export type PublicationInput = {
   packageFile: File | null; sourceFile: File | null; iconFile: File | null; screenshotFiles: File[];
 };
 export type PublicationQuote = { cycles: CycleEstimate; bytes: number; coverageEndsAt: string; warnings: string[]; opaque: unknown };
+export type PromotionQuote = { operationId: string; appId: string; release: ReleaseIdentity; cycles: CycleEstimate; opaque: unknown };
 export type InstallationQuote = {
   operationId: string; appIds: string[]; canisterId: string; owner: string; cycles: CycleEstimate;
   /** Saved installer selection; resuming it does not repeat charged preparation. */
@@ -93,6 +116,10 @@ export type InstallationQuote = {
   sourceAccess?: { source: string; feeVersion: string; cycles: string };
   /** Definitive protocol reply; an interrupted preparation is not unavailable. */
   unavailableReason?: string;
+  releasePreferences?: ReleasePreferences;
+  preferenceChanged?: boolean;
+  reconciliationRequired?: boolean;
+  selection?: ReleaseSelection;
   fee: { feeVersion: string; processingCycles: string; storageCycles: string; totalCycles: string; processingBytes: string; newStorageBytes: string };
 };
 export interface MarketplaceClient {
@@ -102,6 +129,7 @@ export interface MarketplaceClient {
   setDiscountCode(code: string): Promise<DiscountPreference>;
   catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>>;
   detail(appId: string): Promise<AppDetail>;
+  publisherDetail(appId: string): Promise<AppDetail>;
   library(cursor?: string): Promise<Page<LibraryApp>>;
   publisherApps(cursor?: string): Promise<Page<PublishedApp>>;
   publisherProfile(id: string): Promise<PublisherProfile>;
@@ -111,7 +139,7 @@ export interface MarketplaceClient {
   savePublisherProfile(input: PublisherProfileInput, quote: PublisherProfileQuote): Promise<PublisherProfile>;
   earnings(): Promise<Earnings>;
   createReferralCode(): Promise<string>;
-  quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode?: string | undefined; ethereum?: EthereumPurchaseSelection }): Promise<PurchaseQuote>;
+  quotePurchase(input: { appIds: string[]; token: PaymentToken; affiliateCode?: string | undefined; ethereum?: EthereumPurchaseSelection; selection?: PurchaseSelection }): Promise<PurchaseQuote>;
   purchase(quote: PurchaseQuote, browserConnection?: EthereumProviderConnection): Promise<OperationResult>;
   operation(operationId: string): Promise<OperationResult>;
   recentOperations(): Promise<OperationResult[]>;
@@ -122,8 +150,13 @@ export interface MarketplaceClient {
   install(appIds: string[], quote: InstallationQuote): Promise<OperationResult>;
   openInstallation(quote: InstallationQuote): Promise<OperationResult>;
   rate(appId: string, stars: number, text: string): Promise<void>;
+  comments(appId: string, release: ReleaseIdentity, cursor?: string): Promise<Page<VersionComment>>;
+  comment(appId: string, release: ReleaseIdentity, text: string): Promise<void>;
   quoteWithdrawal(input: { token: PaymentToken; amountAtoms: string; destination: string }): Promise<WithdrawalQuote>;
   withdraw(quote: WithdrawalQuote): Promise<OperationResult>;
   quotePublication(input: PublicationInput): Promise<PublicationQuote>;
   publish(input: PublicationInput, quote: PublicationQuote, progress: (percent: number) => void): Promise<{ message: string }>;
+  quotePromotion(appId: string): Promise<PromotionQuote>;
+  pendingPromotions(): Promise<PromotionQuote[]>;
+  promote(quote: PromotionQuote): Promise<{ message: string }>;
 }

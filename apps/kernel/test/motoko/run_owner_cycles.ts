@@ -107,7 +107,7 @@ try {
       const reply = await call(management, "provisional_create_canister_with_cycles", args(method.argTypes, [{
         amount: [amount], settings: [], specified_id: [], sender_canister_version: [],
       }]), owner, defaultEffective);
-      return (IDL.decode(method.retTypes, reply)[0] as { canister_id: Principal }).canister_id;
+      return (IDL.decode(method.retTypes, reply)[0] as unknown as { canister_id: Principal }).canister_id;
     }
     async function install(canister: Principal, wasm: Uint8Array, init: Uint8Array, upgrade = false) {
       const method = methods.get("install_code")!;
@@ -158,7 +158,7 @@ try {
       sender: owner, canisterId: kernel, method: "execute", payload: input(2, 2n * T), effectivePrincipal: effective(kernel),
     });
     for (let attempt = 0; attempt < 20 && (await snapshot()).deposits < 2n; attempt++) {
-      const tick = await fetch(new URL(`instances/${instanceId}/update/tick`, controlUrl), {
+      const tick: Response = await fetch(new URL(`instances/${instanceId}/update/tick`, controlUrl), {
         method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(30_000),
       });
       assert(tick.ok, `PocketIC tick failed: ${await tick.text()}`);

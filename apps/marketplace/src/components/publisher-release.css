@@ -1,0 +1,6 @@
+.mp-publisher-releases { display: grid; gap: .6rem; margin: 1rem 0; }
+.mp-publisher-release { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; }
+.mp-publisher-release dt { flex: 0 0 8rem; color: var(--mp-muted); }
+.mp-publisher-release dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.mp-publisher-release-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
+.mp-release-notes { white-space: pre-wrap; overflow-wrap: anywhere; }

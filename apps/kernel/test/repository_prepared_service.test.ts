@@ -11,5 +11,5 @@ test("isolated prepared repository installation service", async () => {
     child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
   ]);
   expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
-  expect(`${stdout}\n${stderr}`).toContain("11 pass");
+  expect(`${stdout}\n${stderr}`).toContain("14 pass");
 });

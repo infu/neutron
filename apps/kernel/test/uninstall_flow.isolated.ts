@@ -452,7 +452,7 @@ test("uninstall compilation completes before the final confirmation is exposed",
     compiled,
     expectedDeploymentId: BASELINE_DEPLOYMENT_ID,
     removedApps: ["mail"],
-    provenance: BASELINE_PROVENANCE,
+    provenance: { ...BASELINE_PROVENANCE, format: 2 },
   });
   expect(useAppsStore.getState().operation).toBeNull();
   expect(useAppsStore.getState().operationBusy).toBe(true);
@@ -670,7 +670,7 @@ test("approval is the only boundary that deploys the reviewed uninstall artifact
     compiled,
     expectedDeploymentId: BASELINE_DEPLOYMENT_ID,
     removedApps: ["mail"],
-    provenance: BASELINE_PROVENANCE,
+    provenance: { ...BASELINE_PROVENANCE, format: 2 },
   });
   expect(deployCalls).toHaveLength(1);
   expect(deployCalls[0]).toMatchObject({
@@ -695,7 +695,7 @@ test("approval is the only boundary that deploys the reviewed uninstall artifact
   expect(provenanceAsset?.target).toBe("/system/install-provenance.json");
   expect(
     JSON.parse(new TextDecoder().decode(provenanceAsset?.content)),
-  ).toEqual({ format: 1, apps: {} });
+  ).toEqual({ format: 2, apps: {} });
 
   deployGate.reject(new Error("stop after deployment boundary"));
   await expect(result).rejects.toThrow("stop after deployment boundary");
@@ -791,7 +791,7 @@ test("selected apps share one reviewed compile and deployment boundary", async (
     JSON.parse(
       new TextDecoder().decode(deployCalls[0]?.stagedAssets?.[0]?.content),
     ),
-  ).toEqual({ format: 1, apps: {} });
+  ).toEqual({ format: 2, apps: {} });
 
   deployGate.reject(new Error("stop after batch deployment boundary"));
   await expect(result).rejects.toThrow("stop after batch deployment boundary");

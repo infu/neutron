@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { MarketplaceClient, PublicationInput, PublicationQuote, PublishedApp, PublisherProfile } from "../view-types.ts";
+import type { MarketplaceClient, PublicationInput, PublicationQuote, PublishedApp, PublisherProfile, PromotionQuote } from "../view-types.ts";
 import { AppIcon, CycleCost, EmptyState, ErrorNote, Icon, Loading, Modal, activateOnInputEnter, dateLabel, decimalAmount, errorMessage, parseAmount, usd, useRead } from "./primitives.tsx";
 import { EXCERPT_MAX_CHARACTERS, DESCRIPTION_MAX_CHARACTERS, listingCharacterCount, validateListingText } from "../listing-text.ts";
 import { PublisherIdentity } from "./publisher_profile.tsx";
 import { PublisherLink } from "./app_card.tsx";
 import { PublisherProfileEditor } from "./publisher_profile_editor.tsx";
+import "./publisher-release.css";
 
 type Props = {
   client: MarketplaceClient;
@@ -81,6 +82,14 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [promotion, setPromotion] = useState<{ title: string; quote: PromotionQuote } | null>(null);
+  const [promotionOpen, setPromotionOpen] = useState(false);
+  const [promotionBusy, setPromotionBusy] = useState(false);
+  const [promotionAttempted, setPromotionAttempted] = useState(false);
+  const [promotionError, setPromotionError] = useState("");
+  const [promotionSuccess, setPromotionSuccess] = useState("");
+  const promotionInFlight = useRef(false);
+  const pendingReleases = useRead(connected ? "pending-publisher-releases" : null, () => client.pendingPromotions(), refresh + reload);
   // React state updates do not synchronously exclude a second click or submit.
   const actionInFlight = useRef(false);
 
@@ -120,7 +129,7 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
     const generation = ++detailGeneration.current;
     setDetailLoading(true); setDetailError("");
     try {
-      const detail = await client.detail(app.id);
+      const detail = await client.publisherDetail(app.id);
       if (generation !== detailGeneration.current) return;
       setDraft((previous) => ({ ...previous, title: detail.title, summary: detail.summary, description: detail.description, category: "", paid: detail.priceUsdMicros !== "0", price: detail.priceUsdMicros === "0" ? "1" : decimalAmount({ atoms: detail.priceUsdMicros, decimals: 6, symbol: "USD" }), website: "", releaseNotes: "" }));
     } catch (reason) {
@@ -176,27 +185,67 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
     finally { actionInFlight.current = false; setPublishing(false); }
   }
 
+  function reviewPromotion(quote: PromotionQuote, title: string, attempted = false) {
+    setPromotion({ quote, title }); setPromotionOpen(true); setPromotionAttempted(attempted); setPromotionError(""); setPromotionSuccess("");
+  }
+
+  async function preparePromotion(appId: string, title: string) {
+    if (promotionInFlight.current) return;
+    promotionInFlight.current = true; setPromotionBusy(true); setPromotionError("");
+    try {
+      const quote = await client.quotePromotion(appId);
+      reviewPromotion(quote, title, (promotion?.quote.operationId === quote.operationId && promotionAttempted) || !!pendingReleases.data?.some(saved => saved.operationId === quote.operationId));
+    }
+    catch (reason) { setPromotionError(errorMessage(reason)); }
+    finally { promotionInFlight.current = false; setPromotionBusy(false); }
+  }
+
+  async function release() {
+    if (!promotion || promotionInFlight.current || promotionSuccess) return;
+    promotionInFlight.current = true; setPromotionBusy(true); setPromotionAttempted(true); setPromotionError("");
+    try {
+      const result = await client.promote(promotion.quote);
+      setPromotionSuccess(result.message); setReload(value => value + 1);
+      try { onChanged(); } catch (reason) { setReadError(`Release saved. Refreshing the surrounding view failed: ${errorMessage(reason)}`); }
+    } catch (reason) { setPromotionError(errorMessage(reason)); }
+    finally { promotionInFlight.current = false; setPromotionBusy(false); }
+  }
+
   const retainedDraft = draftStarted && !success;
   const editorBusy = quoting || publishing || detailLoading;
   const excerptCharacters = listingCharacterCount(draft.summary), descriptionCharacters = listingCharacterCount(draft.description);
   const fileLabel = (file: File | null, fallback: string) => file ? `${file.name} · ${bytesLabel(file.size)}` : fallback;
+  const recoverablePromotions = pendingReleases.data?.filter(quote => quote.operationId !== promotion?.quote.operationId) ?? [];
 
   if (!connected) return <EmptyState icon="publish" title="Your publications are unavailable">Retry setup above to load your publications and saved releases.</EmptyState>;
 
   return <section className="mp-publisher" aria-label="Publisher apps">
-    <div className="mp-section-heading"><div><h2>Your publications</h2><p className="mp-muted">Every release is reviewed before it reaches the store.</p></div>
+    <div className="mp-section-heading"><div><h2>Your publications</h2><p className="mp-muted">Upload for review, test the approved beta, then release it to stable.</p></div>
       <button type="button" className="mp-button mp-button-primary" disabled={!retainedDraft && editorBusy} onClick={() => retainedDraft ? setEditorOpen(true) : openEditor(null)}><Icon name={retainedDraft ? "publish" : "plus"} />{retainedDraft ? review ? "Continue publication" : "Continue draft" : "Publish an app"}</button>
     </div>
     {!editorOpen && draftStarted && <div className="mp-notice" role="status"><span>{publishing ? `Uploading ${review?.input.title ?? "app"} · ${Math.round(progress)}%` : success || `Your ${review ? "publication" : "draft"} is retained here.`}</span><button type="button" className="mp-text-button" onClick={() => setEditorOpen(true)}>{review ? "View upload" : "View draft"}</button></div>}
     <ErrorNote error={readError} retry={() => setReload((value) => value + 1)} />
+    <ErrorNote error={pendingReleases.error} retry={() => setReload(value => value + 1)} />
+    {!promotionOpen && <ErrorNote error={promotionError} />}
+    {!promotionOpen && promotion && !promotionSuccess && <div className="mp-notice" role="status"><span>{promotionBusy ? `Releasing ${promotion.title} v${promotion.quote.release.version}…` : `${promotion.title} v${promotion.quote.release.version} release is retained.`}</span><button type="button" className="mp-text-button" onClick={() => setPromotionOpen(true)}>Continue release</button></div>}
+    {recoverablePromotions.map(quote => <div key={quote.operationId} className="mp-notice" role="status"><span>{quote.appId} v{quote.release.version} has an unfinished release.</span><button type="button" className="mp-text-button" disabled={promotionBusy} onClick={() => reviewPromotion(quote, apps.find(app => app.id === quote.appId)?.title ?? quote.appId, true)}>Continue release v{quote.release.version}</button></div>)}
     {loading ? <Loading label="Loading your publications…" /> : apps.length === 0 && !readError ? <EmptyState icon="publish" title="Your first app starts here">Add your package, screenshots and a description. You can offer it for free or set a price from $1 to $50.</EmptyState> : <div className="mp-publisher-list">
       {apps.map((app) => <article key={app.id} className="mp-publisher-card">
-        <div className="mp-publisher-card-main"><AppIcon app={app} /><div className="mp-publisher-card-copy"><h3>{app.title}</h3>{publisher && <PublisherLink app={app} open={publisher} />}<p className="mp-muted">{app.id}{app.version ? ` · v${app.version}` : ""} · {usd(app.priceUsdMicros)}</p></div><span className={`mp-status mp-status-${app.status}`}>{statusLabels[app.status]}</span></div>
+        <div className="mp-publisher-card-main"><AppIcon app={app} /><div className="mp-publisher-card-copy"><h3>{app.title}</h3>{publisher && <PublisherLink app={app} open={publisher} />}<p className="mp-muted">{app.id} · {usd(app.priceUsdMicros)}</p></div></div>
+        <dl className="mp-publisher-releases" aria-label={`${app.title} releases`}>
+          <div className="mp-publisher-release"><dt>Stable</dt><dd>{app.stableVersion ? `v${app.stableVersion}` : "Not released"}{app.stableVersion && app.stableAvailable === false && <span className="mp-muted"> · Unavailable</span>}</dd></div>
+          <div className="mp-publisher-release"><dt>Beta</dt><dd>{app.betaVersion ? `v${app.betaVersion}` : "No beta"}{app.betaVersion && app.betaAvailable === false ? <span className="mp-muted"> · Unavailable</span> : app.betaVersion && app.betaVersion === app.stableVersion && <span className="mp-muted"> · Also stable</span>}</dd></div>
+          <div className="mp-publisher-release"><dt>Latest candidate</dt><dd>{app.candidateVersion && <span>v{app.candidateVersion} </span>}<span className={`mp-status mp-status-${app.status}`}>{statusLabels[app.status]}</span></dd></div>
+        </dl>
         {app.rejectionReason && <div className="mp-review-feedback"><strong>{app.status === "revoked" ? "Why this release is unavailable" : "Reviewer feedback"}</strong><p>{app.rejectionReason}</p></div>}
-        <div className="mp-publisher-card-footer"><span className="mp-muted">{app.coverageEndsAt ? `Prepaid storage through ${dateLabel(app.coverageEndsAt)}` : app.summary}</span><button type="button" className="mp-text-button" disabled={editorBusy || retainedDraft} onClick={() => openEditor(app)}>Manage</button></div>
+        <div className="mp-publisher-card-footer"><span className="mp-muted">{app.coverageEndsAt ? `Prepaid storage through ${dateLabel(app.coverageEndsAt)}` : app.summary}</span><div className="mp-publisher-release-actions">{app.betaRelease && (!app.stableVersion || BigInt(app.betaRelease.version) > BigInt(app.stableVersion)) && <button type="button" className="mp-button mp-button-primary" disabled={promotionBusy} onClick={() => void preparePromotion(app.id, app.title)}>Release v{app.betaRelease.version}</button>}<button type="button" className="mp-text-button" disabled={editorBusy || retainedDraft} onClick={() => openEditor(app)}>Manage</button></div></div>
       </article>)}
     </div>}
     {cursor && <button type="button" className="mp-button mp-load-more" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Loading…" : "Show more apps"}</button>}
+
+    {promotionOpen && promotion && <Modal title={`Release v${promotion.quote.release.version} to stable`} close={() => setPromotionOpen(false)} footer={promotionSuccess ? <button type="button" className="mp-button mp-button-primary" onClick={() => setPromotionOpen(false)}>Done</button> : <><button type="button" className="mp-button" disabled={promotionBusy} onClick={() => setPromotionOpen(false)}>Close</button><button type="button" className="mp-button mp-button-primary" disabled={promotionBusy} onClick={() => void release()}>{promotionBusy ? "Releasing…" : promotionAttempted ? "Continue release" : `Release v${promotion.quote.release.version}`}</button></>}>
+      {promotionSuccess ? <div className="mp-publication-success" role="status"><Icon name="check" /><p>{promotionSuccess}</p></div> : <div className="mp-stack"><p>Release <strong>{promotion.title} v{promotion.quote.release.version}</strong> to everyone using stable updates. This keeps the tested beta package and its comments.</p><CycleCost value={promotion.quote.cycles} /><ErrorNote error={promotionError} />{promotionAttempted && <p className="mp-muted">This release request is saved in your Neutron. Continue it to confirm the outcome for v{promotion.quote.release.version}.</p>}{promotionError && <button type="button" className="mp-text-button" disabled={promotionBusy} onClick={() => void preparePromotion(promotion.quote.appId, promotion.title)}>Review release again</button>}</div>}
+    </Modal>}
 
     {editorOpen && <Modal wide title={success ? "Publication saved" : review ? "Review publication" : editing ? `Manage ${editing.title}` : "Publish an app"} close={() => setEditorOpen(false)} footer={success ? <button type="button" className="mp-button mp-button-primary" onClick={() => setEditorOpen(false)}>Done</button> : review ? <>
       {!attempted && <button type="button" className="mp-button" disabled={publishing} onClick={() => { setReview(null); setError(""); }}>Edit details</button>}
@@ -207,7 +256,7 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
         <dl className="mp-facts"><div><dt>App ID</dt><dd>{review.input.appId}</dd></div><div><dt>Upload size</dt><dd>{bytesLabel(review.quote.bytes)}</dd></div>{review.input.packageFile && <div><dt>Package</dt><dd>{review.input.packageFile.name}</dd></div>}{review.input.sourceFile && <div><dt>Offered source</dt><dd>{review.input.sourceFile.name}</dd></div>}{review.quote.coverageEndsAt && <div><dt>Prepaid through</dt><dd>{dateLabel(review.quote.coverageEndsAt)}</dd></div>}</dl>
         <CycleCost value={review.quote.cycles} storage={BigInt(review.quote.cycles.storage ?? "0") > 0n} />
         {review.quote.warnings.length > 0 && <ul className="mp-warning-list">{review.quote.warnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul>}
-        {review.input.packageFile && <p className="mp-muted">An auditor must approve this package before it can appear in the store.</p>}
+        {review.input.packageFile && <><p className="mp-muted">An auditor must approve this package before it becomes available as beta. After testing it, choose Release to make the same version stable.</p>{review.input.releaseNotes && <div><h3>Release notes</h3><p className="mp-release-notes">{review.input.releaseNotes}</p></div>}</>}
         {(publishing || attempted) && <div className="mp-upload-progress" role="status"><label htmlFor="mp-publication-progress">{publishing ? "Uploading your publication" : "Upload progress"}<span>{Math.round(progress)}%</span></label><progress id="mp-publication-progress" max={100} value={progress} /></div>}
         <ErrorNote error={error} />
         {error && attempted && <p className="mp-muted">Your reviewed files and upload are retained here. Continue this upload to resume it.</p>}
@@ -229,6 +278,7 @@ function PublicationsList({ client, connected, refresh, onChanged, publisher }: 
         <fieldset disabled={editorBusy || !!detailError} className="mp-form-group"><legend>{editing ? "New release" : "Release files"}</legend>
           <label className="mp-field mp-file-field"><span>Neutron package{editing && <small>Optional for listing-only changes</small>}</span><input type="file" accept=".neutron" onChange={(event) => { const file = event.target.files?.[0]; if (file) update("packageFile", file); event.currentTarget.value = ""; }} /><small>{fileLabel(draft.packageFile, editing ? "Keep the current release, or choose a new .neutron package." : "Choose the .neutron package you want reviewed.")}</small></label>
           {draft.packageFile && <button type="button" className="mp-text-button" onClick={() => update("packageFile", null)}>Remove selected package</button>}
+          {draft.packageFile && <label className="mp-field"><span>Release notes</span><textarea rows={4} value={draft.releaseNotes} onChange={event => update("releaseNotes", event.target.value)} /><small>Describe what changed in this package version.</small></label>}
           <label className="mp-field mp-file-field"><span>Offered source archive</span><input type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) update("sourceFile", file); event.currentTarget.value = ""; }} /><small>{fileLabel(draft.sourceFile, "Include the matching source archive required by your package license.")}</small></label>
           {draft.sourceFile && <button type="button" className="mp-text-button" onClick={() => update("sourceFile", null)}>Remove selected source</button>}
         </fieldset>

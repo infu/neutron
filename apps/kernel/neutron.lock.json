@@ -34,6 +34,15 @@
         }
       },
       "migrations": {}
+    },
+    "kernel_release_preferences": {
+      "schemas": {
+        "1": {
+          "hash": "6cc8abce587f3db5b9e82004f7c6eacd7fca22ac33d3324b6885064852d97fa5",
+          "entry": "6cc8abce587f3db5b9e82004f7c6eacd7fca22ac33d3324b6885064852d97fa5"
+        }
+      },
+      "migrations": {}
     }
   }
 }

@@ -16,6 +16,7 @@ import Ledger "../../mo/Ledger";
 import Journal "../../mo/PaymentStore";
 import Purchases "../../mo/Purchases";
 import Quotes "../../mo/Quotes";
+import ReleaseStore "../../mo/ReleaseStore";
 import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
@@ -25,7 +26,8 @@ persistent actor class EvmPaymentHarness(config : Types.Config, ledgerId : Princ
   var failRevenueFinalization = false;
   var failGrant = false;
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(memory, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   transient let marketplace = Principal.fromActor(self);
   transient let ledger : Ledger.Client = {
     transfer = func(expected : Principal, args : Ledger.TransferArgs) : async* Ledger.Outcome {
@@ -94,7 +96,7 @@ persistent actor class EvmPaymentHarness(config : Types.Config, ledgerId : Princ
       digest = Encoding.hash(bytes); size = Nat64.fromNat(bytes.size()); mediaType = "application/octet-stream";
       content = #bytes(bytes); publicLegacy = false; createdAtNs = now;
     }));
-    let app = Journal.must(Store.insertApp(db, {
+    ignore Journal.must(Store.insertApp(db, {
       appId; owner = publisher; title = appId; summary = "Payment fixture"; description = "";
       priceUsdMicros; revision = 1; approvedCandidate = null; visible = true; iconArtifact = null;
       screenshots = []; ratingCount = 0; ratingTotal = 0; createdAtNs = now; updatedAtNs = now;
@@ -104,7 +106,8 @@ persistent actor class EvmPaymentHarness(config : Types.Config, ledgerId : Princ
       artifactId = artifact.id; sourceArtifactId = null; digest = artifact.digest; sourceDigest = null;
       dependencies = []; state = #approved; published = true; createdAtNs = now; updatedAtNs = now;
     }));
-    ignore Journal.must(db.apps.update({ app with approvedCandidate = ?release.id }));
+    let heads = ReleaseStore.heads(db.channels, appId);
+    ReleaseStore.putHeads(db.channels, appId, { heads with stableHead = { candidateId = ?release.id; revision = heads.stableHead.revision + 1 } });
     ignore Journal.must(Store.putRate(db, {
       ledger = EvmMinter.ckusdcLedger(); symbol = "USDC"; usdRate = 100_000_000; decimals = 8;
       observedAtNs = now; refreshedAtNs = now; lastError = null;

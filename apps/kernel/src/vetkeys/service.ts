@@ -89,6 +89,8 @@ const KERNEL_POLICY_TO_VET_KEYS_ERROR = {
   APP_PAUSED: "source_gone",
   REQUEST_EXPIRED: "challenge_expired",
   REQUEST_CANCELLED: "source_gone",
+  ONE_TIME_CYCLE_CALL_CANCELLED: "source_gone",
+  ONE_TIME_CYCLE_CALL_NOT_DISPATCHED: "key_unavailable",
   OWNER_REQUIRED: "owner_required",
   USER_INTERACTION_REQUIRED: "source_gone",
   INVOCATION_INVALID: "invalid_request",

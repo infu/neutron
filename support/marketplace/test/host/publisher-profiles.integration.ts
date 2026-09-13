@@ -30,6 +30,7 @@ const registration = (publisherId: string, name = "Fixture publisher", descripti
 
 async function setup(legacy = false) {
   const env = await session();
+  let legacyInstalled = legacy && Boolean(previousPath);
   try {
     const ordinary = await installFixture(env.pic, "relay", "test/fixtures/Relay.mo");
     const competitor = await installFixture(env.pic, "relay", "test/fixtures/Relay.mo");
@@ -82,7 +83,13 @@ async function setup(legacy = false) {
       await send("upload_chunk", { requestId, offset: 0n, bytes, feeVersion: 1n });
       const upload = await send("upload_finish", { requestId, feeVersion: 1n });
       const candidate = await send("candidate_submit", { requestId: `${appId}-candidate`, appId, version: 100n, artifactId: upload.artifactId[0], sourceArtifactId: [], dependencies: [], feeVersion: 1n });
-      if (visible) success(await auditor.audit_stamp({ requestId: `${appId}-audit`, candidateId: candidate.id, expectedDigest: candidate.digest, expectedSourceDigest: candidate.sourceDigest, decision: { approved: null }, analysis: "Opaque local fixture inspected", reason: [] }));
+      if (visible) {
+        success(await auditor.audit_stamp({ requestId: `${appId}-audit`, candidateId: candidate.id, expectedDigest: candidate.digest, expectedSourceDigest: candidate.sourceDigest, decision: { approved: null }, analysis: "Opaque local fixture inspected", reason: [] }));
+        if (!legacyInstalled) {
+          const plan = await send("promotion_prepare", { appIds: [appId] });
+          await send("release_promote", { requestId: `${appId}-promote`, ...plan, feeVersion: 1n });
+        }
+      }
       return { appId, saved, candidate, bytes, path: `/repo/v1/packages/${hash(bytes)}.neutron` };
     }
     async function acquire(sender: Fixture, requestId: string, appIds: string[]) {
@@ -100,7 +107,10 @@ async function setup(legacy = false) {
       return { quote, result };
     }
     const rating = (sender: Fixture, appId: string, stars: bigint, review = "Local review") => call(sender, "rating_set", { appId, stars, review, feeVersion: 1n });
-    const upgrade = () => env.pic.upgradeCanister({ canisterId, wasm: compiled.wasmPath, arg, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+    const upgrade = async () => {
+      await env.pic.upgradeCanister({ canisterId, wasm: compiled.wasmPath, arg, upgradeModeOptions: { skip_pre_upgrade: [], wasm_memory_persistence: [{ keep: null }] } });
+      legacyInstalled = false;
+    };
     return { ...env, ordinary, competitor, firstBuyer, secondBuyer, thirdBuyer, ledger, market, trusted, trustedPrincipal, auditor, as, call, direct, profile, settleStats, publish, acquire, rating, upgrade };
   } catch (error) { await env.shutdown(); throw error; }
 }

@@ -109,6 +109,15 @@ untrusted text. Presentation mode must never change permissions, enforcement,
 or the consequences requiring consent. `appearance.ts` owns browser-local
 appearance; a background-image cache is not app or Kernel durable memory.
 
+**Settings → Advanced users** groups Developer mode with **Beta updates**.
+`release_preferences.ts` reads and writes the owner-authorized Kernel preference,
+which is durable per Neutron and defaults off. It is independent of browser-local
+presentation settings. The read-only `updates.preferences` app bridge supplies
+the same preference to Marketplace; apps and agents cannot change it. Fetch or
+save errors remain visible, and a failed read must not silently select beta.
+Changing the preference invalidates pending release checks and prepared
+repository reviews. Preparation and dispatch recheck its backend revision.
+
 Installed-app operational data is joined by exact app id and installation uid.
 Usage displays an estimate of execution and outgoing cycle costs, not
 billing-grade canister burn. Incoming cycles accepted through attributed app
@@ -130,7 +139,11 @@ license or publisher identity.
 Certified install provenance records acquisition source and exact accepted
 package bytes. It is not an endorsement, an update subscription, or proof of
 publisher identity. Manual replacement clears stale repository provenance;
-uninstall removes the affected record.
+uninstall removes the affected record. Channel provenance distinguishes an
+installed beta ahead of stable from an unexplained source regression. Turning
+beta off preserves the installation and shows **Ahead of stable — waiting for a
+stable release**, without offering a downgrade. Promotion of its exact bytes
+makes it current without another install.
 
 `settings/deployment_integrity.ts` and `deployment_build_record.ts` compare the
 public canonical deployment record with the live certificate-verified
@@ -257,17 +270,26 @@ manifest.
 
 `repository/service.ts` holds the shared app-operation mutex, verifies the
 pinned manifest, and fetches every advertised package under the shared bounds.
+`repository/channel_metadata.ts` negotiates the optional fixed
+`repo_channel_metadata` query, retaining certified Candid-only v1 repositories.
+`repository/channels.ts` verifies the source's descriptor, complete exact setup
+selection, manifest digest and current per-app head revisions. A verified
+production-node method-not-found rejection establishes optional method absence;
+transport, malformed-data and proof failures cannot select legacy handling.
+After positive channel identification, missing evidence fails the request.
 Installed app state does not change that package request set. Selection and
 missing dependency closure are resolved locally after retrieval. Present or
 inconsistent apps are skipped; this setup path cannot replace installed apps
 or the Kernel.
 
-Final review freezes the selected verified packages and permissions, compiles
-the target set, and requires exact owner approval. One checked journal and
-atomic registry/provenance commit perform installation. Journal creation checks
+Final review freezes the selected verified packages, release-preference revision
+and permissions, compiles the target set, and requires exact owner approval.
+Deployment admission revalidates the channel selection before staging. One
+checked journal and atomic registry/provenance commit perform installation. Journal creation checks
 the expected predecessor deployment so a concurrent tab cannot turn an
-install-only selection into an update. Package/source prose remains separate
-from Kernel-derived facts. See
+install-only selection into an update. A preference change before dispatch
+invalidates approval; a dispatched transaction retains its existing recovery
+path. Package/source prose remains separate from Kernel-derived facts. See
 [Repository Setup Manifests](./repository-setup-manifests.md) and
 [App And Agent Install Offers](./app-install-offers.md).
 

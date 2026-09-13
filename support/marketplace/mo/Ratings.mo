@@ -49,6 +49,17 @@ module {
     #ok(());
   };
 
+  // Called only after the explicit feedback API cutover has stopped nonempty
+  // versionless writes. Removing legacy text must not edit stars, timestamps,
+  // app aggregates, or the publisher's retained rating contribution.
+  public func clearLegacyReview(db : Store.DB, rating : Types.Rating) {
+    if (rating.review == "") return;
+    switch (db.ratings.update({ rating with review = "" })) {
+      case (#ok(_)) {};
+      case (#err(error)) Runtime.trap("Could not clear legacy review text: " # debug_show(error));
+    };
+  };
+
   // A second rating from the same owner edits its contribution. It must not
   // inflate the number of owners who rated this app or any acquisition count.
   public func updateSummary(summary : Summary, previousStars : ?Nat, stars : Nat) : Result<Summary> {

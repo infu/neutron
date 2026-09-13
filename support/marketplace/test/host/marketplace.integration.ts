@@ -49,6 +49,10 @@ export const cases: IntegrationCase[] = [{
       const browser = caller(browserPrincipal);
       const auditor = caller(auditorPrincipal);
       const charged = async (neutron: any, name: string, arg: unknown) => succeeded(await relayCall(neutron, marketplace, name, [arg], 1_000_000_000n));
+      const promote = async (requestId: string, appIds: string[]) => {
+        const plan = succeeded(await relayCall(publisher, marketplace, "promotion_prepare", [{ appIds }]));
+        return charged(publisher, "release_promote", { requestId, entries: plan.entries, feeVersion: 1n });
+      };
       // Registration is explicit so the following tests still exercise the
       // listing's reservation and cycle boundaries rather than a missing profile.
       await charged(publisher, "publisher_profile_register", { publisherId: "publisher", name: "Test publisher", description: "Protocol fixture publisher", feeVersion: 1n });
@@ -85,6 +89,8 @@ export const cases: IntegrationCase[] = [{
       await charged(publisher, "admin_auditor_set", { principal: auditorPrincipal, active: true, feeVersion: 1n });
       succeeded(await auditor.audit_stamp(stamp)); // Auditor endpoint: no cycles attached.
       assert.ok("err" in await auditor.listing_save({ ...listing, appId: "audit_freepass" }), "Auditor exemption does not apply to publisher writes");
+      assert.equal(succeeded(await marketplace.actor.catalog_query(catalogRequest)).apps.length, 0, "Audit approval makes beta available; stable stays hidden until the publisher promotes it");
+      await promote("free-stable", [listing.appId]);
       assert.equal(succeeded(await marketplace.actor.app_detail(listing.appId)).app.visible, true);
       const quote = succeeded(await browser.purchase_quote({ requestId: "free-acquisition", appIds: [listing.appId], ledger: ledger.canisterId, referralCode: [] }));
       assert.equal(quote.amount, 0n);
@@ -111,6 +117,7 @@ export const cases: IntegrationCase[] = [{
       const paidSource = await artifact(paidAppId, "source", 4);
       const paidCandidate = await charged(publisher, "candidate_submit", { requestId: "paid-candidate", appId: paidAppId, version: 100n, artifactId: paidPackage, sourceArtifactId: [paidSource], dependencies: [{ appId: paidDependencyId, minVersion: 100n }], feeVersion: 1n });
       succeeded(await auditor.audit_stamp({ ...stamp, requestId: "paid-stamp", candidateId: paidCandidate.id, expectedDigest: paidCandidate.digest, expectedSourceDigest: paidCandidate.sourceDigest }));
+      await promote("paid-app-and-dependency-stable", [paidDependencyId, paidAppId]);
       const packagePath = `/repo/v1/packages/${Buffer.from(paidCandidate.digest).toString("hex")}.neutron`;
       const grant = { request_id: "a1".repeat(16), token: "b2".repeat(32), paths: [packagePath], fee_version: 1n };
       assert.ok("err" in await relayCall(buyer, marketplace, "repo_access_v1", [grant], 1_000_000_000n), "A Neutron cannot download an unowned paid package");

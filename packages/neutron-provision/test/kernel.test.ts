@@ -82,6 +82,7 @@ test("kernel IDL preserves resident-frame authority in journals and runtime stat
   }
   const request: CheckedInstallJournalRequest = {
     expected_deployment_id: "before",
+    expected_release_preferences_revision: [],
     journal: {
       deployment_id: "after",
       copies: [],
@@ -143,6 +144,46 @@ test("kernel IDL preserves resident-frame authority in journals and runtime stat
       IDL.encode(runtimeMethod.retTypes, [runtime]),
     )[0] as unknown,
   ).toEqual(runtime);
+});
+
+test("kernel IDL retains optional release preference guards at admission and both dispatch methods", () => {
+  const methods = new Map(kernelIdl({ IDL })._fields);
+  const requests = {
+    kernel_install_begin_checked: {
+      expected_deployment_id: "before",
+      journal: {
+        deployment_id: "after",
+        copies: [],
+        clear_prefixes: [],
+        target_app_inventory: [],
+      },
+    },
+    kernel_install_code: {
+      deployment_id: "after",
+      candid: "service : {}",
+      wasm: new Uint8Array(),
+      wasm_memory_persistence: { keep: null },
+    },
+    kernel_install_code_chunked: {
+      deployment_id: "after",
+      chunk_hashes: [],
+      wasm_module_hash: new Uint8Array(),
+      wasm_memory_persistence: { keep: null },
+    },
+  };
+  for (const [name, base] of Object.entries(requests)) {
+    const method = methods.get(name);
+    if (!method) throw new Error(`${name} IDL is missing`);
+    for (const revision of [undefined, 0n, 123456789012345678901234567890n]) {
+      const option = revision === undefined ? [] : [revision];
+      const request = {
+        ...base,
+        expected_release_preferences_revision: option,
+      };
+      expect(IDL.decode(method.argTypes, IDL.encode(method.argTypes, [request]))[0] as unknown)
+        .toEqual({ ...base, expected_release_preferences_revision: option });
+    }
+  }
 });
 
 test("kernel IDL encodes pre-dispatch install reservation plans", () => {

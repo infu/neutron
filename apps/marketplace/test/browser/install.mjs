@@ -39,10 +39,10 @@ const install=async(ids,quote)=>{
  return {operationId:quote.operationId,state:'complete',nextAction:'none',message:'Installer opened.',appIds:ids};
 };
 function Fixture(){
- const [appIds,setAppIds]=useState(['alpha']),[mode,setMode]=useState(initialMode);
- state.select=ids=>setAppIds(ids);state.setMode=value=>{state.mode=value;setMode(value);};
+ const [appIds,setAppIds]=useState(['alpha']),[mode,setMode]=useState(initialMode),[releaseIdentity,setReleaseIdentity]=useState('stable:101');
+ state.selectRelease=value=>setReleaseIdentity(value);state.select=ids=>setAppIds(ids);state.setMode=value=>{state.mode=value;setMode(value);};
  return <main className="nt-app mp-app"><div className="mp-shell"><div className="mp-body">
- {mode==='control'&&<InstallControl client={client} appIds={appIds} onInstall={install}/>}
+ {mode==='control'&&<InstallControl client={client} appIds={appIds} selectionIdentity={releaseIdentity} onInstall={install}/>}
  {(mode==='owned'||mode==='public')&&<AppDetailDialog key={mode} client={client} app={{...listing,owned:mode==='owned'}} close={()=>state.setMode('control')} acquire={app=>state.acquired.push(app.id)} install={install} connected={true} connect={async()=>{}}/>}
  <AgentReviewHost/></div></div></main>;
 }
@@ -146,6 +146,44 @@ try {
   await waitRequests(4);
   assert.deepEqual(await installed(),[{ids:['alpha'],operationId:'installation-1',retained:true,total:'5000000009'}]);
   checks.push('Failed quotes and cost refreshes only perform reads; stale fees disable dispatch, and the fresh visible fee retains the original request ID.');
+
+  await page.goto(url);
+  await waitRequests(1);
+  await resolveQuote(0);
+  await page.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
+  await page.evaluate(() => window.installFixture.selectRelease('beta:102'));
+  await waitRequests(2);
+  assert.equal(await button.isDisabled(), true, 'changing the displayed release clears the previous quote even for identical app IDs');
+  assert.equal(await page.evaluate(() => window.installFixture.requests[1].operationId), undefined);
+  await resolveQuote(1);
+  await page.getByText('5,000,000,008 cycles', { exact: true }).waitFor();
+  assert.deepEqual(await installed(), []);
+  checks.push('Changing the displayed stable/beta release clears its old quote identity while retaining the same app IDs.');
+
+  await page.goto(url);
+  await waitRequests(1);
+  await page.evaluate(() => { window.installFixture.requests[0].quote.preferenceChanged = true; });
+  await resolveQuote(0);
+  await page.getByRole('alert').getByText('Beta updates changed. Prepare a new selection using the current setting.', { exact: true }).waitFor();
+  assert.equal(await button.isDisabled(), true, 'a saved quote with a changed preference cannot open installation');
+  await page.getByRole('button', { name: 'Prepare latest selection', exact: true }).click();
+  await waitRequests(2);
+  const freshPreferenceId = await page.evaluate(() => window.installFixture.requests[1].operationId);
+  assert.match(freshPreferenceId, /^[0-9a-f]{32}$/);
+  await resolveQuote(1);
+  await page.getByText('5,000,000,008 cycles', { exact: true }).waitFor();
+  assert.equal(await button.isEnabled(), true);
+  assert.deepEqual(await installed(), []);
+  checks.push('A changed preference disables stale installation and lets Prepare latest review a new request without charging.');
+
+  await page.goto(url);
+  await waitRequests(1);
+  await page.evaluate(() => { Object.assign(window.installFixture.requests[0].quote, { preferenceChanged: true, reconciliationRequired: true }); });
+  await resolveQuote(0);
+  await page.getByRole('alert').getByText('Beta updates changed. Continue the original request to confirm its submitted charge, then prepare a new selection.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Continue original request', exact: true }).isEnabled(), true);
+  assert.deepEqual(await installed(), []);
+  checks.push('A submitted request awaiting reconciliation remains explicitly distinguishable from a new installation after preferences change.');
 
   await page.goto(url+'/?mode=owned');
   await waitRequests(1);

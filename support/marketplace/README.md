@@ -15,6 +15,11 @@ place, and both its first publication and exact-byte no-op repeat are verified. 
 [production release record](spec/production-release.md) separates deployment from
 publication and installation.
 
+The channel implementation below requires a state-preserving source upgrade
+and a compatible Kernel/Marketplace app release. Those successor deployments
+and publications are not implied by the historical production record. Follow
+the [channel rollout](OPERATIONS.md#channel-protocol-rollout).
+
 ## Implemented behavior
 
 - The catalog combines reviewed app listings, immutable package/source artifacts,
@@ -39,21 +44,32 @@ publication and installation.
   separate from token fees; the operator funds storage after that year.
 - Publishers submit exact artifacts for an assigned auditor to approve, reject,
   or revoke. An audit binds the candidate ID and inspected package/source hashes.
-  Pending releases do not replace an approved version, and revocation preserves
+  Approval publishes beta; publishers explicitly promote the exact current beta
+  to stable. Pending releases do not replace either head. Revocation preserves
   ownership while blocking ordinary downloads of revoked bytes.
+- Stable and beta reference immutable releases. Kernel's Neutron-wide **Beta
+  updates** setting defaults off and controls both update discovery and the
+  storefront. Beta-only apps are hidden in stable mode. Opting out preserves
+  installed packages and state, with no downgrade. Promotion preserves package
+  bytes, offered source and release identity.
 - The configured first-party publisher, production Blast ID 0, owns the initial
   listings. Its releases are cycle-free and automatically approved after the
   publishing scripts inspect the exact package/source artifacts. Compatible
-  release sets publish atomically. Other publishers retain normal fees and
-  assigned-auditor review.
-- Current approved and pending-review package/source content is retained;
+  release sets publish to beta atomically and can be promoted together. Other
+  publishers retain normal fees and assigned-auditor review.
+- Both current channel heads and pending-review package/source content are retained;
   superseded bytes are removed without deleting purchases, receipts or audits.
+- Each acquiring Neutron has one permanent, editable app star rating. The UI
+  shows its average, total count and five star-count buckets. Written comments
+  bind an exact offered version; promotion retains them, while losing both
+  channel references retires the thread and deletes its text through maintenance.
 - Domain modules isolate catalog, audit, access, assets, ranking, ledger, payment,
   and accounting behavior. `main.mo` wires these to authenticated actor methods,
   certified responses, and scheduled maintenance.
 
 The marketplace app supports browsing, checkout, My Apps, publisher submissions,
-ratings, referrals, earnings, and agent tools. Public and signed private reads
+permanent ratings, version comments, beta-to-stable release actions, referrals,
+earnings, and agent tools. Public and signed private reads
 are browser-direct. Ordinary user and publisher updates use Neutron with native
 cycles. Assigned auditors and administrators use their dedicated exempt CLI
 endpoints directly; the app has no admin or auditor interface. The
@@ -61,8 +77,9 @@ app's approved call budgets are 1 trillion cycles per call and 10 trillion per
 day. These budgets are separate from the protocol's configured fee coefficients.
 Install and Upgrade reviews show the applicable access cost.
 
-The admin exemption covers exactly `admin_auditor_set`, `admin_reserve_app`,
-`admin_set_burn_account`, and `rates_refresh`. They authenticate the actual
+The admin exemption covers `admin_auditor_set`, `admin_reserve_app`,
+`admin_set_burn_account`, `rates_refresh`, and the explicit
+`admin_feedback_cutover` rollout action. They authenticate the actual
 configured admin principal, accept no attached cycles, and retain `feeVersion`
 only for Candid compatibility. Existing canister admin principals remain valid.
 Admin or auditor status does not exempt purchases, uploads, or other ordinary
@@ -146,6 +163,7 @@ or push Git commits.
 - [Ethereum USDC invoices, early access and conversion](spec/ethereum-usdc.md)
 - [Prices, acquisition records and rankings](spec/catalog-rankings.md)
 - [Admin-assigned auditors and review stamps](spec/audits.md)
+- [Stable/beta releases, certified selection and version comments](spec/release-channels.md)
 - [Certified HTTP package delivery](spec/certified-http.md)
 - [Build, installation and upgrades with icp](spec/deployment.md)
 - [Production deployment and publication status](spec/production-release.md)

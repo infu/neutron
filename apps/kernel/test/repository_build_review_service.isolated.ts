@@ -99,6 +99,11 @@ globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
   return 1;
 }) as typeof requestAnimationFrame;
 
+mock.module(new URL("../src/release_preferences.ts", import.meta.url).pathname, () => ({
+  getReleasePreferences: async () => ({ betaEnabled: false, revision: "0" }),
+  subscribeReleasePreferences: () => () => {},
+}));
+
 mock.module(new URL("../src/bootstrap.ts", import.meta.url).pathname, () => ({
   kernelSetupStorage: storage,
 }));

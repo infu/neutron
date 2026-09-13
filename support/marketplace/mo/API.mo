@@ -2,9 +2,36 @@
 import Billing "./Billing";
 import PaymentState "./PaymentState";
 import Types "./Types";
+import ReleaseStore "./ReleaseStore";
 
 module {
   public type Error = { code : Text; message : Text };
+  public type ChannelMode = ReleaseStore.Mode;
+  public type ReleaseSelection = ReleaseStore.Selection;
+  public type ReleaseHead = { revision : Nat64; candidate : ?Types.Candidate; releaseNotes : Text };
+  public type ChannelApp = { app : App; stableHead : ReleaseHead; betaHead : ReleaseHead; selected : ?Types.Candidate; selectedChannel : ?ChannelMode };
+  public type ChannelAppDetail = { release : ChannelApp; audit : ?Types.Audit; rating : ?Types.Rating };
+  public type ChannelAppPage = { apps : [ChannelApp]; nextCursor : ?Nat64 };
+  public type ChannelCatalogPage = { apps : [ChannelApp]; nextCursor : ?Cursor; asOfNs : Int; generation : Nat64; refreshing : Bool };
+  public type ChannelCatalogRequest = { request : CatalogRequest; mode : ChannelMode };
+  public type ChannelPageRequest = { request : PageRequest; mode : ChannelMode };
+  public type ChannelPublisherPageRequest = { request : PublisherPageRequest; mode : ChannelMode };
+  public type ChannelDetailRequest = { appId : Text; mode : ChannelMode };
+  public type BetaPublishRequest = { requestId : Text; candidates : [{ candidateId : Nat64; expectedDigest : Blob; expectedSourceDigest : ?Blob }]; analysis : Text; operation : Text; channel : Text };
+  public type BetaPublishReceipt = ReleaseStore.BetaReceipt;
+  public type PromotionEntry = ReleaseStore.PromotionEntry;
+  public type PromotionRequest = { requestId : Text; entries : [PromotionEntry]; feeVersion : Nat };
+  public type PromotionReceipt = ReleaseStore.PromotionReceipt;
+  public type PromotionPrepare = { appIds : [Text] };
+  public type PromotionPlan = { entries : [PromotionEntry] };
+  public type CandidateRequestV2 = { request : CandidateRequest; releaseNotes : Text };
+  public type ChannelInstallQuery = { appIds : [Text]; mode : ChannelMode };
+  public type ChannelInstallSelection = { appIds : [Text]; mode : ChannelMode; selection : [ReleaseSelection] };
+  public type ChannelInstallRequest = { request : InstallRequest; mode : ChannelMode; selection : [ReleaseSelection] };
+  public type ChannelPurchaseRequest = { request : PurchaseRequest; mode : ChannelMode; expectedSelection : ?[ReleaseSelection] };
+  public type ChannelCheckoutQuote = { quote : CheckoutQuote; mode : ChannelMode; selection : [ReleaseSelection] };
+  public type ChannelPurchaseExecute = { quote : ChannelCheckoutQuote; feeVersion : Nat };
+  public type ChannelPurchaseResult = { purchase : PurchaseResult; quote : ?ChannelCheckoutQuote };
   public type Result<T> = { #ok : T; #err : Error };
   public type Window = { #week; #month; #all };
   public type Tier = { #free; #paid };

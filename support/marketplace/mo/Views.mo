@@ -4,11 +4,14 @@ import Access "Access";
 import Catalog "Catalog";
 import Rankings "Rankings";
 import Publishers "Publishers";
+import ReleaseStore "ReleaseStore";
 import Store "Store";
 import Types "Types";
+import Array "mo:core/Array";
 import List "mo:core/List";
 import Iter "mo:core/Iter";
 import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 
 module {
@@ -43,21 +46,77 @@ module {
     };
   };
 
-  func matches(record : Types.App, needle : Text) : Bool {
+  func releaseApp(db : Store.DB, source : Principal, owner : ?Principal, record : Types.App, mode : API.ChannelMode) : API.App {
+    let selected = Catalog.release(db, record, mode);
+    let presentation = switch (selected) {
+      case null record;
+      case (?candidate) {
+        switch (Store.getListing(db, record.appId, candidate.listingRevision)) {
+          case null Runtime.trap("Published candidate listing revision is missing");
+          case (?listing) ({ record with
+            title = listing.title; summary = listing.summary; description = listing.description;
+            iconArtifact = listing.iconArtifact; screenshots = listing.screenshots;
+          });
+        };
+      };
+    };
+    { app(db, source, owner, presentation) with
+      version = switch (selected) { case null null; case (?candidate) ?candidate.version };
+      visible = Catalog.eligibleFor(db, record, mode);
+    };
+  };
+
+  public func channelApp(db : Store.DB, source : Principal, owner : ?Principal, record : Types.App, mode : API.ChannelMode) : API.ChannelApp {
+    let heads = ReleaseStore.heads(db.channels, record.appId);
+    func head(candidateId : ?Nat64, revision : Nat64) : API.ReleaseHead {
+      let candidate = switch (candidateId) {
+        case null null;
+        case (?id) switch (Store.getCandidate(db, id)) {
+          case (?value) { if (value.appId == record.appId) ?value else null };
+          case null null;
+        };
+      };
+      { revision; candidate; releaseNotes = switch (candidate) {
+        case null "";
+        case (?value) ReleaseStore.notes(db.channels, value.id);
+      } };
+    };
+    let selected = Catalog.release(db, record, mode);
+    {
+      app = releaseApp(db, source, owner, record, mode);
+      stableHead = head(heads.stableHead.candidateId, heads.stableHead.revision);
+      betaHead = head(heads.betaHead.candidateId, heads.betaHead.revision);
+      selected;
+      selectedChannel = switch (selected) {
+        case null null;
+        case (?candidate) { if (heads.stableHead.candidateId == ?candidate.id) ?#stable_ else ?#beta };
+      };
+    };
+  };
+
+  func matches(record : API.App, needle : Text) : Bool {
     needle == "" or Text.contains(Text.toLower(record.appId), #text needle) or
       Text.contains(Text.toLower(record.title), #text needle) or Text.contains(Text.toLower(record.summary), #text needle);
   };
 
   public func catalog(db : Store.DB, source : Principal, owner : ?Principal, request : API.CatalogRequest, now : Int) : API.Result<API.CatalogPage> {
+    switch (catalogFor(db, source, owner, request, now, #stable_)) {
+      case (#err(error)) #err(error);
+      case (#ok(page)) #ok({ page with apps = Array.map<API.ChannelApp, API.App>(page.apps, func(value) { value.app }) });
+    };
+  };
+
+  public func catalogFor(db : Store.DB, source : Principal, owner : ?Principal, request : API.CatalogRequest, now : Int, mode : API.ChannelMode) : API.Result<API.ChannelCatalogPage> {
     if (request.limit == 0) return failure("invalid_page", "Choose a positive catalog page size.");
     let needle = Text.toLower(Text.trim(request.search, #predicate(func(c : Char) : Bool { c == ' ' or c == '\t' or c == '\n' or c == '\r' })));
-    let results = List.empty<API.App>();
+    let results = List.empty<API.ChannelApp>();
     var cursor = request.cursor;
     var generation : Nat64 = 0;
     var asOfNs : Int = 0;
     var refreshing = false;
     label pages loop {
-      let page = switch (Rankings.chart(db, request.tier, request.window, cursor, request.limit - List.size(results), now)) {
+      let page = switch (Rankings.chartFor(db, request.tier, request.window, cursor, request.limit - List.size(results), now,
+        func(record) { Catalog.eligibleFor(db, record, mode) })) {
         case (#err(message)) return failure("catalog_page", message);
         case (#ok(page)) page;
       };
@@ -66,7 +125,10 @@ module {
       refreshing := page.refreshing;
       for (entry in page.entries.vals()) {
         switch (Store.getApp(db, entry.appId)) {
-          case (?record) { if (matches(record, needle)) List.add(results, app(db, source, owner, record)) };
+          case (?record) {
+            let projection = channelApp(db, source, owner, record, mode);
+            if (matches(projection.app, needle)) List.add(results, projection);
+          };
           case null {};
         };
       };
@@ -93,19 +155,49 @@ module {
       return failure("app_unavailable", "This app has no available approved release.");
     };
     let candidate = if (isPublisher or isAuditor) latestCandidate(db, appId) else {
-      switch (record.approvedCandidate) { case null null; case (?id) Store.getCandidate(db, id) };
+      let heads = ReleaseStore.heads(db.channels, appId);
+      switch (heads.stableHead.candidateId) { case null null; case (?id) Store.getCandidate(db, id) };
     };
     let audit = switch (candidate) {
       case null null;
       case (?value) db.audits.by_candidate.rangeIter({ gt = null; gte = ?value.id; lt = null; lte = ?value.id; dir = #bwd }, null).next();
     };
     let rating = switch (owner) { case null null; case (?principal) Store.getRating(db, principal, appId) };
-    #ok({ app = app(db, source, owner, record); candidate; audit; rating });
+    #ok({
+      // The legacy publisher/auditor view is also the listing editor's draft
+      // read path. Public and acquiring viewers see stable release metadata.
+      app = if (isPublisher or isAuditor) app(db, source, owner, record) else releaseApp(db, source, owner, record, #stable_);
+      candidate; audit; rating;
+    });
+  };
+
+  public func detailFor(db : Store.DB, source : Principal, owner : ?Principal, appId : Text, mode : API.ChannelMode) : API.Result<API.ChannelAppDetail> {
+    let ?record = Store.getApp(db, appId) else return failure("app_not_found", "This app could not be found.");
+    let isPublisher = owner == ?record.owner;
+    let isAuditor = switch (owner) { case null false; case (?principal) Access.isAuditor(db, principal) };
+    let entitled = switch (owner) { case null false; case (?principal) Store.getEntitlement(db, principal, appId) != null };
+    if (not Catalog.eligibleFor(db, record, mode) and not isPublisher and not isAuditor and not entitled) {
+      return failure("app_unavailable", "This app has no available approved release in the selected channel.");
+    };
+    let release = channelApp(db, source, owner, record, mode);
+    let audit = switch (release.selected) {
+      case null null;
+      case (?value) db.audits.by_candidate.rangeIter({ gt = null; gte = ?value.id; lt = null; lte = ?value.id; dir = #bwd }, null).next();
+    };
+    let rating = switch (owner) { case null null; case (?principal) Store.getRating(db, principal, appId) };
+    #ok({ release; audit; rating });
   };
 
   public func library(db : Store.DB, source : Principal, owner : Principal, request : API.PageRequest) : API.Result<API.AppPage> {
+    switch (libraryFor(db, source, owner, request, #stable_)) {
+      case (#err(error)) #err(error);
+      case (#ok(page)) #ok({ page with apps = Array.map<API.ChannelApp, API.App>(page.apps, func(value) { value.app }) });
+    };
+  };
+
+  public func libraryFor(db : Store.DB, source : Principal, owner : Principal, request : API.PageRequest, mode : API.ChannelMode) : API.Result<API.ChannelAppPage> {
     if (request.limit == 0) return failure("invalid_page", "Choose a positive library page size.");
-    let apps = List.empty<API.App>();
+    let apps = List.empty<API.ChannelApp>();
     var last = request.cursor;
     for (entitlement in db.entitlements.by_owner.rangeIter({ gt = null; gte = ?owner; lt = null; lte = ?owner; dir = #fwd }, null)) {
       let after = switch (request.cursor) { case null true; case (?id) entitlement.id > id };
@@ -113,7 +205,7 @@ module {
         switch (Store.getApp(db, entitlement.appId)) {
           case (?record) {
             if (List.size(apps) == request.limit) return #ok({ apps = List.toArray(apps); nextCursor = last });
-            List.add(apps, app(db, source, ?owner, record));
+            List.add(apps, channelApp(db, source, ?owner, record, mode));
           };
           case null {};
         };
@@ -138,20 +230,42 @@ module {
     #ok({ apps = List.toArray(apps); nextCursor = null });
   };
 
+  public func publisherAppsFor(db : Store.DB, source : Principal, owner : Principal, request : API.PageRequest, mode : API.ChannelMode) : API.Result<API.ChannelAppPage> {
+    if (request.limit == 0) return failure("invalid_page", "Choose a positive publisher page size.");
+    let apps = List.empty<API.ChannelApp>();
+    var last = request.cursor;
+    for (record in db.apps.by_owner.rangeIter({ gt = null; gte = ?owner; lt = null; lte = ?owner; dir = #fwd }, null)) {
+      let after = switch (request.cursor) { case null true; case (?id) record.id > id };
+      if (after) {
+        if (List.size(apps) == request.limit) return #ok({ apps = List.toArray(apps); nextCursor = last });
+        List.add(apps, channelApp(db, source, ?owner, record, mode));
+        last := ?record.id;
+      };
+    };
+    #ok({ apps = List.toArray(apps); nextCursor = null });
+  };
+
   public func publicPublisherApps(db : Store.DB, source : Principal, viewer : ?Principal, request : API.PublisherPageRequest) : API.Result<API.AppPage> {
+    switch (publicPublisherAppsFor(db, source, viewer, request, #stable_)) {
+      case (#err(error)) #err(error);
+      case (#ok(page)) #ok({ page with apps = Array.map<API.ChannelApp, API.App>(page.apps, func(value) { value.app }) });
+    };
+  };
+
+  public func publicPublisherAppsFor(db : Store.DB, source : Principal, viewer : ?Principal, request : API.PublisherPageRequest, mode : API.ChannelMode) : API.Result<API.ChannelAppPage> {
     if (request.limit == 0) return failure("invalid_page", "Choose a positive publisher page size.");
     let profile = switch (Publishers.profile(db, request.publisherId)) {
       case (#err(value)) return #err(value);
       case (#ok(value)) value;
     };
-    let apps = List.empty<API.App>();
+    let apps = List.empty<API.ChannelApp>();
     var last = request.cursor;
     // Seek directly into this publisher's ownership index. Skip unaudited or
     // hidden rows without exposing them, including on a publisher's own page.
     for ((cursor, record) in db.publisherApps(profile.principal, request.cursor)) {
-      if (Catalog.eligible(db, record)) {
+      if (Catalog.eligibleFor(db, record, mode)) {
         if (List.size(apps) == request.limit) return #ok({ apps = List.toArray(apps); nextCursor = last });
-        List.add(apps, app(db, source, viewer, record));
+        List.add(apps, channelApp(db, source, viewer, record, mode));
       };
       last := ?cursor;
     };

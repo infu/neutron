@@ -48,12 +48,12 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 361;
+export const KERNEL_NPL_RELEASE_VERSION = 362;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
 export const KERNEL_RELEASE_MEMORY_LOCK_SHA256 =
-  "b21e05c8fc094d1ab721b884c37e3cb9b3aaacff2c101ca54a8af314146f57d7";
+  "5896ba454fefe16d20265bef7a866d41532f71947a16147912f24b3a46280d0c";
 export const KERNEL_NPL_LICENSE_PATH = "legal/LICENSE.NPL-1.0.txt";
 export const KERNEL_APPLICATION_NOTICE_PATH = "legal/APPLICATION-NOTICE.txt";
 export const KERNEL_ESBUILD_META_PATH = "meta.json";
@@ -68,6 +68,7 @@ const KERNEL_RELEASE_INIT_ARGS = Object.freeze([
   "memory_kernel",
   "memory_kernel_activation",
   "memory_kernel_cycle_calls",
+  "memory_kernel_release_preferences",
   "deployment_id",
   "active_app_instance_inventory",
   "canister_principal",
@@ -141,12 +142,29 @@ const KERNEL_MEMORY_SCHEMA_BINDINGS: Readonly<Record<string, KernelMemoryRelease
     },
     migrations: [],
   }),
+  kernel_release_preferences: Object.freeze({
+    version: 1,
+    schemas: {
+      "1": {
+        src: "memory/release_preferences/v1.mo",
+        hash: "6cc8abce587f3db5b9e82004f7c6eacd7fca22ac33d3324b6885064852d97fa5",
+        entry: "6cc8abce587f3db5b9e82004f7c6eacd7fca22ac33d3324b6885064852d97fa5",
+      },
+    },
+    migrations: [],
+  }),
 });
 const KERNEL_RELEASED_SCHEMA_SOURCE_SHA256 = Object.freeze({
   "apps/kernel/backend/memory/activation/v1.mo":
     "828b20f8bfdf7b516774ef720eee1514bf917ce7e785917b0a1a62b775a1a1b6",
   "apps/kernel/backend/memory/kernel/v3.mo":
     "1a588ddddaef0c4f1bdcd4f11459e0c9b351e46481ffb81fcaab7eb4ecbfc77f",
+  "apps/kernel/backend/memory/kernel/v4.mo":
+    "2bd917b2baf60547d1c108d7382c3d523dc24b1e065ef223241ffe9195a3db83",
+  "apps/kernel/backend/memory/kernel/v3_to_v4.mo":
+    "ec92a5d68c132bbebb8c661324256d38fd8c839bd5d1d14f5ecfafa41fffaf94",
+  "apps/kernel/backend/memory/kernel_cycle_calls/v1.mo":
+    "70144619b4175eeb0dc262b473b221b01da26be3565ae9ad76910a18b35ce4b4",
 });
 
 const KERNEL_DIST_REQUIRED_FILES = new Set([
@@ -285,6 +303,22 @@ const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
 
 /** Explicitly reviewed new files in this uncommitted release candidate. */
 const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
+  // Kernel 362 release channels, durable owner preferences, and qualification.
+  "apps/kernel/backend/memory/release_preferences/v1.mo",
+  "apps/kernel/src/release_preferences.ts",
+  "apps/kernel/src/repository/channel_metadata.ts",
+  "apps/kernel/src/repository/channels.ts",
+  "apps/kernel/test/install_provenance_format.test.ts",
+  "apps/kernel/test/release_preferences.test.ts",
+  "apps/kernel/test/release_preferences_surface.test.ts",
+  "apps/kernel/test/release_preferences_upgrade.pocketic.test.ts",
+  "apps/kernel/test/repository_channel_legacy.pocketic.test.ts",
+  "apps/kernel/test/repository_channel_metadata.test.ts",
+  "apps/kernel/test/repository_channels.test.ts",
+  "apps/kernel/test/updates_channels.test.ts",
+  "packages/neutron-tools/src/release_channels.ts",
+  "packages/neutron-tools/src/strict_json.ts",
+  "packages/neutron-tools/test/release_channels.test.ts",
   // Kernel 361 exclusive principal authorization and preserved-memory regressions.
   "apps/kernel/test/exclusive_reservations_memory.test.ts",
   "apps/kernel/test/motoko/exclusive_principal_reservations_test.mo",
@@ -455,6 +489,8 @@ export const KERNEL_PACKAGE_BUILD_INPUT_PATHS = Object.freeze([
   "apps/kernel/backend/memory/kernel/v3.mo",
   "apps/kernel/backend/memory/kernel/v3_to_v4.mo",
   "apps/kernel/backend/memory/kernel/v4.mo",
+  "apps/kernel/backend/memory/kernel_cycle_calls/v1.mo",
+  "apps/kernel/backend/memory/release_preferences/v1.mo",
   "apps/kernel/backend/wallet_custody_signing/Service.mo",
   "apps/kernel/backend/wallet_custody_signing/Types.mo",
   "apps/kernel/build.ts",
@@ -1314,13 +1350,14 @@ function assertReleasedMemoryManifest(
 ): void {
   const memoryIds = Object.keys(memory).sort(compareCanonicalText);
   if (
-    memoryIds.length !== 3 ||
+    memoryIds.length !== 4 ||
     memoryIds[0] !== "kernel" ||
     memoryIds[1] !== "kernel_activation" ||
-    memoryIds[2] !== "kernel_cycle_calls"
+    memoryIds[2] !== "kernel_cycle_calls" ||
+    memoryIds[3] !== "kernel_release_preferences"
   ) {
     throw new Error(
-      "The Kernel release must include exactly its three reviewed memory roots",
+      "The Kernel release must include exactly its four reviewed memory roots",
     );
   }
   for (const [memoryId, binding] of Object.entries(
@@ -1411,7 +1448,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.61 (packed version 361)",
+    "Package release: v0.3.62 (packed version 362)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

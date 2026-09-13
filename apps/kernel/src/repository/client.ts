@@ -8,37 +8,47 @@ import { createCertifiedAssetReader } from "neutron-tools/certified_asset";
 import {
   REPOSITORY_LIMITS,
   parseRepositoryInfo,
-  parseRepositoryManifest,
   repositoryIdlFactory,
   repositoryInfoPath,
   repositoryManifestPath,
   repositoryPackagePath,
   type RepositoryActor,
   type RepositoryInfo,
-  type RepositoryManifest,
   type RepositoryManifestPackage,
   type RepositorySetupReference,
 } from "neutron-tools/repository";
+import { parseRepositorySetupManifest, type RepositorySetupManifest } from "neutron-tools/src/release_channels.js";
 import { hashContent } from "neutron-tools/src/hash.js";
 import { canisterOrigin } from "neutron-tools/src/runtime.js";
 import { getRuntimeDeployment } from "../runtime_deployment.ts";
 import { fetchPackageFromUrl } from "../tools/package_url.ts";
 import type { RepositoryAccessApproval, RepositoryPreparedAccess } from "../repository_access/client.ts";
+import { createRepositoryChannelMetadataReader } from "./channel_metadata.ts";
+import {
+  revalidateRepositoryReleaseSelection,
+  verifyRepositoryReleaseSelection,
+  type RepositoryChannelMetadataReader,
+  type VerifiedRepositoryReleaseSelection,
+} from "./channels.ts";
 
 export type FetchedRepositoryPackage = {
   metadata: RepositoryManifestPackage;
   bytes: Uint8Array;
+  releaseChannel?: "stable" | "beta";
 };
 
 export type FetchedRepositorySetup = {
   info: RepositoryInfo;
-  manifest: RepositoryManifest;
+  manifest: RepositorySetupManifest;
   manifestBytes: Uint8Array;
   packages: readonly FetchedRepositoryPackage[];
+  releaseSelection: VerifiedRepositoryReleaseSelection;
+  revalidateReleaseSelection(): Promise<void>;
 };
 
 export type RepositoryByteSource = {
   readInfo(): Promise<Uint8Array | undefined>;
+  readChannelMetadata?: RepositoryChannelMetadataReader;
   readManifest(id: string): Promise<Uint8Array | undefined>;
   readPackage(
     digest: string,
@@ -59,6 +69,7 @@ export type RepositoryClientOptions = {
   signal?: AbortSignal;
   fetch?: typeof fetch;
   onProgress?: (progress: RepositoryLoadProgress) => void;
+  betaEnabled?: boolean;
 };
 
 const fatalDecoder = new TextDecoder("utf-8", { fatal: true });
@@ -84,6 +95,7 @@ export async function loadRepositorySetupBytes(
       source,
       options.onProgress,
       () => attempt.abort(),
+      options,
     );
   } catch (error) {
     attempt.abort();
@@ -98,6 +110,7 @@ export async function verifyRepositorySetupBytes(
   source: RepositoryByteSource,
   onProgress?: (progress: RepositoryLoadProgress) => void,
   onPackageFailure?: (error: unknown) => void,
+  options: Pick<RepositoryClientOptions, "betaEnabled"> = {},
 ): Promise<FetchedRepositorySetup> {
   notifyProgress(onProgress, {
     label: "Verifying repository identity",
@@ -135,14 +148,22 @@ export async function verifyRepositorySetupBytes(
       `Pinned manifest digest mismatch: expected ${reference.digest}, received ${actualManifestDigest}`,
     );
   }
-  const manifest = parseRepositoryManifest(
-    parseJsonBytes(manifestBytes, "repository manifest"),
-  );
+  const manifest = parseRepositorySetupManifest(manifestBytes);
   if (manifest.id !== reference.manifest) {
     throw new Error(
       `Repository returned manifest '${manifest.id}' for '${reference.manifest}'`,
     );
   }
+
+  const releaseSelectionOptions = {
+    source: reference.repo,
+    manifest,
+    manifestDigest: actualManifestDigest,
+    betaEnabled: options.betaEnabled === true,
+    readMetadata: source.readChannelMetadata ?? (async () => undefined),
+  };
+  const releaseSelection = await verifyRepositoryReleaseSelection(releaseSelectionOptions);
+  const releaseChannels = new Map(releaseSelection.selection?.packages.map((entry) => [entry.id, entry.channel]));
 
   const resourcePaths = Object.freeze(
     manifest.packages.map(({ sha256 }) => repositoryPackagePath(sha256)),
@@ -171,7 +192,7 @@ export async function verifyRepositorySetupBytes(
           `Package '${metadata.id}' digest mismatch: expected ${metadata.sha256}, received ${digest}`,
         );
       }
-      return Object.freeze({ metadata, bytes });
+      return Object.freeze({ metadata, bytes, releaseChannel: releaseChannels.get(metadata.id) ?? "stable" as const });
     },
     onPackageFailure,
   );
@@ -192,6 +213,8 @@ export async function verifyRepositorySetupBytes(
     manifest,
     manifestBytes,
     packages: Object.freeze(packages),
+    releaseSelection,
+    revalidateReleaseSelection: () => revalidateRepositoryReleaseSelection(releaseSelection, releaseSelectionOptions),
   });
 }
 
@@ -248,6 +271,7 @@ export async function createAnonymousRepositorySource(
   };
 
   return Object.freeze({
+    readChannelMetadata: createRepositoryChannelMetadataReader({ canisterId, agent, rootKey, local: deployment.local }),
     readInfo: () =>
       read(
         repositoryInfoPath(),

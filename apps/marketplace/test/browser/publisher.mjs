@@ -49,6 +49,8 @@ const fixture = `
       state.pageRequests.push(cursor ?? null);
       return cursor ? {items: [other], nextCursor: null} : {items: [rejected], nextCursor: 'page-2'};
     },
+    pendingPromotions: async () => [],
+    publisherDetail: async (appId) => ({...(appId === other.id ? other : rejected), description: 'A private notebook for research and everyday writing.', screenshots: [], website: 'https://example.invalid', audit: null}),
     detail: async (appId) => ({...(appId === other.id ? other : rejected), description: 'A private notebook for research and everyday writing.', screenshots: [], website: 'https://example.invalid', audit: null}),
     quotePublication: async (input: PublicationInput) => {
       state.quotes.push(input);

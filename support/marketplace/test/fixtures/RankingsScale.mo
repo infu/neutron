@@ -6,6 +6,7 @@ import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Rankings "../../mo/Rankings";
 import PublisherStore "../../mo/PublisherStore";
+import ReleaseStore "../../mo/ReleaseStore";
 import Store "../../mo/Store";
 import Fixtures "../motoko/Fixtures";
 
@@ -14,7 +15,8 @@ import Fixtures "../motoko/Fixtures";
 persistent actor {
   let mem = Fixtures.memory();
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(mem, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  transient let db = Store.Use(mem, publisherMemory, releaseMemory);
   var apps = 0;
   var acquisitions = 0;
 
@@ -39,10 +41,13 @@ persistent actor {
       let id = Fixtures.stored(db.apps.insert({
         appId = name; owner = Fixtures.owner(); title = name; summary = "Scale fixture";
         description = ""; priceUsdMicros = if (index % 2 == 0) 0 else 1_000_000;
-        revision = 1; approvedCandidate = ?candidate; visible = true; iconArtifact = null;
+        revision = 1; approvedCandidate = null; visible = true; iconArtifact = null;
         screenshots = []; ratingCount = 0; ratingTotal = 0; createdAtNs = 1; updatedAtNs = 1;
       }));
       let ?app = db.apps.get(id) else Runtime.trap("Seed app missing");
+      ReleaseStore.putHeads(db.channels, name, {
+        ReleaseStore.heads(db.channels, name) with stableHead = { candidateId = ?candidate; revision = 1 };
+      });
       Rankings.refreshEligibility(db, app);
       index += 1;
     };

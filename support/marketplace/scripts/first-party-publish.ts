@@ -5,15 +5,17 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Principal } from "@dfinity/principal";
 import { inspectUpdatePackage, sha256Hex, UPDATE_SOURCE_RECEIPT_PROTOCOL, PACKAGE_CONTENT_TYPE, SOURCE_CONTENT_TYPE } from "../../update-source/src/model.ts";
-import { assertGatewayCertificationV2, readReleaseAsset, updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
+import { readReleaseAsset, updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
 import { resolveReleaseCatalogPackageFiles, type ReleaseCatalog } from "../../update-source/src/release_catalog.ts";
 import { repositoryReleasePath, type RepositoryReleaseRecord } from "neutron-tools/src/repository.ts";
+import { repositoryBetaReleasePath } from "neutron-tools/src/release_channels.ts";
 import { preparePackageInstall } from "neutron-compiler/src/install.ts";
 import { json } from "./operator-wire.ts";
-import { preparePublisher, validatePreparedPublisher, TRUSTED_FIRST_PARTY_PUBLISHER, type Prepared } from "./publisher.ts";
+import { preparePublisher, validatePreparedPublisher, type Prepared } from "./publisher.ts";
 import { lockPublisherJournal, savePublisherJournal } from "./publisher-journal.ts";
+import { TRUSTED_PUBLISHER_CALLER, verifyArtifact, verifyChannelSupport } from "./publication-evidence.ts";
 
-export const TRUSTED_PUBLISHER_CALLER = TRUSTED_FIRST_PARTY_PUBLISHER;
+export { TRUSTED_PUBLISHER_CALLER, verifyArtifact, verifyChannelSupport } from "./publication-evidence.ts";
 export const AUTOMATED_PUBLICATION_ANALYSIS = "Trusted first-party publication. Automated checks verified the exact .neutron archive SHA-256 and size, packed manifest identity/version/update source, package compiler install-preparation checks (including declared dependencies and memory migration structure), and any declared Complete App Source digest, size and build-input compatibility. This stamp records automated package validation; it is not a manual malware or application-behavior review.";
 
 export type TrustedRelease = {
@@ -25,21 +27,46 @@ export type TrustedRelease = {
 };
 export type TrustedCatalog = { canister: string; releases: TrustedRelease[] };
 export type CandidateBinding = { candidateId: bigint; expectedDigest: Uint8Array; expectedSourceDigest: [] | [Uint8Array] };
-export type BatchRequest = { requestId: string; candidates: CandidateBinding[]; analysis: string };
+export type BatchRequest = { operation: "publish"; channel: "beta"; requestId: string; candidates: CandidateBinding[]; analysis: string };
 export type BatchEntry = { candidateId: bigint; appId: string; version: bigint; digest: Uint8Array; sourceDigest: [] | [Uint8Array]; auditId: bigint };
-export type BatchReceipt = { id: bigint; owner: Principal; publisher: Principal; requestId: string; entries: BatchEntry[]; analysis: string; createdAtNs: bigint };
+export type BatchReceipt = { operation: "publish"; channel: "beta"; id: bigint; owner: Principal; publisher: Principal; requestId: string; entries: BatchEntry[]; analysis: string; createdAtNs: bigint };
+// The original wire receipt is frozen independently of current beta types.
+type LegacyBatchEntry = { candidateId: bigint; appId: string; version: bigint; digest: Uint8Array; sourceDigest: [] | [Uint8Array]; auditId: bigint };
+export type LegacyBatchReceipt = { id: bigint; owner: Principal; publisher: Principal; requestId: string; entries: LegacyBatchEntry[]; analysis: string; createdAtNs: bigint };
 export type StagedCandidate = BatchEntry & { publisher: Principal };
 export type TrustedPublishTransport = {
   /** Actual loaded signing identity, checked before queries or writes. */
   caller: Principal;
   stage: (release: TrustedRelease, options: { requestId: string; journal: string; publisher: string }) => Promise<Omit<StagedCandidate, "auditId">>;
   batchStatus: (requestId: string) => Promise<BatchReceipt | null>;
+  /** Original stable publication status only; never replay the old mutation. */
+  legacyBatchStatus?: (requestId: string) => Promise<LegacyBatchReceipt | null>;
   publishBatch: (request: BatchRequest) => Promise<BatchReceipt>;
 };
 export type PublishOptions = { publisher: string; requestId: string; journal: string; execute?: boolean; fetch?: CertifiedFetch };
 type SavedCandidate = { candidateId: string; appId: string; version: string; digest: string; sourceDigest: string | null };
-type SavedBatch = { id: string; owner: string; publisher: string; requestId: string; entries: (SavedCandidate & { auditId: string })[]; analysis: string; createdAtNs: string };
+type SavedBatch = { operation: "publish"; channel: "beta"; id: string; owner: string; publisher: string; requestId: string; entries: (SavedCandidate & { auditId: string })[]; analysis: string; createdAtNs: string };
+// These persisted v1 shapes must not inherit future beta journal changes.
+type SavedLegacyCandidate = { candidateId: string; appId: string; version: string; digest: string; sourceDigest: string | null };
+type SavedLegacyBatchEntry = { candidateId: string; appId: string; version: string; digest: string; sourceDigest: string | null; auditId: string };
+type SavedLegacyBatch = { id: string; owner: string; publisher: string; requestId: string; entries: SavedLegacyBatchEntry[]; analysis: string; createdAtNs: string };
+type ReleaseChannel = "stable" | "beta";
 type Journal = {
+  format: "marketplace-first-party-publish-v2";
+  operation: "publish";
+  channel: "beta";
+  fingerprint: string;
+  requestId: string;
+  canister: string;
+  caller: string;
+  publisher: string;
+  changedAppIds: string[];
+  releaseChannels: Record<string, ReleaseChannel>;
+  staged: SavedCandidate[];
+  batchRequested: boolean;
+  batch: SavedBatch | null;
+};
+type LegacyJournal = {
   format: "marketplace-first-party-publish-v1";
   fingerprint: string;
   requestId: string;
@@ -47,9 +74,9 @@ type Journal = {
   caller: string;
   publisher: string;
   changedAppIds: string[];
-  staged: SavedCandidate[];
+  staged: SavedLegacyCandidate[];
   batchRequested: boolean;
-  batch: SavedBatch | null;
+  batch: SavedLegacyBatch | null;
 };
 const hex = (value: Uint8Array) => Buffer.from(value).toString("hex");
 const bytes = (value: string) => Uint8Array.from(Buffer.from(value, "hex"));
@@ -62,7 +89,7 @@ export async function prepareTrustedCatalog(catalog: ReleaseCatalog, listings: R
     const id = catalog.packages[releases.length]!.id;
     const prepared = await preparePublisher(file, listings.get(id));
     const checked = inspectUpdatePackage(file, prepared.files[0]!.bytes);
-    releases.push({ prepared, record: checked.record, packagePath: checked.packagePath, releasePath: checked.releasePath,
+    releases.push({ prepared, record: checked.record, packagePath: checked.packagePath, releasePath: repositoryBetaReleasePath(checked.record.id),
       source: checked.hostedSource ? { url: checked.hostedSource.url, path: checked.hostedSource.path, sha256: checked.hostedSource.sha256, size: checked.hostedSource.size } : null });
   }
   const result = { canister: catalog.updateSource, releases };
@@ -79,7 +106,7 @@ function validateCatalog(catalog: TrustedCatalog): void {
     validatePreparedPublisher(release.prepared);
     const checked = inspectUpdatePackage(release.record.id, release.prepared.files[0]!.bytes);
     // Metadata supplied by a caller is never a substitute for the packed bytes.
-    if (json(checked.record) !== json(release.record) || checked.packagePath !== release.packagePath || checked.releasePath !== release.releasePath) throw new Error("Catalog metadata differs from its inspected archive.");
+    if (json(checked.record) !== json(release.record) || checked.packagePath !== release.packagePath || repositoryBetaReleasePath(checked.record.id) !== release.releasePath) throw new Error("Catalog metadata differs from its inspected archive or beta release path.");
     const expected = checked.hostedSource ? { url: checked.hostedSource.url, path: checked.hostedSource.path, sha256: checked.hostedSource.sha256, size: checked.hostedSource.size } : null;
     if (json(expected) !== json(release.source)) throw new Error("Catalog source metadata differs from the declared offered source.");
     if (release.source && release.source.url !== `${origin}${release.source.path}`) throw new Error("Offered source must use the marketplace's canonical certified origin.");
@@ -100,7 +127,7 @@ function saveBatch(value: BatchReceipt): SavedBatch {
 }
 function verifyBatch(receipt: BatchReceipt, journal: Journal): SavedBatch {
   const saved = saveBatch(receipt);
-  if (saved.owner !== TRUSTED_PUBLISHER_CALLER || saved.publisher !== journal.publisher || saved.requestId !== journal.requestId || saved.analysis !== AUTOMATED_PUBLICATION_ANALYSIS || saved.entries.length !== journal.staged.length) throw new Error("Trusted publication receipt differs from the original batch identity or review.");
+  if (saved.operation !== "publish" || saved.channel !== "beta" || saved.owner !== TRUSTED_PUBLISHER_CALLER || saved.publisher !== journal.publisher || saved.requestId !== journal.requestId || saved.analysis !== AUTOMATED_PUBLICATION_ANALYSIS || saved.entries.length !== journal.staged.length) throw new Error("Trusted publication receipt differs from the original batch operation, channel, identity or review.");
   const entries = [...saved.entries].sort((a, b) => a.appId.localeCompare(b.appId));
   const expected = [...journal.staged].sort((a, b) => a.appId.localeCompare(b.appId));
   for (let i = 0; i < expected.length; i++) {
@@ -110,8 +137,53 @@ function verifyBatch(receipt: BatchReceipt, journal: Journal): SavedBatch {
   return saved;
 }
 
-async function current(release: TrustedRelease, options: PublishOptions, origin: string) {
-  return readReleaseAsset({ origin, path: release.releasePath, ...(options.fetch ? { fetch: options.fetch } : {}) });
+function legacyFingerprint(catalog: TrustedCatalog, options: PublishOptions): string {
+  return sha256Hex(new TextEncoder().encode(json({ canister: catalog.canister, caller: TRUSTED_PUBLISHER_CALLER, publisher: options.publisher, requestId: options.requestId, analysis: AUTOMATED_PUBLICATION_ANALYSIS, releases: catalog.releases.map(release => ({ record: release.record, source: release.source, dependencies: release.prepared.dependencies, listing: release.prepared.listing ?? null })) })));
+}
+function legacyJournal(value: unknown, catalog: TrustedCatalog, options: PublishOptions): LegacyJournal {
+  const journal = value as LegacyJournal;
+  const fields = ["format", "fingerprint", "requestId", "canister", "caller", "publisher", "changedAppIds", "staged", "batchRequested", "batch"];
+  if (!journal || typeof journal !== "object" || Object.keys(journal).sort().join() !== fields.sort().join() || journal.format !== "marketplace-first-party-publish-v1" ||
+    journal.fingerprint !== legacyFingerprint(catalog, options) || journal.requestId !== options.requestId || journal.canister !== catalog.canister || journal.caller !== TRUSTED_PUBLISHER_CALLER || journal.publisher !== options.publisher) {
+    throw new Error("This legacy catalog journal belongs to different bytes, publisher, target or request ID. Resume the original publication.");
+  }
+  const releases = new Map(catalog.releases.map(release => [release.record.id, release]));
+  if (!Array.isArray(journal.changedAppIds) || journal.changedAppIds.some(id => typeof id !== "string" || !releases.has(id)) || new Set(journal.changedAppIds).size !== journal.changedAppIds.length ||
+    !Array.isArray(journal.staged) || typeof journal.batchRequested !== "boolean" ||
+    journal.staged.some(candidate => !candidate || typeof candidate !== "object" || Object.keys(candidate).sort().join() !== ["candidateId", "appId", "version", "digest", "sourceDigest"].sort().join() || !journal.changedAppIds.includes(candidate.appId) || !candidateMatches(candidate, releases.get(candidate.appId)!)) ||
+    new Set(journal.staged.map(candidate => candidate.appId)).size !== journal.staged.length || new Set(journal.staged.map(candidate => candidate.candidateId)).size !== journal.staged.length ||
+    (journal.batchRequested && (journal.changedAppIds.length === 0 || journal.staged.length !== journal.changedAppIds.length)) ||
+    (journal.batch !== null && !journal.batchRequested)) {
+    throw new Error("The original publication journal has inconsistent staged candidates or commit phase; preserve it for reconciliation.");
+  }
+  if (journal.batch !== null) savedLegacyReceipt(journal.batch, journal);
+  return journal;
+}
+function verifyLegacyBatch(receipt: LegacyBatchReceipt, journal: LegacyJournal): SavedLegacyBatch {
+  if ("operation" in receipt || "channel" in receipt) throw new Error("Legacy publication status returned a different operation or channel.");
+  const saved: SavedLegacyBatch = { id: String(receipt.id), owner: receipt.owner.toText(), publisher: receipt.publisher.toText(), requestId: receipt.requestId, entries: receipt.entries.map(entry => ({ ...saveCandidate({ ...entry, publisher: receipt.publisher }), auditId: String(entry.auditId) })), analysis: receipt.analysis, createdAtNs: String(receipt.createdAtNs) };
+  if (!/^(0|[1-9][0-9]*)$/.test(saved.id) || !/^(0|-?[1-9][0-9]*)$/.test(saved.createdAtNs) || saved.owner !== journal.caller || saved.publisher !== journal.publisher || saved.requestId !== journal.requestId || saved.analysis !== AUTOMATED_PUBLICATION_ANALYSIS || saved.entries.length !== journal.changedAppIds.length || saved.entries.length !== journal.staged.length) throw new Error("Legacy publication receipt differs from the original batch identity or review.");
+  const entries = [...saved.entries].sort((a, b) => a.appId.localeCompare(b.appId));
+  const expected = [...journal.staged].sort((a, b) => a.appId.localeCompare(b.appId));
+  for (let i = 0; i < expected.length; i++) {
+    const { auditId, ...candidate } = entries[i]!;
+    if (!/^(0|[1-9][0-9]*)$/.test(auditId) || json(candidate) !== json(expected[i])) throw new Error("Legacy publication receipt does not cover the exact original candidates and source bytes.");
+  }
+  return { ...saved, entries };
+}
+function savedLegacyReceipt(saved: SavedLegacyBatch, journal: LegacyJournal): SavedLegacyBatch {
+  if (!saved || typeof saved !== "object" || Object.keys(saved).sort().join() !== ["id", "owner", "publisher", "requestId", "entries", "analysis", "createdAtNs"].sort().join() || !Array.isArray(saved.entries) ||
+    !/^(0|[1-9][0-9]*)$/.test(saved.id) || !/^(0|-?[1-9][0-9]*)$/.test(saved.createdAtNs) || saved.entries.some(entry => !entry || Object.keys(entry).sort().join() !== ["candidateId", "appId", "version", "digest", "sourceDigest", "auditId"].sort().join() || !/^(0|[1-9][0-9]*)$/.test(entry.auditId))) throw new Error("The original publication receipt is malformed; preserve its journal for reconciliation.");
+  return verifyLegacyBatch({ id: BigInt(saved.id), owner: Principal.fromText(saved.owner), publisher: Principal.fromText(saved.publisher), requestId: saved.requestId, analysis: saved.analysis, createdAtNs: BigInt(saved.createdAtNs), entries: saved.entries.map(entry => ({ candidateId: BigInt(entry.candidateId), appId: entry.appId, version: BigInt(entry.version), digest: bytes(entry.digest), sourceDigest: entry.sourceDigest === null ? [] : [bytes(entry.sourceDigest)], auditId: BigInt(entry.auditId) })) }, journal);
+}
+
+function releasePath(id: string, channel: ReleaseChannel): string {
+  return channel === "beta" ? repositoryBetaReleasePath(id) : repositoryReleasePath(id);
+}
+async function current(id: string, channel: ReleaseChannel, options: Pick<PublishOptions, "fetch">, origin: string) {
+  const remote = await readReleaseAsset({ origin, path: releasePath(id, channel), ...(options.fetch ? { fetch: options.fetch } : {}) });
+  if (remote.status === "found" && remote.record.id !== id) throw new Error("Certified release path contains a different app ID.");
+  return remote;
 }
 function isSame(record: RepositoryReleaseRecord, expected: RepositoryReleaseRecord) {
   return record.protocol === expected.protocol && record.id === expected.id && record.version === expected.version && record.sha256 === expected.sha256 && record.size === expected.size;
@@ -122,51 +194,49 @@ async function verifyDependencies(catalog: TrustedCatalog, options: PublishOptio
   for (const release of catalog.releases) for (const dependency of release.prepared.dependencies) {
     let version = selected.get(dependency.appId) ?? verified.get(dependency.appId);
     if (version === undefined) {
-      const remote = await readReleaseAsset({ origin, path: repositoryReleasePath(dependency.appId), ...(options.fetch ? { fetch: options.fetch } : {}) });
-      if (remote.status === "found" && remote.record.id === dependency.appId) { version = remote.record.version; verified.set(dependency.appId, version); }
+      const heads = await currentHeads(dependency.appId, options, origin);
+      const versions = heads.flatMap(remote => remote.status === "found" ? [remote.record.version] : []);
+      if (versions.length) { version = Math.max(...versions); verified.set(dependency.appId, version); }
     }
-    if (version === undefined || BigInt(version) < dependency.minVersion) throw new Error(`Dependency '${dependency.appId}' of '${release.record.id}' requires an approved or selected version of at least ${dependency.minVersion}.`);
+    if (version === undefined || BigInt(version) < dependency.minVersion) throw new Error(`Dependency '${dependency.appId}' of '${release.record.id}' requires an approved stable, beta or selected version of at least ${dependency.minVersion}.`);
   }
 }
 
-/** Preserve authenticated private cache headers. The old public-source reader
- * requires immutable public caching, which a paid artifact must never use. */
-async function verifyArtifact(input: { origin: string; path: string; digest: string; size: number; mediaType: string }, options: PublishOptions) {
-  const response = await (options.fetch ?? fetch)(`${input.origin}${input.path}`, { method: "GET", credentials: "omit", redirect: "error", cache: "no-store", headers: { Accept: input.mediaType, "Accept-Encoding": "identity" }, signal: AbortSignal.timeout(30_000) });
-  if (response.url && new URL(response.url).origin !== input.origin) throw new Error("Certified artifact returned from a different origin.");
-  assertGatewayCertificationV2(response, input.path);
-  if (response.status !== 200) throw new Error(`Certified artifact '${input.path}' returned HTTP ${response.status}.`);
-  if (response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== input.mediaType) throw new Error("Certified artifact has an unexpected media type.");
-  const cache = new Set((response.headers.get("cache-control") ?? "").toLowerCase().split(",").map(value => value.trim()));
-  if (!(cache.has("private") && cache.has("no-store")) && !(cache.has("public") && cache.has("immutable"))) throw new Error("Certified artifact has an unexpected cache policy.");
-  if (response.headers.get("content-encoding") && response.headers.get("content-encoding") !== "identity") throw new Error("Certified artifact is not identity encoded.");
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  if (response.body) {
-    const reader = response.body.getReader();
-    try {
-      for (;;) {
-        const { done, value } = await reader.read(); if (done) break;
-        total += value.length;
-        if (total > input.size) { await reader.cancel(); throw new Error("Certified artifact exceeds its expected size."); }
-        chunks.push(value);
-      }
-    } finally { reader.releaseLock(); }
-  }
-  const body = Uint8Array.from(Buffer.concat(chunks));
-  if (total !== input.size || sha256Hex(body) !== input.digest) throw new Error("Certified artifact bytes differ from their expected size or SHA-256.");
-  if (response.headers.get("etag")?.replace(/^W\//, "").replace(/^\"|\"$/g, "").toLowerCase() !== input.digest) throw new Error("Certified artifact ETag differs from its SHA-256.");
+async function currentHeads(id: string, options: Pick<PublishOptions, "fetch">, origin: string) {
+  const [stable, beta] = await Promise.all([current(id, "stable", options, origin), current(id, "beta", options, origin)]);
+  if (stable.status === "found" && beta.status === "found" && stable.record.version === beta.record.version && !isSame(stable.record, beta.record)) throw new Error(`Stable and beta offer different bytes for version ${stable.record.version} of '${id}'.`);
+  return [stable, beta] as const;
 }
-async function postflight(catalog: TrustedCatalog, options: PublishOptions, origin: string) {
+
+async function postflight(catalog: TrustedCatalog, journal: Pick<Journal, "releaseChannels">, options: PublishOptions, origin: string) {
   const releaseDigests = new Map<string, string>();
   for (const release of catalog.releases) {
-    const remote = await current(release, options, origin);
+    const remote = await current(release.record.id, journal.releaseChannels[release.record.id]!, options, origin);
     if (remote.status !== "found" || !isSame(remote.record, release.record)) throw new Error(`Certified current release differs for '${release.record.id}'. Any completed batch stays retained; do not create a replacement publication to recover it.`);
     releaseDigests.set(release.record.id, remote.digest);
     await verifyArtifact({ origin, path: release.packagePath, digest: release.record.sha256, size: release.record.size, mediaType: PACKAGE_CONTENT_TYPE }, options);
     if (release.source) await verifyArtifact({ origin, path: release.source.path, digest: release.source.sha256, size: release.source.size, mediaType: SOURCE_CONTENT_TYPE }, options);
   }
   return releaseDigests;
+}
+
+async function reconcileLegacyPublication(catalog: TrustedCatalog, journal: LegacyJournal, options: PublishOptions, transport: TrustedPublishTransport, origin: string) {
+  let batch: SavedLegacyBatch | null = null;
+  if (journal.changedAppIds.length) {
+    if (!transport.legacyBatchStatus) throw new Error("Legacy publication recovery requires the original trusted_publish_status query. No beta operation was started.");
+    const remote = await transport.legacyBatchStatus(journal.requestId);
+    if (!remote) {
+      if (journal.batchRequested || journal.batch) throw new Error("The original stable publication outcome remains unresolved: trusted_publish_status returned no receipt. Preserve the original journal and bytes; no beta operation was started.");
+      throw new Error("The legacy publication stopped before requesting its stable commit. Its original staged candidates and upload journals remain retained; explicitly resolve this unfinished workflow before starting a beta publication.");
+    }
+    batch = verifyLegacyBatch(remote, journal);
+    if (journal.batch && json(savedLegacyReceipt(journal.batch, journal)) !== json(batch)) throw new Error("Legacy publication status differs from the receipt already retained in the original journal.");
+  }
+  const releaseChannels = Object.fromEntries(catalog.releases.map(release => [release.record.id, "stable" as const]));
+  const releaseDigests = await postflight(catalog, { releaseChannels }, options, origin);
+  // The predecessor journal remains byte-for-byte intact. Reconciliation never
+  // replays its mutation, uploads candidates, or creates a beta request identity.
+  return { action: "publication_verified" as const, protocol: UPDATE_SOURCE_RECEIPT_PROTOCOL, operation: "reconcile_legacy_publish" as const, channel: "stable" as const, requestId: journal.requestId, canister_id: catalog.canister, origin, publisher: journal.publisher, skippedListingAppIds: catalog.releases.filter(release => release.prepared.listing && !journal.changedAppIds.includes(release.record.id)).map(release => release.record.id), atomic: true as const, batch_id: null, reconciled_batch_id: batch?.id ?? null, journal: path.resolve(options.journal), published_at: new Date().toISOString(), packages: catalog.releases.map(release => ({ ...release.record, channel: "stable" as const, package_path: release.packagePath, release_path: repositoryReleasePath(release.record.id), release_digest: releaseDigests.get(release.record.id)!, status: "unchanged" as const, source: release.source ? { ...release.source, status: "unchanged" as const } : null })) };
 }
 
 /** No live transport is selected implicitly. All mutation authority stays in the
@@ -178,36 +248,47 @@ export async function publishTrustedCatalog(catalog: TrustedCatalog, options: Pu
   if (publisher !== TRUSTED_PUBLISHER_CALLER) throw new Error("Trusted first-party listings must belong to the assigned Blast identity 0 principal.");
   if (!options.requestId.trim()) throw new Error("Provide the retained catalog publication request ID.");
   const file = path.resolve(options.journal), origin = updateSourceOrigin({ canisterId: catalog.canister });
-  const fingerprint = sha256Hex(new TextEncoder().encode(json({ canister: catalog.canister, caller: TRUSTED_PUBLISHER_CALLER, publisher, requestId: options.requestId, analysis: AUTOMATED_PUBLICATION_ANALYSIS, releases: catalog.releases.map(release => ({ record: release.record, source: release.source, dependencies: release.prepared.dependencies, listing: release.prepared.listing ?? null })) })));
+  const fingerprint = sha256Hex(new TextEncoder().encode(json({ operation: "publish", channel: "beta", canister: catalog.canister, caller: TRUSTED_PUBLISHER_CALLER, publisher, requestId: options.requestId, analysis: AUTOMATED_PUBLICATION_ANALYSIS, releases: catalog.releases.map(release => ({ record: release.record, source: release.source, dependencies: release.prepared.dependencies, listing: release.prepared.listing ?? null })) })));
   let unlock: (() => Promise<void>) | undefined;
-  if (options.execute) { await mkdir(path.dirname(file), { recursive: true }); unlock = await lockPublisherJournal(file); }
+  if (options.execute) { await mkdir(path.dirname(file), { recursive: true }); unlock = await lockPublisherJournal(file, { operation: "publish", channel: "beta" }); }
   try {
     let journal: Journal | undefined;
-    try {
-      journal = JSON.parse(await readFile(file, "utf8")) as Journal;
-      if (journal.format !== "marketplace-first-party-publish-v1" || journal.fingerprint !== fingerprint) throw new Error("This catalog journal belongs to different bytes, publisher, target or request ID. Resume the original publication.");
-    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    let savedText: string | undefined;
+    try { savedText = await readFile(file, "utf8"); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (savedText !== undefined) {
+      const saved: unknown = JSON.parse(savedText);
+      if (saved && typeof saved === "object" && "format" in saved && saved.format === "marketplace-first-party-publish-v1") {
+        return await reconcileLegacyPublication(catalog, legacyJournal(saved, catalog, { ...options, publisher }), options, transport, origin);
+      }
+      journal = saved as Journal;
+      if (journal.format !== "marketplace-first-party-publish-v2" || journal.operation !== "publish" || journal.channel !== "beta" || journal.fingerprint !== fingerprint) throw new Error("This catalog journal belongs to different bytes, operation, channel, publisher, target or request ID. Resume the original publication.");
+      if (!journal.releaseChannels || catalog.releases.some(release => !["stable", "beta"].includes(journal!.releaseChannels[release.record.id]!) || (journal!.changedAppIds.includes(release.record.id) && journal!.releaseChannels[release.record.id] !== "beta"))) throw new Error("Saved publication has invalid certified release-channel selections.");
+    }
+    await verifyChannelSupport(catalog.canister, options, origin);
     if (!journal) {
       await verifyDependencies(catalog, options, origin);
       const changedAppIds: string[] = [];
+      const releaseChannels: Record<string, ReleaseChannel> = {};
       for (const release of catalog.releases) {
-        const remote = await current(release, options, origin);
-        if (remote.status === "found") {
-          if (remote.record.id !== release.record.id) throw new Error("Certified release path contains a different app ID.");
+        const [stable, beta] = await currentHeads(release.record.id, options, origin);
+        for (const remote of [stable, beta]) if (remote.status === "found") {
           if (remote.record.version > release.record.version) throw new Error(`Refusing to downgrade '${release.record.id}'.`);
           if (remote.record.version === release.record.version && !isSame(remote.record, release.record)) throw new Error(`Version ${release.record.version} of '${release.record.id}' already contains different bytes.`);
         }
-        if (remote.status !== "found" || !isSame(remote.record, release.record)) changedAppIds.push(release.record.id);
+        if (beta.status === "found" && isSame(beta.record, release.record)) releaseChannels[release.record.id] = "beta";
+        else if (stable.status === "found" && isSame(stable.record, release.record)) releaseChannels[release.record.id] = "stable";
+        else { releaseChannels[release.record.id] = "beta"; changedAppIds.push(release.record.id); }
       }
-      journal = { format: "marketplace-first-party-publish-v1", fingerprint, requestId: options.requestId, canister: catalog.canister, caller: TRUSTED_PUBLISHER_CALLER, publisher, changedAppIds, staged: [], batchRequested: false, batch: null };
+      journal = { format: "marketplace-first-party-publish-v2", operation: "publish", channel: "beta", fingerprint, requestId: options.requestId, canister: catalog.canister, caller: TRUSTED_PUBLISHER_CALLER, publisher, changedAppIds, releaseChannels, staged: [], batchRequested: false, batch: null };
       if (options.execute) await savePublisherJournal(file, journal);
     }
     const skippedListingAppIds = catalog.releases.filter(release => release.prepared.listing && !journal!.changedAppIds.includes(release.record.id)).map(release => release.record.id);
-    if (!options.execute) return { action: "publication_review" as const, requestId: options.requestId, canister: catalog.canister, publisher, changedAppIds: journal.changedAppIds, skippedListingAppIds, analysis: AUTOMATED_PUBLICATION_ANALYSIS, atomic: true as const, batch_id: null, packages: catalog.releases.map(release => ({ ...release.record, source: release.source })) };
+    if (!options.execute) return { action: "publication_review" as const, operation: "publish" as const, channel: "beta" as const, requestId: options.requestId, canister: catalog.canister, publisher, changedAppIds: journal.changedAppIds, skippedListingAppIds, analysis: AUTOMATED_PUBLICATION_ANALYSIS, atomic: true as const, batch_id: null, packages: catalog.releases.map(release => ({ ...release.record, channel: journal!.releaseChannels[release.record.id]!, release_path: releasePath(release.record.id, journal!.releaseChannels[release.record.id]!), source: release.source })) };
     let committedThisRun: string | null = null;
     if (journal.changedAppIds.length) {
       // An unknown batch may already have atomically published all releases.
-      // Reconcile it before uploads or promotion; never create a replacement ID.
+      // Reconcile it before uploads or publication; never create a replacement ID.
       const remoteBatch = await transport.batchStatus(journal.requestId);
       if (remoteBatch) { journal.batch = verifyBatch(remoteBatch, journal); await savePublisherJournal(file, journal); }
       else if (journal.batch) throw new Error("A previously completed batch is missing from protocol status. Its original evidence remains in the journal.");
@@ -217,19 +298,19 @@ export async function publishTrustedCatalog(catalog: TrustedCatalog, options: Pu
           if (!release) throw new Error("Saved publication contains an app outside the retained catalog.");
           const previous = journal.staged.find(value => value.appId === id);
           if (previous) { if (!candidateMatches(previous, release)) throw new Error("Saved candidate differs from the original archive."); continue; }
-          const candidate = await transport.stage(release, { requestId: sha256Hex(new TextEncoder().encode(`${journal.requestId}\0${id}`)), journal: `${file}.${id}.upload.json`, publisher });
+          const candidate = await transport.stage(release, { requestId: sha256Hex(new TextEncoder().encode(`publish\0beta\0${journal.requestId}\0${id}`)), journal: `${file}.${id}.upload.json`, publisher });
           const saved = saveCandidate(candidate);
           if (candidate.publisher.toText() !== publisher || !candidateMatches(saved, release)) throw new Error("Staged candidate does not match the inspected publisher, package and source.");
           journal.staged.push(saved); await savePublisherJournal(file, journal);
         }
-        const request: BatchRequest = { requestId: journal.requestId, candidates: journal.staged.map(value => ({ candidateId: BigInt(value.candidateId), expectedDigest: bytes(value.digest), expectedSourceDigest: value.sourceDigest ? [bytes(value.sourceDigest)] : [] })), analysis: AUTOMATED_PUBLICATION_ANALYSIS };
+        const request: BatchRequest = { operation: "publish", channel: "beta", requestId: journal.requestId, candidates: journal.staged.map(value => ({ candidateId: BigInt(value.candidateId), expectedDigest: bytes(value.digest), expectedSourceDigest: value.sourceDigest ? [bytes(value.sourceDigest)] : [] })), analysis: AUTOMATED_PUBLICATION_ANALYSIS };
         journal.batchRequested = true; await savePublisherJournal(file, journal);
         const receipt = await transport.publishBatch(request);
         journal.batch = verifyBatch(receipt, journal); await savePublisherJournal(file, journal);
         committedThisRun = journal.batch.id;
       }
     }
-    const releaseDigests = await postflight(catalog, options, origin);
-    return { action: "publication_verified" as const, protocol: UPDATE_SOURCE_RECEIPT_PROTOCOL, requestId: journal.requestId, canister_id: catalog.canister, origin, publisher, skippedListingAppIds, atomic: true as const, batch_id: committedThisRun, reconciled_batch_id: journal.batch?.id ?? null, published_at: new Date().toISOString(), packages: catalog.releases.map(release => ({ ...release.record, package_path: release.packagePath, release_path: release.releasePath, release_digest: releaseDigests.get(release.record.id)!, status: committedThisRun && journal!.changedAppIds.includes(release.record.id) ? "published" : "unchanged", source: release.source ? { ...release.source, status: committedThisRun && journal!.changedAppIds.includes(release.record.id) ? "published" : "unchanged" } : null })) };
+    const releaseDigests = await postflight(catalog, journal, options, origin);
+    return { action: "publication_verified" as const, protocol: UPDATE_SOURCE_RECEIPT_PROTOCOL, operation: "publish" as const, channel: "beta" as const, requestId: journal.requestId, canister_id: catalog.canister, origin, publisher, skippedListingAppIds, atomic: true as const, batch_id: committedThisRun, reconciled_batch_id: journal.batch?.id ?? null, published_at: new Date().toISOString(), packages: catalog.releases.map(release => ({ ...release.record, channel: journal!.releaseChannels[release.record.id]!, package_path: release.packagePath, release_path: releasePath(release.record.id, journal!.releaseChannels[release.record.id]!), release_digest: releaseDigests.get(release.record.id)!, status: committedThisRun && journal!.changedAppIds.includes(release.record.id) ? "published" : "unchanged", source: release.source ? { ...release.source, status: committedThisRun && journal!.changedAppIds.includes(release.record.id) ? "published" : "unchanged" } : null })) };
   } finally { await unlock?.(); }
 }

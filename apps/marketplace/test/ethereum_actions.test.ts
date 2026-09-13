@@ -4,10 +4,11 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { Principal } from "@dfinity/principal";
 import type { JsonObject, MsgBusToolContext } from "neutron-tools/app";
-import { checkoutType, encodeOpaque, type Checkout, type Fee } from "../src/protocol.ts";
+import { checkoutType, channelCheckoutType, encodeOpaque, type Checkout, type ChannelCheckout, type Fee } from "../src/protocol.ts";
 import type { EthereumFees, EthereumInvoiceResult } from "../src/ethereum_protocol.ts";
 import type { EthereumFundingKind, EthereumFundingJournal, EthereumFundingPlan, EthereumFundingRecord } from "../src/ethereum.ts";
 import type { PurchaseQuote, EthereumWalletSource } from "../src/view-types.ts";
+import type { ReleasePreferences } from "../src/release_preferences.ts";
 
 if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
   test("Ethereum purchase authority, durable funding and independent verification", async () => {
@@ -31,9 +32,10 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
   const fee: Fee = { feeVersion: 1n, processingCycles: 100n, totalCycles: 100n, storageCycles: 0n, processingBytes: 0n, newStorageBytes: 0n };
   const fees: EthereumFees = { prepare: fee, verify: { ...fee, totalCycles: 500n, processingCycles: 500n }, settle: fee, cancel: fee };
   const wire: Checkout = { request: { requestId: ID, appIds: ["sample"], ledger: principal(LEDGER), referralCode: [] }, buyer: principal(OWNER), items: [{ appId: "sample", listingRevision: 1n, publisher: principal(PROTOCOL), priceUsdMicros: 1_000_000n, paidAtoms: 1_000_000n, developerAtoms: 300_000n, affiliateAtoms: 0n, burnAtoms: 700_000n, releaseDigest: bytes }], amount: 1_000_000n, fee: 10_000n, affiliate: [], rate: [], spender: { owner: principal(PROTOCOL), subaccount: [] }, commitment: bytes, cycles: fee, quotedAtNs: 1n };
+  const channel: ChannelCheckout = { quote: wire, mode: { beta: null }, selection: [{ appId: "sample", candidateId: 3n, version: 3n, digest: bytes, sourceDigest: [], channel: { beta: null }, revision: 3n }] };
   const money = (amount: bigint) => ({ atoms: String(amount), decimals: 6, symbol: "USDC" });
   function quote(source: EthereumWalletSource = "evm_wallet", frozen = false): PurchaseQuote {
-    return { operationId: ID, commitment: actualClient.hex(bytes), appIds: ["sample"], items: [], token: "ckUSDC", subtotalUsdMicros: "1000000", discountUsdMicros: "0", payment: money(wire.amount), approvalFee: money(0n), collectionFee: money(wire.fee), totalDebit: money(wire.amount + wire.fee), allocations: [], cycles: actualClient.cycleView(fee), affiliateCode: "", warnings: [], opaque: encodeOpaque(checkoutType, wire), ethereum: { wallet: source, chainId: "1", payerAddress: PAYER, tokenAddress: TOKEN, recipientPrincipal: PROTOCOL, wrappingFee: money(wire.fee), prepareCycles: actualClient.cycleView(fee), verifyCycles: actualClient.cycleView(fees.verify), ...(frozen ? { helperAddress: HELPER, minterAddress: MINTER } : {}) } };
+    return { operationId: ID, commitment: actualClient.hex(bytes), appIds: ["sample"], items: [], token: "ckUSDC", subtotalUsdMicros: "1000000", discountUsdMicros: "0", payment: money(wire.amount), approvalFee: money(0n), collectionFee: money(wire.fee), totalDebit: money(wire.amount + wire.fee), allocations: [], cycles: actualClient.cycleView(fee), affiliateCode: "", warnings: [], opaque: encodeOpaque(checkoutType, wire), ...(quotePreferences ? { releasePreferences: quotePreferences } : {}), ...(channelEnabled ? { channelOpaque: encodeOpaque(channelCheckoutType, channel) } : {}), ethereum: { wallet: source, chainId: "1", payerAddress: PAYER, tokenAddress: TOKEN, recipientPrincipal: PROTOCOL, wrappingFee: money(wire.fee), prepareCycles: actualClient.cycleView(fee), verifyCycles: actualClient.cycleView(fees.verify), ...(frozen ? { helperAddress: HELPER, minterAddress: MINTER } : {}) } };
   }
   function fixture(): EthereumInvoiceResult {
     const route = { chainId: "1", tokenAddress: TOKEN, helperAddress: HELPER, minterAddress: MINTER, recipientPrincipal: PROTOCOL };
@@ -44,6 +46,8 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
   let stored: Map<string, Uint8Array>, events: string[], reviews: JsonObject[], updates: string[], sends: EthereumFundingKind[], observations: EthereumFundingKind[];
   let status: EthereumInvoiceResult | null, prepared: EthereumInvoiceResult, idCounter: number, ownerApproved: boolean, lostClaimReply: boolean;
   let states: Record<EthereumFundingKind, EthereumFundingRecord["state"]>, approvalRequired: boolean;
+  let quotePreferences: ReleasePreferences | undefined, preferences: ReleasePreferences;
+  let channelEnabled: boolean, walletAuthorizations: number;
   const opKey = `ethereum:operation:${ID}`, stepKey = (kind: EthereumFundingKind) => `ethereum:step:${ID}:${kind}`;
   const saved = (id = opKey) => stored.has(id) ? JSON.parse(new TextDecoder().decode(stored.get(id)!)) : null;
   const client = { state: { owner: OWNER, canisterId: PROTOCOL }, info: { canister: principal(PROTOCOL) },
@@ -51,6 +55,7 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
       updates.push(name); events.push(`update:${name}`);
       expect(saved()).not.toBeNull();
       if (name === "ethereum_prepare") { expect(estimate).toEqual(fees.prepare); expect(request.payer).toBe(PAYER); status = prepared; return status; }
+      if (name === "ethereum_prepare_v2") { expect(request.quote).toEqual(channel); expect(request.payer).toBe(PAYER); status = prepared; return { invoice: status, quote: [channel] }; }
       if (name === "ethereum_cancel") {
         expect(estimate).toEqual(fees.cancel);
         status = { ...status!, invoice: { ...status!.invoice, canceledAtNs: [20n] }, nextAction: { none: null } }; return status;
@@ -74,17 +79,18 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
     ethereumInvoiceStatus: async () => { events.push("status"); return status; }, ethereumFees: async () => fees,
   }));
   mock.module("../src/ethereum.ts", () => ({ ...actualEthereum,
-    createEthereumFundingWallet: () => ({ accounts: async () => ({ accounts: [{ accountId: "main", address: PAYER }] }) }),
+    createEthereumFundingWallet: () => ({ accounts: async () => ({ accounts: [{ accountId: "main", address: PAYER }] }), sendTransaction: async () => { walletAuthorizations += 1; return {}; } }),
     readEthereumFundingWalletState: async () => ({ allowanceAtoms: approvalRequired ? "0" : String(wire.amount + wire.fee), balanceAtoms: "10000000", approvalRequired }),
     executeEvmFundingStep: async (plan: EthereumFundingPlan, kind: EthereumFundingKind, _wallet: unknown, journal: EthereumFundingJournal) => {
       observations.push(kind); events.push(`funding:${kind}`); expect(saved()?.plan).toEqual(plan);
       const old = await journal.read(kind);
       if (old?.state === "confirmed") return old;
+      if (old?.state === "prepared") { await (_wallet as { sendTransaction(input: unknown): Promise<unknown> }).sendTransaction({ requestId: old.step.requestId }); return old; }
       const initial: EthereumFundingRecord = { version: 1, invoiceId: ID, source: "evm_wallet", step: plan.steps[kind], state: "unknown", transactionHash: null, walletIntent: null, receipt: null, message: "Unknown" };
       const record = old ?? (await journal.claim(initial)).record;
       if (!old) { sends.push(kind); expect(saved(stepKey(kind))?.record).toEqual(initial); }
       const state = states[kind], hash = `0x${(kind === "approval" ? "11" : "22").repeat(32)}` as `0x${string}`;
-      return journal.record(record, { ...record, state, transactionHash: state === "unknown" ? null : hash, message: state === "confirmed" ? "Confirmed" : "Pending" });
+      return journal.record(record, { ...record, state, transactionHash: state === "unknown" || state === "prepared" ? null : hash, message: state === "confirmed" ? "Confirmed" : "Pending" });
     },
   }));
   const { quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, prepareEthereumBrowser, ethereumJournalClaim, ethereumJournalRecord, finishEthereumBrowser, ethereumSavedStatus, cancelEthereumPurchase } = await import("../src/ethereum_actions.ts");
@@ -93,6 +99,7 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
       caller: { appId: root ? "agent" : "marketplace", installationUid: "install-1", role: root ? "background" : "tile", endpoint: root ? "app:agent:background" : "app:marketplace:tile:main:instance:test" },
       requestApproval: async (review: JsonObject) => { events.push("root_review"); reviews.push(review); },
       kernel: {
+        listTools: async () => [{ name: "updates.preferences" }],
         querySelf: async (name: string, args: string[]) => { if (name !== "marketplace_draft") throw new Error(`Unexpected query ${name}`); return stored.has(args[0]!) ? [stored.get(args[0]!)] : []; },
         updateSelf: async (name: string, args: Array<{ id: string; value: Uint8Array; expected?: Uint8Array; revision?: string }>) => {
           const arg = args[0]!;
@@ -109,11 +116,69 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
           }
           throw new Error(`Unexpected update ${name}`);
         },
-        callTool: async (request: { name: string; arguments: { reviewJson: string } }) => { expect(request.name).toBe("marketplace_owner_review_v1"); events.push("owner_review"); reviews.push(JSON.parse(request.arguments.reviewJson)); return { approved: ownerApproved }; },
+        callTool: async (request: { name: string; arguments: { reviewJson: string } }) => { if (request.name === "updates.preferences") return preferences; expect(request.name).toBe("marketplace_owner_review_v1"); events.push("owner_review"); reviews.push(JSON.parse(request.arguments.reviewJson)); return { approved: ownerApproved }; },
       },
     } as unknown as MsgBusToolContext;
   }
-  beforeEach(() => { stored = new Map(); events = []; reviews = []; updates = []; sends = []; observations = []; status = null; prepared = fixture(); idCounter = 0; ownerApproved = true; lostClaimReply = false; approvalRequired = true; states = { approval: "confirmed", deposit: "submitted" }; });
+  beforeEach(() => { stored = new Map(); events = []; reviews = []; updates = []; sends = []; observations = []; status = null; prepared = fixture(); idCounter = 0; ownerApproved = true; lostClaimReply = false; approvalRequired = true; states = { approval: "confirmed", deposit: "submitted" }; quotePreferences = undefined; preferences = { betaEnabled: false, revision: "0" }; channelEnabled = false; walletAuthorizations = 0; });
+
+  test("channel Ethereum preparation and recovery retain the exact original wrapper after a toggle", async () => {
+    channelEnabled = true; quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+    await runEthereumPurchase(context(), quote()); const original = saved();
+    preferences = { betaEnabled: false, revision: "2" }; states.deposit = "confirmed";
+    expect((await resumeEthereumPurchase(context(), ID)).state).toBe("complete");
+    expect(updates).toEqual(["ethereum_prepare_v2", "ethereum_verify"]); expect(sends).toEqual(["approval", "deposit"]);
+    expect(saved().quote.channelOpaque).toEqual(original.quote.channelOpaque); expect(saved().quote.opaque).toEqual(original.quote.opaque);
+  });
+  test("an unsigned saved EVM request cannot request a new wallet authorization after a toggle", async () => {
+    quotePreferences = preferences = { betaEnabled: true, revision: "1" }; states.approval = "prepared";
+    await runEthereumPurchase(context(), quote());
+    preferences = { betaEnabled: false, revision: "2" };
+    await expect(resumeEthereumPurchase(context(), ID)).rejects.toThrow("Beta updates changed");
+    expect(walletAuthorizations).toBe(0); expect(sends).toEqual(["approval"]); expect(saved(stepKey("deposit"))).toBeNull();
+  });
+
+  test("a stale Ethereum quote cannot create an invoice or request payment", async () => {
+    quotePreferences = { betaEnabled: true, revision: "1" };
+    await expect(runEthereumPurchase(context(), quote())).rejects.toThrow("Beta updates changed");
+    expect(updates).toEqual([]); expect(sends).toEqual([]);
+  });
+  test("a preference change during invoice route review prevents the first funding request", async () => {
+    quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+    const ctx = context(), call = ctx.kernel.callTool.bind(ctx.kernel);
+    ctx.kernel.callTool = (async (...args: Parameters<typeof call>) => {
+      const value = await call(...args);
+      if (args[0].name === "marketplace_owner_review_v1") preferences = { betaEnabled: false, revision: "2" };
+      return value;
+    }) as typeof ctx.kernel.callTool;
+    await expect(runEthereumPurchase(ctx, quote())).rejects.toThrow("Beta updates changed");
+    expect(updates).toEqual(["ethereum_prepare"]); expect(sends).toEqual([]); expect(saved().plan).toBeNull();
+  });
+  test("a submitted Ethereum deposit still verifies its original invoice after a toggle", async () => {
+    quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+    await runEthereumPurchase(context(), quote());
+    const original = saved();
+    preferences = { betaEnabled: false, revision: "2" }; states.deposit = "confirmed";
+    expect((await resumeEthereumPurchase(context(), ID)).state).toBe("complete");
+    expect(sends).toEqual(["approval", "deposit"]); expect(updates).toEqual(["ethereum_prepare", "ethereum_verify"]);
+    expect(saved().quote).toEqual(original.quote); expect(saved().requestIds).toEqual(original.requestIds);
+  });
+  test("an earlier Ethereum approval can reconcile after a toggle but cannot start a deposit", async () => {
+    quotePreferences = preferences = { betaEnabled: true, revision: "1" }; states.approval = "submitted";
+    await runEthereumPurchase(context(), quote());
+    preferences = { betaEnabled: false, revision: "2" }; states.approval = "confirmed";
+    await expect(resumeEthereumPurchase(context(), ID)).rejects.toThrow("Beta updates changed");
+    expect(saved(stepKey("approval")).record.state).toBe("confirmed");
+    expect(saved(stepKey("deposit"))).toBeNull(); expect(sends).toEqual(["approval"]);
+  });
+  test("a browser payment claim revalidates the original preference after preparation", async () => {
+    quotePreferences = preferences = { betaEnabled: true, revision: "1" };
+    const { plan } = await prepareEthereumBrowser(context(), quote("browser"));
+    preferences = { betaEnabled: false, revision: "2" };
+    const record: EthereumFundingRecord = { version: 1, invoiceId: ID, source: "browser", step: plan.steps.approval, state: "unknown", transactionHash: null, walletIntent: null, receipt: null, message: "Pending" };
+    await expect(ethereumJournalClaim(context(), ID, record)).rejects.toThrow("Beta updates changed");
+    expect(saved(stepKey("approval"))).toBeNull(); expect(sends).toEqual([]);
+  });
 
   test("saved Ethereum quote retains its original discount when omitted", async () => {
     const retained = { ...quote("browser"), affiliateCode: "ORIGINAL" };

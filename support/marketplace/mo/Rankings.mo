@@ -5,6 +5,7 @@ import Iter "mo:core/Iter";
 import Store "Store";
 import Types "Types";
 import Publishers "Publishers";
+import ReleaseStore "ReleaseStore";
 
 module {
   public type Kind = { #free; #paid };
@@ -82,15 +83,22 @@ module {
     switch (value) { case (#ok(result)) result; case (#err(error)) Runtime.trap("Ranking storage invariant: " # debug_show(error)) };
   };
 
-  func appEligible(db : Store.DB, app : Types.App) : Bool {
-    if (not app.visible) return false;
-    let ?candidateId = app.approvedCandidate else return false;
+  func headEligible(db : Store.DB, app : Types.App, head : ReleaseStore.Head) : Bool {
+    let ?candidateId = head.candidateId else return false;
     let ?candidate = db.candidates.get(candidateId) else return false;
     candidate.appId == app.appId and candidate.published and candidate.state == #approved;
   };
 
+  func appEligible(db : Store.DB, app : Types.App) : Bool {
+    app.visible and headEligible(db, app, ReleaseStore.heads(db.channels, app.appId).stableHead);
+  };
+
   public func refreshEligibility(db : Store.DB, app : Types.App) {
-    let eligible = appEligible(db, app);
+    // The immutable generated indexes filter on this retained eligibility bit.
+    // Include either offered channel, then select the viewer's channel when
+    // reading its snapshot. Acquisition counters remain shared by the app.
+    let heads = ReleaseStore.heads(db.channels, app.appId);
+    let eligible = app.visible and (headEligible(db, app, heads.stableHead) or headEligible(db, app, heads.betaHead));
     let isFree = app.priceUsdMicros == 0;
     switch (db.rankings.by_app.lookup(app.appId)) {
       case (?prior) {
@@ -164,8 +172,8 @@ module {
     let publish = weekly.complete and monthly.complete;
     if (publish) {
       let descending = { gt = null; gte = null; lt = null; lte = null; dir = #bwd };
-      // Every candidate remains indexed. Snapshots cover all entries so hiding
-      // one app can still expose the next eligible result during later backlog.
+      // Snapshots include every indexed app from either offered channel so
+      // hiding one app exposes the next eligible result during later backlog.
       let charts = {
         free7 = chartEntries(db.rankings.by_free7.rangeIter(descending, null), #free, #week);
         free30 = chartEntries(db.rankings.by_free30.rangeIter(descending, null), #free, #month);
@@ -188,6 +196,12 @@ module {
   };
 
   public func chart(db : Store.DB, kind : Kind, window : Window, cursor : ?ChartCursor, limit : Nat, now : Int) : Result<ChartPage> {
+    chartFor(db, kind, window, cursor, limit, now, func(app) { appEligible(db, app) });
+  };
+
+  // Ranking generations contain every indexed app. Apply release-channel
+  // eligibility at read time without changing their score or cursor identity.
+  public func chartFor(db : Store.DB, kind : Kind, window : Window, cursor : ?ChartCursor, limit : Nat, now : Int, eligible : Types.App -> Bool) : Result<ChartPage> {
     if (limit == 0) return #err("Choose a positive chart page size.");
     let saved = db.store.get().rankings;
     var offset = switch (cursor) {
@@ -208,7 +222,7 @@ module {
       offset += 1;
       switch (db.apps.by_appId.lookup(row.appId)) {
         case (?app) {
-          if (appEligible(db, app) and ((app.priceUsdMicros == 0) == (kind == #free))) List.add(entries, row);
+          if (eligible(app) and ((app.priceUsdMicros == 0) == (kind == #free))) List.add(entries, row);
         };
         case null {};
       };

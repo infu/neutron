@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { Principal } from "@dfinity/principal";
 import type { MsgBusToolContext } from "neutron-tools/app";
-import { checkoutType, decodeOpaque, encodeOpaque, type Checkout, type Info } from "../src/protocol.ts";
+import { checkoutType, channelCheckoutType, decodeOpaque, encodeOpaque, type Checkout, type ChannelCheckout, type ChannelPurchaseResult, type Info } from "../src/protocol.ts";
 
 // Keep transport substitution isolated from the other client/action tests.
 if (process.env.NEUTRON_MARKETPLACE_CLIENT_RECOVERY_CHILD !== "1") {
@@ -37,21 +37,38 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_RECOVERY_CHILD !== "1") {
     cycles: { feeVersion: 1n, processingCycles: 100n, storageCycles: 0n, totalCycles: 100n, processingBytes: 0n, newStorageBytes: 0n },
   };
   let detail: () => unknown;
+  let retainedPurchase: ChannelPurchaseResult | null;
+  const calls: string[] = [];
   const actualTransport = await import("../src/transport.ts");
   mock.module("../src/transport.ts", () => ({
     ...actualTransport, makeAgent: async () => ({}), makeTransport: () => ({
       query: async (name: string) => {
+        calls.push(name);
         if (name === "marketplace_info") return info;
-        if (name === "app_detail") return detail();
+        if (name === "app_detail" || name === "app_detail_v2") return detail();
+        if (name === "purchase_status_v2") return { ok: retainedPurchase ? [retainedPurchase] : [] };
         throw new Error(`Unexpected query ${name}`);
       },
     }),
   }));
   const { clearClient, protocolClient } = await import("../src/client.ts");
   const context = (signal = new AbortController().signal) => ({ signal, kernel: {
-    querySelf: async () => ({ seed: [], canister: [PROTOCOL.toText()], host: "https://icp-api.io", owner: OWNER.toText(), revision: 1 }),
+    querySelf: async (name: string) => name === "marketplace_draft" ? [] : ({ seed: [], canister: [PROTOCOL.toText()], host: "https://icp-api.io", owner: OWNER.toText(), revision: 1 }),
+    listTools: async () => { throw new Error("Original financial recovery must not select today's release preference"); },
   } }) as unknown as MsgBusToolContext;
-  beforeEach(clearClient);
+  beforeEach(() => { clearClient(); retainedPurchase = null; calls.length = 0; });
+
+  for (const channelAware of [false, true]) test(`remote ${channelAware ? "channel" : "legacy"} purchase recovers its exact quote before considering current preferences`, async () => {
+    detail = () => ({ err: { code: "app_unavailable", message: "The original release is retired." } });
+    const channel: ChannelCheckout = { quote, mode: { beta: null }, selection: [{ appId: "saved_app", candidateId: 2n, version: 2n, digest: quote.items[0]!.releaseDigest, sourceDigest: [], channel: { beta: null }, revision: 2n }] };
+    retainedPurchase = { purchase: { order: { requestId: quote.request.requestId, state: { outcome_unknown: null }, lastError: [] }, attempt: [], quote: [quote], active: false, nextAction: { retry_same_attempt: null } }, quote: channelAware ? [channel] : [] };
+    const view = await (await protocolClient(context())).quotePurchase({ operationId: quote.request.requestId, appIds: quote.request.appIds, token: "ckUSDC" });
+    expect(view.opaque).toEqual(encodeOpaque(checkoutType, quote));
+    expect(view.channelOpaque).toEqual(channelAware ? encodeOpaque(channelCheckoutType, channel) : undefined);
+    expect(view.releasePreferences).toBeUndefined();
+    expect(view.payment.atoms).toBe("9000000");
+    expect(calls).toEqual(["marketplace_info", "purchase_status_v2", channelAware ? "app_detail_v2" : "app_detail"]);
+  });
 
   for (const unavailable of ["revoked", "read_failure"]) test(`saved terms survive ${unavailable} catalog details`, async () => {
     detail = unavailable === "revoked" ? () => ({ err: { code: "app_unavailable", message: "No approved release." } }) : () => { throw new Error("Query temporarily unavailable"); };

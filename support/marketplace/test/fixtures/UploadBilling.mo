@@ -9,6 +9,7 @@ import API "../../mo/API";
 import Assets "../../mo/Assets";
 import Billing "../../mo/Billing";
 import PublisherStore "../../mo/PublisherStore";
+import ReleaseStore "../../mo/ReleaseStore";
 import Store "../../mo/Store";
 
 // PocketIC only: makes allocation fail deterministically without growing memory.
@@ -19,7 +20,8 @@ persistent actor class UploadBilling() = self {
     referralTerms = { version = 1; discountBps = 1_000; affiliateBps = 3_000; developerBps = 3_000 } });
   let mem = { initial with blobs = StableBlob.initWith({ StableBlob.defaults with maxPages = 0; uploadTtl = 0 }) };
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(mem, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  transient let db = Store.Use(mem, publisherMemory, releaseMemory);
   var effects = 0;
 
   public func seed() : async () {

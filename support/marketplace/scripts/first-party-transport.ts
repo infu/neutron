@@ -8,24 +8,42 @@ import { readFile } from "node:fs/promises";
 import { loadExistingBlastIdentity } from "../../../packages/neutron-provision/src/identity.ts";
 import { AccessRequest, AccessReply, blob, result, unwrap, type Target } from "./operator-wire.ts";
 import { Listing, ListingReply, UploadBegin, UploadChunk, UploadFinish, UploadReply, Submit, SubmitReply, publish, type Transport } from "./publisher.ts";
-import { TRUSTED_PUBLISHER_CALLER, type BatchReceipt, type TrustedPublishTransport } from "./first-party-publish.ts";
+import type { BatchReceipt, LegacyBatchReceipt, TrustedPublishTransport } from "./first-party-publish.ts";
+import { TRUSTED_PUBLISHER_CALLER } from "./publication-evidence.ts";
 import { reader, type HttpReader } from "./audit-download.ts";
 import { updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
 import { SOURCE_COMPRESSED_MAX_BYTES } from "../../update-source/src/model.ts";
 import { REPOSITORY_LIMITS } from "neutron-tools/src/repository.ts";
 import { MediaDetailReply } from "./media-wire.ts";
+import { PromotionRejectedError, type PromotionEntry, type PromotionReceipt, type TrustedPromotionTransport } from "./first-party-promote.ts";
 
 const operation = IDL.Record({ requestId: IDL.Text });
 const TrustedInfo = IDL.Record({ canister: IDL.Principal, fees: IDL.Record({ version: IDL.Nat }), trustedPublishingPrincipal: IDL.Opt(IDL.Principal) });
 export const TrustedBatchRequest = IDL.Record({
+  operation: IDL.Text, channel: IDL.Text,
   requestId: IDL.Text,
   candidates: IDL.Vec(IDL.Record({ candidateId: IDL.Nat64, expectedDigest: blob, expectedSourceDigest: IDL.Opt(blob) })),
   analysis: IDL.Text,
 });
-export const TrustedBatch = IDL.Record({
+// Frozen legacy stable-publication receipt fields. New beta fields extend this
+// shape without changing the original status query contract.
+const LegacyBatchFields = {
   id: IDL.Nat64, owner: IDL.Principal, publisher: IDL.Principal, requestId: IDL.Text,
   entries: IDL.Vec(IDL.Record({ candidateId: IDL.Nat64, appId: IDL.Text, version: IDL.Nat, digest: blob, sourceDigest: IDL.Opt(blob), auditId: IDL.Nat64 })),
   analysis: IDL.Text, createdAtNs: IDL.Int,
+};
+export const LegacyTrustedBatch = IDL.Record(LegacyBatchFields);
+export const TrustedBatch = IDL.Record({ ...LegacyBatchFields, operation: IDL.Text, channel: IDL.Text });
+export const PromotionEntryWire = IDL.Record({
+  appId: IDL.Text, candidateId: IDL.Nat64, version: IDL.Nat, digest: blob,
+  sourceDigest: IDL.Opt(blob), packageSize: IDL.Nat64, sourceSize: IDL.Opt(IDL.Nat64),
+  dependencies: IDL.Vec(IDL.Record({ appId: IDL.Text, minVersion: IDL.Nat })),
+  expectedBetaRevision: IDL.Nat64, expectedStableCandidate: IDL.Opt(IDL.Nat64), expectedStableRevision: IDL.Nat64,
+});
+export const PromotionRequestWire = IDL.Record({ requestId: IDL.Text, entries: IDL.Vec(PromotionEntryWire), feeVersion: IDL.Nat });
+export const PromotionReceiptWire = IDL.Record({
+  id: IDL.Nat64, owner: IDL.Principal, publisher: IDL.Principal, requestId: IDL.Text,
+  operation: IDL.Text, channel: IDL.Text, entries: IDL.Vec(PromotionEntryWire), createdAtNs: IDL.Int,
 });
 type Method = { args: [] | [IDL.Type]; reply: IDL.Type; query: boolean };
 const methods: Record<string, Method> = {
@@ -36,18 +54,23 @@ const methods: Record<string, Method> = {
   upload_chunk: { args: [UploadChunk], reply: UploadReply, query: false },
   upload_finish: { args: [UploadFinish], reply: UploadReply, query: false },
   candidate_submit: { args: [Submit], reply: SubmitReply, query: false },
-  trusted_publish_batch: { args: [TrustedBatchRequest], reply: result(TrustedBatch), query: false },
-  trusted_publish_status: { args: [operation], reply: result(IDL.Opt(TrustedBatch)), query: true },
+  trusted_publish_beta_batch: { args: [TrustedBatchRequest], reply: result(TrustedBatch), query: false },
+  trusted_publish_status: { args: [operation], reply: result(IDL.Opt(LegacyTrustedBatch)), query: true },
+  trusted_publish_beta_status: { args: [operation], reply: result(IDL.Opt(TrustedBatch)), query: true },
+  promotion_prepare: { args: [IDL.Record({ appIds: IDL.Vec(IDL.Text) })], reply: result(IDL.Record({ entries: IDL.Vec(PromotionEntryWire) })), query: true },
+  release_promote: { args: [PromotionRequestWire], reply: result(PromotionReceiptWire), query: false },
+  promotion_status: { args: [operation], reply: result(IDL.Opt(PromotionReceiptWire)), query: true },
   repo_access_v1: { args: [AccessRequest], reply: AccessReply, query: false },
 };
 export const firstPartyService = () => IDL.Service(Object.fromEntries(Object.entries(methods).map(([name, method]) => [name, IDL.Func(method.args, [method.reply], method.query ? ["query"] : [])])));
 export type FirstPartyActor = Record<string, (...args: unknown[]) => Promise<unknown>>;
-export type FirstPartyTransportOptions = { canister: string; host: string; rootKeyFile?: string };
+export type FirstPartyTransportOptions = { canister: string; host: string; rootKeyFile?: string; allowArtifactAuthorization?: boolean };
 type Dependencies = {
   loadIdentity?: typeof loadExistingBlastIdentity;
   createAgent?: (options: HttpAgentOptions) => Promise<HttpAgent>;
   createActor?: (agent: HttpAgent, canister: string) => FirstPartyActor;
   httpReader?: typeof reader;
+  certifiedFetch?: typeof certifiedQueryFetch;
 };
 
 /** Typed Candid translation keeps large archive chunks out of process arguments.
@@ -59,7 +82,7 @@ export function publisherActorTransport(target: Target, caller: Principal, actor
   };
   const invoke = async (method: string, args: Uint8Array, query: boolean) => {
     const spec = methods[method];
-    if (!spec || spec.query !== query || method.startsWith("trusted_publish_") || method === "repo_access_v1") throw new Error("This is not a supported trusted staging method.");
+    if (!spec || spec.query !== query || method.startsWith("trusted_publish_") || method.startsWith("promotion_") || method === "release_promote" || method === "repo_access_v1") throw new Error("This is not a supported trusted staging method.");
     const value = await actor[method]!(...IDL.decode(spec.args, args));
     return new Uint8Array(IDL.encode([spec.reply], [value]));
   };
@@ -109,13 +132,32 @@ async function createConnection(options: FirstPartyTransportOptions, dependencie
       if (candidate.sourceDigest.length > 1) throw new Error("Staged candidate returned an invalid optional source digest.");
       return { candidateId: candidate.id, appId: candidate.appId, version: candidate.version, publisher: candidate.publisher, digest: candidate.digest, sourceDigest: candidate.sourceDigest[0] ? [candidate.sourceDigest[0]] : [] };
     },
+    legacyBatchStatus: async requestId => {
+      const values = unwrap(await actor.trusted_publish_status!({ requestId }) as { ok: [] | [LegacyBatchReceipt] } | { err: { code: string; message: string } });
+      if (values.length > 1) throw new Error("Legacy publication status returned an invalid optional receipt.");
+      return values[0] ?? null;
+    },
     batchStatus: async requestId => {
-      const value = unwrap(await actor.trusted_publish_status!({ requestId }) as { ok: [] | [BatchReceipt] } | { err: { code: string; message: string } });
+      const value = unwrap(await actor.trusted_publish_beta_status!({ requestId }) as { ok: [] | [BatchReceipt] } | { err: { code: string; message: string } });
       return value[0] ?? null;
     },
-    publishBatch: async request => unwrap(await actor.trusted_publish_batch!(request) as { ok: BatchReceipt } | { err: { code: string; message: string } }),
+    publishBatch: async request => unwrap(await actor.trusted_publish_beta_batch!(request) as { ok: BatchReceipt } | { err: { code: string; message: string } }),
   };
-  return { transport, actor, target, staging, feeVersion: info.fees.version };
+  const promotion: TrustedPromotionTransport = {
+    caller,
+    prepare: async appIds => unwrap(await actor.promotion_prepare!({ appIds }) as { ok: { entries: PromotionEntry[] } } | { err: { code: string; message: string } }),
+    status: async requestId => {
+      const values = unwrap(await actor.promotion_status!({ requestId }) as { ok: [] | [PromotionReceipt] } | { err: { code: string; message: string } });
+      if (values.length > 1) throw new Error("Promotion status returned an invalid optional receipt.");
+      return values[0] ?? null;
+    },
+    promote: async request => {
+      const result = await actor.release_promote!({ ...request, feeVersion: info.fees.version }) as { ok: PromotionReceipt } | { err: { code: string; message: string } };
+      if ("err" in result) throw new PromotionRejectedError(result.err.code, result.err.message);
+      return result.ok;
+    },
+  };
+  return { transport, promotion, actor, target, staging, feeVersion: info.fees.version };
 }
 
 /** The same request-bound verifier works against mainnet and an explicitly
@@ -130,9 +172,10 @@ export function certifiedQueryFetch(options: { canister: string; actor: HttpRead
     const packageMatch = /^\/repo\/v1\/packages\/([0-9a-f]{64})\.neutron$/.exec(url.pathname);
     const sourceMatch = /^\/repo\/v1\/sources\/([0-9a-f]{64})\.source\.v1\.msgpack\.gz$/.exec(url.pathname);
     const mediaMatch = /^\/repo\/v1\/media\/([0-9a-f]{64})$/.exec(url.pathname);
-    const releaseMatch = /^\/repo\/v1\/releases\/[a-z0-9_-]+\.json$/.test(url.pathname);
+    const releaseMatch = /^\/repo\/v1\/(?:releases|channels\/beta\/releases|channels\/apps)\/[a-z0-9_-]+\.json$/.test(url.pathname);
+    const descriptorMatch = url.pathname === "/repo/v1/channels.json";
     const mediaSize = mediaMatch ? options.mediaFiles?.get(url.pathname) : undefined;
-    if (!packageMatch && !sourceMatch && !releaseMatch && mediaSize === undefined) throw new Error("The certified publication reader requires a canonical package, source, release or explicitly selected media path.");
+    if (!packageMatch && !sourceMatch && !releaseMatch && !descriptorMatch && mediaSize === undefined) throw new Error("The certified publication reader requires a canonical package, source, release or explicitly selected media path.");
     const maximum = packageMatch ? REPOSITORY_LIMITS.packageBytes : sourceMatch ? SOURCE_COMPRESSED_MAX_BYTES : mediaSize ?? REPOSITORY_LIMITS.releaseJsonBytes;
     const expectedDigest = packageMatch?.[1] ?? sourceMatch?.[1] ?? mediaMatch?.[1];
     const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
@@ -184,7 +227,7 @@ export function certifiedQueryFetch(options: { canister: string; actor: HttpRead
       return new Response(Uint8Array.from(verified.response.body), { status: first.status_code, headers });
     };
     const publicResponse = await read();
-    if (publicResponse.status !== 403 || releaseMatch || mediaMatch) return publicResponse;
+    if (publicResponse.status !== 403 || releaseMatch || descriptorMatch || mediaMatch) return publicResponse;
     signal?.throwIfAborted();
     const credential = await wait(options.authorize(url.pathname));
     signal?.throwIfAborted();
@@ -206,13 +249,14 @@ export async function createFirstPartyMediaEnvironment(options: FirstPartyTransp
   };
 }
 
-export async function createFirstPartyEnvironment(options: FirstPartyTransportOptions, dependencies: Dependencies = {}): Promise<{ transport: TrustedPublishTransport; fetch: CertifiedFetch }> {
+export async function createFirstPartyEnvironment(options: FirstPartyTransportOptions, dependencies: Dependencies = {}): Promise<{ transport: TrustedPublishTransport; promotion: TrustedPromotionTransport; fetch: CertifiedFetch }> {
   const connection = await createConnection(options, dependencies);
   const http = await (dependencies.httpReader ?? reader)(options.canister, options.host, options.rootKeyFile);
   // Credentials exist only in this process. Retain the exact access request if
   // a response is lost; never write bearer tokens to publication journals.
   const grants = new Map<string, { request_id: string; token: string; paths: string[]; fee_version: bigint; confirmed: boolean }>();
   const authorize = async (path: string) => {
+    if (options.allowArtifactAuthorization === false) throw new Error("--execute is required to authorize private artifact verification; no grant was requested.");
     let saved = grants.get(path);
     if (!saved) { saved = { request_id: randomBytes(16).toString("hex"), token: randomBytes(32).toString("hex"), paths: [path], fee_version: connection.feeVersion, confirmed: false }; grants.set(path, saved); }
     if (!saved.confirmed) {
@@ -222,5 +266,5 @@ export async function createFirstPartyEnvironment(options: FirstPartyTransportOp
     }
     return saved.token;
   };
-  return { transport: connection.transport, fetch: certifiedQueryFetch({ canister: options.canister, actor: http.actor, rootKey: http.rootKey, authorize }) };
+  return { transport: connection.transport, promotion: connection.promotion, fetch: (dependencies.certifiedFetch ?? certifiedQueryFetch)({ canister: options.canister, actor: http.actor, rootKey: http.rootKey, authorize }) };
 }

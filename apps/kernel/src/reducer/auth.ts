@@ -12,6 +12,7 @@ import type { Principal } from "@dfinity/principal";
 import type { RepositoryAccessReply, RepositoryAccessRequest } from "neutron-tools/src/repository_access.js";
 import { clearPendingRepositorySetup } from "neutron-tools/repository";
 import { getNeutronId } from "../config.ts";
+import type { ReleasePreferencesActor } from "../release_preferences.ts";
 import type {
   DeploymentReference,
   InstallJournal,
@@ -54,7 +55,7 @@ type IcblastFactory = (options?: Record<string, unknown>) => any;
 type IcblastPreset = string | IDL.InterfaceFactory;
 type IcblastClient = (canister: string, preset?: IcblastPreset) => Promise<any>;
 
-export type KernelActor = CertifiedAssetsSettingsActor & {
+export type KernelActor = CertifiedAssetsSettingsActor & ReleasePreferencesActor & {
   kernel_owner_cycle_call_quote_v1(req: unknown): Promise<unknown>;
   kernel_owner_cycle_call_execute_v1(req: unknown): Promise<unknown>;
   kernel_owner_cycle_call_status_v1(req: unknown): Promise<unknown>;
@@ -70,6 +71,7 @@ export type KernelActor = CertifiedAssetsSettingsActor & {
     candid: string;
     deployment_id: string;
     wasm_memory_persistence: { keep: null } | { replace: null };
+    expected_release_preferences_revision?: [] | [bigint];
   }): Promise<null>;
   kernel_install_wasm_chunks_clear(req: DeploymentReference): Promise<null>;
   kernel_install_wasm_chunk(req: KernelInstallWasmChunkRequest): Promise<null>;
@@ -79,6 +81,7 @@ export type KernelActor = CertifiedAssetsSettingsActor & {
   kernel_install_begin_checked(req: {
     journal: InstallJournal;
     expected_deployment_id: string;
+    expected_release_preferences_revision?: [] | [bigint];
   }): Promise<null>;
   kernel_install_reservations_prepare(
     req: KernelInstallReservationsPrepareRequest,
@@ -715,6 +718,7 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
   const KernelInstallCodeInput = IDL.Record({
     candid: IDL.Text,
     deployment_id: IDL.Text,
+    expected_release_preferences_revision: IDL.Opt(IDL.Nat),
     wasm: IDL.Vec(IDL.Nat8),
     wasm_memory_persistence: IDL.Variant({
       keep: IDL.Null,
@@ -728,6 +732,7 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
   });
   const KernelInstallCodeChunkedInput = IDL.Record({
     deployment_id: IDL.Text,
+    expected_release_preferences_revision: IDL.Opt(IDL.Nat),
     chunk_hashes: IDL.Vec(IDL.Vec(IDL.Nat8)),
     wasm_module_hash: IDL.Vec(IDL.Nat8),
     wasm_memory_persistence: IDL.Variant({
@@ -780,6 +785,11 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
   const CheckedInstallJournal = IDL.Record({
     journal: InstallJournal,
     expected_deployment_id: IDL.Text,
+    expected_release_preferences_revision: IDL.Opt(IDL.Nat),
+  });
+  const ReleasePreferences = IDL.Record({
+    beta_enabled: IDL.Bool,
+    revision: IDL.Nat,
   });
   const InstallStatus = IDL.Record({
     deployment_id: IDL.Text,
@@ -1231,6 +1241,16 @@ const kernelIdl: Parameters<typeof Actor.createActor>[0] = ({ IDL }) => {
       [IDL.Null],
       [KernelSettingsSnapshot],
       ["query"],
+    ),
+    get_release_preferences: IDL.Func(
+      [IDL.Null],
+      [ReleasePreferences],
+      ["query"],
+    ),
+    set_release_preferences: IDL.Func(
+      [IDL.Bool],
+      [ReleasePreferences],
+      [],
     ),
     kernel_scheduled_tasks_snapshot: IDL.Func(
       [IDL.Null],

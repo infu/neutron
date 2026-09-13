@@ -21,6 +21,7 @@ import type { AttestedInstallOfferRequester } from "../src/install_offers/types.
 import type { RepositoryClientOptions } from "../src/repository/client.ts";
 import type { RepositoryPreparedAccess } from "../src/repository_access/client.ts";
 import { registryApp, runtimeApp } from "./app_registry_fixture.ts";
+import type { ReleasePreferences } from "../src/release_preferences.ts";
 
 const NOW = 1_800_000_000_000;
 const reference: RepositorySetupReference = {
@@ -73,6 +74,9 @@ let loadGate: ReturnType<typeof deferred> | null = null;
 let compileGate: ReturnType<typeof deferred> | null = null;
 let deploymentByCompiled = new Map<CompileResult, ReturnType<typeof preparedDeployment>>();
 let stateHistory: string[] = [];
+let releasePreferences: ReleasePreferences = { betaEnabled: false, revision: "0" };
+let preferenceListener: ((next: ReleasePreferences) => void) | undefined;
+let releaseSelectionFailure: Error | null = null;
 
 const originalNow = Date.now;
 const originalAnimationFrame = globalThis.requestAnimationFrame;
@@ -82,9 +86,13 @@ globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
   return 1;
 }) as typeof requestAnimationFrame;
 
+mock.module(new URL("../src/release_preferences.ts", import.meta.url).pathname, () => ({
+  getReleasePreferences: async () => releasePreferences,
+  subscribeReleasePreferences: (listener: (next: ReleasePreferences) => void) => { preferenceListener = listener; return () => {}; },
+}));
 mock.module(new URL("../src/bootstrap.ts", import.meta.url).pathname, () => ({ kernelSetupStorage: storage }));
 mock.module(new URL("../src/reducer/apps.ts", import.meta.url).pathname, () => ({
-  beginRepositoryInstallSession: async () => {
+  beginRepositoryInstallSession: async (options: { releasePreferences: ReleasePreferences; revalidateReleaseSelection: () => Promise<void> }) => {
     let canceled = false;
     const registry = Object.fromEntries(installedManifests.map((manifest) => [manifest.id, registryApp(manifest)]));
     return {
@@ -122,6 +130,8 @@ mock.module(new URL("../src/reducer/apps.ts", import.meta.url).pathname, () => (
         if (input.deploymentBuildRecord !== deployment?.prepared.record) {
           throw new Error("Only the reviewed deployment may be installed");
         }
+        await options.revalidateReleaseSelection();
+        if (options.releasePreferences.revision !== releasePreferences.revision) throw new Error("Release preferences changed");
         deployCalls.push(input);
       },
       cancel: () => { if (!canceled) canceledSessions += 1; canceled = true; },
@@ -137,6 +147,7 @@ mock.module(new URL("../src/repository/client.ts", import.meta.url).pathname, ()
       info: { name: "Prepared repository", provider: { name: "Unverified provider" } },
       manifest: { id: reference.manifest, name: "Prepared suite", revision: 1, packages: packages.map(({ metadata }) => metadata) },
       manifestBytes: new Uint8Array([1]),
+      revalidateReleaseSelection: async () => { if (releaseSelectionFailure) throw releaseSelectionFailure; },
       packages: packages.map(({ metadata, bytes }) => ({ metadata, bytes })),
     };
   },
@@ -180,6 +191,8 @@ beforeEach(async () => {
   compileGate = null;
   deploymentByCompiled = new Map();
   stateHistory = [];
+  releasePreferences = { betaEnabled: false, revision: "0" };
+  releaseSelectionFailure = null;
 });
 afterEach(async () => {
   await service.dismissRepositorySetup();
@@ -231,13 +244,44 @@ test("one explicit final approval deploys the exact reviewed group once and excl
   expect(Object.keys(deployCalls[0]!.provenance).sort()).toEqual(["consumer", "provider"]);
   expect(deployCalls[0]!.provenance.consumer).toEqual({
     kind: "repository", repository: reference.repo, manifest_id: reference.manifest,
-    manifest_digest: reference.digest, package_digest: packages[1]!.metadata.sha256,
+    manifest_digest: reference.digest, package_digest: packages[1]!.metadata.sha256, release_preferences_revision: "0",
   });
   expect(readPendingRepositorySetup(storage, NOW)).toBeNull();
   expect(JSON.stringify(storage.writes)).not.toContain(bearer);
   expect(JSON.stringify(stateHistory)).not.toContain(bearer);
   expect(JSON.stringify(deployCalls[0]!.provenance)).not.toContain(bearer);
   expect(loadCalls[0]!.options.preparedAccess?.token).toBe(bearer);
+});
+
+test("a prepared handoff cannot load after its authoritative preference revision changes", async () => {
+  releasePreferences = { betaEnabled: false, revision: "2" };
+  service.startPreparedRepositorySetup(reference, requester, ["consumer"], privateAccess, { betaEnabled: true, revision: "1" });
+  await phase("error");
+  expect(useRepositorySetupStore.getState().error).toContain("Release preferences changed");
+  expect(loadCalls).toEqual([]);
+  expect(compileCalls).toEqual([]);
+});
+
+test("turning beta off invalidates an open prepared review before deployment", async () => {
+  releasePreferences = { betaEnabled: true, revision: "1" };
+  service.startPreparedRepositorySetup(reference, requester, ["consumer"], privateAccess, releasePreferences);
+  await phase("review");
+  releasePreferences = { betaEnabled: false, revision: "2" };
+  preferenceListener?.(releasePreferences);
+  expect(useRepositorySetupStore.getState().phase).toBe("error");
+  expect(useRepositorySetupStore.getState().deploymentReview).toBeNull();
+  await service.installRepositorySelection();
+  expect(deployCalls).toEqual([]);
+});
+
+test("a current-head recheck failure prevents final approved setup deployment", async () => {
+  service.startPreparedRepositorySetup(reference, requester, ["consumer"], privateAccess);
+  await phase("review");
+  releaseSelectionFailure = new Error("The selected release is no longer its eligible current head");
+  await service.installRepositorySelection();
+  expect(useRepositorySetupStore.getState().phase).toBe("error");
+  expect(useRepositorySetupStore.getState().error).toContain("eligible current head");
+  expect(deployCalls).toEqual([]);
 });
 
 test("canceling final review installs nothing and clears the private handoff for the next setup", async () => {

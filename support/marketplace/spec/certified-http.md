@@ -20,13 +20,17 @@ checks access and streams content. Both new and legacy HTTP responses must pass
 the normal certificate and complete-file hash/size verification before installation.
 
 Immutable identity does not promise permanent storage of every package version.
-The new marketplace retains current approved content and candidates awaiting
-review. Approval removes unreferenced superseded package/source bytes and their
-certified access paths together. Grants and streaming callbacks for retired
+The marketplace retains content referenced by either current channel head and
+candidates awaiting review. A head change removes unreferenced superseded
+package/source bytes and their certified access paths together. Grants and streaming callbacks for retired
 content fail without substituting another version. A user can prepare the latest
 approved release under their existing ownership; purchase and audit records are
 not deleted by content retirement. Historical bytes already served by the old
 public source remain there.
+
+Stable v1 release paths remain stable-only. Channel descriptor, heads, beta
+releases and exact setup-selection evidence use the separately versioned
+[Release Channels](release-channels.md#certified-repository-contract) contract.
 
 ## Authentication without a Neutron byte proxy
 
@@ -46,7 +50,7 @@ backend call for each chunk or asset read. Ordinary grant-creation,
 renewal or revocation update attaches native cycles through the Neutron; there
 are no prepaid credits or general browser-direct user updates. Authorized
 auditor access updates retain their direct CLI route and cycle exemption. The
-separate four admin-only exemptions do not apply to `repo_access_v1` or ordinary
+separate admin-only exemptions do not apply to `repo_access_v1` or ordinary
 browser read-delegate changes.
 
 Batch acquisition needs a generic HTTP package path after it reads the pinned
