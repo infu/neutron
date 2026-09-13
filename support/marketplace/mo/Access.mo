@@ -4,6 +4,7 @@ import List "mo:core/List";
 import Nat8 "mo:core/Nat8";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Set "mo:core/Set";
 import Text "mo:core/Text";
 import API "./API";
 import Catalog "./Catalog";
@@ -152,6 +153,17 @@ module {
     };
     false;
   };
+  func artifactLabel(db : Store.DB, resolved : ResolvedArtifact) : Text {
+    var displayName = artifactPath(resolved.artifact, resolved.purpose);
+    ignore matchingCandidates(db, resolved.artifact.id, resolved.purpose, func(candidate) {
+      displayName := switch (Store.getApp(db, candidate.appId)) {
+        case (?app) app.title # " (" # app.appId # ")";
+        case null candidate.appId;
+      };
+      true;
+    });
+    displayName;
+  };
   func publicPath(db : Store.DB, resolved : ResolvedArtifact) : Bool {
     let artifact = resolved.artifact;
     // This flag is set only by the explicit historical-public import path.
@@ -280,7 +292,7 @@ module {
         // request cannot resurrect access to a revoked package or audit role.
         for (path in saved.paths.vals()) {
           let ?resolved = resolveArtifactPath(db, path) else return failure("artifact_unavailable", "A selected artifact is unavailable.");
-          if (not accessPath(db, owner, resolved, purpose)) return failure("access_denied", "A selected artifact is no longer available to this owner.");
+          if (not accessPath(db, owner, resolved, purpose)) return failure("access_denied", "Download access is no longer available for " # artifactLabel(db, resolved) # ".");
         };
         return #ok({ grant = saved; new = false });
       };
@@ -288,11 +300,13 @@ module {
     };
     if (Store.getGrantByCredential(db, credentialHash) != null) return failure("credential_reused", "This credential is already bound to another source request. Use a new random credential.");
     let ids = List.empty<Nat64>();
+    let denied = Set.empty<Text>();
     for (path in request.paths.vals()) {
       let ?resolved = resolveArtifactPath(db, path) else return failure("invalid_artifact_path", "A selected artifact path is not a canonical repository artifact.");
-      if (not accessPath(db, owner, resolved, purpose)) return failure("access_denied", "Acquire this app before downloading its package, or use its authorized publisher/auditor review access.");
+      if (not accessPath(db, owner, resolved, purpose)) Set.add(denied, Text.compare, artifactLabel(db, resolved));
       List.add(ids, resolved.artifact.id);
     };
+    if (not Set.isEmpty(denied)) return failure("access_denied", "Download access denied for " # Text.join(Set.values(denied), ", ") # ". Acquire the listed apps in Marketplace or use authorized publisher/auditor review access.");
     let saved = must(Store.insertGrant(db, {
       owner; requestId = request.request_id; credentialHash; authorizationHash;
       paths = request.paths; delegate = null; artifactIds = List.toArray(ids);

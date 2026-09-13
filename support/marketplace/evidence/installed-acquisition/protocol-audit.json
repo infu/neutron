@@ -1,0 +1,18 @@
+{
+  "auditedAt": "2026-09-13T22:38:39.828920+00:00",
+  "beforeSha256": "4cb57655e1131670d1eafaa522b13d74b9a59081708764f5680f753a1f4aa477",
+  "afterSha256": "757493f6d7c412df13af148095af00994c9d60c627d2ff72c516b484b3003ae9",
+  "stableTypesUnchanged": true,
+  "candidUnchanged": true,
+  "stableTypesSha256": "c3d4f46098b2dc4fa44e36df10095b7046514d4f8c6d1dc34db76ba45a5cab9a",
+  "roots": [
+    "publisherMemory",
+    "memory",
+    "certificationMemory",
+    "releaseMemory",
+    "feedbackMemory",
+    "storefrontMemory"
+  ],
+  "changedRuntimeModule": "Access.mo",
+  "persistentSchemaChanges": []
+}

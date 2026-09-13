@@ -23,7 +23,7 @@ import '${root}/apps/marketplace/src/style.scss';
 window.marketplaceTools=new Map();
 const principal='3rurp-vyaaa-aaaay-aacua-cai';
 const scenario=new URL(location.href).searchParams;
-const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:[],purchased:[],restored:false,installationQuotes:[],installations:[],discountCode:localStorage.getItem('discountCode'),discountReads:0,discountSaves:[],operations:JSON.parse(sessionStorage.getItem('canceledCheckoutFixture')||'[]'),cancelPurchase:false,discountRelease:null};
+const state=window.marketplaceFixture={initializations:0,connections:0,copies:[],copyFailure:false,paidReadFailed:false,calls:[],owned:['notes','garden'],installed:scenario.get('ownership')==='installed'?['atlas','studio']:[],purchased:[],restored:false,installationQuotes:[],installations:[],discountCode:localStorage.getItem('discountCode'),discountReads:0,discountSaves:[],operations:JSON.parse(sessionStorage.getItem('canceledCheckoutFixture')||'[]'),cancelPurchase:false,discountRelease:null};
 const entries=[
  ['notes','Quiet Notes','A little space for your biggest ideas.','0'],
  ['garden','Garden','A clearer view of your day.','0'],
@@ -56,7 +56,7 @@ const client={
  quotePublisherProfile:async()=>{throw Error('Unexpected profile quote')},savePublisherProfile:async()=>{throw Error('Unexpected profile update')},
  quotePublication:async()=>{throw Error('Unexpected publication')},publish:async()=>{throw Error('Unexpected publication')},
  quotePurchase:async input=>{const args={...input,affiliateCode:input.affiliateCode===undefined?(state.discountCode||''):input.affiliateCode};state.calls.push(['quotePurchase',args]);return quote(args)},
- purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);if(state.cancelPurchase==='ic')return {operationId:q.operationId,state:'failed',nextAction:'none',checkoutCanceled:true,message:'The Wallet approval was declined. No purchase payment was requested.'};if(state.cancelPurchase)return {operationId:q.operationId,state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'};return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
+ purchase:async q=>{state.calls.push(['purchase',q]);state.purchased.push(q.operationId);if(scenario.get('ownership')==='installed'){state.owned=[...new Set([...state.owned,...q.items.map(app=>app.id)])];return {operationId:q.operationId,state:'complete',message:'Your app is ready.',nextAction:'none',appIds:q.appIds};}if(state.cancelPurchase==='ic')return {operationId:q.operationId,state:'failed',nextAction:'none',checkoutCanceled:true,message:'The Wallet approval was declined. No purchase payment was requested.'};if(state.cancelPurchase)return {operationId:q.operationId,state:'failed',nextAction:'resume',ethereumWallet:'browser',canceledBeforeSubmission:true,message:'The browser wallet declined this transaction before submission.'};return {operationId:q.operationId,state:'pending',message:'The payment is being confirmed. Your request is saved.',nextAction:'resume',appIds:q.appIds}},
  operation:async id=>{state.calls.push(['operation',id]);return state.operations.find(item=>item.operationId===id)??{operationId:id,state:'pending',message:'Waiting for the original payment.',nextAction:'resume'}},
  resumeOperation:async id=>{state.calls.push(['resumeOperation',id]);const result={operationId:id,state:'complete',message:'Your app is ready.',nextAction:'none'};state.operations=[result,...state.operations.filter(item=>item.operationId!==id)];return result;},
  cancelEthereumCheckout:async id=>{state.calls.push(['cancelEthereumCheckout',id]);const canceled={operationId:id,paymentRail:'ethereum',state:'failed',nextAction:'none',checkoutCanceled:true,message:'Checkout canceled.'};state.operations=state.operations.map(item=>item.operationId===id?canceled:item);sessionStorage.setItem('canceledCheckoutFixture',JSON.stringify(state.operations));return canceled;},
@@ -187,25 +187,29 @@ try {
   await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
   for (const title of ['Atlas', 'Canvas Studio']) {
     const card = appCard(title);
-    await card.locator('.mp-card-price').getByText('Owned', { exact: true }).waitFor();
+    await card.locator('.mp-card-price').getByText('Installed', { exact: true }).waitFor();
     await clickCardPrice(card);
     const installedDetail = page.getByRole("dialog", { name: title, exact: true });
     await installedDetail.getByText("Audited by AI", { exact: true }).waitFor();
-    assert.equal(await installedDetail.getByRole("button", { name: "Installed", exact: true }).isDisabled(), true);
-    assert.equal(await installedDetail.getByRole("button", { name: /^(Get|Buy|Install app)/ }).count(), 0);
+    const acquisition = installedDetail.getByRole("button", { name: title === "Atlas" ? /^Buy ·/ : "Get app" });
+    assert.equal(await acquisition.isEnabled(), true);
+    assert.equal(await installedDetail.getByRole("button", { name: "Install app", exact: true }).count(), 0);
     assert.equal(await installedDetail.getByRole("button", { name: "Rate app", exact: true }).count(), 0, "local installation does not grant marketplace rating entitlement");
-    assert.equal(await installedDetail.locator('.mp-detail-stats').getByText('Owned', { exact: true }).count(), 1);
+    assert.equal(await installedDetail.locator('.mp-detail-stats').getByText('Owned', { exact: true }).count(), 0);
     assert.equal(await installedDetail.getByText('Installed on this Neutron', { exact: true }).count(), 1);
     assert.equal(await installedDetail.getByText('Future updates included', { exact: true }).count(), 0);
-    await installedDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
+    await acquisition.click();
+    const acquisitionReview = page.getByRole("dialog", { name: title === "Atlas" ? "Review purchase" : "Add to My Apps", exact: true });
+    await acquisitionReview.getByRole("button", { name: "Review costs", exact: true }).waitFor();
+    await acquisitionReview.getByRole("button", { name: "Close dialog", exact: true }).click();
   }
-  assert.equal(await page.evaluate(() => window.marketplaceFixture.installationQuotes.length), installationQuotesBefore, "installed apps do not quote installation or acquisition");
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.installationQuotes.length), installationQuotesBefore, "viewing installed apps does not implicitly prepare installation");
   assert.equal(await page.evaluate(() => window.marketplaceFixture.calls.filter(call => ['quotePurchase', 'purchase'].includes(call[0])).length), 0);
   assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.owned), ['notes', 'garden'], "installed app display leaves durable entitlements unchanged");
   await page.evaluate(() => { window.marketplaceFixture.installed = []; });
   await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();
   await appCard('Atlas').locator('.mp-card-price').getByText('$10.00', { exact: true }).waitFor();
-  checks.push("Locally installed free and paid apps display Owned immediately on refreshed cards and Installed in details, without acquisition/installation calls or implied marketplace rating entitlements.");
+  checks.push("Locally installed free and paid apps display Installed separately from Marketplace ownership, retain Get/Buy actions without uninstalling, and do not acquire or prepare installation just by opening details.");
   const headerDiscount = page.locator('.mp-header').getByRole('button', { name: /^Discount code/ });
   await headerDiscount.click();
   const discountDialog = page.getByRole('dialog', { name: 'Discount code', exact: true });
@@ -625,6 +629,31 @@ try {
   assert.equal(await page.evaluate(() => window.marketplaceFixture.initializations), 2);
   assert.equal(await page.evaluate(() => window.marketplaceFixture.connections), 0);
   checks.push("A failed initial Neutron request stops loading and offers a working initialization retry.");
+  await page.goto(`${url}/?ownership=installed`);
+  await page.getByRole("button", { name: "Atlas", exact: true }).click();
+  const unownedInstalled = page.getByRole("dialog", { name: "Atlas", exact: true });
+  await unownedInstalled.getByText("Installed. Buy this app to get future updates.", { exact: true }).waitFor();
+  await page.screenshot({ path: join(output, "installed-unowned.png") });
+  await unownedInstalled.getByRole("button", { name: /^Buy ·/ }).click();
+  const ownershipCheckout = page.getByRole("dialog", { name: "Review purchase", exact: true });
+  await ownershipCheckout.getByRole("button", { name: "Review costs", exact: true }).click();
+  await ownershipCheckout.getByRole("button", { name: /^Buy ·/ }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.purchased), []);
+  await ownershipCheckout.getByRole("button", { name: /^Buy ·/ }).click();
+  const acquiredRow = page.locator('.mp-library-row').filter({ has: page.getByRole("button", { name: "Atlas", exact: true }) });
+  await acquiredRow.getByRole("button", { name: "Installed", exact: true }).waitFor();
+  assert.equal(await acquiredRow.getByRole("button", { name: "Installed", exact: true }).isDisabled(), true);
+  assert.deepEqual(await page.evaluate(() => window.marketplaceFixture.installed), ['atlas', 'studio']);
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.owned.includes('atlas')), true);
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.purchased.length), 1);
+  assert.equal(await page.evaluate(() => window.marketplaceFixture.installations.length), 0);
+  await acquiredRow.getByRole("button", { name: "Atlas", exact: true }).click();
+  const acquiredDetail = page.getByRole("dialog", { name: "Atlas", exact: true });
+  await acquiredDetail.getByText("Installed. Manage app updates in Settings.", { exact: true }).waitFor();
+  assert.equal(await acquiredDetail.locator('.mp-detail-stats').getByText('Owned', { exact: true }).count(), 1);
+  assert.equal(await acquiredDetail.getByRole("button", { name: /^Buy ·/ }).count(), 0);
+  await page.screenshot({ path: join(output, "installed-owned.png") });
+  checks.push("An installed paid app can complete the existing reviewed purchase, remains installed throughout, then shows real ownership and directs updates to Settings without reinstalling or paying twice.");
   assert.deepEqual(errors, []);
   await writeFile(join(output, "results.json"), JSON.stringify({ checks, errors }, null, 2));
   console.log(`Marketplace UI checks passed. Artifacts: ${output}`);

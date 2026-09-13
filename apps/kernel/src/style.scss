@@ -4373,12 +4373,12 @@ button:focus-visible,
 
 .settings-app-selection:not(:disabled):hover,
 .settings-app-selection[aria-pressed="true"] {
-    background: rgba(255, 120, 133, 0.12);
-    color: var(--k-danger);
+    background: rgba(137, 224, 170, 0.12);
+    color: var(--k-accent);
 }
 
 .settings-app-entry.is-selected .settings-app-row > .settings-app-cell {
-    background: rgba(255, 120, 133, 0.035);
+    background: rgba(137, 224, 170, 0.035);
 }
 
 .settings-app-details-row[hidden] {

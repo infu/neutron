@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   IoChevronDown,
+  IoCheckboxOutline,
   IoClose,
   IoCubeOutline,
   IoLockClosedOutline,
   IoTimeOutline,
-  IoTrashOutline,
+  IoSquareOutline,
 } from "react-icons/io5";
 import type { BackendCallReservation } from "../backend_calls/service.ts";
 import {
@@ -272,7 +273,7 @@ export function AppSettingsEntry({
               title={selectionTitle}
               type="button"
             >
-              <IoTrashOutline aria-hidden="true" />
+              {selected ? <IoCheckboxOutline aria-hidden="true" /> : <IoSquareOutline aria-hidden="true" />}
             </button>
           )}
         </td>

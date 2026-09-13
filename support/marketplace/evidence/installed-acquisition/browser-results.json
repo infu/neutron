@@ -1,0 +1,33 @@
+{
+  "checks": [
+    "Marketplace initializes automatically for this Neutron, without a Connect action; paid then free charts are visible together with no rank numbers.",
+    "Explore is compact at 320, 380, 480 and 960px, with acquisition counts retained for assistive technology, detailed counts in the app dialog, and no horizontal overflow.",
+    "Focused search has one visible accent border around the entire field and no nested input border or focus ring.",
+    "Ranking controls request the selected rolling window; exact micro-dollar list prices are not truncated.",
+    "Paid and free details show their all-time acquisition counts on narrow tiles; Audited by AI retains the auditor principal and exact review analysis.",
+    "Whole cards, including price and Owned labels, open details with one keyboard-accessible control; publisher links appear in details; 255-character excerpts wrap and full 5,000-character descriptions preserve paragraphs.",
+    "Locally installed free and paid apps display Installed separately from Marketplace ownership, retain Get/Buy actions without uninstalling, and do not acquire or prepare installation just by opening details.",
+    "A saved discount activates once, renders crossed-out original and exact discounted prices, restores after reload, rejects invalid/self-code changes without dropping the old code, supports change/clear, and fits alongside the bell tab at 320px.",
+    "Checkout shows exact discounted allocations, principals, fees and total before payment; status refresh makes no second purchase.",
+    "My Apps retains the selected batch for cancel/retry and reuses its saved request after remount, without install-progress cards or false installed status; financial recovery remains available on its Activity page.",
+    "Already installed apps are excluded from install selection, updates point to Settings, and restored requests resume their original identity.",
+    "Referral Copy uses the shared Kernel clipboard API within the click activation, works with direct iframe clipboard access blocked, and clears a failed-copy message after retry.",
+    "Max withdrawal uses available credits, shows the deducted fee and requires explicit confirmation.",
+    "Normal agent review displays the same exact purchase split, can be declined, and does not accept the root-agent UI route.",
+    "Updated-cost owner review accepts only the authenticated marketplace background caller outside agent mode, displays revised exact fees, and performs no payment; forged callers and agent-mode use are rejected.",
+    "A free Canvas Studio root with paid Folio dependency shows both quoted apps, labels the required app, changes to paid checkout, and waits for explicit 5 ckUSDC purchase confirmation.",
+    "The bell is a fifth Activity tab; confirmed pre-submission browser cancellation is absent, uncertain and unclassified failures remain recoverable, and no wallet status is pinned over browsing. Activity fits 320/380/960px without replay.",
+    "A later durable receipt supersedes a locally canceled observation on refresh; visibility is based on the newest evidence, without a replacement purchase.",
+    "An explicitly rejected IC approval closes Checkout quietly and leaves no Activity card or badge.",
+    "Cancel checkout removes the unpaid card and badge immediately, survives app refresh and browser reload, and later payment evidence restores recovery without another cancellation or payment.",
+    "Rejected IC approvals disappear; approval-only reminders can be dismissed across refresh/reload, while later unknown payments resurface and retain recovery without replay.",
+    "Opening the discount dialog before saved preferences resolve fills a pristine input when ready while preserving any edits already typed.",
+    "Paid and free charts page independently, and a shared search applies to both lists without carrying pagination into the new search.",
+    "One chart's read error does not block the other chart, and its retry recovers in place.",
+    "Focus refreshes open release details. Kernel preference invalidation closes stale details and rereads storefronts without purchasing.",
+    "A recoverable setup error preserves public browsing, clearly explains the unavailable library, and Retry setup restores it without a purchase.",
+    "A failed initial Neutron request stops loading and offers a working initialization retry.",
+    "An installed paid app can complete the existing reviewed purchase, remains installed throughout, then shows real ownership and directs updates to Settings without reinstalling or paying twice."
+  ],
+  "errors": []
+}

@@ -104,12 +104,13 @@ const predecessors = [
   { version: 112, memoryVersion: 1, digest: "6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21", size: 476_452 },
   { version: 118, memoryVersion: 2, digest: "54136d8bd22c9d682fc958c1eef7904816f34e599f6dd2daf503c10c554eec20", size: 489_788 },
   { version: 121, memoryVersion: 2, digest: "d6ac1fc5b3e563c5af4bf0d7cd5d40f9469d756a5d6bb988782fe9ea96671dcd", size: 519_184 },
+  { version: 122, memoryVersion: 2, digest: "ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42", size: 519_194 },
 ] as const;
 
 for (const predecessor of predecessors) qualify(`Marketplace${predecessor.version} managed state ${predecessor.memoryVersion === 1 ? "migrates once" : "keeps v2 unchanged"} and retains identity, journals and discount preference`, async () => {
   const candidateDigest = process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256;
   if (!candidateDigest || !/^[0-9a-f]{64}$/.test(candidateDigest)) throw new Error("Set the exact reviewed candidate archive digest after packaging");
-  const candidateVersion = Number(process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION ?? "122");
+  const candidateVersion = Number(process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION ?? "123");
   expect(candidateVersion).toBeGreaterThan(predecessor.version);
   const kernel = await pinned("kernel", 359, "6b506590ab9160a6e8e31859a791d40e60b797f06e9fde28781b8f0beb89574d", 2_466_756);
   const previous = await pinned("marketplace", predecessor.version, predecessor.digest, predecessor.size);
