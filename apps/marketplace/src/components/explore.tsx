@@ -3,9 +3,9 @@ import type { AppListing, AppTier, DiscountPreference, MarketplaceClient, Rankin
 import { AppCard } from "./app_card.tsx";
 import { ErrorNote, Icon, dateLabel, errorMessage, useRead } from "./primitives.tsx";
 
-type Props = { client: MarketplaceClient; refresh: number; discount: DiscountPreference; select: (app: AppListing) => void; publisher: (id: string) => void };
+type Props = { client: MarketplaceClient; refresh: number; discount: DiscountPreference; select: (app: AppListing) => void };
 
-export function Explore({ client, refresh, discount, select, publisher }: Props) {
+export function Explore({ client, refresh, discount, select }: Props) {
   const [window, setWindow] = useState<RankingWindow>("week"), [search, setSearch] = useState(""), [tag, setTag] = useState<string>();
   const [retry, setRetry] = useState(0);
   const selection = { search: search.trim(), ...(tag ? { tag } : {}) };
@@ -30,8 +30,8 @@ export function Explore({ client, refresh, discount, select, publisher }: Props)
     </nav>
     <div className="mp-discover-content">
       <ErrorNote error={home.error} retry={() => setRetry(value => value + 1)} />
-      {featured.length > 0 && <section className="mp-featured-section" aria-label="Featured apps"><div className="mp-section-heading"><h3>Featured apps</h3><span className="mp-curated-label">Selected for you</span></div><div className="mp-featured-grid">{featured.map(app => <AppCard key={app.id} size="large" app={app} discount={discount} select={() => select(app)} publisher={publisher} />)}</div></section>}
-      {(!home.loading || home.data || home.error) && (["paid", "free"] as const).map(tier => <CatalogSection key={JSON.stringify([tier, window, selection, exclude])} client={client} tier={tier} window={window} changeWindow={setWindow} search={selection.search} tag={tag} exclude={exclude} refresh={refresh} discount={discount} select={select} publisher={publisher} />)}
+      {featured.length > 0 && <section className="mp-featured-section" aria-label="Featured apps"><div className="mp-section-heading"><h3>Featured apps</h3><span className="mp-curated-label">Selected for you</span></div><div className="mp-featured-grid">{featured.map(app => <AppCard key={app.id} size="large" app={app} discount={discount} select={() => select(app)} />)}</div></section>}
+      {(!home.loading || home.data || home.error) && (["paid", "free"] as const).map(tier => <CatalogSection key={JSON.stringify([tier, window, selection, exclude])} client={client} tier={tier} window={window} changeWindow={setWindow} search={selection.search} tag={tag} exclude={exclude} refresh={refresh} discount={discount} select={select} />)}
     </div>
   </div>;
 }
@@ -49,7 +49,7 @@ function CategoryIcon({ id }: { id: string }) {
   return <svg className="mp-icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[id] ?? <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>}</svg>;
 }
 
-function CatalogSection({ client, tier, window, changeWindow, search, tag, exclude, refresh, discount, select, publisher }: Props & { tier: AppTier; window: RankingWindow; changeWindow: (window: RankingWindow) => void; search: string; tag: string | undefined; exclude: string[] }) {
+function CatalogSection({ client, tier, window, changeWindow, search, tag, exclude, refresh, discount, select }: Props & { tier: AppTier; window: RankingWindow; changeWindow: (window: RankingWindow) => void; search: string; tag: string | undefined; exclude: string[] }) {
   const [pages, setPages] = useState<AppListing[]>([]), [nextCursor, setNextCursor] = useState<string | null | undefined>(), [paging, setPaging] = useState(false), [pageError, setPageError] = useState(""), [retry, setRetry] = useState(0);
   const input = { tier, window, search, ...(tag ? { tag } : {}), ...(client.storefront ? { exclude } : {}) };
   const read = useRead(JSON.stringify(input), () => client.catalog(input), retry + refresh, search ? 200 : 0);
@@ -72,7 +72,7 @@ function CatalogSection({ client, tier, window, changeWindow, search, tag, exclu
   }
   const rows = [...(read.data?.items ?? []), ...pages].filter((app, index, all) => all.findIndex(other => other.id === app.id) === index);
   const title = search ? `${tier === "paid" ? "Paid" : "Free"} apps` : `Top ${tier}`;
-  const card = (app: AppListing, size: "medium" | "small") => <AppCard key={app.id} size={size} app={app} discount={discount} select={() => select(app)} publisher={publisher} />;
+  const card = (app: AppListing, size: "medium" | "small") => <AppCard key={app.id} size={size} app={app} discount={discount} select={() => select(app)} />;
   return <section className="mp-catalog-section" aria-label={title}>
     <div className="mp-section-heading"><h3>{title}</h3><div className="mp-section-actions">{tier === "paid" && <label className="mp-ranking-control"><span className="mp-sr-only">Ranking period</span><select value={window} onChange={event => changeWindow(event.target.value as RankingWindow)}><option value="week">7 days</option><option value="month">30 days</option><option value="all">All time</option></select></label>}{rows.length > 4 && <a className="mp-see-all" href={`#mp-more-${tier}`} onClick={event => { event.preventDefault(); document.getElementById(`mp-more-${tier}`)?.scrollIntoView({ block: "nearest" }); }}>See all <Icon name="arrow" /></a>}</div></div>
     <ErrorNote error={read.error} retry={() => setRetry(value => value + 1)} /><ErrorNote error={pageError} retry={() => void more()} />

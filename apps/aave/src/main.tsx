@@ -286,7 +286,7 @@ function App() {
   return <main className="nt-app av-app"><div className="av-shell">
     <header className="nt-app-header">
       <div className="nt-app-header-main">
-        <img className="nt-app-header-icon" src="static/icon.svg" alt="" />
+        <img className="nt-app-header-icon" src="static/icon.webp" alt="" />
         <div className="nt-app-header-copy"><h1 className="nt-app-header-title">via Aave</h1><p className="nt-app-header-subtitle">Supply & borrow</p></div>
       </div>
       <div className="nt-app-header-actions"><select className="nt-select nt-app-header-control" aria-label="Network" value={chainId} disabled={busy} onChange={(event) => { setChainId(event.target.value as ChainId); setSelection(null); setActive(null); setError(""); }}>{Object.entries(CHAINS).map(([id, chain]) => <option key={id} value={id}>{chain.marketName}</option>)}</select></div>

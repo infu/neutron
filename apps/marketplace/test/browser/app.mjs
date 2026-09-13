@@ -120,8 +120,8 @@ try {
   assert.equal(await page.getByRole("region", { name: "Top free", exact: true }).getByText("42 added", { exact: true }).count(), 3);
   assert.equal(await page.locator('.mp-app-card').count(), 6);
   assert.equal(await page.locator('article.mp-app-card button.mp-card-open[aria-haspopup="dialog"]').count(), 6);
-  assert.equal(await page.locator('.mp-app-card button button, .mp-app-card button a').count(), 0, "app and publisher are separate native controls without nested interaction");
-  assert.equal(await page.locator('.mp-app-card button').count(), 12, "each card exposes app details and its publisher independently");
+  assert.equal(await page.locator('.mp-app-card button button, .mp-app-card button a').count(), 0, "cards have no nested controls");
+  assert.equal(await page.locator('.mp-app-card button').count(), 6, "each card opens app details, where publisher navigation is available");
   assert.ok((await appCard('Atlas').innerText()).includes(listingExcerpt), 'The excerpt remains available to assistive technology; the detail shows the full text.');
   checks.push("Marketplace initializes automatically for this Neutron, without a Connect action; paid then free charts are visible together with no rank numbers.");
   for (const width of [320, 380, 480, 960]) {
@@ -181,7 +181,7 @@ try {
   await freeDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.setViewportSize({ width: 380, height: 760 });
   checks.push("Paid and free details show their all-time acquisition counts on narrow tiles; Audited by AI retains the auditor principal and exact review analysis.");
-  checks.push("Whole cards, including price and Owned labels, open details; separate native app and publisher controls remain keyboard-accessible; 255-character excerpts wrap and full 5,000-character descriptions preserve paragraphs.");
+  checks.push("Whole cards, including price and Owned labels, open details with one keyboard-accessible control; publisher links appear in details; 255-character excerpts wrap and full 5,000-character descriptions preserve paragraphs.");
   const installationQuotesBefore = await page.evaluate(() => window.marketplaceFixture.installationQuotes.length);
   await page.evaluate(() => { window.marketplaceFixture.installed = ['atlas', 'studio']; });
   await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();

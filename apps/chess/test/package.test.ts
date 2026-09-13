@@ -22,7 +22,7 @@ const serviceHtmlUrl = new URL("../dist/web/service.html", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
 const serviceSourceUrl = new URL("../src/service.ts", import.meta.url);
 const uiSourceUrl = new URL("../src/index.tsx", import.meta.url);
-const packageUrl = new URL("../chess.v0.3.5.neutron", import.meta.url);
+const packageUrl = new URL("../chess.v0.3.6.neutron", import.meta.url);
 
 async function readManifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -35,7 +35,7 @@ test("Chess declares per-tile games, managed memory, and narrow remote access", 
     format: 3,
     id: "chess",
     name: "Chess",
-    version: 305,
+    version: 306,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     backend: {
       capabilities: {
@@ -84,7 +84,7 @@ test("Chess declares per-tile games, managed memory, and narrow remote access", 
       path: "service.html",
       description: "Expose live local Chess games to approved Neutron agents",
     },
-    tiles: [{ id: "board", path: "index.html", icon: "static/icon.svg" }],
+    tiles: [{ id: "board", path: "index.html", icon: "static/icon.webp" }],
     memory: { chess: { version: 1 } },
   });
   expect(manifest).not.toHaveProperty("init_arg");
@@ -101,7 +101,7 @@ test("Chess emits schemas for its complete local and remote API", async () => {
     await readManifest(),
     await readFile(backendUrl, "utf8"),
   );
-  expect(artifact.app).toEqual({ id: "chess", name: "Chess", version: 305 });
+  expect(artifact.app).toEqual({ id: "chess", name: "Chess", version: 306 });
   expect(Object.keys(artifact.methods).sort()).toEqual([
     "chess_action",
     "chess_create_game",

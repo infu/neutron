@@ -21,7 +21,7 @@ test("Wagyu manifest is a semantically valid format-3 app package", async () => 
     format: 3,
     id: "wagyu",
     name: "Wagyu",
-    version: 307,
+    version: 308,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     src: "main.mo",
     backend: {
@@ -32,8 +32,8 @@ test("Wagyu manifest is a semantically valid format-3 app package", async () => 
       },
     },
     background: { path: "service.html" },
-    tray: { path: "tray.html", icon: "static/wagyu-steak-topdown-v2.png" },
-    tiles: [{ id: "wagyu", path: "index.html", icon: "static/wagyu-steak-topdown-v2.png" }],
+    tray: { path: "tray.html", icon: "static/icon.webp" },
+    tiles: [{ id: "wagyu", path: "index.html", icon: "static/icon.webp" }],
     memory: {
       wagyu: {
         version: 3,

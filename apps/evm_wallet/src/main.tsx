@@ -422,7 +422,7 @@ export function EvmWalletApp() {
     <main className="nt-app evm-app">
       <header className="evm-header">
         <div className="evm-brand">
-          <img className="evm-brand-icon" src="static/icon.svg" alt="" />
+          <img className="evm-brand-icon" src="static/icon.webp" alt="" />
           <div>
             <h1 className="evm-title">EVM Wallet</h1>
 

@@ -2,7 +2,7 @@
   "format": 3,
   "id": "marketplace",
   "name": "Marketplace",
-  "version": 120,
+  "version": 121,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Discover, acquire, install and publish Neutron applications.",
   "src": "main.mo",
@@ -21,7 +21,7 @@
       "id": "main",
       "title": "Marketplace",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Discover apps for your Neutron"
     }
   ],

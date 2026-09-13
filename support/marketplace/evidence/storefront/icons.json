@@ -1,0 +1,226 @@
+[
+  {
+    "appId": "jetcreeper",
+    "path": "support/marketplace/catalog/media/jetcreeper/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 13294,
+    "sha256": "096cd13d9920f97d989b13e8f5df74655388f7eacc0f00e08f483bdac9750164"
+  },
+  {
+    "appId": "kernel",
+    "path": "support/marketplace/catalog/media/kernel/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 11294,
+    "sha256": "129a1af0864d98384416df001eb80247cd7088bdd886476a1413ad1fdf8a8523"
+  },
+  {
+    "appId": "files",
+    "path": "support/marketplace/catalog/media/files/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 6782,
+    "sha256": "c3da0ebcc6b3a404341c6561a9087d9e7247d72fb7a12cb78023b4bc795c48ce"
+  },
+  {
+    "appId": "contacts",
+    "path": "support/marketplace/catalog/media/contacts/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 7518,
+    "sha256": "a7a4c656506331499159845237ec51d0a5ffd9f929d5735007360423b0dc3007"
+  },
+  {
+    "appId": "kitchensink",
+    "path": "support/marketplace/catalog/media/kitchensink/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 9628,
+    "sha256": "41a485f495b0dbcf75790eda577b02f75675992d54423caf4509d56eec139f6f"
+  },
+  {
+    "appId": "wagyu",
+    "path": "support/marketplace/catalog/media/wagyu/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 13454,
+    "sha256": "6258ef69992a2de9e95044b5e935bab071a6bf1da3fba815e70406ab33dec2c3"
+  },
+  {
+    "appId": "agent",
+    "path": "support/marketplace/catalog/media/agent/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 7118,
+    "sha256": "55fd8942ee67a1c0657a57159935a23b8e2c7c6044282ede7e0b715df05368dc"
+  },
+  {
+    "appId": "blast",
+    "path": "support/marketplace/catalog/media/blast/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 12396,
+    "sha256": "03c9dbbef7935a20050217ae1a2954f4784910aa1f4d75086effcd2f10ee8d91"
+  },
+  {
+    "appId": "mail",
+    "path": "support/marketplace/catalog/media/mail/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 6746,
+    "sha256": "34d61ce812a52d97d7d67dab56f3e472d140baf0e0ed4e790e9d4069571cd92e"
+  },
+  {
+    "appId": "mysubnet",
+    "path": "support/marketplace/catalog/media/mysubnet/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 13908,
+    "sha256": "fe580eeade06a6b0db08e9e29dad958999c37ddd3222ed1c438323406ebaa479"
+  },
+  {
+    "appId": "wallet",
+    "path": "support/marketplace/catalog/media/wallet/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 11530,
+    "sha256": "adcce047a1278c3c029276ebfae72f5218d80beef781caea3b8eca512fe87ce5"
+  },
+  {
+    "appId": "evm_wallet",
+    "path": "support/marketplace/catalog/media/evm_wallet/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 8128,
+    "sha256": "1f7ebb464b7d935ad800d19e80b3ba98b60ba062a28b6f0d64c5a4ee55856de3"
+  },
+  {
+    "appId": "uniswap",
+    "path": "support/marketplace/catalog/media/uniswap/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 12056,
+    "sha256": "a5cbe75ebf155e3da9c73814016b9adf44d9f62aefd44596b2ce0a3331e8eb08"
+  },
+  {
+    "appId": "curve",
+    "path": "support/marketplace/catalog/media/curve/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 12052,
+    "sha256": "12c7fd18a6640231b302f0b4c842bc2b37a40edaa228ae75b16ea2e0914123b1"
+  },
+  {
+    "appId": "spreadsheet",
+    "path": "support/marketplace/catalog/media/spreadsheet/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 8628,
+    "sha256": "4d3ae1d1fd8da3e6c849739ca95310089bf1047708b22b290134e73dfd359e6f"
+  },
+  {
+    "appId": "chess",
+    "path": "support/marketplace/catalog/media/chess/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 9388,
+    "sha256": "54b5ff74d0e9353eb4147fa794244bdf455e36db97493dc6fec9ed1822f1321d"
+  },
+  {
+    "appId": "hello",
+    "path": "support/marketplace/catalog/media/hello/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 8316,
+    "sha256": "982febecdbb6a72b71016f3d4140d79021427e054be485f51050d816811c5ab9"
+  },
+  {
+    "appId": "gemma",
+    "path": "support/marketplace/catalog/media/gemma/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 10276,
+    "sha256": "76e8883f3c24396064e6c37343f5f330f4db7960a5ebcea6b20b3080977f9c9d"
+  },
+  {
+    "appId": "hullshift",
+    "path": "support/marketplace/catalog/media/hullshift/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 13336,
+    "sha256": "40643a1315adc8faa6219e1d733f70216fc843c71474059542560edfa22277a5"
+  },
+  {
+    "appId": "aave",
+    "path": "support/marketplace/catalog/media/aave/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 5846,
+    "sha256": "a199d1bf8d2a42428636ce2fccf70e1f0da426db7bb98f54137d1d5a958819d6"
+  },
+  {
+    "appId": "hyperliquid",
+    "path": "support/marketplace/catalog/media/hyperliquid/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 10908,
+    "sha256": "c6a200c5da7a3fe2bd040c9784afc659d198b1781334860aeb0d343c76f020df"
+  },
+  {
+    "appId": "icpswap",
+    "path": "support/marketplace/catalog/media/icpswap/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 11278,
+    "sha256": "7b3ef7cab8df1e76219c0d228b878304212df27b2f6f60cb8d0dbbb902f24fea"
+  },
+  {
+    "appId": "taggr",
+    "path": "support/marketplace/catalog/media/taggr/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 10022,
+    "sha256": "a2212537e57f5bf147e9073a26c69adb9eeff61de598c7b7bdcf4aa199d77893"
+  },
+  {
+    "appId": "openchat",
+    "path": "support/marketplace/catalog/media/openchat/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 7658,
+    "sha256": "594085d95b574120e201698da06e4f6d879d7a8a082f1e118b6d71b73e09542c"
+  },
+  {
+    "appId": "nuance",
+    "path": "support/marketplace/catalog/media/nuance/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 11336,
+    "sha256": "335bb5cf561349ef8d032e30eaa23b34cd5a440fbe5a100be34897dec00203cd"
+  },
+  {
+    "appId": "snsgov",
+    "path": "support/marketplace/catalog/media/snsgov/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 11908,
+    "sha256": "3edf2e2f8e9e7e4afefc153d4bd2e52848b163c5c42f7b42336db60caffa6e10"
+  },
+  {
+    "appId": "marketplace",
+    "path": "support/marketplace/catalog/media/marketplace/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 11646,
+    "sha256": "74ff2f5fd5f6ac88c5ef1f2c67991da7b12605daa67b0f3bcc6959f4fb6aacbc"
+  },
+  {
+    "appId": "feedback",
+    "path": "support/marketplace/catalog/media/feedback/icon.webp",
+    "width": 256,
+    "height": 256,
+    "bytes": 6414,
+    "sha256": "f0a8cf20a972d407d1fa9f3a72c213030f9e37051c511e21800aab2388191819"
+  }
+]

@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Blast",
   "id": "blast",
-  "version": 103,
+  "version": 104,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Headless IC data, collection, and JavaScript tools for Neutron agents",
   "src": "main.mo",

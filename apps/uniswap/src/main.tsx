@@ -287,7 +287,7 @@ export function App() {
   return <main className="nt-app uni-app"><div className="uni-shell">
     <header className="nt-app-header">
       <div className="nt-app-header-main">
-        <span className="nt-app-header-icon" aria-hidden="true"><img src="static/icon.svg" alt="" /></span>
+        <span className="nt-app-header-icon" aria-hidden="true"><img src="static/icon.webp" alt="" /></span>
         <div className="nt-app-header-copy"><h1 className="nt-app-header-title">via Uniswap</h1><p className="nt-app-header-subtitle">Swaps & liquidity</p></div>
       </div>
       <div className="nt-app-header-actions">{account && !walletError ? <span className="uni-connected" title={account.address}><span aria-hidden="true" /> {short(account.address)}</span> : <span className="uni-muted" role="status">{walletLoading ? "Loading wallet…" : "Wallet unavailable"}</span>}</div>

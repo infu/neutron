@@ -72,20 +72,33 @@ with a stale revision returns `storefront_conflict`. Keep the exact reviewed
 input after a lost response. Config and each app are separate commits; there is
 no claim that a multi-app editorial update is one catalog transaction.
 
-## Covers and initial copy
+## Covers, icons and initial copy
 
-The proposed [first-party storefront](../catalog/first-party-storefront.json)
-contains 25 app presentations and eight editable categories. Jetfreeper and
-Hullshift are the proposed featured pair. This JSON is operator input, not a
+The [first-party storefront](../catalog/first-party-storefront.json)
+contains 26 app presentations and eight editable categories. Jetfreeper and
+Hullshift are the initial featured pair. This JSON is operator input, not a
 hardcoded seed installed into protocol memory.
 
-Ten generated covers are saved in `catalog/media/<appId>/cover.webp`, at
+Sixteen generated covers are saved in `catalog/media/<appId>/cover.webp`, at
 1672 × 941 pixels, enough for approximately twice the displayed large-card
 width. The [exact generation prompts](../catalog/cover-prompts.json) identify
 the image-generation mode and each asset. These are promotional illustrations;
-the existing actual UI screenshots and app icons are retained. The
+the existing actual UI screenshots are retained. The
 [media manifest](../catalog/first-party-media.json) appends covers to their
 existing galleries.
+
+The production preflight found newer Hullshift screenshots than the old local
+copies. `published-overview.png` and `published-entry.png` retain those exact
+certified live bytes so cover publication appends to its actual gallery too.
+
+All 28 listing icons use the selected sculpted 3D bitmap style. The shipped
+assets are 256 × 256 WebP, about 6–14 KB each (283 KB total), with identical
+bytes in each app's launcher asset. Full-size generated PNG masters stay
+outside app packages. [Icon prompts](../catalog/icon-prompts.json) record the
+mode and per-app prompts. Kernel has no launcher; Blast is headless but receives
+a package release to snapshot its new listing icon. The release set contains
+27 changed app packages and leaves Kernel 362 unchanged. Card footers show app
+names and tags; publisher navigation remains in app details.
 
 Covers use the existing image upload, listing and certified HTTP path. An admin
 can explicitly select a newly published current-listing image without replacing
@@ -109,7 +122,7 @@ media, prepare exact artifact IDs/revisions and apply reviewed admin edits.
 
 The app has one managed root, `state`, still at schema **2**. Its complete
 declaration, released `v1.mo`, `v2.mo`, `v1_to_v2.mo` and `neutron.lock.json`
-remain unchanged. Release version **120** is independent of that memory version.
+remain unchanged. Release version **121** is independent of that memory version.
 The existing exact-archive qualification covers saved schema 1 from release 112
 and saved schema 2 from release 118, through the checked Kernel installation
 transaction, plus clean initialization. It retains read identity, configuration,
@@ -136,13 +149,15 @@ For release, follow the repository's canonical
    workflow, then apply reviewed config and per-app presentations. Repeat exact
    admin requests to verify unchanged revisions. Do not change app prices to
    reproduce screenshot fixtures.
-3. Build the complete Marketplace workspace package and run release checks on
-   its exact archive and offered-source bytes. Keep memory schema 2 and the
-   existing Marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
+3. Build each affected app through its complete workspace package command and
+   run its release checks. Review exact archives and offered-source bytes. Keep
+   every released memory declaration and lineage, including Marketplace schema
+   2, and the existing Marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
 4. Publish the reviewed package/source via root `npm run updates:publish`, then
    repeat against identical bytes and require receipt-v2 `batch_id: null` with
    every selected package and source verified `unchanged`. Qualify and promote
-   the same beta bytes through the existing stable-promotion workflow.
+   the same beta bytes through the existing stable-promotion workflow only when
+   a stable release is requested.
 
 This storefront requires no Kernel code change. If a release set also includes
 an intended compatible Kernel successor, publish/promote that set atomically as

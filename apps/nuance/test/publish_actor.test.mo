@@ -62,6 +62,7 @@ persistent actor {
             };
             let callsCapability : Caps.BackendCallsV1 = {
                 canister_principal = Principal.fromText("aaaaa-aa");
+                owns_principal = func(principal : Principal) : Bool { principal == Principal.fromText("aaaaa-aa") };
                 can_call = func(_ : Principal, _ : Text) : Bool { true };
                 call = dispatch;
                 call_batch = func(_ : [Caps.BackendCallRequestV1]) : async* [Caps.BackendCallResultV1] {

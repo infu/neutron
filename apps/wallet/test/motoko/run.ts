@@ -130,7 +130,9 @@ async function runIcTest(wasm: Uint8Array, temporary: string): Promise<void> {
       if (!port) await new Promise((resolve) => setTimeout(resolve, 25));
     }
     const controlUrl = `http://127.0.0.1:${port}/`;
-    client = new PocketIcRestClient(controlUrl);
+    // Full Wallet fixture Wasm compilation can exceed the transport default
+    // when release suites share the build host. This is a test-only budget.
+    client = new PocketIcRestClient(controlUrl, { requestTimeoutMs: 120_000 });
     // This disposable test instance has no gateway and cannot affect the
     // workspace's persistent local deployment or any production canister.
     const config = createNeutronPocketIcInstanceConfig({ profile: "minimal", stateDirectory: path.join(actorTemporary, "state") });

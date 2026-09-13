@@ -39,6 +39,7 @@ const manifest = Object.freeze({
     {
       id: "driver",
       title: "Blast Qualification",
+      icon: "static/icon.webp",
       path: "index.html",
       description: "Drive one trusted Blast qualification turn",
     },
@@ -465,9 +466,9 @@ export async function buildBlastQualificationAgentArchive(input: {
         mode: 0o600,
       }),
       writeFile(
-        path.join(staticRoot, "icon.png"),
+        path.join(staticRoot, "icon.webp"),
         await readFile(
-          path.join(input.repositoryRoot, "apps", "hello", "public", "static", "icon.png"),
+          path.join(input.repositoryRoot, "apps", "hello", "public", "static", "icon.webp"),
         ),
         { mode: 0o600 },
       ),

@@ -62,9 +62,15 @@ function fixture(ledger: string, fallback: boolean, noIndex = false) {
   const selfCalls: string[] = [];
   const walletContext = { reportProgress() {}, kernel: {
     querySelf: async (method: string, args: unknown[]) => {
-      selfCalls.push(method); expect(args).toEqual([null]);
-      if (method === "wallet_snapshot") return { owner: OWNER };
-      if (method === "wallet_catalog") return CATALOG.map(entry => ({ ...entry, index: noIndex ? null : entry.index }));
+      selfCalls.push(method); expect(method).toBe("wallet_read_v1");
+      if ("snapshot" in (args[0] as JsonObject)) {
+        expect(args).toEqual([{ snapshot: null }]);
+        return { snapshot: { owner: OWNER } };
+      }
+      if ("catalog" in (args[0] as JsonObject)) {
+        expect(args).toEqual([{ catalog: null }]);
+        return { catalog: CATALOG.map(entry => ({ ...entry, index: noIndex ? null : entry.index })) };
+      }
       throw new Error("Unexpected self query");
     },
     updateSelf: async () => { throw new Error("Payout evidence must not issue a Wallet update"); },
@@ -90,7 +96,7 @@ describe("Wallet history to ICPSwap payout interoperability", () => {
     expect(result.ledgers[0]).toMatchObject({ status: "observed", coverage: { source: { kind: "index", ledgerVerified: false }, pagination: { completeToOldest: true } }, candidates: [{ operationLinkVerified: false, transaction: { blockIndex: BLOCK.toString(), amountAtoms: AMOUNT.toString(), memoHex: "0001020304050607" } }] });
     expect(result.explicitBlocks[0]).toMatchObject({ status: "candidate", source: { canister: ARCHIVE, ledgerVerified: true, archived: true }, candidate: { operationLinkVerified: false }, transaction: { blockIndex: BLOCK.toString(), amountAtoms: AMOUNT.toString(), balanceEffectAtoms: AMOUNT.toString() } });
     expect(JSON.stringify(action)).toBe(before);
-    expect(f.selfCalls).toEqual(["wallet_snapshot", "wallet_catalog", "wallet_snapshot", "wallet_catalog"]);
+    expect(f.selfCalls).toEqual(Array(4).fill("wallet_read_v1"));
     expect(f.queries.some(query => query.canister === ARCHIVE)).toBe(true);
   });
 

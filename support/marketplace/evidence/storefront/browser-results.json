@@ -1,8 +1,9 @@
 {
   "checks": [
-    "Two large featured cards, four medium cards per price tier, compact remainder, no duplicate featured apps, CSS blur/mask, responsive tile categories, DPR 2 screenshots at 320/390/960/1422/1800px.",
-    "Independent paging keeps the four medium leaders fixed. Tags filter both tiers and featured selection; promotional subtitle search opens the actual app details."
+    "Two large featured cards, four medium cards per price tier, compact remainder, no duplicate featured apps, CSS blur/mask, responsive tile categories, DPR 2 screenshots at 320/390/960/1422/1800px."
   ],
   "errors": [],
-  "fixture": "Real first-party assets; local illustrative prices and counts; no production requests."
+  "capturedAt": "2026-09-13T19:13:00.936Z",
+  "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "fixture": "Read-only production beta catalog snapshot; exact verified media served locally."
 }

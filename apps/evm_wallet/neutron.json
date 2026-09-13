@@ -2,7 +2,7 @@
   "format": 3,
   "id": "evm_wallet",
   "name": "EVM Wallet",
-  "version": 126,
+  "version": 127,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Chain-key accounts, transactions and signatures across EVM networks",
   "src": "main.mo",
@@ -65,7 +65,7 @@
       "id": "evm_wallet",
       "title": "EVM Wallet",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Manage EVM accounts, balances, transactions and signatures"
     }
   ],

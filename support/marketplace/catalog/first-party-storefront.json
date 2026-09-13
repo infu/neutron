@@ -149,7 +149,8 @@
       "tags": [
         "crypto",
         "defi"
-      ]
+      ],
+      "cover": "media/uniswap/cover.webp"
     },
     {
       "appId": "curve",
@@ -158,7 +159,8 @@
       "tags": [
         "crypto",
         "defi"
-      ]
+      ],
+      "cover": "media/curve/cover.webp"
     },
     {
       "appId": "hyperliquid",
@@ -167,7 +169,8 @@
       "tags": [
         "crypto",
         "defi"
-      ]
+      ],
+      "cover": "media/hyperliquid/cover.webp"
     },
     {
       "appId": "icpswap",
@@ -184,7 +187,8 @@
       "subtitle": "Bring your OpenChat conversations into view.",
       "tags": [
         "social"
-      ]
+      ],
+      "cover": "media/openchat/cover.webp"
     },
     {
       "appId": "taggr",
@@ -250,13 +254,24 @@
       "subtitle": "Meet the basics of a Neutron app.",
       "tags": [
         "tools"
-      ]
+      ],
+      "cover": "media/hello/cover.webp"
     },
     {
       "appId": "blast",
       "title": "A toolkit for curious agents.",
       "subtitle": "Discover, call, and explore IC canisters.",
       "tags": [
+        "tools"
+      ],
+      "cover": "media/blast/cover.webp"
+    },
+    {
+      "appId": "feedback",
+      "title": "Help shape what comes next.",
+      "subtitle": "Get support, share feedback, and suggest new ideas.",
+      "tags": [
+        "productivity",
         "tools"
       ]
     }

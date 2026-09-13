@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Gemma",
   "id": "gemma",
-  "version": 205,
+  "version": 206,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Private local Heretic Gemma 4 chat powered by WebGPU",
   "src": "main.mo",
@@ -21,7 +21,7 @@
       "id": "chat",
       "title": "Gemma",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Chat with the resident local Heretic Gemma 4 model"
     }
   ],

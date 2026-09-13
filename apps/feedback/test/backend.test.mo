@@ -12,6 +12,7 @@ var sent : [Capabilities.BackendCallRequestV1] = [];
 var callResult : Capabilities.BackendCallResultV1 = #ok("protocol reply");
 let broker : Capabilities.BackendCallsV1 = {
     canister_principal = owner;
+    owns_principal = func(principal : Principal) : Bool { principal == owner };
     can_call = func(_canister : Principal, _method : Text) : Bool { true };
     call = func(request : Capabilities.BackendCallRequestV1) : async* Capabilities.BackendCallResultV1 {
         sent := [request];

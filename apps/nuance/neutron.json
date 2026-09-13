@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Nuance",
   "id": "nuance",
-  "version": 111,
+  "version": 112,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Read, write, and collaboratively draft Nuance articles",
   "src": "main.mo",
@@ -22,7 +22,7 @@
       "id": "main",
       "title": "Nuance",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Browse, read, and write Nuance articles"
     }
   ],

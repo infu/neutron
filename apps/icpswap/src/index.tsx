@@ -474,7 +474,7 @@ export function App() {
       <div className="ics-shell">
         <header className="nt-app-header ics-app-header">
           <div className="nt-app-header-main">
-            <img className="nt-app-header-icon" src="static/icon.svg" alt="" />
+            <img className="nt-app-header-icon" src="static/icon.webp" alt="" />
             <div className="nt-app-header-copy">
               <h1 className="nt-app-header-title">via ICPSwap</h1>
               <p className="nt-app-header-subtitle">Swaps &amp; liquidity</p>

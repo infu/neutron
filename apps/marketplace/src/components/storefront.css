@@ -48,7 +48,6 @@
   .mp-app-card .mp-card-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
   .mp-app-card .mp-card-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 14px; color: #f5f7fb; }
   .mp-app-card .mp-card-category { color: #b9c5d5; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .mp-app-card .mp-publisher-link { color: #c2cbd8; font-size: 10px !important; padding: 0; line-height: 1.25; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; z-index: 3; }
   .mp-app-card .mp-app-icon { width: 48px; height: 48px; flex-basis: 48px; border: 1px solid #ffffff28; border-radius: 11px; box-shadow: 0 2px 6px #0003; }
   .mp-card-large .mp-app-icon { width: 54px; height: 54px; flex-basis: 54px; }
   .mp-app-card .mp-card-price { white-space: nowrap; text-align: center; font-weight: 600; flex: none; min-width: 64px; max-width: 45%; border: 1px solid #8c99ad30; border-radius: 24px; padding: 7px 14px; background: #333e50ab; color: #9dedc2; font-size: 13px; pointer-events: none; }

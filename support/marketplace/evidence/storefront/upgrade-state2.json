@@ -13,8 +13,8 @@
     "size": 489788
   },
   "successor": {
-    "version": 120,
-    "sha256": "64bac460f9bdc687d4e26ebcf89c5e6b0ba24a6664bfff8feb53fac1bbc1a7a7"
+    "version": 121,
+    "sha256": "d6ac1fc5b3e563c5af4bf0d7cd5d40f9469d756a5d6bb988782fe9ea96671dcd"
   },
   "migrationPlan": {
     "upgrades": [
@@ -58,7 +58,7 @@
     ]
   ],
   "deploymentBefore": "1dc5d5cb726ae39b3a4055921ba43ba0",
-  "deploymentAfter": "596a6651555566cf8706e7493d86db63",
+  "deploymentAfter": "6f73d794acffc8ddb2feca6a608ba824",
   "readPublicKeySha256": "bb6f4afb1ee7976c2c8c963f97184f723e69934cdbb3a0d5dbe771ec6b2c8ced",
   "journalSha256": [
     "a062c96080d691f2e68854716fb808762fe7d0b27b10d58f9e88a03dc4bebd86",

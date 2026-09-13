@@ -22,6 +22,7 @@ let installationGeneration : Nat64 = 37;
 
 let backendCalls : Capabilities.BackendCallsV1 = {
     canister_principal = node;
+    owns_principal = func(principal : Principal) : Bool { principal == node };
     can_call = func(_canister : Principal, _method : Text) { false };
     call = func(
         _request : Capabilities.BackendCallRequestV1

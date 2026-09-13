@@ -27,6 +27,7 @@
   .mp-app a:hover, .mp-modal a:hover { text-decoration: underline; }
   .mp-header { flex-shrink: 0; padding-inline: 20px; min-height: 56px; border-bottom: 1px solid var(--nt-line-subtle); }
   .mp-brand { background: #29213c; color: #c8b8ff; }
+  .mp-brand img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
   .mp-icon { flex: none; vertical-align: middle; }
   .mp-icon-button { border: 0; background: transparent; color: var(--mp-muted); width: 32px; height: 32px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; }
   .mp-icon-button:hover { color: var(--nt-text-strong); background: var(--nt-bg-control-hover); }
@@ -62,7 +63,6 @@
   .mp-card-open:focus-visible::after { outline: 2px solid var(--nt-accent); outline-offset: 3px; }
   .mp-publisher-link { align-self: flex-start; color: var(--nt-accent); background: none; border: 0; padding: 1px 0; font-size: 11px !important; line-height: 1.6; text-align: left; }
   .mp-publisher-link:hover { text-decoration: underline; }
-  .mp-app-card .mp-publisher-link { position: relative; z-index: 1; }
   .mp-app-icon { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 23px; font-weight: 600; box-shadow: inset 0 0 0 1px #ffffff0b; overflow: hidden; }
   .mp-app-icon img { object-fit: cover; width: 100%; height: 100%; }
   .mp-app-icon-large { width: 76px; height: 76px; flex-basis: 76px; border-radius: 18px; font-size: 34px; }

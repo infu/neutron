@@ -3,7 +3,7 @@
   "apps": [
     {
       "appId": "aave",
-      "icon": "media/aave/icon.svg",
+      "icon": "media/aave/icon.webp",
       "screenshots": [
         "media/aave/overview.png",
         "media/aave/compact.png",
@@ -12,7 +12,7 @@
     },
     {
       "appId": "agent",
-      "icon": "media/agent/icon.svg",
+      "icon": "media/agent/icon.webp",
       "screenshots": [
         "media/agent/overview.png",
         "media/agent/cover.webp"
@@ -20,7 +20,7 @@
     },
     {
       "appId": "chess",
-      "icon": "media/chess/icon.svg",
+      "icon": "media/chess/icon.webp",
       "screenshots": [
         "media/chess/overview.png",
         "media/chess/cover.webp"
@@ -28,7 +28,7 @@
     },
     {
       "appId": "contacts",
-      "icon": "media/contacts/icon.svg",
+      "icon": "media/contacts/icon.webp",
       "screenshots": [
         "media/contacts/overview.png",
         "media/contacts/cover.webp"
@@ -36,15 +36,16 @@
     },
     {
       "appId": "curve",
-      "icon": "media/curve/icon.svg",
+      "icon": "media/curve/icon.webp",
       "screenshots": [
         "media/curve/overview.png",
-        "media/curve/compact.png"
+        "media/curve/compact.png",
+        "media/curve/cover.webp"
       ]
     },
     {
       "appId": "evm_wallet",
-      "icon": "media/evm_wallet/icon.svg",
+      "icon": "media/evm_wallet/icon.webp",
       "screenshots": [
         "media/evm_wallet/overview.png",
         "media/evm_wallet/compact.png"
@@ -52,7 +53,7 @@
     },
     {
       "appId": "files",
-      "icon": "media/files/icon.svg",
+      "icon": "media/files/icon.webp",
       "screenshots": [
         "media/files/overview.png",
         "media/files/cover.webp"
@@ -60,38 +61,40 @@
     },
     {
       "appId": "gemma",
-      "icon": "media/gemma/icon.svg",
+      "icon": "media/gemma/icon.webp",
       "screenshots": [
         "media/gemma/overview.png"
       ]
     },
     {
       "appId": "hello",
-      "icon": "media/hello/icon.png",
+      "icon": "media/hello/icon.webp",
       "screenshots": [
-        "media/hello/overview.png"
+        "media/hello/overview.png",
+        "media/hello/cover.webp"
       ]
     },
     {
       "appId": "hullshift",
-      "icon": "media/hullshift/icon.svg",
+      "icon": "media/hullshift/icon.webp",
       "screenshots": [
-        "media/hullshift/overview.png",
-        "media/hullshift/entry.png",
+        "media/hullshift/published-overview.png",
+        "media/hullshift/published-entry.png",
         "media/hullshift/cover.webp"
       ]
     },
     {
       "appId": "hyperliquid",
-      "icon": "media/hyperliquid/icon.svg",
+      "icon": "media/hyperliquid/icon.webp",
       "screenshots": [
         "media/hyperliquid/overview.png",
-        "media/hyperliquid/compact.png"
+        "media/hyperliquid/compact.png",
+        "media/hyperliquid/cover.webp"
       ]
     },
     {
       "appId": "icpswap",
-      "icon": "media/icpswap/icon.svg",
+      "icon": "media/icpswap/icon.webp",
       "screenshots": [
         "media/icpswap/overview.png",
         "media/icpswap/compact.png",
@@ -100,7 +103,7 @@
     },
     {
       "appId": "jetcreeper",
-      "icon": "media/jetcreeper/icon.svg",
+      "icon": "media/jetcreeper/icon.webp",
       "screenshots": [
         "media/jetcreeper/overview.png",
         "media/jetcreeper/entry.png",
@@ -109,7 +112,7 @@
     },
     {
       "appId": "kitchensink",
-      "icon": "media/kitchensink/icon.svg",
+      "icon": "media/kitchensink/icon.webp",
       "screenshots": [
         "media/kitchensink/overview.png",
         "media/kitchensink/design.png"
@@ -117,7 +120,7 @@
     },
     {
       "appId": "mail",
-      "icon": "media/mail/icon.svg",
+      "icon": "media/mail/icon.webp",
       "screenshots": [
         "media/mail/overview.png",
         "media/mail/cover.webp"
@@ -125,14 +128,14 @@
     },
     {
       "appId": "mysubnet",
-      "icon": "media/mysubnet/icon.svg",
+      "icon": "media/mysubnet/icon.webp",
       "screenshots": [
         "media/mysubnet/overview.png"
       ]
     },
     {
       "appId": "nuance",
-      "icon": "media/nuance/icon.svg",
+      "icon": "media/nuance/icon.webp",
       "screenshots": [
         "media/nuance/overview.png",
         "media/nuance/compact.png"
@@ -140,15 +143,16 @@
     },
     {
       "appId": "openchat",
-      "icon": "media/openchat/icon.svg",
+      "icon": "media/openchat/icon.webp",
       "screenshots": [
         "media/openchat/overview.png",
-        "media/openchat/compact.png"
+        "media/openchat/compact.png",
+        "media/openchat/cover.webp"
       ]
     },
     {
       "appId": "snsgov",
-      "icon": "media/snsgov/icon.svg",
+      "icon": "media/snsgov/icon.webp",
       "screenshots": [
         "media/snsgov/overview.png",
         "media/snsgov/compact.png"
@@ -156,7 +160,7 @@
     },
     {
       "appId": "spreadsheet",
-      "icon": "media/spreadsheet/icon.svg",
+      "icon": "media/spreadsheet/icon.webp",
       "screenshots": [
         "media/spreadsheet/overview.png",
         "media/spreadsheet/summary.png"
@@ -164,7 +168,7 @@
     },
     {
       "appId": "taggr",
-      "icon": "media/taggr/icon.svg",
+      "icon": "media/taggr/icon.webp",
       "screenshots": [
         "media/taggr/overview.png",
         "media/taggr/compact.png"
@@ -172,15 +176,16 @@
     },
     {
       "appId": "uniswap",
-      "icon": "media/uniswap/icon.svg",
+      "icon": "media/uniswap/icon.webp",
       "screenshots": [
         "media/uniswap/overview.png",
-        "media/uniswap/compact.png"
+        "media/uniswap/compact.png",
+        "media/uniswap/cover.webp"
       ]
     },
     {
       "appId": "wagyu",
-      "icon": "media/wagyu/icon.png",
+      "icon": "media/wagyu/icon.webp",
       "screenshots": [
         "media/wagyu/overview.png",
         "media/wagyu/cover.webp"
@@ -188,11 +193,30 @@
     },
     {
       "appId": "wallet",
-      "icon": "media/wallet/icon.svg",
+      "icon": "media/wallet/icon.webp",
       "screenshots": [
         "media/wallet/overview.png",
         "media/wallet/compact.png",
         "media/wallet/cover.webp"
+      ]
+    },
+    {
+      "appId": "kernel",
+      "icon": "media/kernel/icon.webp"
+    },
+    {
+      "appId": "marketplace",
+      "icon": "media/marketplace/icon.webp"
+    },
+    {
+      "appId": "feedback",
+      "icon": "media/feedback/icon.webp"
+    },
+    {
+      "appId": "blast",
+      "icon": "media/blast/icon.webp",
+      "screenshots": [
+        "media/blast/cover.webp"
       ]
     }
   ]

@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Spreadsheet",
   "id": "spreadsheet",
-  "version": 305,
+  "version": 306,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Create and edit agent-friendly spreadsheet workbooks",
   "src": "main.mo",
@@ -27,7 +27,7 @@
       "id": "workbook",
       "title": "Spreadsheet",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Edit spreadsheet workbooks"
     }
   ],

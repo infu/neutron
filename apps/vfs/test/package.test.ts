@@ -25,7 +25,7 @@ const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const jsUrl = new URL("../dist/web/main.js", import.meta.url);
 const serviceHtmlUrl = new URL("../dist/web/service.html", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
-const packageUrl = new URL("../files.v0.4.11.neutron", import.meta.url);
+const packageUrl = new URL("../files.v0.4.12.neutron", import.meta.url);
 
 const VAULT_METHODS = [
   "files_bootstrap_v2",
@@ -69,7 +69,7 @@ test("Files package manifest binds Shared, Vault, and Workspace storage", async 
   expect(manifest).toMatchObject({
     id: "files",
     name: "Files",
-    version: 411,
+    version: 412,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: { path: "service.html" },
     backend: { capabilities: { certified_assets: { api: 2 } } },
@@ -83,7 +83,7 @@ test("Files package manifest binds Shared, Vault, and Workspace storage", async 
       preapproved_self_calls: { api: 1 },
       certified_assets: { api: 2 },
     },
-    tiles: [{ id: "files", path: "index.html", icon: "static/icon.svg" }],
+    tiles: [{ id: "files", path: "index.html", icon: "static/icon.webp" }],
     memory: {
       files: {
         version: 2,
@@ -255,7 +255,7 @@ test("Files package contains the backend, memory, schema, and web install paths"
   );
 
   const prepared = preparePackageInstall(unpacked);
-  expect(prepared.manifest.version).toBe(411);
+  expect(prepared.manifest.version).toBe(412);
   expect(prepared.packageRecord?.license.id).toBe(
     "LicenseRef-Neutron-Sovereign-Application-License-1.0",
   );

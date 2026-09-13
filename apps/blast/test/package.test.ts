@@ -103,7 +103,7 @@ describe("Blast first-release package shape", () => {
     expect(manifest).toMatchObject({
       format: 3,
       id: "blast",
-      version: 103,
+      version: 104,
       update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
       background: {
         path: "service.html",
@@ -112,7 +112,8 @@ describe("Blast first-release package shape", () => {
     expect(manifest).not.toHaveProperty("tiles");
     expect(manifest).not.toHaveProperty("tray");
     expect(manifest).not.toHaveProperty("menu_items");
-    expect(await readdir(resolve(appRoot, "public"))).toEqual(["service.html"]);
+    expect((await readdir(resolve(appRoot, "public"))).sort()).toEqual(["service.html", "static"]);
+    expect(await readdir(resolve(appRoot, "public/static"))).toEqual(["icon.webp"]);
   });
 
   test("declares only the exact resident capabilities and v1 self-call surface", () => {
@@ -345,6 +346,7 @@ function assertAllowedPackagePath(packagePath: string): void {
     packagePath === "neutron.json" ||
     packagePath === "neutron.lock.json" ||
     packagePath === "schema.json" ||
+    packagePath === "web/static/icon.webp" ||
     packagePath === "web/service.html" ||
     packagePath === "web/service.js" ||
     packagePath === "web/icblast_worker.js" ||

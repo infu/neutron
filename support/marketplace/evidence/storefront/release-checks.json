@@ -1,0 +1,974 @@
+{
+  "apps": 27,
+  "allPassed": true,
+  "browser": "/run/current-system/sw/bin/google-chrome-stable",
+  "commands": [
+    {
+      "appId": "files",
+      "version": 412,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-vfs",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 13.47,
+          "log": "tmp/marketplace-storefront/icon-qualification/files-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-vfs",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 239.39,
+          "log": "tmp/marketplace-storefront/icon-qualification/files-1-test.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-vfs",
+            "run",
+            "test:release"
+          ],
+          "exitCode": 0,
+          "seconds": 1.16,
+          "log": "tmp/marketplace-storefront/icon-qualification/files-2-test:release.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-vfs",
+            "run",
+            "test:browser-release"
+          ],
+          "exitCode": 0,
+          "seconds": 6.6,
+          "log": "tmp/marketplace-storefront/icon-qualification/files-3-test:browser-release.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "contacts",
+      "version": 308,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-contacts",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 7.16,
+          "log": "tmp/marketplace-storefront/icon-qualification/contacts-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-contacts",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 24.42,
+          "log": "tmp/marketplace-storefront/icon-qualification/contacts-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "kitchensink",
+      "version": 320,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-kitchensink",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 6.35,
+          "log": "tmp/marketplace-storefront/icon-qualification/kitchensink-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-kitchensink",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 18.32,
+          "log": "tmp/marketplace-storefront/icon-qualification/kitchensink-1-test.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-kitchensink",
+            "run",
+            "test:browser"
+          ],
+          "exitCode": 0,
+          "seconds": 5.81,
+          "log": "tmp/marketplace-storefront/icon-qualification/kitchensink-2-test:browser.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "wagyu",
+      "version": 308,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-wagyu",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 27.6,
+          "log": "tmp/marketplace-storefront/icon-qualification/wagyu-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-wagyu",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 183.97,
+          "log": "tmp/marketplace-storefront/icon-qualification/wagyu-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "agent",
+      "version": 322,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-agent",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 4.78,
+          "log": "tmp/marketplace-storefront/icon-qualification/agent-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-agent",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 9.03,
+          "log": "tmp/marketplace-storefront/icon-qualification/agent-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "jetcreeper",
+      "version": 306,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-jetcreeper",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 5.17,
+          "log": "tmp/marketplace-storefront/icon-qualification/jetcreeper-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-jetcreeper",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 52.83,
+          "log": "tmp/marketplace-storefront/icon-qualification/jetcreeper-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "mail",
+      "version": 307,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-mail",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 9.7,
+          "log": "tmp/marketplace-storefront/icon-qualification/mail-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-mail",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 93.34,
+          "log": "tmp/marketplace-storefront/icon-qualification/mail-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "mysubnet",
+      "version": 306,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-mysubnet",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 4.79,
+          "log": "tmp/marketplace-storefront/icon-qualification/mysubnet-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-mysubnet",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 5.68,
+          "log": "tmp/marketplace-storefront/icon-qualification/mysubnet-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "wallet",
+      "version": 333,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-wallet",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 11.57,
+          "log": "tmp/marketplace-storefront/icon-qualification/wallet-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-wallet",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 331.62,
+          "log": "tmp/marketplace-storefront/icon-qualification/wallet-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "evm_wallet",
+      "version": 127,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-evm-wallet",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 9.92,
+          "log": "tmp/marketplace-storefront/icon-qualification/evm_wallet-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-evm-wallet",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 226.45,
+          "log": "tmp/marketplace-storefront/icon-qualification/evm_wallet-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "uniswap",
+      "version": 120,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-uniswap",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 6.49,
+          "log": "tmp/marketplace-storefront/icon-qualification/uniswap-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-uniswap",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 18.09,
+          "log": "tmp/marketplace-storefront/icon-qualification/uniswap-1-test.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-uniswap",
+            "run",
+            "test:browser"
+          ],
+          "exitCode": 0,
+          "seconds": 17.27,
+          "log": "tmp/marketplace-storefront/icon-qualification/uniswap-2-test:browser.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "curve",
+      "version": 108,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-curve",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 5.86,
+          "log": "tmp/marketplace-storefront/icon-qualification/curve-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-curve",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 31.42,
+          "log": "tmp/marketplace-storefront/icon-qualification/curve-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "spreadsheet",
+      "version": 306,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-spreadsheet",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 4.96,
+          "log": "tmp/marketplace-storefront/icon-qualification/spreadsheet-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-spreadsheet",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 7.64,
+          "log": "tmp/marketplace-storefront/icon-qualification/spreadsheet-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "chess",
+      "version": 306,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-chess",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 7.2,
+          "log": "tmp/marketplace-storefront/icon-qualification/chess-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-chess",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 19.0,
+          "log": "tmp/marketplace-storefront/icon-qualification/chess-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "hello",
+      "version": 206,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-hello",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 4.77,
+          "log": "tmp/marketplace-storefront/icon-qualification/hello-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-hello",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 7.08,
+          "log": "tmp/marketplace-storefront/icon-qualification/hello-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "gemma",
+      "version": 206,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-gemma",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 5.16,
+          "log": "tmp/marketplace-storefront/icon-qualification/gemma-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-gemma",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 7.07,
+          "log": "tmp/marketplace-storefront/icon-qualification/gemma-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "hullshift",
+      "version": 209,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-hullshift",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 199.1,
+          "log": "tmp/marketplace-storefront/icon-qualification/hullshift-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-hullshift",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 176.64,
+          "log": "tmp/marketplace-storefront/icon-qualification/hullshift-1-test.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-hullshift",
+            "run",
+            "test:browser"
+          ],
+          "exitCode": 0,
+          "seconds": 15.41,
+          "log": "tmp/marketplace-storefront/icon-qualification/hullshift-2-test:browser.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "aave",
+      "version": 109,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-aave",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 6.49,
+          "log": "tmp/marketplace-storefront/icon-qualification/aave-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-aave",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 50.59,
+          "log": "tmp/marketplace-storefront/icon-qualification/aave-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "hyperliquid",
+      "version": 109,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-hyperliquid",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 6.67,
+          "log": "tmp/marketplace-storefront/icon-qualification/hyperliquid-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-hyperliquid",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 55.76,
+          "log": "tmp/marketplace-storefront/icon-qualification/hyperliquid-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "icpswap",
+      "version": 211,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-icpswap",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 9.22,
+          "log": "tmp/marketplace-storefront/icon-qualification/icpswap-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-icpswap",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 76.39,
+          "log": "tmp/marketplace-storefront/icon-qualification/icpswap-1-test.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-icpswap",
+            "run",
+            "test:chart"
+          ],
+          "exitCode": 0,
+          "seconds": 3.86,
+          "log": "tmp/marketplace-storefront/icon-qualification/icpswap-2-test:chart.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-icpswap",
+            "run",
+            "test:browser"
+          ],
+          "exitCode": 0,
+          "seconds": 32.69,
+          "log": "tmp/marketplace-storefront/icon-qualification/icpswap-3-test:browser.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "taggr",
+      "version": 110,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-taggr",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 5.54,
+          "log": "tmp/marketplace-storefront/icon-qualification/taggr-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-taggr",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 22.61,
+          "log": "tmp/marketplace-storefront/icon-qualification/taggr-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "openchat",
+      "version": 125,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-openchat",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 4.81,
+          "log": "tmp/marketplace-storefront/icon-qualification/openchat-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-openchat",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 10.72,
+          "log": "tmp/marketplace-storefront/icon-qualification/openchat-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "nuance",
+      "version": 112,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-nuance",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 6.58,
+          "log": "tmp/marketplace-storefront/icon-qualification/nuance-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-nuance",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 47.57,
+          "log": "tmp/marketplace-storefront/icon-qualification/nuance-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "snsgov",
+      "version": 117,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-snsgov",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 7.35,
+          "log": "tmp/marketplace-storefront/icon-qualification/snsgov-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-snsgov",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 168.27,
+          "log": "tmp/marketplace-storefront/icon-qualification/snsgov-1-test.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "marketplace",
+      "version": 121,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-marketplace",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 7.53,
+          "log": "tmp/marketplace-storefront/icon-qualification/marketplace-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-marketplace",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 10.58,
+          "log": "tmp/marketplace-storefront/icon-qualification/marketplace-1-test.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-marketplace",
+            "run",
+            "typecheck"
+          ],
+          "exitCode": 0,
+          "seconds": 0.43,
+          "log": "tmp/marketplace-storefront/icon-qualification/marketplace-2-typecheck.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-marketplace",
+            "run",
+            "test:browser"
+          ],
+          "exitCode": 0,
+          "seconds": 74.62,
+          "log": "tmp/marketplace-storefront/icon-qualification/marketplace-3-test:browser.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-marketplace",
+            "run",
+            "test:protocol"
+          ],
+          "exitCode": 0,
+          "seconds": 32.68,
+          "log": "tmp/marketplace-storefront/icon-qualification/marketplace-4-test:protocol.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "feedback",
+      "version": 102,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-feedback",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 6.46,
+          "log": "tmp/marketplace-storefront/icon-qualification/feedback-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-feedback",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 4.28,
+          "log": "tmp/marketplace-storefront/icon-qualification/feedback-1-test.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-feedback",
+            "run",
+            "test:browser"
+          ],
+          "exitCode": 0,
+          "seconds": 23.5,
+          "log": "tmp/marketplace-storefront/icon-qualification/feedback-2-test:browser.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-feedback",
+            "run",
+            "test:protocol"
+          ],
+          "exitCode": 0,
+          "seconds": 11.75,
+          "log": "tmp/marketplace-storefront/icon-qualification/feedback-3-test:protocol.log"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "appId": "blast",
+      "version": 104,
+      "commands": [
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-blast",
+            "run",
+            "package"
+          ],
+          "exitCode": 0,
+          "seconds": 7.53,
+          "log": "tmp/marketplace-storefront/icon-qualification/blast-0-package.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-blast",
+            "test"
+          ],
+          "exitCode": 0,
+          "seconds": 101.7,
+          "log": "tmp/marketplace-storefront/icon-qualification/blast-1-test.log"
+        },
+        {
+          "command": [
+            "npm",
+            "--workspace",
+            "neutron-blast",
+            "run",
+            "test:qualification"
+          ],
+          "exitCode": 0,
+          "seconds": null,
+          "log": "tmp/marketplace-storefront/icon-qualification/blast-2-test:qualification.log",
+          "note": "Passed separate full installed qualification after updating its disposable icon fixture; cleanup failures now preserve the original diagnostic."
+        }
+      ],
+      "passed": true
+    }
+  ]
+}

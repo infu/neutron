@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 332,
+  "version": 333,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "IC token wallet, transfers and canister refills",
   "src": "main.mo",
@@ -20,7 +20,7 @@
   "tray": {
     "title": "Wallet",
     "path": "tray.html",
-    "icon": "static/icon.svg"
+    "icon": "static/icon.webp"
   },
   "dependencies": {
     "contacts": {
@@ -197,7 +197,7 @@
       "id": "wallet",
       "title": "IC Wallet",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Inspect canister-owned ICRC token balances"
     }
   ],

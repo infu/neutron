@@ -12,6 +12,7 @@ import OperationsMemory "../backend/memory/snsgov_operations/v1";
 // relay may dispatch at all is exercised directly below.
 let stubBroker : NeutronCapabilities.BackendCallsV1 = {
     canister_principal = Principal.fromText("aaaaa-aa");
+    owns_principal = func(principal : Principal) : Bool { principal == Principal.fromText("aaaaa-aa") };
     can_call = func(_ : Principal, _ : Text) : Bool { true };
     call = func(_ : NeutronCapabilities.BackendCallRequestV1) : async* NeutronCapabilities.BackendCallResultV1 {
         #err({ code = "stub"; message = "not dispatched in tests" });

@@ -104,6 +104,7 @@ const REQUIRED_DIST_PATHS = new Set([
   "web/service.html",
   "web/service.js",
   "web/static/icon.svg",
+  "web/static/icon.webp",
 ]);
 
 export type TreeDigest = {

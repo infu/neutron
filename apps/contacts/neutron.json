@@ -2,7 +2,7 @@
   "format": 3,
   "id": "contacts",
   "name": "Contacts",
-  "version": 307,
+  "version": 308,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Private multi-network contacts for Neutron apps and agents",
   "src": "main.mo",
@@ -28,7 +28,7 @@
       "id": "contacts",
       "title": "Contacts",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Manage people and payment destinations"
     }
   ],

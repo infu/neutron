@@ -1,6 +1,7 @@
 /** Render the real app in Neutron's iframe sandbox. Catalog data and prices are
  * local fixtures; images and copy are the reviewed first-party catalog assets. */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { build } from "esbuild";
 import { sassPlugin } from "esbuild-sass-plugin";
 import { chromium } from "playwright";
@@ -15,6 +16,30 @@ const output = process.env.MARKETPLACE_STOREFRONT_ARTIFACTS || path.join(root, "
 await mkdir(output, { recursive: true });
 const content = JSON.parse(await readFile(path.join(root, "support/marketplace/catalog/first-party-storefront.json"), "utf8"));
 const media = JSON.parse(await readFile(path.join(root, "support/marketplace/catalog/first-party-media.json"), "utf8"));
+const snapshot = process.env.MARKETPLACE_STOREFRONT_SNAPSHOT
+  ? JSON.parse(await readFile(process.env.MARKETPLACE_STOREFRONT_SNAPSHOT, "utf8")) : null;
+const assetUrls = {}, snapshotMedia = new Map();
+if (snapshot) {
+  const origin = `https://${snapshot.canister}.icp0.io`;
+  for (const app of media.apps) for (const relative of [app.icon, ...(app.screenshots || [])]) {
+    const bytes = await readFile(path.join(root, "support/marketplace/catalog", relative));
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    assetUrls[`${origin}/repo/v1/media/${sha}`] = `/media/${relative}`;
+  }
+  for (const app of [...snapshot.featured, ...snapshot.charts.paid, ...snapshot.charts.free]) {
+    for (const remote of [app.iconUrl, app.coverUrl].filter(Boolean)) {
+      if (assetUrls[remote]) continue;
+      const image = new URL(remote), sha = image.pathname.split("/").at(-1);
+      assert.equal(image.origin, origin); assert.match(sha, /^[a-f0-9]{64}$/);
+      const response = await fetch(remote); assert.ok(response.ok);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(createHash("sha256").update(bytes).digest("hex"), sha);
+      const contentType = response.headers.get("content-type"); assert.match(contentType, /^image\//);
+      assetUrls[remote] = `/snapshot-media/${sha}`;
+      snapshotMedia.set(assetUrls[remote], { bytes, contentType });
+    }
+  }
+}
 const names = {};
 for (const app of content.apps) {
   const manifest = JSON.parse(await readFile(path.join(root, `apps/${app.appId === "files" ? "vfs" : app.appId}/neutron.json`), "utf8"));
@@ -24,13 +49,13 @@ const fixture = `
 import React from 'react'; import {createRoot} from 'react-dom/client';
 import App from '${root}/apps/marketplace/src/app.tsx';
 import '${root}/apps/marketplace/src/style.scss';
-const content=${JSON.stringify(content)}, media=${JSON.stringify(media)}, names=${JSON.stringify(names)};
+const content=${JSON.stringify(content)}, media=${JSON.stringify(media)}, names=${JSON.stringify(names)}, snapshot=${JSON.stringify(snapshot)}, assetUrls=${JSON.stringify(assetUrls)};
 const paid=['chess','aave','agent','wallet','uniswap','curve','hyperliquid','evm_wallet','icpswap','snsgov'];
-const order=['jetcreeper','hullshift',...paid,'contacts','mail','files','wagyu','openchat','taggr','nuance','spreadsheet','gemma','kitchensink','mysubnet','hello','blast'];
+const order=['jetcreeper','hullshift',...paid,'contacts','mail','files','wagyu','openchat','taggr','nuance','spreadsheet','gemma','kitchensink','mysubnet','hello','blast','feedback'];
 const state=window.storefrontFixture={calls:[],failTier:null,delay:null};
-const listings=order.map(id=>{const app=content.apps.find(app=>app.appId===id), images=media.apps.find(app=>app.appId===id);return {
+const listings=snapshot?[...snapshot.featured,...snapshot.charts.paid,...snapshot.charts.free].map(app=>({...app,iconUrl:assetUrls[app.iconUrl],coverUrl:assetUrls[app.coverUrl]})):order.map(id=>{const app=content.apps.find(app=>app.appId===id), images=media.apps.find(app=>app.appId===id);return {
  id,title:names[id],headline:app.title,subtitle:app.subtitle,summary:app.subtitle,category:'Apps',tags:app.tags.map(id=>content.tags.find(tag=>tag.id===id)),
- iconUrl:images?'/media/'+images.icon:undefined,coverUrl:app.cover?'/media/'+app.cover:images?'/media/'+images.screenshots[0]:undefined,
+ iconUrl:images?'/media/'+images.icon:undefined,coverUrl:app.cover?'/media/'+app.cover:images?.screenshots?.[0]?'/media/'+images.screenshots[0]:undefined,
  publisher:'aaaaa-aa',publisherId:'neutron',publisherName:'Neutron',priceUsdMicros:paid.includes(id)?String([3990000,9990000,14990000,2990000][paid.indexOf(id)%4]):'0',
  version:'100',rating:4.8,ratingCount:42,freeAcquisitions:'1240',paidPurchases:'840',owned:false,installed:false,
 };});
@@ -38,7 +63,7 @@ const matches=(app,input)=>(!input.tag||app.tags.some(tag=>tag.id===input.tag))&
 const client={
  initialize:async()=>({configured:true,connected:true,canisterId:'aaaaa-aa',host:location.origin,account:'aaaaa-aa'}),
  discount:async()=>({code:null,active:false,discountBps:0,affiliate:null,error:null}),recentOperations:async()=>[],
- storefront:async input=>{state.calls.push(['storefront',input]);return {tags:content.tags,featured:content.featured.map(id=>listings.find(app=>app.id===id)).filter(app=>matches(app,input))};},
+ storefront:async input=>{state.calls.push(['storefront',input]);return {tags:content.tags,featured:(snapshot?snapshot.featured.map(app=>app.id):content.featured).map(id=>listings.find(app=>app.id===id)).filter(app=>matches(app,input))};},
  catalog:async input=>{state.calls.push(['catalog',input]);if(state.failTier===input.tier){state.failTier=null;throw Error('Fixture chart unavailable.');}const rows=listings.filter(app=>(input.tier==='paid'?app.priceUsdMicros!=='0':app.priceUsdMicros==='0')&&matches(app,input)&&!input.exclude?.includes(app.id));const start=Number(input.cursor||0);return {items:rows.slice(start,start+7),nextCursor:start+7<rows.length?String(start+7):null};},
  detail:async id=>({...listings.find(app=>app.id===id),description:'Local visual fixture. Prices and acquisition counts are examples.',screenshots:[],audit:null,ownRating:null}),
  publisherProfile:async()=>({id:'neutron',name:'Neutron',description:'Apps for your Neutron.',principal:'aaaaa-aa',rating:null,ratingCount:0,totalUsers:'0',statsComplete:true}),
@@ -57,11 +82,17 @@ await build({ stdin: { contents: fixture, loader: "tsx", resolveDir: root }, bun
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, "http://127.0.0.1");
-    if (url.pathname.startsWith("/media/media/")) {
+    if (snapshotMedia.has(url.pathname)) {
+      const asset = snapshotMedia.get(url.pathname);
+      response.setHeader("content-type", asset.contentType); response.end(asset.bytes);
+    } else if (url.pathname.startsWith("/media/media/")) {
       const relative = url.pathname.slice("/media/".length), file = path.resolve(root, "support/marketplace/catalog", relative);
       if (!file.startsWith(path.join(root, "support/marketplace/catalog/media/"))) throw Error("Invalid media path");
       response.setHeader("content-type", file.endsWith(".svg") ? "image/svg+xml" : file.endsWith(".webp") ? "image/webp" : "image/png");
       response.end(await readFile(file));
+    } else if (url.pathname === "/static/icon.webp") {
+      response.setHeader("content-type", "image/webp");
+      response.end(await readFile(path.join(root, "apps/marketplace/public/static/icon.webp")));
     } else if (["/main.js", "/main.css"].includes(url.pathname)) {
       response.setHeader("content-type", url.pathname.endsWith(".js") ? "text/javascript" : "text/css");
       response.end(await readFile(path.join(output, url.pathname.slice(1))));
@@ -99,6 +130,14 @@ try {
   }
   checks.push('Two large featured cards, four medium cards per price tier, compact remainder, no duplicate featured apps, CSS blur/mask, responsive tile categories, DPR 2 screenshots at 320/390/960/1422/1800px.');
   await page.setViewportSize({ width: 1422, height: 1106 });
+  if (snapshot) {
+    await page.screenshot({ path: path.join(output, "storefront-reference.png") });
+    await page.getByRole("region", { name: "Top free", exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(output, "storefront-free.png") });
+    assert.deepEqual(errors, []);
+    await writeFile(path.join(output, "results.json"), JSON.stringify({ checks, errors, capturedAt: snapshot.capturedAt, canister: snapshot.canister, fixture: "Read-only production beta catalog snapshot; exact verified media served locally." }, null, 2));
+    console.log(`Production snapshot screenshots: ${output}`);
+  } else {
   await page.getByRole('button',{name:'Show more paid apps',exact:true}).click();
   assert.equal(await page.getByRole('region',{name:'Top paid',exact:true}).locator('.mp-card-small').count(),6);
   assert.equal(await page.getByRole('region',{name:'Top free',exact:true}).locator('.mp-card-small').count(),3);
@@ -120,5 +159,6 @@ try {
   assert.deepEqual(errors,[]);
   await writeFile(path.join(output,'results.json'),JSON.stringify({checks,errors,fixture:'Real first-party assets; local illustrative prices and counts; no production requests.'},null,2));
   console.log(`Storefront Playwright checks passed. Screenshots: ${output}`);
+  }
 } catch (error) { await page.screenshot({path:path.join(output,'failure.png')}); throw error; }
 finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); }

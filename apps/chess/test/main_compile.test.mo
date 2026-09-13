@@ -13,6 +13,7 @@ let environment : Chess.AppBackendEnvironment = {
     capabilities = {
         backend_calls = {
             canister_principal = self;
+            owns_principal = func(principal : Principal) : Bool { principal == self };
             can_call = func(_canister : Principal, _method : Text) { true };
             call = func(
                 _request : NeutronCapabilities.BackendCallRequestV1,
