@@ -64,7 +64,7 @@ describe("procedural cargo puzzles", () => {
   }, 180000);
 
   test("g5 identity is deterministic, uses all seed bits, and ignores scheduling", async () => {
-    const request = { seed: "ffffffffabcd1234", difficulty: 2 };
+    const request = { generatorVersion: "g5" as const, seed: "ffffffffabcd1234", difficulty: 2 };
     const first = await generateLevel(request);
     const second = await generateLevel(request, { yieldControl: async () => { await Promise.resolve(); } });
     expect(first.identity.generatorVersion).toBe("g5");

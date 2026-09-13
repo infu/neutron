@@ -6,6 +6,7 @@ import {
 } from "./brain_catalog.ts";
 import type { DifficultyRating } from "./difficulty.ts";
 import { generateCargoPuzzle } from "./cargo_puzzles.ts";
+import { generateFreightPuzzle } from "./freight_puzzles.ts";
 import { assertValidLevel } from "./mechanics.ts";
 import type { LevelDefinition } from "./model.ts";
 import { formatCanonicalSeed, parseCanonicalSeed } from "./prng.ts";
@@ -81,8 +82,8 @@ export class GenerationCancelledError extends Error {
 }
 
 /**
- * New seeds build procedural cargo puzzles. Explicit g4 identities retain the
- * released catalog and its original validation for reproducible old shares.
+ * New seeds build procedural freight puzzles. Explicit g5/g4 identities
+ * retain their released generators and validation for reproducible old shares.
  */
 export async function generateLevel(
   request: GenerateLevelRequest,
@@ -90,7 +91,7 @@ export async function generateLevel(
 ): Promise<GeneratedLevel> {
   checkCancelled(hooks);
   const generatorVersion = request.generatorVersion ?? GENERATOR_VERSION;
-  if (generatorVersion !== GENERATOR_VERSION && generatorVersion !== "g4") {
+  if (generatorVersion !== GENERATOR_VERSION && generatorVersion !== "g5" && generatorVersion !== "g4") {
     throw new GenerationCertificationError(
       `Generator ${generatorVersion} is frozen and cannot create new missions`,
     );
@@ -101,9 +102,9 @@ export async function generateLevel(
     throw new RangeError("Hullshift difficulty must be 0 through 8");
   }
 
-  if (generatorVersion === "g5") {
+  if (generatorVersion === "g5" || generatorVersion === "g6") {
     hooks.onProgress?.({ stage: "starting", completed: 0, total: 1, detail: "Arranging a new cargo deck" });
-    const { level, analysis } = await generateCargoPuzzle(seed, request.difficulty, hooks);
+    const { level, analysis } = await (generatorVersion === "g6" ? generateFreightPuzzle : generateCargoPuzzle)(seed, request.difficulty, hooks);
     checkCancelled(hooks);
     assertValidLevel(level);
     const identity = Object.freeze({ generatorVersion, seed: canonicalSeed, difficulty: request.difficulty });

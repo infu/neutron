@@ -65,6 +65,9 @@ import {
 } from "./training.ts";
 import { HomeSurface, CargoHintMap } from "./cargo_ui.tsx";
 import { CARGO_DIFFICULTIES } from "./cargo_puzzles.ts";
+import { FREIGHT_DIFFICULTIES } from "./freight_puzzles.ts";
+import { bayProgress, SystemsOnDeck } from "./freight_ui.tsx";
+import type { GeneratorVersion } from "./share_code.ts";
 import "./style.scss";
 
 type Overlay = "menu" | "help" | "hint" | "settings" | "details" | "briefing" | "clear" | null;
@@ -165,7 +168,7 @@ export function App() {
       const run = snapshot?.activeRun;
       const allKnown = run !== null && run !== undefined && mechanicReferencesForLevel(run.level)
         .every((mechanic) => snapshot.learnedMechanics.includes(mechanic.key));
-      if (run?.level.objective !== "cargo" && (!snapshot.settings.skipKnownBriefings || !allKnown)) setOverlay("briefing");
+      if (run?.level.objective === undefined && (!snapshot.settings.skipKnownBriefings || !allKnown)) setOverlay("briefing");
     }
   }, [snapshot]);
 
@@ -309,7 +312,7 @@ export function App() {
     }
   }
 
-  async function startMission(selectedDifficulty = difficulty, seed = randomSeed()): Promise<void> {
+  async function startMission(selectedDifficulty = difficulty, seed = randomSeed(), generatorVersion: GeneratorVersion = "g6"): Promise<void> {
     const current = snapshotRef.current;
     if (!current) return;
     const result = await callMutation(HULLSHIFT_TOOLS.generationStart, {
@@ -317,6 +320,7 @@ export function App() {
       expectedServiceRevision: current.serviceRevision,
       seed,
       difficulty: selectedDifficulty,
+      generatorVersion,
     });
     if (result?.ok) {
       setOverlay(null);
@@ -456,7 +460,7 @@ export function App() {
           runs={snapshot.runs}
           onOpen={(id) => void openRun(id)}
           onHelp={() => setOverlay("help")}
-          onStart={(selected, seed) => void startMission(selected, seed)}
+          onStart={(selected, seed, version) => void startMission(selected, seed, version)}
           onSettings={() => setOverlay("settings")}
         />
       )}
@@ -529,8 +533,8 @@ export function App() {
             <DetailsPanel run={activeRun} />
           ) : overlay === "hint" && hint ? (
             <div><HintPanel hint={hint} />
-              {activeRun?.level.objective === "cargo" ? <CargoHintMap run={activeRun} hint={hint} /> : null}
-              {activeRun && hint.kind === "hint" && hint.tier === 1 ? <button className={nt.button} disabled={busy} onClick={() => void requestHint(activeRun)}>Show me the next push</button> : null}
+              {activeRun?.level.objective !== undefined ? <CargoHintMap run={activeRun} hint={hint} /> : null}
+              {activeRun && hint.kind === "hint" && hint.tier === 1 ? <button className={nt.button} disabled={busy} onClick={() => void requestHint(activeRun)}>Show me the next step</button> : null}
               <button className={nt.buttonGhost} onClick={() => setOverlay(null)}>Back to puzzle</button>
             </div>
           ) : overlay === "briefing" && activeRun ? (
@@ -568,7 +572,7 @@ export function App() {
               })}
             />
           ) : (
-            <HelpPanel reducedMotion={reducedMotion} legacy={activeRun !== null && activeRun.level.objective !== "cargo"} />
+            <HelpPanel reducedMotion={reducedMotion} run={activeRun} />
           )}
         </Modal>
       ) : null}
@@ -580,7 +584,7 @@ function GenerationSurface(props: { job: NonNullable<ResidentSnapshot["generatio
   return (
     <section aria-busy="true" className="hullshift-generation">
       <div className="hullshift-scanner" aria-hidden="true"><span /><span /><span /></div>
-      <p className={nt.eyebrow}>{CARGO_DIFFICULTIES[props.job.difficulty]?.name}</p>
+      <p className={nt.eyebrow}>{(props.job.generatorVersion === "g5" ? CARGO_DIFFICULTIES : FREIGHT_DIFFICULTIES)[props.job.difficulty]?.name}</p>
       <h1>Making room for a new idea.</h1>
       <p>Arranging the deck and finding an interesting way through.<br />Bigger puzzles can take a little longer.</p>
       <button className={nt.buttonSecondary} disabled={props.busy || props.job.state === "cancelling"} onClick={props.onCancel}>
@@ -628,17 +632,17 @@ function GameSurface(props: {
   onRestart(): void;
 }) {
   const [retryKey, setRetryKey] = useState(0);
-  const cargo = props.run.level.objective === "cargo";
-  const filled = props.run.snapshot.derived.sources.filter((source) => source.active).length;
+  const cargo = props.run.level.objective !== undefined;
+  const { filled, total } = bayProgress(props.run.level, props.run.snapshot);
   const consumerConsequence = [...props.events].reverse().find((event) => event.type === "consumer-changed");
   return (
-    <section className="hullshift-game">
+    <section className={`hullshift-game${props.run.level.objective === "freight" ? " hs-game-systems" : ""}`}>
       <header className="hullshift-hud">
         <div className="hullshift-objective">
           <span className="hullshift-objective-mark" aria-hidden="true" />
-          <span><small>{cargo ? `${props.run.identity.difficulty + 1} / 9 · ${CARGO_DIFFICULTIES[props.run.identity.difficulty]?.name}` : "Escape puzzle"}</small>{cargo ? "Park every pod on a glowing bay" : props.run.trainingId === null ? "Reach the powered evacuation gate" : getTrainingDefinition(props.run.trainingId).briefing.objective}</span>
+          <span><small>{cargo ? `${props.run.identity.difficulty + 1} / 9 · ${(props.run.level.objective === "freight" ? FREIGHT_DIFFICULTIES : CARGO_DIFFICULTIES)[props.run.identity.difficulty]?.name}` : "Escape puzzle"}</small>{cargo ? "Fill every mint bay with a cargo pod" : props.run.trainingId === null ? "Reach the powered evacuation gate" : getTrainingDefinition(props.run.trainingId).briefing.objective}</span>
         </div>
-        {cargo ? <div className="hs-bay-progress" aria-label={`${filled} of ${props.run.level.objects.length} pods parked`}><span aria-hidden="true">◇</span><strong>{filled} <small>/ {props.run.level.objects.length}</small></strong><span className="hullshift-action-label">parked</span></div> : <div aria-label="Circuit status" className="hullshift-circuit-status">
+        {cargo ? <div className="hs-bay-progress" aria-label={`${filled} of ${total} bays filled`}><span aria-hidden="true">◇</span><strong>{filled} <small>/ {total}</small></strong><span className="hullshift-action-label">parked</span></div> : <div aria-label="Circuit status" className="hullshift-circuit-status">
           {props.run.snapshot.derived.channels.map((channel) => (
             <span
               aria-label={`${channel.symbol} ${channel.active ? "powered" : "unpowered"}`}
@@ -655,6 +659,7 @@ function GameSurface(props: {
           <button aria-label="Mission menu" className={nt.iconButton} disabled={props.busy || props.inputLocked} onClick={props.onMenu}><IoMenu /></button>
         </div>
       </header>
+      {props.run.level.objective === "freight" ? <SystemsOnDeck key={props.run.id} level={props.run.level} snapshot={props.run.snapshot} /> : null}
       <BoardStage
         run={props.run}
         events={props.events}
@@ -674,7 +679,7 @@ function GameSurface(props: {
         </div>
       ) : null}
       <div className="hullshift-turn-readout" aria-live="polite">
-        <span>{cargo ? (props.run.statistics.acceptedActions === 0 ? "Arrow keys · WASD · or tap a direction" : "Take your time. Undo is always here.") : eventSummary(props.events)}</span>
+        <span>{cargo ? (props.run.statistics.acceptedActions === 0 ? "Arrow keys · WASD · or tap a direction" : props.run.level.objective === "freight" ? eventSummary(props.events) : "Take your time. Undo is always here.") : eventSummary(props.events)}</span>
         <span>{props.run.statistics.acceptedActions} moves · {props.run.statistics.pushes} pushes</span>
       </div>
       {consumerConsequence?.type === "consumer-changed" ? (
@@ -812,10 +817,11 @@ function MenuPanel(props: {
 
 function DetailsPanel({ run }: { run: RunView }) {
   const [copied, setCopied] = useState(false);
-  if (run.level.objective === "cargo") return <div className="hullshift-details">
-    <p className={nt.eyebrow}>{run.analysis.cargo?.layout ?? "Cargo deck"}</p>
-    <h3>{CARGO_DIFFICULTIES[run.identity.difficulty]?.name}</h3>
-    <p>{run.level.objects.length} pods. One home for each. Take as many tries as you need.</p>
+  if (run.level.objective !== undefined) return <div className="hullshift-details">
+    <p className={nt.eyebrow}>{run.analysis.freight?.layout ?? run.analysis.cargo?.layout ?? "Cargo deck"}</p>
+    <h3>{(run.level.objective === "freight" ? FREIGHT_DIFFICULTIES : CARGO_DIFFICULTIES)[run.identity.difficulty]?.name}</h3>
+    <p>Fill all {bayProgress(run.level, run.snapshot).total} mint bays with cargo pods. Take as many tries as you need.</p>
+    {run.level.objective === "freight" ? <SystemsOnDeck level={run.level} snapshot={run.snapshot} /> : null}
     <label className={nt.field}><span className={nt.label}>Share this exact puzzle</span><input className={nt.input} readOnly value={run.shareCode} onFocus={(event) => event.target.select()} /></label>
     <button className={nt.buttonSecondary} onClick={() => { void navigator.clipboard.writeText(run.shareCode).then(() => setCopied(true)).catch(() => setCopied(false)); }}>{copied ? "Copied!" : "Copy puzzle code"}</button>
     <p className={nt.muted}>Paste the code on the home screen to play the same layout and starting position.</p>
@@ -939,15 +945,17 @@ function ClearPanel(props: { value: string; busy: boolean; onChange(value: strin
   );
 }
 
-function HelpPanel({ reducedMotion, legacy }: { reducedMotion: boolean; legacy: boolean }) {
+function HelpPanel({ reducedMotion, run }: { reducedMotion: boolean; run: RunView | null }) {
+  const legacy = run !== null && run.level.objective === undefined;
   return (
     <div className="hullshift-help">
       <p>Move the maintenance droid with arrow keys, WASD, or the direction pad. Push one object at a time; objects cannot be pulled or chain-pushed.</p>
       {legacy ? <HullshiftHelpModelGallery reducedMotion={reducedMotion} /> : <div className="hs-help-rules">
         <p><i className="hs-legend-pod" /><span><strong>Push, don’t pull.</strong> Move into a pod to push it. Only one pod moves at a time.</span></p>
-        <p><i className="hs-legend-bay" /><span><strong>Every pod needs a bay.</strong> Any pod fits any bay. Parked pods turn mint green, and you can still move them.</span></p>
+        <p><i className="hs-legend-bay" /><span><strong>Fill every mint bay.</strong> Park a cargo pod on each bay. Parked pods turn mint green and can still move. Gold reactor cells power sockets; they do not fill bays.</span></p>
         <p><IoArrowUndoOutline /><span><strong>Experiment freely.</strong> Corners can trap pods. Undo as often as you like, restart, or ask for a hint.</span></p>
       </div>}
+      {!legacy && run?.level.objective !== "cargo" ? <HullshiftHelpModelGallery reducedMotion={reducedMotion} only={run ? mechanicReferencesForLevel(run.level).map((m) => m.key) : ["plate", "relay", "reactor", "socket", "door", "bridge", "fracture", "disposal"]} /> : null}
       <p><kbd>Z</kbd> undo · <kbd>R</kbd> restart · <kbd>Esc</kbd> menu</p>
     </div>
   );
@@ -969,7 +977,7 @@ function TerminalPanel(props: { kind: "failure"; title: string; detail: string; 
 
 function VictoryPanel(props: { run: RunView; busy: boolean; primaryLabel: string; onReplay(): void; onNew(): void; onHarder: (() => void) | null; onDetails(): void; onHome(): void }) {
   const dialogRef = useModalFocus();
-  const cargo = props.run.level.objective === "cargo";
+  const cargo = props.run.level.objective !== undefined;
   return (
     <div aria-label={cargo ? "Puzzle complete" : "Evacuation complete"} aria-modal="true" className="hullshift-terminal-backdrop" role="dialog">
       <section className="hullshift-terminal hullshift-terminal--victory" ref={dialogRef}>

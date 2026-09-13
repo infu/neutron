@@ -9,12 +9,14 @@ export const LEGACY_GENERATOR_VERSION = "g1" as const;
 export const FROZEN_GENERATOR_VERSION_G2 = "g2" as const;
 export const FROZEN_GENERATOR_VERSION_G3 = "g3" as const;
 export const FROZEN_GENERATOR_VERSION_G4 = "g4" as const;
-export const GENERATOR_VERSION = "g5" as const;
+export const FROZEN_GENERATOR_VERSION_G5 = "g5" as const;
+export const GENERATOR_VERSION = "g6" as const;
 export const SUPPORTED_GENERATOR_VERSIONS = Object.freeze([
   LEGACY_GENERATOR_VERSION,
   FROZEN_GENERATOR_VERSION_G2,
   FROZEN_GENERATOR_VERSION_G3,
   FROZEN_GENERATOR_VERSION_G4,
+  FROZEN_GENERATOR_VERSION_G5,
   GENERATOR_VERSION,
 ] as const);
 export type GeneratorVersion = (typeof SUPPORTED_GENERATOR_VERSIONS)[number];
@@ -154,11 +156,7 @@ export function parseShareCode(input: string): ParsedShareCode {
 }
 
 export function isGeneratorVersion(value: unknown): value is GeneratorVersion {
-  return value === LEGACY_GENERATOR_VERSION
-    || value === FROZEN_GENERATOR_VERSION_G2
-    || value === FROZEN_GENERATOR_VERSION_G3
-    || value === FROZEN_GENERATOR_VERSION_G4
-    || value === GENERATOR_VERSION;
+  return typeof value === "string" && (SUPPORTED_GENERATOR_VERSIONS as readonly string[]).includes(value);
 }
 
 export function isShareCodeError(error: unknown, code?: ShareCodeErrorCode): error is ShareCodeError {

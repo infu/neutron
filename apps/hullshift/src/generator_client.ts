@@ -8,7 +8,8 @@ import {
   type WorkerRequest,
   type WorkerResponse,
 } from "./worker_protocol.ts";
-import type { LevelDefinition } from "./model.ts";
+import type { LevelDefinition, EngineSnapshot, Direction } from "./model.ts";
+import type { GeneratorVersion } from "./share_code.ts";
 import type { GenerationProgress } from "./generator.ts";
 
 type JobResult =
@@ -40,6 +41,7 @@ export class GeneratorWorkerClient {
     seed: string,
     difficulty: number,
     onProgress?: (progress: GenerationProgress) => void,
+    generatorVersion?: GeneratorVersion,
   ): Promise<SerializedGeneratedLevel> {
     const result = await this.#run(
       {
@@ -48,6 +50,7 @@ export class GeneratorWorkerClient {
         jobId: this.#jobId(),
         seed,
         difficulty,
+        ...(generatorVersion === undefined ? {} : { generatorVersion }),
       },
       "generated",
       onProgress,
@@ -59,6 +62,7 @@ export class GeneratorWorkerClient {
   async analyze(
     level: LevelDefinition,
     onProgress?: (progress: GenerationProgress) => void,
+    current?: { snapshot: EngineSnapshot; knownRoute: readonly Direction[] },
   ): Promise<SerializedAnalysis> {
     const result = await this.#run(
       {
@@ -66,6 +70,7 @@ export class GeneratorWorkerClient {
         type: "analyze",
         jobId: this.#jobId(),
         level,
+        ...(current === undefined ? {} : { current }),
       },
       "analyzed",
       onProgress,

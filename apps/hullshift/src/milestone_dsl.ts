@@ -552,6 +552,7 @@ function validateEventFields(
   }
   if (fixtureEntry !== undefined && record.channel !== undefined
     && fixtureEntry.fixture.kind !== "disposal"
+    && fixtureEntry.fixture.kind !== "bay"
     && fixtureEntry.fixture.channel !== record.channel) {
     fail(`${path}.channel`, `does not match fixture '${fixtureEntry.fixture.id}'`);
   }

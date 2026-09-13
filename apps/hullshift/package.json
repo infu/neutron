@@ -28,7 +28,7 @@
   },
   "author": "",
   "license": "LicenseRef-Neutron-Sovereign-Application-License-1.0",
-  "description": "Procedural Sokoban cargo puzzles for Neutron.",
+  "description": "Procedural cargo and machinery puzzles with six systems for Neutron.",
   "dependencies": {
     "neutron-design-system": "^1.1.0",
     "neutron-tools": "^1.1.0",

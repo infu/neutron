@@ -45,6 +45,7 @@ export const HULLSHIFT_FIXTURE_SUPPORT_SURFACE_Z = Object.freeze({
 
 /** Visible front/top ledges for the channel's redundant pip code. */
 export const HULLSHIFT_CHANNEL_MARK_SURFACE_Z = Object.freeze({
+  bay: 0.08,
   plate: 0.23,
   relay: 0.24,
   socket: 0.29,
@@ -58,6 +59,7 @@ const OCCUPANT_SUPPORT_CLEARANCE = 0.008;
 
 const TERRAIN_KINDS = ["floor", "bulkhead", "vacuum", "fracture"] as const;
 const FIXTURE_KINDS = [
+  "bay",
   "plate",
   "relay",
   "socket",
@@ -69,6 +71,7 @@ const FIXTURE_KINDS = [
 const OBJECT_KINDS = ["cargo", "reactor-cell"] as const;
 const MODEL_MATERIAL_ROLES = ["base", "detail", "emissive"] as const;
 const FIXTURE_VARIANT_COUNTS = Object.freeze({
+  bay: 2,
   plate: 2,
   relay: 2,
   socket: 2,
@@ -269,7 +272,7 @@ export class HullshiftRenderLayers {
       );
       const layer = this.createInstanceLayer(
         `Hullshift terrain: ${kind}`,
-        createHullshiftTerrainModel(kind, level.objective === "cargo").geometry,
+        createHullshiftTerrainModel(kind, level.objective !== undefined).geometry,
         new THREE.MeshStandardMaterial({
           // Instanced colors are already authored in the exact palette. A
           // non-white material tint multiplies them in Three's mesh shaders and
@@ -577,7 +580,7 @@ export class HullshiftRenderLayers {
       if (!layer) return;
       const count = counts.get(kind) ?? 0;
       const coord = { x: cellIndex % this.level.width, y: Math.floor(cellIndex / this.level.width) };
-      const cargo = this.level.objective === "cargo";
+      const cargo = this.level.objective !== undefined;
       this.writeTransform(layer.mesh, count, coord, BOARD_LAYER_Z.terrain, 0, 0, 1, cargo && kind === "bulkhead" ? 0.7 : 1);
       layer.mesh.setColorAt(count, this.scratchColor.setHex(terrainColor(kind)).multiplyScalar(cargo && kind === "floor" && (coord.x + coord.y) % 2 === 0 ? 1.1 : 1));
       counts.set(kind, count + 1);
@@ -679,7 +682,7 @@ export class HullshiftRenderLayers {
         count,
         fixture.coord,
         BOARD_LAYER_Z.fixture,
-        (role) => this.level.objective === "cargo" && fixture.kind === "plate"
+        (role) => (this.level.objective === "cargo" && fixture.kind === "plate" || fixture.kind === "bay")
           ? (role === "emissive" ? HULLSHIFT_PALETTE.powerGreen : HULLSHIFT_PALETTE.hullDeep)
           : fixturePartColor(fixture, role, state, this.channelIndex),
       );
@@ -744,9 +747,9 @@ export class HullshiftRenderLayers {
         count,
         object.position,
         this.occupantStandingZ(snapshot, object.position, object.kind),
-        (role) => this.level.objective === "cargo" && object.kind === "cargo"
+        (role) => this.level.objective !== undefined && object.kind === "cargo"
           ? role === "base"
-            ? (this.level.cells[object.position.y * this.level.width + object.position.x]?.fixture ? HULLSHIFT_PALETTE.powerGreen : HULLSHIFT_PALETTE.cargoBlue)
+            ? ((this.level.cells[object.position.y * this.level.width + object.position.x]?.fixture?.kind === (this.level.objective === "cargo" ? "plate" : "bay")) ? HULLSHIFT_PALETTE.powerGreen : HULLSHIFT_PALETTE.cargoBlue)
             : role === "detail" ? HULLSHIFT_PALETTE.hullDeep : HULLSHIFT_PALETTE.goalIvory
           : occupantPartColor(object.kind, role, snapshot),
       );
@@ -823,7 +826,7 @@ export class HullshiftRenderLayers {
       candidate.coord.x === coord.x && candidate.coord.y === coord.y
     ));
     if (model === undefined || fixture === undefined) return BOARD_LAYER_Z.occupant;
-    if (this.level.objective === "cargo" && fixture.kind === "plate") return BOARD_LAYER_Z.occupant + 0.04;
+    if ((this.level.objective === "cargo" && fixture.kind === "plate" || fixture.kind === "bay")) return BOARD_LAYER_Z.occupant + 0.04;
     const state = fixtureModelState(snapshot, fixture);
     const surface = fixtureSupportSurfaceZ(fixture.kind, state);
     if (surface === null) return BOARD_LAYER_Z.occupant;
@@ -997,6 +1000,7 @@ function terrainColor(kind: TerrainKind): number {
 
 function fixtureModelState(snapshot: EngineSnapshot, fixture: FixtureView): string {
   switch (fixture.kind) {
+    case "bay":
     case "plate":
       return fixtureIsActive(snapshot, fixture) ? "depressed" : "released";
     case "relay":
@@ -1029,6 +1033,7 @@ function fixtureSupportSurfaceZ(kind: FixtureKind, state: string): number | null
       return state === "empty" ? HULLSHIFT_FIXTURE_SUPPORT_SURFACE_Z.socket : null;
     case "bridge":
       return state === "active" ? HULLSHIFT_FIXTURE_SUPPORT_SURFACE_Z.bridge : null;
+    case "bay":
     case "door":
     case "disposal":
     case "gate":
@@ -1125,7 +1130,9 @@ function readChannelIds(level: LevelDefinition): string[] {
   for (const fixture of readFixtures(level)) {
     if (fixture.channelId !== null && !result.includes(fixture.channelId)) result.push(fixture.channelId);
   }
-  return result;
+  // Match deriveMechanics and the textual circuit legend, regardless of the
+  // order in which the procedural generator installed the sources.
+  return result.sort();
 }
 
 function fixtureChannel(fixture: FixtureDefinition): string | null {
@@ -1141,6 +1148,7 @@ function readSnapshotObjects(snapshot: EngineSnapshot): RenderObjectView[] {
 }
 
 function fixtureIsActive(snapshot: EngineSnapshot, fixture: FixtureView): boolean {
+  if (fixture.kind === "bay") return snapshot.state.objects.some((o) => o.kind === "cargo" && o.position.x === fixture.coord.x && o.position.y === fixture.coord.y);
   if (fixture.kind === "relay") {
     return snapshot.state.activeRelayIds.includes(fixture.id);
   }

@@ -517,7 +517,7 @@ function syntheticFixtureHighlight(position: Coord): HintHighlight {
 }
 
 function hintChannel(level: LevelDefinition, fixture: FixtureDefinition): HintChannel | null {
-  if (fixture.kind === "disposal") return null;
+  if (fixture.kind === "disposal" || fixture.kind === "bay") return null;
   const channel = level.channels.find((candidate) => candidate.id === fixture.channel);
   if (channel === undefined) return null;
   const symbol = boundedText(channel.symbol, MAX_CHANNEL_TEXT);
@@ -548,6 +548,7 @@ function highlightPlayer(position: Coord): HintHighlight {
 
 function highlightFixture(fixture: FixtureDefinition, position: Coord): HintHighlight {
   const labels: Readonly<Record<FixtureDefinition["kind"], string>> = {
+    bay: "Cargo bay",
     plate: "Mass plate",
     relay: "Relay pad",
     socket: "Reactor socket",

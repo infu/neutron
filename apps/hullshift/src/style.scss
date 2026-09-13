@@ -1127,3 +1127,34 @@
     }
   }
 }
+
+@layer app {
+  .hs-system-preview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 16px; margin-block-start: 22px; color: var(--hs-steel); font-size: .74rem; }
+  .hs-system-preview span { display: flex; align-items: center; gap: 9px; }
+  .hs-system-preview i { color: var(--hs-cyan); font-size: 1.1rem; font-style: normal; }
+  .hs-deck-systems { border: 1px solid var(--hs-line); background: #142132f2; border-radius: 12px; padding: 10px 14px; color: var(--hs-steel); }
+  .hs-game-systems > .hs-deck-systems { position: absolute; z-index: 7; inset: 68px 18px auto; }
+  .hs-game-systems .hullshift-board-stage { inset-block-start: 184px; }
+  .hs-system-buttons { display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: thin; padding-block-end: 2px; }
+  .hs-system-buttons > span { white-space: nowrap; font-size: .64rem; text-transform: uppercase; letter-spacing: .06em; margin-inline-end: 6px; }
+  .hs-system-buttons button { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; border: 1px solid var(--hs-line); border-radius: 6px; background: transparent; color: var(--hs-ivory); padding: 5px 8px; font-size: .7rem; cursor: pointer; }
+  .hs-system-buttons button[aria-pressed="true"] { background: #91e5c721; border-color: var(--hs-cyan); }
+  .hs-system-buttons i { font-style: normal; color: var(--hs-cyan); }
+  .hs-system-rule { margin: 7px 0; font-size: .73rem; line-height: 1.5; }
+  .hs-live-circuits { display: flex; flex-wrap: wrap; gap: 12px; margin-block-start: 6px; font-size: .64rem; }
+  .hs-live-circuits b { color: var(--hs-steel); margin-inline-end: 3px; }
+  .hs-live-circuits .is-powered, .hs-live-circuits .is-powered b { color: var(--hs-cyan); }
+  @media (max-width: 620px) {
+    .hs-game-systems .hs-bay-progress { position: absolute; grid-area: auto; inset: 54px 0 auto auto; margin: 0; }
+    .hs-game-systems > .hs-deck-systems { inset: 111px 9px auto; padding: 7px 9px; }
+    .hs-game-systems .hullshift-board-stage { inset-block-start: 244px; }
+    .hs-system-buttons > span { display: none; }
+    .hs-system-buttons button { min-block-size: 34px; }
+    .hs-system-rule { font-size: .69rem; }
+  }
+  @media (max-height: 520px) and (min-width: 621px) {
+    .hs-game-systems > .hs-deck-systems { inset-block-start: 58px; }
+    .hs-game-systems .hs-system-rule { display: none; }
+    .hs-game-systems .hullshift-board-stage { inset-block-start: 137px; }
+  }
+}

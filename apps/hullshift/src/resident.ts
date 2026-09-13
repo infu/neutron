@@ -30,11 +30,12 @@ import type {
 } from "./worker_protocol.ts";
 import type { GenerationProgress } from "./generator.ts";
 import { isMeaningfulDecisionTransition } from "./solver.ts";
-import { encodeShareCode } from "./share_code.ts";
+import { encodeShareCode, GENERATOR_VERSION, type GeneratorVersion } from "./share_code.ts";
 import { parseCanonicalSeed } from "./prng.ts";
 import { mechanicReferencesForLevel } from "./mechanic_reference.ts";
 import { createSolverHint, type HintResponse, type HintTier } from "./hints.ts";
 import { createCargoHint } from "./cargo_hints.ts";
+import { createFreightHint } from "./freight_hints.ts";
 import { evaluateDifficulty } from "./difficulty.ts";
 import {
   getTrainingDefinition,
@@ -114,6 +115,7 @@ export type ResidentSave = {
 };
 
 export type GenerationJob = {
+  generatorVersion?: GeneratorVersion;
   id: string;
   ownerTileId: string;
   seed: string;
@@ -257,6 +259,7 @@ export class HullshiftResident {
     expectedServiceRevision: number,
     seed: string,
     difficulty: number,
+    generatorVersion: GeneratorVersion = GENERATOR_VERSION,
   ): Promise<ResidentResult> {
     assertTileId(tileId);
     parseCanonicalSeed(seed);
@@ -269,6 +272,7 @@ export class HullshiftResident {
       throw new Error("Another Hullshift generation job is already active");
     }
     const job: GenerationJob = {
+      generatorVersion,
       id: randomIdentifier("gen"),
       ownerTileId: tileId,
       seed,
@@ -575,7 +579,12 @@ export class HullshiftResident {
     let run = requireRun(this.#save, runId);
     const conflict = runConflict(run, expectedRevision);
     if (conflict !== null) return this.#conflict(tileId, conflict);
-    const hint = run.level.objective === "cargo"
+    const hint = run.level.objective === "freight"
+      ? await createFreightHint(run.level, run.snapshot, run.analysis.preferredSolution?.actions ?? [], tier, async () => {
+        const analysis = await this.#worker.analyze(run.level, undefined, { snapshot: run.snapshot, knownRoute: run.analysis.preferredSolution?.actions ?? [] });
+        return { actions: analysis.preferredSolution?.actions ?? null, complete: analysis.freight?.searchComplete ?? false, explored: analysis.stateCount };
+      })
+      : run.level.objective === "cargo"
       ? await createCargoHint(run.level, run.snapshot, run.analysis.preferredSolution?.actions ?? [], tier, async (level) => {
         const analysis = await this.#worker.analyze(level);
         return { actions: analysis.preferredSolution ? [...analysis.preferredSolution.actions] : null,
@@ -675,7 +684,7 @@ export class HullshiftResident {
           this.#save.serviceRevision += 1;
           void this.#notify();
         }
-      });
+      }, job.generatorVersion);
       if (this.#generation !== job) return;
       const run = this.#createRun(generated);
       this.#pruneForIncomingRun(job.ownerTileId, null);
@@ -785,7 +794,7 @@ export class HullshiftResident {
   async #winningSet(run: SavedRun): Promise<ReadonlySet<string> | undefined> {
     // Sokoban allows experimentation and ordinary dead ends, with free undo.
     // Its solution search does not enumerate the complete winning-state graph.
-    if (run.level.objective === "cargo") return undefined;
+    if (run.level.objective === "cargo" || run.level.objective === "freight") return undefined;
     const cached = this.#winningSets.get(run.levelHash);
     if (cached !== undefined) return cached;
     const analysis = await this.#worker.analyze(run.level);

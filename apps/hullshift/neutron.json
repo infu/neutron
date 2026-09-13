@@ -2,13 +2,13 @@
   "format": 3,
   "name": "Hullshift",
   "id": "hullshift",
-  "version": 207,
+  "version": 208,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
-  "description": "Fresh Sokoban puzzles, one clever push at a time",
+  "description": "Fresh cargo puzzles with six interacting systems",
   "src": "main.mo",
   "background": {
     "path": "service.html",
-    "description": "Save puzzle progress and generate new cargo decks"
+    "description": "Save progress and generate cargo-and-machinery puzzles"
   },
   "capabilities": {
     "persistent_browser_storage": {
@@ -22,7 +22,7 @@
       "title": "Hullshift",
       "path": "index.html",
       "icon": "static/icon.svg",
-      "description": "Park every pod on a glowing bay. Fresh puzzles, free undo, and useful hints."
+      "description": "Fill the cargo bays. Connect power, cross bridges, and plan around changing floors. Fresh puzzles, free undo, and useful hints."
     }
   ],
   "func": {}

@@ -22,6 +22,7 @@ import {
   residentSnapshotSchema,
 } from "./api.ts";
 import { HULLSHIFT_STATE_TOPIC, HullshiftResident } from "./resident.ts";
+import type { GeneratorVersion } from "./share_code.ts";
 import type { Direction } from "./model.ts";
 import type { TrainingId } from "./training.ts";
 import { GeneratorWorkerClient } from "./generator_client.ts";
@@ -70,7 +71,7 @@ exposeTool(
   HULLSHIFT_TOOLS.generationStart,
   {
     title: "Generate Hullshift Mission",
-    description: "Generate a fresh, solvable Sokoban cargo puzzle from a reproducible seed and difficulty.",
+    description: "Generate a fresh cargo-and-systems puzzle from a reproducible seed and difficulty. g6 is the default; g4 and g5 reproduce older puzzle codes.",
     inputSchema: generationStartInputSchema,
     outputSchema: resultSchema,
     annotations: writeAnnotations,
@@ -82,6 +83,7 @@ exposeTool(
       requiredInteger(args, "expectedServiceRevision"),
       requiredString(args, "seed"),
       requiredInteger(args, "difficulty"),
+      args.generatorVersion as GeneratorVersion | undefined,
     ));
   },
 );

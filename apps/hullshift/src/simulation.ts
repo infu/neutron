@@ -141,6 +141,7 @@ function canonicalFixtureValue(fixture: FixtureDefinition): readonly unknown[] {
         fixture.initiallyInstalled ? 1 : 0,
         fixture.initialCellId ?? null,
       ];
+    case "bay":
     case "disposal":
       return [fixture.kind, fixture.id];
   }
@@ -640,6 +641,12 @@ export function resolveDirectionalAction(
     && finalDerived.sources.length > 0 && finalDerived.sources.every((source) => source.active)) {
     outcome = { kind: "victory", gateId: "cargo-secured", position: canonicalState.player };
     events.push({ type: "victory", gateId: "cargo-secured", position: canonicalState.player });
+  } else if (level.objective === "freight" && canonicalState.player !== null
+    && level.cells.every((cell, index) => cell.fixture?.kind !== "bay"
+      || canonicalState.objects.some((object) => object.kind === "cargo"
+        && object.position.x === index % level.width && object.position.y === Math.floor(index / level.width)))) {
+    outcome = { kind: "victory", gateId: "freight-secured", position: canonicalState.player };
+    events.push({ type: "victory", gateId: "freight-secured", position: canonicalState.player });
   } else if (gateEntry !== undefined) {
     outcome = {
       kind: "victory",

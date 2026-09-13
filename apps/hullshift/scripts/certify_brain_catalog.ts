@@ -415,7 +415,7 @@ export function enumerateReleaseAblations(
   for (const channel of channels) {
     const referenced = level.cells.some((cell) => (
       cell.fixture !== undefined
-      && cell.fixture.kind !== "disposal"
+      && cell.fixture.kind !== "disposal" && cell.fixture.kind !== "bay"
       && cell.fixture.channel === channel.id
     ));
     if (!referenced) {
@@ -439,7 +439,7 @@ export function enumerateReleaseAblations(
         const fixture = cell.fixture;
         if (
           fixture === undefined
-          || fixture.kind === "disposal"
+          || (fixture.kind === "disposal" || fixture.kind === "bay")
           || fixture.channel !== channel.id
         ) return cell;
         return { terrain: cell.terrain, fixture: { ...fixture, channel: target.id } };
@@ -969,7 +969,7 @@ function deriveEquivalenceSignature(level: LevelDefinition): string {
         const fixture = cell.fixture;
         const fixtureValue = fixture === undefined
           ? null
-          : fixture.kind === "disposal"
+          : (fixture.kind === "disposal" || fixture.kind === "bay")
           ? [fixture.kind]
           : fixture.kind === "relay"
           ? [fixture.kind, channelIndex.get(fixture.channel), fixture.initialOn ? 1 : 0]

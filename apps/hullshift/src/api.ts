@@ -51,6 +51,7 @@ export const generationStartInputSchema = objectSchema(
     expectedServiceRevision: revisionSchema,
     seed: { type: "string", pattern: "^[0-9a-f]{16}$" },
     difficulty: { type: "integer", minimum: 0, maximum: 8 },
+    generatorVersion: { type: "string", enum: ["g4", "g5", "g6"] },
   },
 );
 

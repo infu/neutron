@@ -38,14 +38,14 @@ try {
   const snapshot = () => call<ResidentSnapshot>("hullshift_snapshot");
   // Real worker generation, gameplay, hints and storage through the app tools.
   await page.getByRole("button", { name: "New puzzle" }).click();
-  await expect(page.getByText("Park every pod on a glowing bay")).toBeVisible({ timeout: 60000 });
+  await expect(page.getByText("Fill every mint bay with a cargo pod")).toBeVisible({ timeout: 60000 });
   let state = await snapshot();
-  expect(state.activeRun?.level.objective).toBe("cargo");
+  expect(state.activeRun?.level.objective).toBe("freight");
   expect(state.storage.mode).toBe("persistent");
   const first = state.activeRun!;
   await page.getByRole("button", { name: "Hint", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Show me the next push" })).toBeVisible();
-  await page.getByRole("button", { name: "Show me the next push" }).click();
+  await expect(page.getByRole("button", { name: "Show me the next step" })).toBeVisible();
+  await page.getByRole("button", { name: "Show me the next step" }).click();
   await expect(page.locator(".hs-hint-map")).toBeVisible();
   await page.screenshot({ path: resolve(output, "hint-desktop.png") });
   await page.getByRole("button", { name: "Back to puzzle" }).click();
@@ -59,7 +59,7 @@ try {
   expect((await snapshot()).activeRun!.snapshot.state).toEqual(first.snapshot.state);
   await page.screenshot({ path: resolve(output, "board-desktop.png") });
   await page.reload();
-  await expect(page.getByText("Park every pod on a glowing bay")).toBeVisible();
+  await expect(page.getByText("Fill every mint bay with a cargo pod")).toBeVisible();
   expect((await snapshot()).activeRun!.id).toBe(first.id);
   // Replay the generated route through authoritative tools, including victory.
   run = (await snapshot()).activeRun!;
@@ -80,6 +80,36 @@ try {
   await page.getByRole("button", { name: "Exit to lobby" }).click();
   await expect(page.getByRole("button", { name: "New puzzle" })).toBeVisible();
   await page.screenshot({ path: resolve(output, "home-mobile.png") });
+  // The full-spectrum board exposes all six systems and explains each one.
+  state = await snapshot();
+  await call("hullshift_generation_start", { expectedServiceRevision: state.serviceRevision, seed: "000000000000007b", difficulty: 7 });
+  await expect.poll(async () => (await snapshot()).activeRun?.identity.difficulty, { timeout: 60000 }).toBe(7);
+  await expect(page.locator(".hs-system-buttons button")).toHaveCount(6);
+  for (const name of ["Pressure plate", "Toggle relay", "Reactor docking", "Powered bridge", "Cracked floor", "Disposal chute"]) {
+    const button = page.getByRole("button", { name, exact: true });
+    if (await button.getAttribute("aria-pressed") !== "true") await button.click();
+    await expect(page.locator(".hs-system-rule")).toBeVisible();
+  }
+  await page.screenshot({ path: resolve(output, "six-systems-mobile.png") });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  // Status and explanation panels must not cover one another on a small tile.
+  const boxes = await page.locator(".hs-bay-progress, .hs-deck-systems, .hullshift-board-stage").evaluateAll((elements) => elements.map((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }));
+  expect(boxes[0]!.bottom).toBeLessThanOrEqual(boxes[1]!.top);
+  expect(boxes[1]!.bottom).toBeLessThanOrEqual(boxes[2]!.top);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: resolve(output, "six-systems-desktop.png") });
+  await page.getByRole("button", { name: "Mission menu" }).click();
+  await page.getByRole("button", { name: "How to play" }).click();
+  await expect(page.locator('[data-help-model="plate"]')).toBeVisible();
+  await expect(page.locator('[data-help-model="gate"]')).toHaveCount(0);
+  await page.screenshot({ path: resolve(output, "systems-help-desktop.png") });
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Exit to lobby" }).click();
+  await page.getByText("Have a puzzle code?").click();
+  await page.getByLabel("Puzzle code", { exact: true }).fill("HS1-G5-D2-Sffffffffabcd1234-Cc0cc2865");
+  await page.getByRole("button", { name: "Play this puzzle" }).click();
+  await expect.poll(async () => (await snapshot()).activeRun?.shareCode, { timeout: 60000 }).toBe("HS1-G5-D2-Sffffffffabcd1234-Cc0cc2865");
+  expect((await snapshot()).activeRun!.levelHash).toBe("e82f13df94aa38b0a745a0c663f568f7af548992e4c1515f457ed1861f80d84f");
   expect(errors).toEqual([]);
   console.log(`Hullshift browser checks passed. Screenshots: ${output}`);
   if (process.argv.includes("--preview")) {
