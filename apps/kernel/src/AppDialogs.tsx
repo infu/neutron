@@ -930,6 +930,11 @@ function BackendCallsDisclosure({
           ? "Accepting this installation creates the exact persistent grants listed below. The app may request other declared grants later."
           : "This app may later ask for persistent outbound access to canister targets. Installation itself grants no canister or method target."}
       </p>
+      <p className="permission-copy">
+        Whole-canister reservations are exclusive to their owning app. Other
+        apps cannot call that canister through exact or method-wide grants,
+        including read methods.
+      </p>
       {permission.installReservations?.length ? (
         <>
           <div className="permission-fact-label">
@@ -948,7 +953,7 @@ function BackendCallsDisclosure({
                 <span>
                   {"principal" in reservation
                     ? reservation.principal
-                    : "Any eligible non-system canister"}
+                    : "Eligible non-system canisters not reserved by another app"}
                   {"method" in reservation
                     ? ` · ${reservation.method}`
                     : " · every method"}

@@ -9,6 +9,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import NeutronCapabilities "mo:neutron-capabilities";
+import NetworkEconomicsProbe "./NetworkEconomicsProbe";
 import Memory "./memory/kitchensink/v1";
 
 module {
@@ -280,30 +281,7 @@ module {
         };
 
         public func /*update*/backend_probe(target : Principal) : async* Text {
-            if (not backendCalls.can_call(target, "icrc1_fee")) {
-                return "Reserve exact icrc1_fee access for this ledger first";
-            };
-            switch (await* backendCalls.call({
-                canister = target;
-                method = "icrc1_fee";
-                args = to_candid ();
-                cycles = 1_000_000;
-            })) {
-                case (#err(error)) {
-                    "Backend call failed (" # boundedText(error.code, 64) # "): " #
-                    boundedText(error.message, 256);
-                };
-                case (#ok(reply)) {
-                    let decoded : ?Nat = from_candid reply;
-                    switch (decoded) {
-                        case (?fee) {
-                            "icrc1_fee returned " # boundedText(Nat.toText(fee), 128) #
-                            ". The demo attached 1,000,000 cycles; a ledger that accepts none refunds them."
-                        };
-                        case null "The ledger returned an invalid icrc1_fee reply";
-                    };
-                };
-            };
+            await* NetworkEconomicsProbe.read(backendCalls, target);
         };
 
         public func /*internal*/scheduled_tick(

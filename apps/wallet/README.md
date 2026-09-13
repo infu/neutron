@@ -19,7 +19,28 @@ owner-trusted apps and live agents, not a cold-storage boundary against the
 installed Wallet package. Installing or updating Wallet is therefore a
 consequential trust decision.
 
-Release 331 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
+Release 332 uses the marketplace update source `sj2r4-haaaa-aaaay-aadgq-cai`.
+
+Wallet reserves every method on selected catalog and custom ledger principals,
+including ckETH used for token-withdrawal gas and native withdrawal minters
+that can spend the ledger allowances. Refill keeps principal reservations for
+ICP, TCYCLES and the cycles minting canister independently of the Assets
+watchlist. Other apps access these ledgers through Wallet's reviewed tools and
+public functions. Kernel
+principal reservations exclude other apps' direct backend calls even when
+those apps hold exact-method or global-method grants.
+
+Wallet also checks live principal ownership for backend ledger and minter
+operations, including resident tools, scheduled work, and saved-call replay;
+partial method grants never substitute for custody access.
+
+Previously selected custom ledgers with partial method grants require approval
+of principal access in the existing asset setup. Until that approval, Wallet
+shows that the assets need access. Cancelling preserves the selected assets and
+leaves a control to reopen the review. Reapproving the saved selection acquires
+only its missing principal grants; no selected assets or saved transactions are
+reset.
+
 All eight released version-1 roots and their lineage remain unchanged, including
 the `wallet_refills` journal added in release 326.
 
@@ -46,8 +67,11 @@ CMC's timestamped ICP/XDR rate and can change before conversion. TCYCLES has
 
 The [CMC interface](https://github.com/dfinity/ic/blob/18a551adafb15fdbfce04c0b1ab2397d4a9a4b59/rs/nns/cmc/cmc.did)
 and [cycles-ledger interface](https://github.com/dfinity/cycles-ledger/blob/2703d3630ef91ad23b4b10e7e4781c2825af4df0/cycles-ledger/cycles-ledger.did)
-define these flows. CMC minting always credits the caller; it cannot directly
-mint to an arbitrary recipient. The cycles-ledger deposit fee is deducted from
+define these flows. CMC minting credits the caller's account with the requested
+subaccount. Wallet uses its default subaccount and reserves the CMC principal
+so another app cannot consume Wallet's paid block with a different subaccount.
+Refill verifies the required principal reservations before paying ICP and
+retains pending commands when access is revoked. The cycles-ledger deposit fee is deducted from
 the gross minted amount, and an onward transfer has its own fee. Direct ICP
 refilling avoids these extra cycles-ledger steps.
 
@@ -201,18 +225,18 @@ attest that mutable external code. Where a trustworthy attestation is
 available, Wallet or Swap may optionally pin a reviewed module hash and fail on
 drift. That is provider/consumer-app hardening, not Kernel or token semantics.
 
-If the installed Swap backend performs `icrc2_transfer_from` itself, every app
-backend still shares the Neutron canister principal. The ledger sees that
-principal and the Swap-supplied `spender_subaccount` and arguments; it cannot
-attest which compiled app module initiated the call. The reviewed, narrowly
-hard-coded Swap backend and its exact ledger-method reservation are therefore
-the app boundary. An allowance is not cryptographic per-app sandboxing, and
-Kernel does not add token-specific interpretation to simulate one.
+Every app backend shares the Neutron canister principal. Wallet's exclusive
+ledger reservation therefore prevents a Swap backend from calling
+`icrc2_transfer_from` directly, including through an exact-method grant or a
+different `spender_subaccount`. Apps obtain token funding through Wallet's
+reviewed provider operations and use their separately approved DEX access for
+the swap. An allowance to a DEX remains authority held by that DEX; it is not
+cryptographic isolation between app modules inside Neutron.
 
 Wallet rejects its own default source account as spender, treating an absent
-(`null`) subaccount and the all-zero subaccount as equivalent. Direct-calling
-Swap apps and fixtures must use a distinct exact spender subaccount because
-ICRC-2 same-account `transfer_from` is not allowance-bounded.
+(`null`) subaccount and the all-zero subaccount as equivalent, because ICRC-2
+same-account `transfer_from` is not allowance-bounded. A distinct spender
+subaccount does not authorize another app to call a reserved ledger.
 
 Before first dispatch, Wallet rechecks review-sensitive metadata, fee,
 freshness, and current allowance state. A change rejects that prepared command
@@ -233,37 +257,27 @@ background authority: the current root turn still begins through a live tile in
 the enabled Agent installation and the exact granted entrypoint, without a
 per-turn browser-focus or transient-activation requirement.
 
-Published Wallet 0.3.6 used the now-deprecated scoped
-`context.requestApproval()` callback. Kernel retains that generic compatibility
-member and its raw JSON dialog; published Wallet 0.3.6 depends on it, but the
-runtime does not version-gate it. Current Wallet code requires
-`context.presentUserInterface()` before preparation and never falls back to the
-legacy callback or an ordinary reusable tool grant. Wallet features unrelated
-to provider funding and direct-root routing are required to remain usable in
-every partial-upgrade combination.
+Wallet 332 requires a Kernel that provides the live `owns_principal`
+backend-call capability. Release it with the compatible Kernel successor;
+there is no older-Kernel or exact-method custody fallback. Current provider
+funding requires `context.presentUserInterface()` before preparation and never
+falls back to the legacy approval callback or a reusable tool grant.
 
-The compatibility contract for K323 through K328 and W306 through W311 is the
-exact matrix in
-[App Method Access And Call Consent](../../doc/app-method-access-and-call-consent.md#provider-mediated-one-shot-tools).
-It distinguishes human presentation from root-tool availability, including the
-K324/W308 lane where human funding fails closed but direct-root funding works.
-Release evidence for candidate cells requires exact-archive qualification. At
-the source-contract level, existing callers need no migration: W311 retains the
-endpoint, schemas, provider annotation, and caller
-semantics of `wallet_fund_v1`. Existing custom ledger state is required to
-remain usable; allowance features require the additional exact scopes described
-below.
+The K323 through K328 and W306 through W311 matrix in
+[App Method Access And Call Consent](../../doc/app-method-access-and-call-consent.md#provider-mediated-one-shot-tools)
+is historical release evidence, not a partial-upgrade compatibility promise
+for Wallet 332. Existing custom ledger records and transaction journals remain
+intact; continued custody operations require exclusive principal access.
 
 The ledger picker offers both reviewed presets and an **Add custom ledger**
 action. A custom canister id is parsed and canonicalized as an IC principal
-before it can be selected. Applying the selection asks the owner for the four
-exact ICRC-1 methods Wallet uses—metadata, balance, fee, and transfer—plus
-`icrc3_get_blocks` for its index-less Activity fallback. Allowance features
-add only the exact `icrc2_allowance`, `icrc2_approve`, and
-`icrc103_get_allowances` scopes. Existing custom-ledger installations do not
-receive those scopes automatically: Approvals and cross-app allowance funding
-show **permission required** until the owner applies the additional reservation
-batch in Wallet settings.
+before it can be selected. Applying the selection asks the owner to reserve the
+entire ledger principal for Wallet. This covers metadata, balance, fee,
+transfer, Activity and allowance methods without permitting another app to
+reserve a narrower route. Previously selected custom ledgers with exact-only
+grants require principal approval through the existing Wallet setup. Resident
+tools, scheduled work and transaction replay also reject partial grants; the
+startup access screen is not the custody enforcement mechanism.
 
 Principal validation checks the id itself; metadata refresh reports an error if
 the target does not implement the required ICRC-1 interface.
@@ -397,9 +411,9 @@ price enters Wallet memory or transaction logic, and providers receive only
 public asset symbols, never balances, principals, account addresses, or ledger
 identifiers.
 
-Reviewed preset ledger principals are reserved as whole canisters. Custom
-ledgers and chain-key minters use exact method reservations; the latter cover
-address discovery, deposit refresh, gas quotes, and withdrawal. Permanent ckBTC
+Reviewed preset and custom ledgers, gas ledgers, and chain-key minters are
+reserved as whole principals. Only public history-index reads use exact-method
+reservations. Permanent ckBTC
 and ckDOGE addresses are cached in Wallet memory.
 While a Wallet tile is open, supported minters are checked immediately and
 every ten minutes; ckETH and ckERC20 balances are refreshed on the same interval
@@ -600,8 +614,9 @@ direct-root invocation.
 
 The caller endpoint UUID is live routing provenance, not durable command
 identity. A retry from a replacement tile or tray endpoint is compared using
-the endpoint stored with the command, so released W306-W309 intent blobs replay
-without rewriting memory. Caller app, role, Agent mode, request id, ledger,
+the endpoint stored with the command, so released W306-W309 intent blobs remain
+recoverable without rewriting memory. Current exclusive custody access is
+required before replay dispatch. Caller app, role, Agent mode, request id, ledger,
 deadline, and every financial intent field remain exact; changing any of them
 still conflicts.
 

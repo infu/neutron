@@ -38,6 +38,7 @@ let capabilities : {
 } = {
     backend_calls = {
         canister_principal = self;
+        owns_principal = func(_canister : Principal) : Bool { false };
         can_call = func(_canister : Principal, _method : Text) { true };
         call = func(_request : Capabilities.CallRequest) : async* Capabilities.CallResult {
             #err({ code = "unused"; message = "unused" });

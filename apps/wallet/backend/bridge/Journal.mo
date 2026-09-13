@@ -26,21 +26,39 @@ module {
     public type RefreshRequest = Types.RefreshRequest;
     public type ListRequest = Types.ListRequest;
     public type Page = Types.Page;
+    type DepositRoute = { minter : Principal; token : ?Text };
 
     public class ServiceWithReplacements(mem : Memory.Mem, replacements : ReplacementMemory.Mem, calls : Capabilities.BackendCalls) {
-        public func quote(ledger : Principal) : async* Result<Quote> {
-            let route = switch (Catalog.find(ledger)) {
+        func depositRoute(ledger : Principal) : Result<DepositRoute> {
+            switch (Catalog.find(ledger)) {
                 case null return #err("This ledger has no supported Ethereum deposit route");
                 case (?value) switch (value.native_route) {
-                    case (?#cketh(value)) ({ minter = Principal.fromText(value.minter); token = null });
-                    case (?#ckerc20(value)) ({ minter = Principal.fromText(value.minter); token = ?lower(value.contract) });
+                    case (?#cketh(value)) #ok({ minter = Principal.fromText(value.minter); token = null });
+                    case (?#ckerc20(value)) #ok({ minter = Principal.fromText(value.minter); token = ?lower(value.contract) });
                     case (_) return #err("This ledger has no supported Ethereum deposit route");
                 };
             };
+        };
+        func custody(ledger : Principal, minter : Principal) : Result<()> {
+            if (not calls.owns_principal(ledger) or not calls.owns_principal(minter)) {
+                return #err("Wallet requires exclusive access to the destination ledger and minter before preparing or claiming a deposit");
+            };
+            #ok(());
+        };
+        public func requireCustody(ledger : Principal) : Result<()> {
+            switch (depositRoute(ledger)) {
+                case (#err(error)) #err(error);
+                case (#ok(route)) custody(ledger, route.minter);
+            };
+        };
+        public func quote(ledger : Principal) : async* Result<Quote> {
+            let route = switch (depositRoute(ledger)) { case (#err(error)) return #err(error); case (#ok(value)) value };
+            switch (custody(ledger, route.minter)) { case (#err(error)) return #err(error); case (_) {} };
             let info = switch (Minter.decodeInfo(await* calls.call(Minter.infoRequest(route.minter)))) {
                 case (#err(error)) return #err(error);
                 case (#ok(value)) value;
             };
+            switch (custody(ledger, route.minter)) { case (#err(error)) return #err(error); case (_) {} };
             let minterAddress = switch (info.minter_address) {
                 case (?value) if (validHex(value, 20)) lower(value) else return #err("The minter has no valid Ethereum address");
                 case null return #err("The minter's Ethereum address is unavailable");
@@ -100,6 +118,7 @@ module {
                 case (?value) if (value.size() != 32) return #err("IC subaccount must contain exactly 32 bytes");
                 case (_) {};
             };
+            switch (requireCustody(request.ledger)) { case (#err(error)) return #err(error); case (_) {} };
             switch (existing(request)) { case (#err(error)) return #err(error); case (#ok(?value)) return #ok(value); case (_) {} };
             let discovered = switch (await* quote(request.ledger)) { case (#err(error)) return #err(error); case (#ok(value)) value };
             let subaccountWord = switch (request.subaccount) { case null discovered.subaccount_word; case (?value) hex(value) };
@@ -115,6 +134,7 @@ module {
                     value.total_event_count;
                 };
             };
+            switch (custody(request.ledger, discovered.minter)) { case (#err(error)) return #err(error); case (_) {} };
             // Another tile can finish preparing the same ID across these reads.
             switch (existing(request)) { case (#err(error)) return #err(error); case (#ok(?value)) return #ok(value); case (_) {} };
             let now = Time.now();
@@ -159,6 +179,7 @@ module {
         };
         public func claim(request : ClaimRequest) : Result<Intent> {
             let intent = switch (current(request.id, request.revision)) { case (#err(error)) return #err(error); case (#ok(value)) value };
+            switch (custody(intent.quote.ledger, intent.quote.minter)) { case (#err(error)) return #err(error); case (_) {} };
             let selected = intent.steps[stepIndex(request.step)];
             if (selected.state != #ready) return #err("This bridge step was already claimed; reconcile its saved operation before continuing");
             if (intent.steps[2].state != #ready and request.step != #deposit) return #err("The deposit was already submitted; approvals cannot be restarted");

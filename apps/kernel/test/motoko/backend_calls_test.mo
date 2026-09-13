@@ -65,6 +65,8 @@ let principalGrant = require(Memory.put(mem, appA, #principal(ledger), owner, 1)
 let sameGrant = require(Memory.put(mem, appA, #principal(ledger), owner, 2));
 assert (principalGrant.id == sameGrant.id);
 assert (Map.size(mem.reservations) == 1);
+assert (Memory.ownsPrincipal(mem, appA, ledger));
+assert (not Memory.ownsPrincipal(mem, appB, ledger));
 assert (Memory.allows(mem, appA, ledger, "icrc1_balance_of"));
 assert (not Memory.allows(mem, appA, other, "icrc1_balance_of"));
 assert (not Memory.allows(mem, appB, ledger, "icrc1_balance_of"));
@@ -73,6 +75,7 @@ let appAReinstall : CapabilityTypes.AppScope = {
     installation_uid = 99;
 };
 assert (not Memory.allows(mem, appAReinstall, ledger, "icrc1_balance_of"));
+assert (not Memory.ownsPrincipal(mem, appAReinstall, ledger));
 // Same authored id is not ownership. A later reinstall cannot acquire or use
 // an old installation's reservation until committed cleanup releases it.
 assert (Memory.put(
@@ -84,6 +87,7 @@ assert (Memory.put(
 ) == null);
 
 let methodGrant = require(Memory.put(mem, appA, #method("status"), owner, 3));
+assert (not Memory.ownsPrincipal(mem, appA, other));
 assert (Memory.allows(mem, appA, other, "status"));
 assert (not Memory.allows(mem, appA, other, "transfer"));
 
@@ -95,6 +99,7 @@ let exactGrant = require(Memory.put(
     4,
 ));
 assert (Memory.allows(mem, appB, other, "read"));
+assert (not Memory.ownsPrincipal(mem, appB, other));
 assert (not Memory.allows(mem, appB, other, "write"));
 
 Memory.removeIncompatible(
@@ -110,6 +115,7 @@ assert (not Memory.remove(mem, exactGrant.id));
 
 Memory.removeAppScope(mem, appA);
 assert (Map.size(mem.reservations) == 0);
+assert (not Memory.ownsPrincipal(mem, appA, ledger));
 
 var taskALive = true;
 var taskBLive = true;
@@ -199,9 +205,8 @@ assert (not Memory.allows(mem, appA, ledger, "future_method"));
 assert (Memory.allows(mem, appA, other, "future_method"));
 assert (Memory.allows(mem, appA, other, "read"));
 
-// Reservations retain exclusive ownership within each scope tier. Distinct
-// tiers are independently effective, so another app's broader grant cannot
-// silently disable an already-approved narrower grant.
+// Method and exact grants may share unreserved principals. A principal
+// reservation is exclusive and takes precedence over every narrower grant.
 let ownership : Types.Memory = {
     var next_id = 1;
     reservations = Map.empty<Nat, Types.Reservation>();
@@ -239,7 +244,7 @@ let filesCanister = require(Memory.put(
     12,
 ));
 assert (Memory.allows(ownership, files, ledger, "mail_receive_v1"));
-assert (Memory.allows(ownership, mail, ledger, "mail_receive_v1"));
+assert (not Memory.allows(ownership, mail, ledger, "mail_receive_v1"));
 assert (Memory.allows(ownership, mail, other, "mail_receive_v1"));
 
 // Same-app reserve is idempotent; another app cannot become a second owner at
@@ -1431,3 +1436,173 @@ assert (recoveryBroker.canFinalizeInstallReservations(
     owner,
     ledger,
 ));
+
+// A newly reserved principal cuts off an existing method grant on every
+// broker route. Replies from requests already dispatched are withheld too;
+// their remote effects cannot be undone and are reported as unknown.
+let exclusiveMem : Types.Memory = {
+    var next_id = 1;
+    reservations = Map.empty<Nat, Types.Reservation>();
+};
+var exclusiveDispatches = 0;
+var reserveDuringReply = true;
+let exclusiveTransport : Types.Transport = {
+    cycle_balance = func() { 10_000_000_000_000 };
+    call_cost = func(_method, _bytes) { 0 };
+    call = func(request : Types.CallRequest) : async Types.TransportResult {
+        exclusiveDispatches += 1;
+        if (reserveDuringReply) {
+            reserveDuringReply := false;
+            ignore require(Memory.put(exclusiveMem, appA, #principal(other), owner, 40));
+        };
+        #ok({ reply = request.args; charged_cycles = 0 });
+    };
+};
+let exclusiveBroker = Service.Service(
+    exclusiveMem,
+    func(scope) { scope == appA or scope == appB },
+    registry,
+    exclusiveTransport,
+    outgoingCycleAccounting,
+);
+exclusiveBroker.configure([
+    {
+        app_scope = appA;
+        backend_calls = ?{
+            reservation_scopes = ["principal"];
+            max_concurrency = 2;
+            max_cycles_per_call = 0;
+            max_cycles_per_day = 0;
+            install_reservations = [];
+        };
+    },
+    {
+        app_scope = appB;
+        backend_calls = ?{
+            reservation_scopes = ["method"];
+            max_concurrency = 2;
+            max_cycles_per_call = 0;
+            max_cycles_per_day = 0;
+            install_reservations = [#method("icrc1_fee"), #method("icrc1_transfer")];
+        };
+    },
+], ledger);
+let externalCapability = exclusiveBroker.capability(appB, canisterActor);
+let feeRequest : Types.CallRequest = {
+    canister = other; method = "icrc1_fee"; args = "private reply"; cycles = 0;
+};
+let transferRequest = { feeRequest with method = "icrc1_transfer" };
+assert (externalCapability.can_call(other, "icrc1_fee"));
+switch (await* externalCapability.call(feeRequest)) {
+    case (#err(error)) assert (error.code == "revoked_after_dispatch");
+    case (#ok(_)) Runtime.trap("Reserved principal reply reached another app");
+};
+assert (exclusiveDispatches == 1);
+assert (not externalCapability.can_call(other, "icrc1_fee"));
+assert (not externalCapability.can_call(other, "icrc1_transfer"));
+for (result in (await* externalCapability.call_batch([feeRequest, transferRequest])).vals()) {
+    switch (result) {
+        case (#err(error)) assert (error.code == "not_reserved");
+        case (#ok(_)) Runtime.trap("Batch bypassed exclusive principal");
+    };
+};
+switch (exclusiveBroker.ownerCallQuote(appB, ledger, transferRequest, false)) {
+    case (#err(error)) assert (error.code == "not_reserved");
+    case (#ok(_)) Runtime.trap("Owner cycle quote bypassed exclusive principal");
+};
+let exclusiveScheduled = exclusiveBroker.scheduledCapability(
+    appB,
+    "exclusive_test",
+    2,
+    { active = func() { true } },
+    canisterActor,
+);
+switch (await* exclusiveScheduled.call(transferRequest)) {
+    case (#err(error)) assert (error.code == "not_reserved");
+    case (#ok(_)) Runtime.trap("Scheduled call bypassed exclusive principal");
+};
+assert (exclusiveDispatches == 1);
+let exclusiveOwner = exclusiveBroker.capability(appA, canisterActor);
+assert (exclusiveOwner.can_call(other, "icrc1_transfer"));
+switch (await* exclusiveOwner.call(transferRequest)) {
+    case (#ok(reply)) assert (reply == transferRequest.args);
+    case (#err(_)) Runtime.trap("Principal owner lost its access");
+};
+assert (exclusiveDispatches == 2);
+
+// Custody apps can require a whole-principal reservation explicitly. This is
+// independent of individual callable methods and consumes no call budget.
+let custodyMem : Types.Memory = {
+    var next_id = 1;
+    reservations = Map.empty<Nat, Types.Reservation>();
+};
+var custodyLive = true;
+var custodyEnabled = true;
+let custodyRegistry : CapabilityTypes.RuntimeRegistry = {
+    registry with
+    allowed = func(scope, kind, resource) {
+        custodyEnabled and registry.allowed(scope, kind, resource);
+    };
+};
+let custodyBroker = Service.Service(
+    custodyMem,
+    func(scope) { custodyLive and scope == appA },
+    custodyRegistry,
+    exclusiveTransport,
+    outgoingCycleAccounting,
+);
+custodyBroker.configure([{
+    app_scope = appA;
+    backend_calls = ?{
+        reservation_scopes = ["principal", "exact", "method"];
+        max_concurrency = 2;
+        max_cycles_per_call = 0;
+        max_cycles_per_day = 0;
+        install_reservations = [];
+    };
+}], ledger);
+let custody = custodyBroker.capability(appA, canisterActor);
+ignore require(Memory.put(custodyMem, appA, #method("icrc1_fee"), owner, 50));
+ignore require(Memory.put(custodyMem, appA, #exact({ principal = other; method = "icrc1_transfer" }), owner, 51));
+assert (custody.can_call(other, "icrc1_fee"));
+assert (custody.can_call(other, "icrc1_transfer"));
+assert (not custody.owns_principal(other));
+let custodyPrincipal = require(Memory.put(custodyMem, appA, #principal(other), owner, 52));
+assert (custody.owns_principal(other));
+assert (not custody.owns_principal(ledger));
+assert (not custody.owns_principal(owner));
+assert (not custody.owns_principal(Principal.anonymous()));
+custodyEnabled := false;
+assert (not custody.owns_principal(other));
+custodyEnabled := true;
+assert (custody.owns_principal(other));
+custodyLive := false;
+assert (not custody.owns_principal(other));
+custodyLive := true;
+var custodyTaskLive = true;
+let custodyScheduled = custodyBroker.scheduledCapability(
+    appA, "custody_test", 1,
+    { active = func() { custodyTaskLive } }, canisterActor,
+);
+assert (custodyScheduled.owns_principal(other));
+assert (custodyScheduled.owns_principal(other));
+assert (custodyScheduled.can_call(other, "icrc1_transfer"));
+custodyTaskLive := false;
+assert (not custodyScheduled.owns_principal(other));
+let custodyDuplicateId = custodyMem.next_id;
+custodyMem.next_id += 1;
+Map.add(custodyMem.reservations, Nat.compare, custodyDuplicateId, {
+    id = custodyDuplicateId; app_scope = appA; scope = #principal(other);
+    created_at = 53 : Nat64; created_by = owner;
+});
+assert (not custody.owns_principal(other));
+assert (Memory.remove(custodyMem, custodyDuplicateId));
+assert (custody.owns_principal(other));
+assert (Memory.remove(custodyMem, custodyPrincipal.id));
+assert (not custody.owns_principal(other));
+assert (custody.can_call(other, "icrc1_transfer"));
+Map.add(custodyMem.reservations, Nat.compare, custodyPrincipal.id, {
+    id = custodyPrincipal.id; app_scope = appAReinstall; scope = #principal(other);
+    created_at = 54 : Nat64; created_by = owner;
+});
+assert (not custody.owns_principal(other));

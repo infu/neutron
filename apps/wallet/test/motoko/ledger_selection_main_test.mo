@@ -25,6 +25,16 @@ persistent actor Self {
     transient let btcMinter = Principal.fromText("mqygn-kiaaa-aaaar-qaadq-cai");
     transient let memory = WalletMemory.init();
     transient var dispatched : [Capabilities.CallRequest] = [];
+    transient var excludedCustody : ?Principal = null;
+    transient var revokeLedgerOnAddress = false;
+
+    func minterCalls() : Nat {
+        var count = 0;
+        for (request in dispatched.vals()) {
+            if (request.canister == btcMinter) count += 1;
+        };
+        count;
+    };
 
     func balance(principal : Principal) : Nat {
         if (principal == first) 9_007_199_254_740_993_123_456_789_012_345
@@ -65,7 +75,16 @@ persistent actor Self {
             };
             case ("get_btc_address") {
                 assert request.canister == btcMinter;
+                if (revokeLedgerOnAddress) {
+                    revokeLedgerOnAddress := false;
+                    excludedCustody := ?btc;
+                };
                 #ok(to_candid ("bc1qtestwalletdepositaddress" : Text));
+            };
+            case ("update_balance") {
+                assert request.canister == btcMinter;
+                let result : { #Err : { #AlreadyProcessing } } = #Err(#AlreadyProcessing);
+                #ok(to_candid(result));
             };
             case ("get_account_transactions") {
                 // The native token's index can be temporarily behind without
@@ -78,6 +97,7 @@ persistent actor Self {
 
     transient let calls : Capabilities.BackendCalls = {
         canister_principal = Principal.fromActor(Self);
+        owns_principal = func(target : Principal) : Bool { target != unreserved and excludedCustody != ?target };
         can_call = func(target : Principal, _method : Text) : Bool {
             target != unreserved;
         };
@@ -180,5 +200,77 @@ persistent actor Self {
         };
         assert memory.next_id == nextId;
         assert dispatched.size() == count;
+
+        // The scheduled task receives its own capability object. The normal
+        // app environment remains authorized, so using it accidentally would
+        // dispatch network calls despite this task's missing principal grant.
+        let unownedTaskCalls : Capabilities.BackendCalls = {
+            calls with
+            owns_principal = func(_ : Principal) : Bool { false };
+            can_call = func(_ : Principal, _ : Text) : Bool { true };
+        };
+        for (ledger in Map.values(memory.ledgers)) {
+            if (ledger.enabled) ledger.history.last_attempt_at := null;
+        };
+        let beforeTask = dispatched.size();
+        await* restored.wallet_history_tick((), { backend_calls = unownedTaskCalls });
+        assert dispatched.size() == beforeTask;
+        for (ledger in Map.values(memory.ledgers)) {
+            if (ledger.enabled) ledger.history.last_attempt_at := null;
+        };
+        await* restored.wallet_history_tick((), { backend_calls = calls });
+        assert dispatched.size() > beforeTask;
+
+        // Deposit discovery and mint refresh each require ownership of the
+        // destination ledger and its minter. Exact calls remain authorized.
+        let ?btcLedger = Map.get(memory.ledgers, Principal.compare, btc)
+            else Runtime.trap("Selected Bitcoin ledger disappeared");
+        let savedProgress : WalletMemory.NativeDepositProgress = {
+            checked_at = 123;
+            current_confirmations = ?1; required_confirmations = ?6;
+            pending = [{ txid = "retained-deposit"; vout = 0; value = 12_345; confirmations = 1; required_confirmations = 6 }];
+            processing = []; recent_minted = []; issues = [];
+        };
+        Map.add(memory.ledgers, Principal.compare, btc, {
+            btcLedger with native_address = null; native_address_updated_at = ?111;
+            native_refresh_updated_at = ?123; native_deposit_progress = ?savedProgress;
+        });
+        let beforeDeniedDeposits = minterCalls();
+        for (missing in [btc, btcMinter].vals()) {
+            excludedCustody := ?missing;
+            assert calls.can_call(btcMinter, "get_btc_address") and calls.can_call(btcMinter, "update_balance");
+            assert calls.owns_principal(if (missing == btc) btcMinter else btc);
+            let denied = selected((await* restored.wallet_refresh_deposits(())).snapshot, btc);
+            assert minterCalls() == beforeDeniedDeposits;
+            assert denied.native_address == null and denied.native_address_updated_at == ?111;
+            assert denied.native_refresh_updated_at == ?123 and denied.native_deposit_progress == ?savedProgress;
+            assert denied.id == btcLedger.id and denied.balance == btcLedger.balance;
+            assert denied.native_address_error != null and denied.native_refresh_error != null;
+        };
+        excludedCustody := null;
+        let recovered = selected((await* restored.wallet_refresh_deposits(())).snapshot, btc);
+        assert minterCalls() == beforeDeniedDeposits + 2;
+        assert recovered.native_address == ?"bc1qtestwalletdepositaddress";
+        assert recovered.native_address_error == null;
+        assert recovered.native_refresh_error == ?"Minter is already checking this address";
+        assert recovered.native_refresh_updated_at == ?123 and recovered.native_deposit_progress == ?savedProgress;
+
+        // Losing the destination while the minter replies cannot publish that
+        // newly discovered address or proceed to the update_balance mint call.
+        let ?beforeRevocation = Map.get(memory.ledgers, Principal.compare, btc)
+            else Runtime.trap("Bitcoin ledger disappeared after refresh");
+        Map.add(memory.ledgers, Principal.compare, btc, { beforeRevocation with native_address = null });
+        let beforeRevocationCalls = minterCalls();
+        revokeLedgerOnAddress := true;
+        let revoked = selected((await* restored.wallet_refresh_deposits(())).snapshot, btc);
+        assert excludedCustody == ?btc;
+        assert calls.owns_principal(btcMinter);
+        assert minterCalls() == beforeRevocationCalls + 1;
+        assert revoked.native_address == null;
+        assert revoked.native_address_updated_at == beforeRevocation.native_address_updated_at;
+        assert revoked.native_refresh_updated_at == ?123 and revoked.native_deposit_progress == ?savedProgress;
+        let ?addressError = revoked.native_address_error else Runtime.trap("Revoked deposit address lacked an error");
+        assert Text.contains(addressError, #text("changed"));
+        assert revoked.native_refresh_error != null;
     };
 };

@@ -46,6 +46,7 @@ persistent actor Test {
         var dispatchedAt : [Int] = [];
         var nextBlock = 81;
         var ledgerReads = 0;
+        var exclusivePrincipal = true;
 
         func call(request : Capabilities.CallRequest) : async* Capabilities.CallResult {
             assert (request.canister == ledger and request.cycles == 0);
@@ -92,6 +93,7 @@ persistent actor Test {
         };
         let calls : Capabilities.BackendCalls = {
             canister_principal = wallet;
+            owns_principal = func(target : Principal) : Bool { exclusivePrincipal and target == ledger };
             can_call = func(target : Principal, method : Text) : Bool {
                 target == ledger and (method == "icrc1_metadata" or method == "icrc1_fee" or method == "icrc1_transfer");
             };
@@ -132,6 +134,13 @@ persistent actor Test {
         func receipt(outcome : Main.WalletFundingExecutionResultV1) : Main.WalletFundingTransferredV1 {
             switch (outcome) { case (#transferred(value)) value; case (_) Runtime.trap(debug_show(outcome)) };
         };
+        func commandState() : [(CommandMemory.CommandKey, ?Blob, Int, CommandMemory.Status)] {
+            var rows : [(CommandMemory.CommandKey, ?Blob, Int, CommandMemory.Status)] = [];
+            for ((key, command) in Map.entries(env.stable_memory.wallet_commands.commands)) {
+                rows := Array.concat(rows, [(key, command.call_args, command.updated_at, command.status)]);
+            };
+            rows;
+        };
         var pair = 0;
         for (memo in [null, ?("\de\ad\be\ef" : Blob)].vals()) {
             let firstRequest = request(if (pair == 0) 11 else 13, memo);
@@ -155,6 +164,18 @@ persistent actor Test {
             switch (previewRead({ request = firstRequest; facts = ?{ facts with owner = recipient }; lookup_only = false })) {
                 case (#err(_)) {}; case (_) Runtime.trap("Wrong preview owner accepted");
             };
+            // Historical exact-method grants remain usable in this mock. The
+            // resident public endpoint must still require the whole ledger.
+            exclusivePrincipal := false;
+            assert calls.can_call(ledger, "icrc1_transfer");
+            let beforeMissingPrincipal = commandState();
+            switch (await* app.wallet_funding_prepare_v1(firstRequest)) {
+                case (#err(_)) {};
+                case (_) Runtime.trap("Funding prepared without exclusive ledger access");
+            };
+            assert ledgerReads == readCount;
+            assert commandState() == beforeMissingPrincipal;
+            exclusivePrincipal := true;
             let first = prepared(await* app.wallet_funding_prepare_v1(firstRequest));
             assert preview == first;
             let existing = previewRead({ request = firstRequest; facts = null; lookup_only = false });
@@ -164,6 +185,16 @@ persistent actor Test {
             assert first.command_id != second.command_id;
             assert first.review.memo == memo and second.review.memo == memo;
             let start = transferBytes.size();
+            exclusivePrincipal := false;
+            let readsBeforeDeniedExecute = ledgerReads;
+            let beforeDeniedExecute = commandState();
+            switch (await* Main.Init(env).wallet_funding_execute_v1({ command_id = first.command_id })) {
+                case (#rejected(_)) {};
+                case (_) Runtime.trap("Funding executed without exclusive ledger access");
+            };
+            assert ledgerReads == readsBeforeDeniedExecute and transferBytes.size() == start;
+            assert commandState() == beforeDeniedExecute;
+            exclusivePrincipal := true;
             pending(await* app.wallet_funding_execute_v1({ command_id = first.command_id }));
             let readsAfterDispatch = ledgerReads;
             switch (previewRead({ request = firstRequest; facts = null; lookup_only = true })) {
@@ -186,6 +217,18 @@ persistent actor Test {
             assert bt > at;
             assert a.to == { owner = recipient; subaccount = null };
             assert a.amount == 1_000 and a.fee == ?10 and a.from_subaccount == null;
+            // Unknown effects retain their exact bytes while custody is
+            // unavailable; restoring the principal permits reconciliation.
+            exclusivePrincipal := false;
+            let readsBeforeDeniedRetry = ledgerReads;
+            let beforeDeniedRetry = commandState();
+            switch (await* Main.Init(env).wallet_funding_execute_v1({ command_id = first.command_id })) {
+                case (#pending(_)) {};
+                case (_) Runtime.trap("Pending funding replayed without exclusive ledger access");
+            };
+            assert ledgerReads == readsBeforeDeniedRetry and transferBytes.size() == start + 2;
+            assert commandState() == beforeDeniedRetry;
+            exclusivePrincipal := true;
             // Each unknown request reconciles to its own original ledger block.
             let afterReload = Main.Init(env);
             let firstReceipt = receipt(await* afterReload.wallet_funding_execute_v1({ command_id = first.command_id }));

@@ -1,5 +1,6 @@
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
+import Map "mo:core/Map";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
@@ -33,20 +34,28 @@ let info : Minter.Info = {
 let memory = Memory.init();
 let replacements = ReplacementMemory.init();
 var queries = 0;
+var exclusiveLedger = true;
+var revokeOnInfo = false;
+var revokeOnEvents = false;
 var eventFeed : [Minter.Event] = [];
 var ledgerFeed : ?Ledger.Reply = null;
 let calls : Capabilities.BackendCalls = {
     canister_principal = owner;
+    owns_principal = func(target : Principal) : Bool { target != ledger or exclusiveLedger };
     can_call = func(_ : Principal, _ : Text) { true };
     call = func(request : Capabilities.CallRequest) : async* Capabilities.CallResult {
         queries += 1;
         switch (request.method) {
-            case ("get_minter_info") #ok(to_candid (info));
+            case ("get_minter_info") {
+                if (revokeOnInfo) { revokeOnInfo := false; exclusiveLedger := false };
+                #ok(to_candid (info));
+            };
             case ("get_events") {
                 let args : { start : Nat64; length : Nat64 } = switch (from_candid request.args : ?{ start : Nat64; length : Nat64 }) { case (?value) value; case null Runtime.trap("Invalid events arguments") };
                 let offset = if (args.start >= 50) Nat64.toNat(args.start - 50) else 0;
                 let selected = Array.tabulate<Minter.Event>(if (args.length == 0 or offset >= eventFeed.size()) 0 else eventFeed.size() - offset, func(index) { eventFeed[offset + index] });
                 let events : Minter.Events = { events = selected; total_event_count = Nat64.fromNat(50 + eventFeed.size()) };
+                if (revokeOnEvents) { revokeOnEvents := false; exclusiveLedger := false };
                 #ok(to_candid (events));
             };
             case ("icrc3_get_blocks") switch (ledgerFeed) { case null Runtime.trap("No ledger fixture"); case (?reply) #ok(to_candid (reply)) };
@@ -57,6 +66,13 @@ let calls : Capabilities.BackendCalls = {
 };
 let service = Bridge.ServiceWithReplacements(memory, replacements, calls);
 let id = Blob.fromArray(Array.tabulate<Nat8>(16, func(_) { 7 }));
+exclusiveLedger := false;
+assert calls.can_call(ledger, "icrc1_transfer");
+assert calls.owns_principal(Principal.fromText("sv3dd-oaaaa-aaaar-qacoa-cai"));
+assert err(await* service.quote(ledger));
+assert err(await* service.prepare({ id; ledger; source = #external; account = address; amount = 42; subaccount = null }));
+assert queries == 0 and Map.size(memory.intents) == 0;
+exclusiveLedger := true;
 let prepared = ok(await* service.prepare({ id; ledger; source = #external; account = address; amount = 42; subaccount = null }));
 assert queries == 2;
 assert prepared.event_cursor == 50;
@@ -67,6 +83,15 @@ assert prepared.quote.principal_word == "0x0000000000000000000000000000000000000
 let replay = ok(await* service.prepare({ id; ledger; source = #external; account = address; amount = 42; subaccount = null }));
 assert replay == prepared;
 assert queries == 2;
+// A cached intent cannot authorize another deposit step after the destination
+// ledger loses exclusivity, even while all exact method grants remain usable.
+exclusiveLedger := false;
+let savedPreparedBytes = to_candid(prepared);
+assert err(await* service.prepare({ id; ledger; source = #external; account = address; amount = 42; subaccount = null }));
+assert err(service.claim({ id; revision = prepared.revision; step = #deposit; operation_id = null }));
+assert to_candid(ok(service.status(id))) == savedPreparedBytes;
+assert queries == 2 and Map.size(memory.intents) == 1;
+exclusiveLedger := true;
 assert err(await* service.prepare({ id; ledger; source = #external; account = address; amount = 43; subaccount = null }));
 // Both intents predate the same mint events. Recovering a lost browser hash
 // must attach that execution to exactly one intent, rather than minting twice.
@@ -210,6 +235,24 @@ assert err(service.recordStep({ id = approvalId; revision = approvalClaim.revisi
 assert err(service.recordStep({ id = evmId; revision = evmClaim.revision; step = #approval; state = #submitted; transaction_hash = ?otherHash; error = null }));
 assert ok(service.status(approvalId)).steps[1].state == #unknown;
 
+// A minter reply cannot create a quote or durable deposit intent after the
+// destination ledger's principal authority changes across that await.
+let beforeRevocationQueries = queries;
+let beforeRevocationIntents = Map.size(memory.intents);
+revokeOnInfo := true;
+assert err(await* service.quote(ledger));
+assert queries == beforeRevocationQueries + 1;
+assert Map.size(memory.intents) == beforeRevocationIntents;
+exclusiveLedger := true;
+let revokedId = Blob.fromArray(Array.repeat<Nat8>(12, 16));
+revokeOnEvents := true;
+assert err(await* service.prepare({ id = revokedId; ledger; source = #external; account = address; amount = 42; subaccount = null }));
+assert queries == beforeRevocationQueries + 3;
+assert Map.size(memory.intents) == beforeRevocationIntents;
+assert err(service.status(revokedId));
+exclusiveLedger := true;
+ignore ok(await* service.prepare({ id = revokedId; ledger; source = #external; account = address; amount = 42; subaccount = null }));
+assert Map.size(memory.intents) == beforeRevocationIntents + 1;
 
 };
 };

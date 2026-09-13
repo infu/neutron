@@ -179,6 +179,19 @@ module {
             let selfPrincipal = Principal.fromActor(self);
             {
                 canister_principal = selfPrincipal;
+                owns_principal = func(canister : Principal) : Bool {
+                    if (
+                        not scopeActive(appScope) or
+                        not supportsScope(appScope, "principal") or
+                        not registry.allowed(appScope, #backend_calls, "default") or
+                        not validTarget(canister, selfPrincipal)
+                    ) return false;
+                    switch (budget) {
+                        case (?scheduled) if (not scheduled.active()) return false;
+                        case (_) {};
+                    };
+                    Memory.ownsPrincipal(mem, appScope, canister);
+                };
                 can_call = func(canister : Principal, method : Text) : Bool {
                     policyError(appScope, selfPrincipal, {
                         canister;
@@ -783,9 +796,11 @@ module {
                 };
                 chargedCycles += charged;
                 decrement(appScope, 1);
+                let dispatched = requests[futureSlots[futureIndex]];
                 slots[futureSlots[futureIndex]] := ?enforcePostDispatch(
                     budget,
-                    scopeActive(appScope) and runtimeLeaseActive(authorityLease),
+                    scopeActive(appScope) and runtimeLeaseActive(authorityLease) and
+                        Memory.allows(mem, appScope, dispatched.canister, dispatched.method),
                     result,
                 );
                 futureIndex += 1;
