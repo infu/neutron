@@ -107,7 +107,7 @@ test("separate EVM Wallet declares custody and browser observation methods witho
   expect(validate_neutron_conf(m).errors).toEqual([]);
   expect(m).toMatchObject({
     id: "evm_wallet",
-    version: 126,
+    version: 127,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: { path: "service.html" },
     capabilities: {
@@ -550,13 +550,14 @@ for (const [previousVersion, previousDigest] of [
   [123, "fca86793ba415220f6920cb55072b6a3b8afeeddb787a10a2aea469f1e671b22"],
   [124, "34f6b07888c87fd0ec90b2b74daf51b2fd9264520e7c526e83b3cb7db88cba96"],
   [125, "ed3a53ddf8dd34a670872d3a88d3232ad81ef3855c4f7af1b37ac9a877b367c7"],
-] as const) test(`release 126 retains every production root, schema closure, lineage and existing method contract from ${previousVersion}`, async () => {
+  [126, "8b00579c33b574d53579f1548ab5cd22e891db263e4a1eb399a349e1db10a4ce"],
+] as const) test(`release 127 retains every production root, schema closure, lineage and existing method contract from ${previousVersion}`, async () => {
   const previousBytes = await readFile(new URL(`../evm_wallet.v0.1.${previousVersion - 100}.neutron`, import.meta.url));
   // The published predecessor is immutable; this code-only release adds no Wallet migration.
   expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(previousDigest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.26.neutron", import.meta.url)));
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 126 });
+  const files = unpackNeutronPackage(await readFile(new URL("../evm_wallet.v0.1.27.neutron", import.meta.url)));
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "evm_wallet", version: 127 });
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!));
   const next = JSON.parse(decode(files["neutron.json"]!));
@@ -585,10 +586,29 @@ for (const [previousVersion, previousDigest] of [
   expect(schema).toEqual(generateAppMethodSchemaArtifact(await manifest(), await source()));
   const { evm_wallet_preparation_error_browser_v1: preparationError, ...retainedMethods } = schema.methods;
   expect(preparationError).toBeDefined();
-  expect({ ...schema, methods: previousVersion >= 123 ? schema.methods : retainedMethods }).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 126 } });
+  expect({ ...schema, methods: previousVersion >= 123 ? schema.methods : retainedMethods }).toEqual({ ...priorSchema, app: { ...priorSchema.app, version: 127 } });
   if (previousVersion >= 123) {
-    expect(next.entry).toBe(old.entry);
-    for (const path of Object.keys(previous).filter(path => path.startsWith("mo/"))) expect(files[path]).toEqual(previous[path]);
+    // The workspace capability type gained owns_principal before this release.
+    // It changes two content-addressed modules, while Wallet behavior and all
+    // persistent schema closures stay byte-for-byte unchanged.
+    const oldCaps = "2417203b21adfa4b8db0619ecb775e6bde85ba5aaf7a3722ade042375a908e55";
+    const nextCaps = "ace8acb6fa301c6d3eaba4e0c3b7729d9e68003f1dcdfe24992df522c82eb843";
+    expect(decode(files[`mo/${nextCaps}.mo`]!)).toBe(
+      decode(previous[`mo/${oldCaps}.mo`]!).replace(
+        "        canister_principal : Principal;\n",
+        "        canister_principal : Principal;\n        owns_principal : Principal -> Bool;\n",
+      ),
+    );
+    expect(decode(files[`mo/${next.entry}.mo`]!)).toBe(
+      decode(previous[`mo/${old.entry}.mo`]!).replace(oldCaps, nextCaps),
+    );
+    const modules = Object.keys(previous).filter(path => path.startsWith("mo/"));
+    expect(Object.keys(files).filter(path => path.startsWith("mo/")).sort()).toEqual(
+      modules.map(path => path.replace(oldCaps, nextCaps).replace(old.entry, next.entry)).sort(),
+    );
+    for (const path of modules.filter(path => path !== `mo/${old.entry}.mo` && path !== `mo/${oldCaps}.mo`)) {
+      expect(files[path]).toEqual(previous[path]);
+    }
   }
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 346, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, evm_wallet: next });

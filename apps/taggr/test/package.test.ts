@@ -252,6 +252,7 @@ describe("archive", () => {
         path === "web/service.html" ||
         path === "web/service.js" ||
         path === "web/static/icon.svg" ||
+    path === "web/static/icon.webp" ||
         path === "neutron.lock.json" ||
         path.startsWith("legal/") ||
         /^mo\/[a-f0-9]{64}\.mo$/.test(path);

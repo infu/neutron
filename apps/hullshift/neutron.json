@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Hullshift",
   "id": "hullshift",
-  "version": 208,
+  "version": 209,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Fresh cargo puzzles with six interacting systems",
   "src": "main.mo",
@@ -21,7 +21,7 @@
       "id": "game",
       "title": "Hullshift",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Fill the cargo bays. Connect power, cross bridges, and plan around changing floors. Fresh puzzles, free undo, and useful hints."
     }
   ],

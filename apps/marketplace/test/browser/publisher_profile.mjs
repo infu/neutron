@@ -75,13 +75,14 @@ try {
   await reset();
   assert.equal(await page.locator('.mp-app-card button button').count(),0);
   const atlas=page.locator('article.mp-app-card').filter({has:page.getByRole('button',{name:'Atlas',exact:true})});
-  const publisher=atlas.getByRole('button',{name:'View publisher aae',exact:true});
-  const positions=await atlas.evaluate(node=>{const title=node.querySelector('.mp-card-open').getBoundingClientRect(),publisher=node.querySelector('.mp-publisher-link').getBoundingClientRect();return {titleBottom:title.bottom,publisherTop:publisher.top}});
-  assert.ok(positions.publisherTop>=positions.titleBottom-1,'publisher ID appears below the app name');
+  assert.equal(await atlas.locator('.mp-publisher-link').count(),0,'storefront cards omit the publisher label');
+  await atlas.getByRole('button',{name:'Atlas',exact:true}).focus();await page.keyboard.press('Enter');
+  await page.getByRole('dialog',{name:'Atlas',exact:true}).getByText('A useful app.',{exact:true}).waitFor();
+  const publisher=page.getByRole('dialog',{name:'Atlas',exact:true}).locator('.mp-detail-hero').getByRole('button',{name:'View publisher aae',exact:true});
   await publisher.focus();await page.keyboard.press('Enter');
   const profileDialog=page.getByRole('dialog',{name:'Publisher',exact:true});
   await profileDialog.getByRole('heading',{name:'AAE',exact:true}).waitFor();
-  assert.deepEqual((await state()).calls.filter(call=>call[0]==='detail'),[],'publisher click must not open app details');
+  assert.deepEqual((await state()).calls.filter(call=>call[0]==='detail'),[['detail','atlas']],'publisher navigation must not fetch another app detail');
   assert.equal(await profileDialog.locator('.mp-profile-id').innerText(),'aae');
   assert.equal(await profileDialog.locator('.mp-description').innerText(),'Independent apps for your Neutron.\n\nTools for people and their agents.');
   assert.match(await profileDialog.locator('.mp-profile-principal').innerText(),/3rurp-vyaaa-aaaay-aacua-cai/);
@@ -96,12 +97,13 @@ try {
   assert.equal(await profileDialog.getByRole('button',{name:'Show more apps',exact:true}).count(),0);
   assert.deepEqual((await state()).calls.filter(call=>call[0]==='publisherCatalog'),[['publisherCatalog','aae',null],['publisherCatalog','aae','public-page-2']]);
   await profileDialog.getByRole('button',{name:'Reader',exact:true}).click();
-  await page.getByRole('dialog',{name:'Reader',exact:true}).waitFor();
+  await page.getByRole('dialog',{name:'Reader',exact:true}).getByText('A useful app.',{exact:true}).waitFor();
   assert.equal(await page.getByRole('dialog',{name:'Publisher',exact:true}).count(),0);
-  assert.deepEqual((await state()).calls.filter(call=>call[0]==='detail'),[['detail','reader']]);
-  checks.push('Independent app/publisher controls support keyboard navigation; publisher profiles show identity, principal, aggregate rating, distinct acquired users and paginated public apps, without opening app details on a publisher click. Fits 320/380/960px.');
+  assert.deepEqual((await state()).calls.filter(call=>call[0]==='detail'),[['detail','atlas'],['detail','reader']]);
+  checks.push('App details lead to publisher profiles through keyboard-accessible controls; cards omit publisher labels. Profiles show identity, principal, aggregate rating, distinct acquired users and paginated public apps. Fits 320/380/960px.');
 
   await reset('stats=pending');
+  await page.getByRole('button',{name:'Atlas',exact:true}).click();
   await page.getByRole('button',{name:'View publisher aae',exact:true}).first().click();
   await profileDialog.getByText('Ratings updating',{exact:true}).waitFor();
   assert.equal(await profileDialog.locator('.mp-profile-stats strong').allTextContents().then(values=>values.every(value=>value==='—')),true);

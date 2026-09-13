@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Chess",
   "id": "chess",
-  "version": 305,
+  "version": 306,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Play complete local, browser-computer, and remote chess games",
   "src": "main.mo",
@@ -63,7 +63,7 @@
       "id": "board",
       "title": "Chess",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Play one complete chess game in this tile"
     }
   ],

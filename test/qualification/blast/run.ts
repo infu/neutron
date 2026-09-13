@@ -178,6 +178,7 @@ export async function runInstalledBlastQualification(): Promise<QualificationRep
   );
   let runtime: InstalledRuntime | undefined;
   let browser: Browser | undefined;
+  let qualificationError: unknown;
   try {
     runtime = await installFreshRuntime(temporaryRoot);
     console.log("[qualification stage] installed runtime", runtime.versions);
@@ -275,6 +276,9 @@ export async function runInstalledBlastQualification(): Promise<QualificationRep
     } finally {
       await first.close();
     }
+  } catch (error) {
+    qualificationError = error;
+    throw error;
   } finally {
     const failures: unknown[] = [];
     if (browser !== undefined) {
@@ -298,7 +302,7 @@ export async function runInstalledBlastQualification(): Promise<QualificationRep
     }
     if (failures.length > 0) {
       throw new AggregateError(
-        failures,
+        qualificationError === undefined ? failures : [qualificationError, ...failures],
         "Blast qualification cleanup did not complete",
       );
     }
@@ -2849,9 +2853,7 @@ if (import.meta.main) {
   main(process.argv.slice(2)).then(
     () => process.exit(0),
     (error) => {
-      console.error(
-        error instanceof Error ? error.stack ?? error.message : String(error),
-      );
+      console.error(error);
       process.exit(1);
     },
   );

@@ -41,11 +41,15 @@ Uninstall still removes app-local journals and browser signing data.
 
 ## Using the app
 
-- **Explore:** browse Top paid followed by Top free over rolling 7 days,
-  30 days or all time. Kernel and Marketplace packages remain available to the
+- **Explore:** browse two admin-selected featured apps, then Top paid and Top
+  free over rolling 7 days, 30 days or all time. Each chart shows its first four
+  apps as image cards and the rest as compact cards, with independent paging.
+  Editable categories sit above the cards, moving to a left sidebar in wide
+  tiles. Search includes app names, short editorial copy, tags and publishers.
+  Featured apps are excluded from the charts below them. Kernel and Marketplace packages remain available to the
   installer and updater but are omitted from these storefront lists. Inspect
   descriptions, screenshots and the release's audit under **Audited by AI**,
-  including its actual auditor and analysis. Cards and app details show lifetime
+  including its actual auditor and analysis. App details show lifetime
   paid-purchase or free-acquisition counts; reinstalls and retries do not add to
   them. The publisher ID beneath an app's name opens its profile, description,
   principal, portfolio rating, total users and audited apps. Listing icons and
@@ -120,7 +124,7 @@ before calling them; atomic amounts are decimal strings.
 
 | Tools | Purpose |
 |---|---|
-| `marketplace_catalog_v1`, `marketplace_app_v1` | Discover and inspect apps |
+| `marketplace_storefront_v1`, `marketplace_catalog_v1`, `marketplace_app_v1` | Discover featured apps and categories, browse charts, and inspect apps |
 | `marketplace_publisher_v1` | Read a publisher profile, aggregate statistics and a page of audited apps |
 | `marketplace_library_v1`, `marketplace_earnings_v1` | Read owned apps and earnings |
 | `marketplace_discount_v1` | Read and validate the remembered discount and current terms |
@@ -141,6 +145,14 @@ Neutron count. `totalUsers` is an exact decimal string. If `statsComplete` is fa
 historical counters are still rebuilding; the partial values do not establish a
 zero audience or a final rating. Profile and app-page queries go directly to the
 protocol; checking installation status uses the existing Kernel app list.
+
+`marketplace_storefront_v1` returns editable categories and eligible featured
+apps, with optional `tag` and `search`. Pass the displayed featured IDs as
+`exclude` to `marketplace_catalog_v1` to avoid repeating them. Catalog also
+accepts `tag`; both reads follow the current Kernel release preference. The
+listing's existing `title` remains the app name; `headline` and `subtitle` are
+separate storefront copy. Admin editing and cover publication use the protocol's
+[storefront operator workflow](../../support/marketplace/spec/storefront.md).
 
 The Kernel owns the beta preference. Marketplace discovers and reads its
 `updates.preferences` tool and treats `kernel.release-preferences` events as

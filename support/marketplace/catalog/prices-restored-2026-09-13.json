@@ -1,0 +1,603 @@
+{
+  "action": "original_prices_restored",
+  "verifiedAt": "2026-09-13T20:37:39.343Z",
+  "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "backupFile": "support/marketplace/catalog/prices-before-temporary-free-2026-09-13.json",
+  "metadataPreserved": true,
+  "releaseHeadsPreserved": true,
+  "exactRepeatsUnchanged": true,
+  "edits": [
+    {
+      "appId": "blast",
+      "priceUsdMicros": "7790000",
+      "revision": "8",
+      "exactRepeatUnchanged": true
+    },
+    {
+      "appId": "curve",
+      "priceUsdMicros": "7790000",
+      "revision": "9",
+      "exactRepeatUnchanged": true
+    },
+    {
+      "appId": "aave",
+      "priceUsdMicros": "9790000",
+      "revision": "10",
+      "exactRepeatUnchanged": true
+    },
+    {
+      "appId": "hyperliquid",
+      "priceUsdMicros": "9990000",
+      "revision": "9",
+      "exactRepeatUnchanged": true
+    },
+    {
+      "appId": "openchat",
+      "priceUsdMicros": "4990000",
+      "revision": "9",
+      "exactRepeatUnchanged": true
+    }
+  ],
+  "apps": [
+    {
+      "appId": "kernel",
+      "title": "Neutron",
+      "priceUsdMicros": "0",
+      "revision": "4",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "362",
+          "candidateId": "55",
+          "packageSha256": "253f19c9d97d8d1a2138004de98a9645d79708582db2cc9fc90df891eebd87e5"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "362",
+          "candidateId": "55",
+          "packageSha256": "253f19c9d97d8d1a2138004de98a9645d79708582db2cc9fc90df891eebd87e5"
+        }
+      }
+    },
+    {
+      "appId": "files",
+      "title": "Files",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "411",
+          "candidateId": "2",
+          "packageSha256": "f8e4e003b31ab43f0e53bb5a4b92e29508a53437442a56fe914ab650d82f7cd3"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "412",
+          "candidateId": "57",
+          "packageSha256": "e252927479e41a063b352d451650475db6c94dd2c6ef60721fd493affad99235"
+        }
+      }
+    },
+    {
+      "appId": "contacts",
+      "title": "Contacts",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "307",
+          "candidateId": "3",
+          "packageSha256": "8bc5da56c73f60c23a0a78fc944b87669f17c5c31edf2dc98d7e6a316cd2f5db"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "308",
+          "candidateId": "58",
+          "packageSha256": "bfcc0e7a6ac65204916c9fde79ac180531b1daa13f85d3743cd66ef21d7f785c"
+        }
+      }
+    },
+    {
+      "appId": "kitchensink",
+      "title": "Kitchen Sink",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "319",
+          "candidateId": "53",
+          "packageSha256": "18b99fc1436ea6dddb260a14824ab0ae52de1b459d9ffefed97e0af14eb63abc"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "320",
+          "candidateId": "59",
+          "packageSha256": "9e9d166b2a84b8b1baed8c03eca411b8f7e1ea9fef8414ac115f3f9d05cfd8ce"
+        }
+      }
+    },
+    {
+      "appId": "wagyu",
+      "title": "Wagyu",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "307",
+          "candidateId": "5",
+          "packageSha256": "2a2cc435020ff0face0f2341f45ce5245ed42d24bb50779e642aabea177a992d"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "308",
+          "candidateId": "60",
+          "packageSha256": "3a09b5b218968a991a4a36c94f940ff3ae3980c31b0ebb4baa7f2edbfbe95acb"
+        }
+      }
+    },
+    {
+      "appId": "agent",
+      "title": "Agent",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "321",
+          "candidateId": "6",
+          "packageSha256": "016e6c6feb2b9c5d85c1a3a8af091700633e39032690833d3a467d0499e6f80d"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "322",
+          "candidateId": "61",
+          "packageSha256": "6223cfb177a3f2f753493faa1973999f381c57f3e750af04f7ac282d481effb0"
+        }
+      }
+    },
+    {
+      "appId": "blast",
+      "title": "Blast",
+      "priceUsdMicros": "7790000",
+      "revision": "8",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "7790000",
+          "version": "103",
+          "candidateId": "7",
+          "packageSha256": "7b7b49842797aaada2f164f39a0b9f7db611eedecb110ee62090c0583e80f9a8"
+        },
+        "beta": {
+          "priceUsdMicros": "7790000",
+          "version": "104",
+          "candidateId": "62",
+          "packageSha256": "9a71e65a2176cebf60a274e20a79de4f56eb4fa222edb2560119fd338229702c"
+        }
+      }
+    },
+    {
+      "appId": "jetcreeper",
+      "title": "Jetfreeper",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "305",
+          "candidateId": "8",
+          "packageSha256": "f8f840e5b582829d529f1f9c0f68057099a7be1551a01e8c186b2a4f524e71bb"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "306",
+          "candidateId": "63",
+          "packageSha256": "405cfbbdaa8956904ab6bd5bd436169ca6f43b4f60945c78789fec218735460d"
+        }
+      }
+    },
+    {
+      "appId": "mail",
+      "title": "Mail",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "306",
+          "candidateId": "9",
+          "packageSha256": "fc485f3250df3bf781237fd7bbe7df2baf78c1bd4c373e03161b11e254643712"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "307",
+          "candidateId": "64",
+          "packageSha256": "880f8e622796fa6737ac976dd853ca2841d83c3d0918b437be2ce2bf26f995b3"
+        }
+      }
+    },
+    {
+      "appId": "mysubnet",
+      "title": "My Subnet",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "305",
+          "candidateId": "10",
+          "packageSha256": "c0009192119b26ac74bf45a76ba2a61eadb77c7d2bcf4bee0e2541ca7e905c45"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "306",
+          "candidateId": "65",
+          "packageSha256": "c73cd2261109a86772e16601dad7e7857f6d96dd8d4db1888e8004fb6aaa0857"
+        }
+      }
+    },
+    {
+      "appId": "wallet",
+      "title": "Wallet",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "332",
+          "candidateId": "54",
+          "packageSha256": "0f747a22c42a070ab0322b9e75a1f239c972288865f759f695d79490052ea51f"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "333",
+          "candidateId": "66",
+          "packageSha256": "c2357102b16d903a30f112318a05b0abd82fb14446311f24a5819fb4be6288cf"
+        }
+      }
+    },
+    {
+      "appId": "evm_wallet",
+      "title": "EVM Wallet",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "126",
+          "candidateId": "12",
+          "packageSha256": "8b00579c33b574d53579f1548ab5cd22e891db263e4a1eb399a349e1db10a4ce"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "127",
+          "candidateId": "67",
+          "packageSha256": "4589adb0ec04e086932eff594bd0f3b4ced47086279b83ea9cd185ce9f064bc9"
+        }
+      }
+    },
+    {
+      "appId": "uniswap",
+      "title": "via Uniswap",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "119",
+          "candidateId": "13",
+          "packageSha256": "68955e05f890989a3892cad0d2bf7accc08a187199ed3f2baa10166435536631"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "120",
+          "candidateId": "68",
+          "packageSha256": "8d8cb0c5c4c05596889b697d9c18b71544b4ad12133fc31b58a65f0558545ede"
+        }
+      }
+    },
+    {
+      "appId": "curve",
+      "title": "via Curve",
+      "priceUsdMicros": "7790000",
+      "revision": "9",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "7790000",
+          "version": "107",
+          "candidateId": "14",
+          "packageSha256": "28c95b2300b984acd4f68b0b1dac7cf6b68f39d3fa912044174cce73becee61a"
+        },
+        "beta": {
+          "priceUsdMicros": "7790000",
+          "version": "108",
+          "candidateId": "69",
+          "packageSha256": "2aed54d79ed6a1b9bf613ee1effdd6f58fa873a661ff5f5458e8048517c18024"
+        }
+      }
+    },
+    {
+      "appId": "spreadsheet",
+      "title": "Spreadsheet",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "305",
+          "candidateId": "15",
+          "packageSha256": "998f645da10722388f98992a420d7a1c4caf6194c531c376853b94bcb626ddb0"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "306",
+          "candidateId": "70",
+          "packageSha256": "5c1f27f7b0a46dd51c1ca4d13998837184bb6dd61e26fe2deeba22cf62a14883"
+        }
+      }
+    },
+    {
+      "appId": "chess",
+      "title": "Chess",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "305",
+          "candidateId": "16",
+          "packageSha256": "a7d10245c912bfa9ecb0fa18119124e099f13c50738758845ada7ccac36b3fe8"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "306",
+          "candidateId": "71",
+          "packageSha256": "b1871ac44ce8bc9ab281404d4465f8fc4132bc470029c2a93f9ad97f0cff0f71"
+        }
+      }
+    },
+    {
+      "appId": "hello",
+      "title": "Hello",
+      "priceUsdMicros": "0",
+      "revision": "6",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "205",
+          "candidateId": "17",
+          "packageSha256": "cf425867db8de9fcea28925710c49a904b5f3b925a8fb1b26a9446581a4edc4d"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "206",
+          "candidateId": "72",
+          "packageSha256": "41409a1b8b8ed3d720ad8989f4b81780812b79dd8ad43ff8763f4da034affba0"
+        }
+      }
+    },
+    {
+      "appId": "gemma",
+      "title": "Gemma",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "205",
+          "candidateId": "18",
+          "packageSha256": "912fd020c09c765b64b86929cb1325908a3590ba18caaf8296d915590ff2b6b1"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "206",
+          "candidateId": "73",
+          "packageSha256": "ae37bde20366dc0ad8129569b7403ec438471401196f763062a3179ab409e1de"
+        }
+      }
+    },
+    {
+      "appId": "hullshift",
+      "title": "Hullshift",
+      "priceUsdMicros": "0",
+      "revision": "10",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "208",
+          "candidateId": "51",
+          "packageSha256": "a88127f6e3d08075d4122d3c023e7d6142fd80be83dffb807a7b1b197099c60a"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "209",
+          "candidateId": "74",
+          "packageSha256": "f0887bedfcb1dffc0fb82c5d9367ab8c15497a35a8108813a283f07e9a5f2fff"
+        }
+      }
+    },
+    {
+      "appId": "aave",
+      "title": "via Aave",
+      "priceUsdMicros": "9790000",
+      "revision": "10",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "9790000",
+          "version": "108",
+          "candidateId": "20",
+          "packageSha256": "8d35362e2b85bd5a9434479ace11996cfa7f1cdc2bfaf03830fb1f0fe0e589db"
+        },
+        "beta": {
+          "priceUsdMicros": "9790000",
+          "version": "109",
+          "candidateId": "75",
+          "packageSha256": "53405b738354a0d9e148fac198596f110e9d026b746ac21e6b1084c83283467e"
+        }
+      }
+    },
+    {
+      "appId": "hyperliquid",
+      "title": "via Hyperliquid",
+      "priceUsdMicros": "9990000",
+      "revision": "9",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "9990000",
+          "version": "108",
+          "candidateId": "21",
+          "packageSha256": "120531cfd957fd6d634b03c3bde9ca1faaba7fbd7d300f056704eb699dcababb"
+        },
+        "beta": {
+          "priceUsdMicros": "9990000",
+          "version": "109",
+          "candidateId": "76",
+          "packageSha256": "aee7c71a07b4507f246c11c8db1967d15cd013e9c18f6eb3c7ded61740342cbd"
+        }
+      }
+    },
+    {
+      "appId": "icpswap",
+      "title": "via ICPSwap",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "210",
+          "candidateId": "22",
+          "packageSha256": "270277a2283749a1a64c5734513fb1ee97035484ec2a4ee4a4dbe4f2382081ea"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "211",
+          "candidateId": "77",
+          "packageSha256": "227dc78c223ae91178707f547a2927dc57d8ae593ca3c277139b036fb39a1c2d"
+        }
+      }
+    },
+    {
+      "appId": "taggr",
+      "title": "Taggr",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "109",
+          "candidateId": "23",
+          "packageSha256": "341eec7d103a853c939a3376a3bc34323aef79f5d06a3c02269d932bc7b680fb"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "110",
+          "candidateId": "78",
+          "packageSha256": "a2368fc1a0d259da8310c5f73a1b088a18fd69784fe92944a32c305f10541a88"
+        }
+      }
+    },
+    {
+      "appId": "openchat",
+      "title": "OpenChat",
+      "priceUsdMicros": "4990000",
+      "revision": "9",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "4990000",
+          "version": "124",
+          "candidateId": "24",
+          "packageSha256": "69c0f5f88d758bc83748b683fe731133f1f3160d97b44299ac68535ca886bd37"
+        },
+        "beta": {
+          "priceUsdMicros": "4990000",
+          "version": "125",
+          "candidateId": "79",
+          "packageSha256": "31836a2a8497754309848b9caa810b438ca5b2267262cd04f464629ba0517124"
+        }
+      }
+    },
+    {
+      "appId": "nuance",
+      "title": "Nuance",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "111",
+          "candidateId": "25",
+          "packageSha256": "8cba729dab1c89cc4a9e9f7dd5b5b949943818f7e48632688fd680427ea3fe59"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "112",
+          "candidateId": "80",
+          "packageSha256": "a1d1f799d7f19e684dabc67b653dcf52f8370edfa21d5e347a78bbeae04196fc"
+        }
+      }
+    },
+    {
+      "appId": "snsgov",
+      "title": "SNS Governance",
+      "priceUsdMicros": "0",
+      "revision": "5",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "116",
+          "candidateId": "48",
+          "packageSha256": "53ffa46cdc04feba57c0f7fc8f8afbfde517a4a9d830aa2103251356df0a073b"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "117",
+          "candidateId": "81",
+          "packageSha256": "640d20ed1a789e617e2896005c509543f49a1955039a9fced800dcb7048b2fb5"
+        }
+      }
+    },
+    {
+      "appId": "marketplace",
+      "title": "Marketplace",
+      "priceUsdMicros": "0",
+      "revision": "4",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "118",
+          "candidateId": "45",
+          "packageSha256": "54136d8bd22c9d682fc958c1eef7904816f34e599f6dd2daf503c10c554eec20"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "122",
+          "candidateId": "84",
+          "packageSha256": "ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42"
+        }
+      }
+    },
+    {
+      "appId": "feedback",
+      "title": "Feedback",
+      "priceUsdMicros": "0",
+      "revision": "3",
+      "channels": {
+        "stable": {
+          "priceUsdMicros": "0",
+          "version": "101",
+          "candidateId": "49",
+          "packageSha256": "f2bd2a40b95554425e0803c1550b806256be40198f0bc28b84d3e7e5087671bb"
+        },
+        "beta": {
+          "priceUsdMicros": "0",
+          "version": "102",
+          "candidateId": "83",
+          "packageSha256": "f87082bb767b531415a9fafc5fcc3e0ed326d6a08bb70d5cbe90f352ecd0f822"
+        }
+      }
+    }
+  ]
+}

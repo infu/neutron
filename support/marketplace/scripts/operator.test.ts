@@ -56,7 +56,7 @@ describe("marketplace CLI identity and call routing", () => {
     });
     expect(decode<string>(IDL.Text, result)).toBe("reserved");
     expect(RELAY_METHODS.has("listing_save")).toBe(true); expect(RELAY_METHODS.has("purchase")).toBe(true); expect(RELAY_METHODS.has("admin_import_listings")).toBe(false);
-    expect([...ADMIN_METHODS].sort()).toEqual(["admin_auditor_set", "admin_reserve_app", "admin_set_burn_account", "rates_refresh"]);
+    expect([...ADMIN_METHODS].sort()).toEqual(["admin_auditor_set", "admin_reserve_app", "admin_set_burn_account", "admin_storefront_app_set", "admin_storefront_set", "rates_refresh"]);
     for (const method of ADMIN_METHODS) expect(RELAY_METHODS.has(method)).toBe(false);
   });
   test("ordinary updates cannot silently become free or use an invented proxy method", async () => {

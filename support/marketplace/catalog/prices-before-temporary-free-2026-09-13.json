@@ -1,0 +1,178 @@
+{
+  "format": 1,
+  "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+  "capturedAt": "2026-09-13T20:00:09.732Z",
+  "purpose": "Original USD-micro prices before the user-requested temporary free period. Restore only these prices on user request, preserving then-current listing metadata.",
+  "restoreAt": null,
+  "apps": [
+    {
+      "appId": "kernel",
+      "title": "Neutron",
+      "priceUsdMicros": "0",
+      "revision": "4"
+    },
+    {
+      "appId": "files",
+      "title": "Files",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "contacts",
+      "title": "Contacts",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "kitchensink",
+      "title": "Kitchen Sink",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "wagyu",
+      "title": "Wagyu",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "agent",
+      "title": "Agent",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "blast",
+      "title": "Blast",
+      "priceUsdMicros": "7790000",
+      "revision": "6"
+    },
+    {
+      "appId": "jetcreeper",
+      "title": "Jetfreeper",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "mail",
+      "title": "Mail",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "mysubnet",
+      "title": "My Subnet",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "wallet",
+      "title": "Wallet",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "evm_wallet",
+      "title": "EVM Wallet",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "uniswap",
+      "title": "via Uniswap",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "curve",
+      "title": "via Curve",
+      "priceUsdMicros": "7790000",
+      "revision": "7"
+    },
+    {
+      "appId": "spreadsheet",
+      "title": "Spreadsheet",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "chess",
+      "title": "Chess",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "hello",
+      "title": "Hello",
+      "priceUsdMicros": "0",
+      "revision": "6"
+    },
+    {
+      "appId": "gemma",
+      "title": "Gemma",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "hullshift",
+      "title": "Hullshift",
+      "priceUsdMicros": "0",
+      "revision": "10"
+    },
+    {
+      "appId": "aave",
+      "title": "via Aave",
+      "priceUsdMicros": "9790000",
+      "revision": "8"
+    },
+    {
+      "appId": "hyperliquid",
+      "title": "via Hyperliquid",
+      "priceUsdMicros": "9990000",
+      "revision": "7"
+    },
+    {
+      "appId": "icpswap",
+      "title": "via ICPSwap",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "taggr",
+      "title": "Taggr",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "openchat",
+      "title": "OpenChat",
+      "priceUsdMicros": "4990000",
+      "revision": "7"
+    },
+    {
+      "appId": "nuance",
+      "title": "Nuance",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "snsgov",
+      "title": "SNS Governance",
+      "priceUsdMicros": "0",
+      "revision": "5"
+    },
+    {
+      "appId": "marketplace",
+      "title": "Marketplace",
+      "priceUsdMicros": "0",
+      "revision": "4"
+    },
+    {
+      "appId": "feedback",
+      "title": "Feedback",
+      "priceUsdMicros": "0",
+      "revision": "3"
+    }
+  ]
+}

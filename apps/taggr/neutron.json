@@ -2,7 +2,7 @@
   "format": 3,
   "id": "taggr",
   "name": "Taggr",
-  "version": 109,
+  "version": 110,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Read, browse, discover, and post on the Taggr network",
   "src": "main.mo",
@@ -31,7 +31,7 @@
       "id": "taggr",
       "title": "Taggr",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Browse and post on the Taggr network"
     }
   ],

@@ -45,7 +45,7 @@ test("manifest validates and declares the tile, background, and memory root", as
     id: "nuance",
     name: "Nuance",
     src: "main.mo",
-    tiles: [{ id: "main", path: "index.html", icon: "static/icon.svg" }],
+    tiles: [{ id: "main", path: "index.html", icon: "static/icon.webp" }],
     background: { path: "service.html" },
     memory: { nuance: { version: 2 } },
   });

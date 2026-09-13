@@ -233,7 +233,7 @@ function App() {
   return <main className="nt-app hl-app"><div className="hl-shell">
     <header className="nt-app-header">
       <div className="nt-app-header-main">
-        <span className="nt-app-header-icon" aria-hidden="true"><img src="static/icon.svg" alt="" /></span>
+        <span className="nt-app-header-icon" aria-hidden="true"><img src="static/icon.webp" alt="" /></span>
         <div className="nt-app-header-copy"><h1 className="nt-app-header-title">via Hyperliquid</h1><p className="nt-app-header-subtitle">Perps</p></div>
       </div>
       <div className="nt-app-header-actions">

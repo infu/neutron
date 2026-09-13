@@ -2,7 +2,7 @@
   "format": 3,
   "name": "OpenChat",
   "id": "openchat",
-  "version": 124,
+  "version": 125,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "A sovereign client for the OpenChat network",
   "src": "main.mo",
@@ -15,14 +15,14 @@
       "id": "chats",
       "title": "OpenChat",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Read and send OpenChat direct messages, groups, and channels"
     },
     {
       "id": "browse",
       "title": "Browse OpenChat",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Find and join public OpenChat groups and communities"
     }
   ],

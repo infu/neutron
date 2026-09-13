@@ -7,9 +7,9 @@ export function PublisherIdentity({ profile }: { profile: PublisherProfile }) {
   return <div className="mp-profile-identity"><span className="mp-profile-avatar" aria-hidden="true">{profile.name.slice(0, 1).toUpperCase()}</span><div><h2>{profile.name}</h2><span className="mp-profile-id">{profile.id}</span></div></div>;
 }
 
-export function PublisherProfileDialog({ client, publisherId, discount, close, select, publisher, refreshRevision = 0 }: {
+export function PublisherProfileDialog({ client, publisherId, discount, close, select, refreshRevision = 0 }: {
   client: MarketplaceClient; publisherId: string; discount: DiscountPreference; close: () => void;
-  select: (app: AppListing) => void; publisher: (id: string) => void; refreshRevision?: number;
+  select: (app: AppListing) => void; refreshRevision?: number;
 }) {
   const [revision, setRevision] = useState(0);
   const read = useRead(publisherId, () => client.publisherProfile(publisherId), revision + refreshRevision);
@@ -53,7 +53,7 @@ export function PublisherProfileDialog({ client, publisherId, discount, close, s
       <section className="mp-profile-apps"><h3>Apps by {profile?.name ?? publisherId}</h3>
         <ErrorNote error={catalog.error} retry={() => setRevision(value => value + 1)} />
         <ErrorNote error={pageError} retry={() => void loadMore()} />
-        {catalog.loading && !catalog.data ? <Loading label="Loading publisher apps…" /> : apps.length > 0 ? <div className="mp-app-grid">{apps.map(app => <AppCard key={app.id} app={app} discount={discount} select={() => select(app)} publisher={publisher} />)}</div> : !catalog.error && <p className="mp-muted">No apps are available from this publisher yet.</p>}
+        {catalog.loading && !catalog.data ? <Loading label="Loading publisher apps…" /> : apps.length > 0 ? <div className="mp-app-grid">{apps.map(app => <AppCard key={app.id} app={app} discount={discount} select={() => select(app)} />)}</div> : !catalog.error && <p className="mp-muted">No apps are available from this publisher yet.</p>}
         {cursor && <button type="button" className="mp-secondary mp-load-more" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? "Loading…" : "Show more apps"}</button>}
       </section>
     </div>

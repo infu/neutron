@@ -25,7 +25,7 @@ test("the imported successor remains backend-free and keeps both existing browse
   expect(prepared.manifest.memory ?? {}).toEqual(prior.memory ?? {});
   expect(prepared.manifest.func ?? {}).toEqual({});
   expect(prepared.manifest.background).toEqual(prior.background);
-  expect(prepared.manifest.tiles).toEqual(prior.tiles);
+  expect(prepared.manifest.tiles).toEqual(prior.tiles.map((tile: Record<string, unknown>) => ({ ...tile, icon: "static/icon.webp" })));
   expect(prepared.manifest.capabilities?.persistent_browser_storage).toEqual(prior.capabilities.persistent_browser_storage);
   for (const path of ["web/index.html", "web/service.html", "web/main.js", "web/service.js"]) {
     expect(files[path]?.byteLength).toBeGreaterThan(0);

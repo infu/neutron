@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wagyu",
   "name": "Wagyu",
-  "version": 307,
+  "version": 308,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Certified peer-to-peer social protocol for Neutron nodes",
   "src": "main.mo",
@@ -26,14 +26,14 @@
   "tray": {
     "title": "Wagyu",
     "path": "tray.html",
-    "icon": "static/wagyu-steak-topdown-v2.png"
+    "icon": "static/icon.webp"
   },
   "tiles": [
     {
       "id": "wagyu",
       "title": "Wagyu",
       "path": "index.html",
-      "icon": "static/wagyu-steak-topdown-v2.png",
+      "icon": "static/icon.webp",
       "description": "Publish, verify, and read certified peer-to-peer social posts"
     }
   ],

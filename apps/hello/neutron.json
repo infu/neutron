@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Hello",
   "id": "hello",
-  "version": 205,
+  "version": 206,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "src": "main.mo",
   "tiles": [
@@ -10,7 +10,7 @@
       "id": "main",
       "title": "Hello",
       "path": "index.html",
-      "icon": "static/icon.png"
+      "icon": "static/icon.webp"
     }
   ],
   "func": {

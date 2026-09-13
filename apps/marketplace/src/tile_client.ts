@@ -112,6 +112,7 @@ export function createMarketplaceClient(): MarketplaceClient {
   return {
     initialize: () => invoke(true, "initialize"), connect: () => invoke(true, "connect"),
     discount: () => invoke(false, "discount"), setDiscountCode: code => invoke(true, "setDiscountCode", { code }),
+    storefront: args => invoke(false, "storefront", args),
     catalog: args => invoke(false, "catalog", args), detail: appId => invoke(false, "detail", { appId }),
     publisherDetail: appId => invoke(false, "publisherDetail", { appId }),
     comments: (appId, release, cursor) => invoke(false, "comments", { appId, release, ...(cursor ? { cursor } : {}) }),

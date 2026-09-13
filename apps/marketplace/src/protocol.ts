@@ -20,6 +20,10 @@ const candidate = rec({ id: nat64, appId: text, version: nat, publisher: princip
 const channelMode = variant("stable", "beta");
 const releaseHead = rec({ revision: nat64, candidate: opt(candidate), releaseNotes: text });
 const channelApp = rec({ app, stableHead: releaseHead, betaHead: releaseHead, selected: opt(candidate), selectedChannel: opt(channelMode) });
+const storefrontTag = rec({ id: text, name: text });
+const storefrontPresentation = rec({ title: text, subtitle: text, tags: vec(storefrontTag), coverUrl: opt(text), revision: nat });
+const storefrontApp = rec({ release: channelApp, presentation: storefrontPresentation });
+const catalogRequest = rec({ search: text, tier: variant("free", "paid"), window: variant("week", "month", "all"), cursor: opt(cursor), limit: nat });
 const channelAppPage = rec({ apps: vec(channelApp), nextCursor: opt(nat64) });
 const releaseSelection = rec({ appId: text, candidateId: nat64, version: nat, digest: blob, sourceDigest: opt(blob), channel: channelMode, revision: nat64 });
 const audit = rec({ auditor: principal, decision: variant("approved", "rejected", "revoked"), analysis: text, reason: opt(text), createdAtNs: int });
@@ -76,6 +80,8 @@ export const CONTRACT: Contract = {
   fee_quote: read([rec({ operation: variant("update", "upload", "purchase", "withdraw", "grant"), processingBytes: nat, newStorageBytes: nat })], feeType),
   catalog_query: read([rec({ search: text, tier: variant("free", "paid"), window: variant("week", "month", "all"), cursor: opt(cursor), limit: nat })], result(rec({ apps: vec(app), nextCursor: opt(cursor), asOfNs: int, generation: nat64, refreshing: bool }))),
   app_detail: read([text], result(rec({ app, candidate: opt(candidate), audit: opt(audit), rating: opt(rating) }))),
+  storefront_query: read([rec({ search: text, tag: opt(text), mode: channelMode })], result(rec({ config: rec({ tags: vec(storefrontTag), featured: vec(text), revision: nat }), featured: vec(storefrontApp) }))),
+  storefront_browse: read([rec({ request: catalogRequest, mode: channelMode, tag: opt(text), exclude: vec(text) })], result(rec({ apps: vec(storefrontApp), nextCursor: opt(cursor), asOfNs: int, generation: nat64, refreshing: bool }))),
   catalog_query_v2: read([rec({ request: rec({ search: text, tier: variant("free", "paid"), window: variant("week", "month", "all"), cursor: opt(cursor), limit: nat }), mode: channelMode })], result(rec({ apps: vec(channelApp), nextCursor: opt(cursor), asOfNs: int, generation: nat64, refreshing: bool }))),
   app_detail_v2: read([rec({ appId: text, mode: channelMode })], result(rec({ release: channelApp, audit: opt(audit), rating: opt(rating) }))),
   library_query_v2: read([rec({ request: pageRequest, mode: channelMode })], result(channelAppPage)),
@@ -163,3 +169,5 @@ export function decodeOpaque<T>(type: IDL.Type, value: unknown): T {
   if (!Array.isArray(value) || !value.every(x => Number.isInteger(x) && x >= 0 && x <= 255)) throw new Error("The saved marketplace quote is invalid.");
   return IDL.decode([type], Uint8Array.from(value))[0] as T;
 }
+
+export type WireStorefrontApp = { release: WireChannelApp; presentation: { title: string; subtitle: string; tags: { id: string; name: string }[]; coverUrl: Option<string>; revision: bigint } };

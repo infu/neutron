@@ -123,6 +123,13 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
           if (mode !== "active") return { err: { code: mode === "required" ? "authentication_required" : mode === "revoked" ? "delegate_revoked" : "delegate_required", message: mode === "revoked" ? "Read access was revoked" : "Read access is not registered" } };
           return { ok: { credits: [], referral: [] } };
         }
+        if (method === "storefront_query" || method === "storefront_browse") {
+          const request = args[0] as { mode: WireChannelMode; exclude?: string[] };
+          const apps = ["notes", "wallet"].filter(id => !request.exclude?.includes(id)).map(id => ({ release: channelApp(id, request.mode), presentation: { title: "A fresh perspective", subtitle: "A short cover subtitle", tags: [{ id: "games", name: "Games" }], coverUrl: [`https://${canisterId}.icp0.io/repo/v1/media/cover`], revision: 3n } }));
+          catalogEntered.resolve();
+          if (waitCatalog) await waitCatalog.promise;
+          return { ok: method === "storefront_query" ? { config: { tags: [{ id: "games", name: "Games" }] }, featured: apps } : { apps, nextCursor: [{ generation: 3n, offset: 24n }], asOfNs: 1_789_056_000_000_000_000n, refreshing: false } };
+        }
         if (method === "catalog_query_v2") {
           const request = args[0] as { mode: WireChannelMode };
           const apps = ["kernel", "notes", "marketplace", "wallet", ...(includeBetaOnly ? ["beta_only"] : [])].map(id => channelApp(id, request.mode)).filter(value => value.app.visible && value.selected.length > 0);
@@ -293,6 +300,34 @@ if (process.env.NEUTRON_MARKETPLACE_CLIENT_ACCESS_CHILD !== "1") {
     expect(calls.agents).toEqual([]);
     expect(calls.updates).toEqual([]);
     expect(calls.localWrites).toEqual([]);
+  });
+
+  test("storefront reads retain app names, exact acquisition counts and selected releases alongside editorial metadata", async () => {
+    installed = ["notes"];
+    const client = await protocolClient(context());
+    for (const betaEnabled of [false, true]) {
+      preferences = { betaEnabled, revision: betaEnabled ? "1" : "0" };
+      const home = await client.storefront({ search: "", tag: "games" });
+      expect(home.tags).toEqual([{ id: "games", name: "Games" }]);
+      expect(home.featured[0]).toMatchObject({ id: "notes", title: app("notes").title, headline: "A fresh perspective", subtitle: "A short cover subtitle", installed: true, freeAcquisitions: "9007199254740993", paidPurchases: "7", channel: betaEnabled ? "beta" : "stable", releasePreferences: preferences });
+      expect(home.featured[0]!.coverUrl).toBe(`https://${PROTOCOL.toText()}.icp0.io/repo/v1/media/cover`);
+      const page = await client.catalog({ tier: "free", window: "week", search: "short", tag: "games", exclude: ["wallet"] });
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]!.releaseSelection).toEqual(home.featured[0]!.releaseSelection);
+      await client.catalog({ tier: "free", window: "week", search: "short", tag: "games", exclude: ["wallet"], cursor: page.nextCursor! });
+      expect(calls.queries.at(-1)).toMatchObject({ method: "storefront_browse", args: [{ tag: ["games"], exclude: ["wallet"], request: { cursor: [{ generation: 3n, offset: 24n }] } }] });
+    }
+    expect(calls.updates).toEqual([]);
+  });
+  for (const kind of ["home", "charts"]) test(`a release-preference change invalidates a pending storefront ${kind} read`, async () => {
+    waitCatalog = deferred();
+    const client = await protocolClient(context());
+    const pending = kind === "home" ? client.storefront({ search: "" }) : client.catalog({ tier: "free", window: "week", search: "", exclude: [] });
+    await catalogEntered.promise;
+    preferences = { betaEnabled: true, revision: "1" };
+    waitCatalog.resolve();
+    await expect(pending).rejects.toThrow("Beta updates changed");
+    expect(calls.updates).toEqual([]);
   });
 
   test("store catalog hides system packages and preserves its server pagination cursor", async () => {

@@ -1,0 +1,64 @@
+{
+  "isolated": true,
+  "versions": {
+    "kernel": 362,
+    "agent": 322,
+    "blast": 104
+  },
+  "neutronCanisterId": "mqrdp-r7777-77775-qaaaq-cai",
+  "targetCanisterId": "mxqf3-4h777-77775-qaaaa-cai",
+  "blastResidentOrigin": "http://p0c0aa8182b8750a790bd19ed--mqrdp-r7777-77775-qaaaq-cai.localhost:8000",
+  "localIdentityPrincipal": "zuips-xsxge-h2yyo-aisqo-3jvcu-bi7ft-24rud-i6blj-e36mz-sbbbv-nqe",
+  "sameProfileIdentityPrincipal": "zuips-xsxge-h2yyo-aisqo-3jvcu-bi7ft-24rud-i6blj-e36mz-sbbbv-nqe",
+  "secondProfileIdentityPrincipal": "2zklg-ds2ko-x2zlw-7fqzd-wbah2-ce2yd-wtzga-mxk4f-mfazi-wketw-tae",
+  "workerBundles": [
+    "http://p0c0aa8182b8750a790bd19ed--mqrdp-r7777-77775-qaaaq-cai.localhost:8000/app/blast/query_worker.js",
+    "http://p0c0aa8182b8750a790bd19ed--mqrdp-r7777-77775-qaaaq-cai.localhost:8000/app/blast/script_worker.js"
+  ],
+  "installedSource": {
+    "kernel": {
+      "version": 362,
+      "installationUid": "4",
+      "revision": "787886b6ce46c8a178999b04395728724c7b5cd2ff7fe6e04cadcd38de4ec710"
+    },
+    "blast": {
+      "version": 104,
+      "installationUid": "2",
+      "revision": "cfcf0c8f06f6adcdabfdad3baf2a88659903f3da921110c310f9164fa7a01709"
+    }
+  },
+  "nestedConsent": {
+    "deniedDispatchStatus": "unknown",
+    "counterBefore": "2",
+    "counterAfterDenial": "2",
+    "counterAfterApproval": "3"
+  },
+  "ownerConsent": {
+    "deniedDispatchStatus": "unknown",
+    "counterBefore": "0",
+    "counterAfterDenial": "1",
+    "counterAfterApproval": "1"
+  },
+  "cancellation": {
+    "error": "signal is aborted without reason",
+    "runningRunsAfterCancellation": 0
+  },
+  "storage": {
+    "collections": 2,
+    "pages": 6,
+    "items": 6,
+    "usage": 29779,
+    "quota": 10737448019,
+    "persisted": false
+  },
+  "uninstallReinstall": {
+    "previousInstallationUid": "2",
+    "replacementInstallationUid": "102801",
+    "replacementResidentOrigin": "http://p25783290f95ca7c5b6792123--mqrdp-r7777-77775-qaaaq-cai.localhost:8000",
+    "replacementIdentityPrincipal": "nkd5f-3zvtx-72lra-uip7f-edveg-4flzj-2atok-p2eu4-7afym-6of7i-mae",
+    "freshScriptId": "1",
+    "freshScriptRevision": "1",
+    "savedScriptsAfterReinstall": 0,
+    "collectionsAfterReinstall": 0
+  }
+}

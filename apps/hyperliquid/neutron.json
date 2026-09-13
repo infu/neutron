@@ -2,7 +2,7 @@
   "format": 3,
   "id": "hyperliquid",
   "name": "via Hyperliquid",
-  "version": 108,
+  "version": 109,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Trade perpetual futures and move USDC between Ethereum and Hyperliquid",
   "src": "main.mo",
@@ -15,7 +15,7 @@
       "id": "hyperliquid",
       "title": "via Hyperliquid",
       "path": "index.html",
-      "icon": "static/icon.svg"
+      "icon": "static/icon.webp"
     }
   ],
   "capabilities": {

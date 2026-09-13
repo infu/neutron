@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Agent",
   "id": "agent",
-  "version": 321,
+  "version": 322,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Chat agent with OpenRouter or ChatGPT subscription models and kernel-regulated Neutron tools",
   "src": "main.mo",
@@ -45,7 +45,7 @@
       "id": "chat",
       "title": "Agent",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Chat with a model that can use Neutron apps through OpenRouter or your ChatGPT subscription"
     }
   ],

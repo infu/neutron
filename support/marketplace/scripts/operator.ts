@@ -1,5 +1,6 @@
 // All rights reserved. See ../LICENSE.
 import { IDL } from "@dfinity/candid";
+import { StorefrontConfig, StorefrontInput, Presentation, PresentationInput, editInput, prepareStorefront, readPresentation, readStorefront } from "./storefront.ts";
 import { Principal } from "@dfinity/principal";
 import { randomBytes } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -47,10 +48,16 @@ bun scripts/operator.ts reserve-app --app ID --publisher ID --title TEXT --fee-v
 bun scripts/operator.ts reserve-route --neutron ID --method NAME --canister ID --identity NAME --network ic [--execute]
 bun scripts/operator.ts burn-account --ledger ID --recipient ID [--subaccount HEX] --fee-version NAT --canister ID --identity NAME --network ic [--execute]
 bun scripts/operator.ts rates-refresh --fee-version NAT --canister ID --identity NAME --network ic [--execute]
+bun scripts/operator.ts storefront --canister ID --identity NAME --network ic
+bun scripts/operator.ts app-presentation --app ID --canister ID --identity NAME --network ic
+bun scripts/operator.ts storefront-prepare --input catalog/first-party-storefront.json --out REVIEW_DIR --canister ID --identity NAME --network ic
+bun scripts/operator.ts admin-storefront --input REVIEW_DIR/storefront.json --canister ID --identity NAME --network ic [--execute]
+bun scripts/operator.ts admin-presentation --input REVIEW_DIR/APP_ID.json --canister ID --identity NAME --network ic [--execute]
 
-Queries, assigned-auditor updates and the four assigned-admin commands call the
+Queries, assigned-auditor updates and assigned-admin commands call the
 protocol directly. Admin calls attach no cycles and need no Neutron route.
-Their feeVersion argument remains for Candid compatibility. Publisher and user
+Existing feeVersion arguments remain for Candid compatibility. Storefront edits
+use expectedRevision. Publisher and user
 updates call the installed marketplace app on the specified Neutron with the
 reviewed cycles. Its backend reservation must permit the exact protocol/method.
 Private HTTP credentials are ephemeral and never written to review output.
@@ -60,7 +67,7 @@ Use --host URL --root-key FILE for a local trusted replica. No deployment occurs
 export async function main(argv: string[], io: { run?: Run; write?: (output: string) => void } = {}): Promise<void> {
   const write = io.write ?? ((output: string) => { process.stdout.write(output); });
   const parsed = parseArgs({ args: argv, allowPositionals: true, options: Object.fromEntries([
-    ...["canister", "identity", "network", "candidate", "out", "cursor", "limit", "request", "decision", "analysis", "reason", "neutron", "method", "args-bin", "cycles", "fee-version", "auditor", "active", "app", "publisher", "title", "host", "root-key", "ledger", "recipient", "subaccount", "digest", "source-digest"].map(key => [key, { type: "string" as const }]), ["execute", { type: "boolean" }], ["help", { type: "boolean" }],
+    ...["canister", "identity", "network", "candidate", "out", "cursor", "limit", "request", "decision", "analysis", "reason", "neutron", "method", "args-bin", "cycles", "fee-version", "auditor", "active", "app", "publisher", "title", "host", "root-key", "ledger", "recipient", "subaccount", "digest", "source-digest", "input"].map(key => [key, { type: "string" as const }]), ["execute", { type: "boolean" }], ["help", { type: "boolean" }],
   ]) });
   const command = parsed.positionals[0], values = parsed.values as Record<string, string | boolean | undefined>;
   if (values.help || !command) { write(HELP); return; }
@@ -68,6 +75,26 @@ export async function main(argv: string[], io: { run?: Run; write?: (output: str
   const optional = (key: string): string | undefined => typeof values[key] === "string" ? values[key] as string : undefined;
   const target: Target = { canister: principal(get("canister")), identity: get("identity"), network: get("network"), rootKeyFile: optional("root-key") };
   const execute = values.execute === true;
+  if (command === "storefront" || command === "app-presentation") {
+    write(json(command === "storefront" ? await readStorefront(target, io.run) : await readPresentation(target, get("app"), io.run))); return;
+  }
+  if (command === "storefront-prepare") {
+    const plan = await prepareStorefront(get("input"), target, io.run);
+    const out = path.resolve(get("out")); await mkdir(out, { recursive: true });
+    // Never replace an earlier reviewed request after an uncertain execution.
+    for (const [name, input] of [["storefront", plan.config], ...plan.apps.map(app => [app.appId, app])] as const) {
+      await writeFile(path.join(out, `${name}.json`), json(input), { flag: "wx" });
+    }
+    write(json({ action: "review_storefront", target, out, ...plan, updateCalls: 0 })); return;
+  }
+  if (command === "admin-storefront" || command === "admin-presentation") {
+    const app = command === "admin-presentation";
+    const input = editInput(JSON.parse(await readFile(get("input"), "utf8")), app);
+    const method = app ? "admin_storefront_app_set" : "admin_storefront_set";
+    if (!execute) { write(json({ action: method, target, input, attachedCycles: "0" })); return; }
+    const response = await adminCall(target, method, encode(app ? PresentationInput : StorefrontInput, input), io.run);
+    write(json(unwrap(decode(result(app ? Presentation : StorefrontConfig), response) as any))); return;
+  }
   if (command === "reserve-route") {
     const method = get("method"), neutron = principal(get("neutron"));
     if (!RELAY_METHODS.has(method)) throw new Error("Only an exact supported marketplace update can be reserved.");

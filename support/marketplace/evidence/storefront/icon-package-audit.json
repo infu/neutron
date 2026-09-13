@@ -1,0 +1,1982 @@
+{
+  "auditedAt": "2026-09-13T18:42:52.130Z",
+  "schemaHistoryUnchanged": true,
+  "appBackendSourceUnchanged": true,
+  "capabilityTypeRefresh": "Existing owns_principal type member; runtime bodies unchanged",
+  "rows": [
+    {
+      "id": "files",
+      "version": 412,
+      "file": "apps/vfs/files.v0.4.12.neutron",
+      "size": 775174,
+      "sha256": "e252927479e41a063b352d451650475db6c94dd2c6ef60721fd493affad99235",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 6782,
+        "sha256": "c3da0ebcc6b3a404341c6561a9087d9e7247d72fb7a12cb78023b4bc795c48ce"
+      },
+      "memoryRoots": [
+        "files"
+      ],
+      "immutableFiles": [
+        "apps/vfs/backend/memory/files/v1.mo",
+        "apps/vfs/backend/memory/files/v2.mo",
+        "apps/vfs/backend/memory/files/v1_to_v2.mo",
+        "apps/vfs/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 411,
+          "sha256": "f8e4e003b31ab43f0e53bb5a4b92e29508a53437442a56fe914ab650d82f7cd3",
+          "backendModules": 64,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 411,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "files",
+              "memoryId": "files",
+              "to": 2
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "files",
+              "memoryId": "files",
+              "version": 2
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "files",
+              "from": 1,
+              "to": 2,
+              "plan": {
+                "kind": "migrate",
+                "owner": "files",
+                "memoryId": "files",
+                "from": 1,
+                "to": 2,
+                "oldSchemaEntry": "16d97303151d8ff71e60d373e08c9cc70ae8534db3c3d33e499af41f61056bd4",
+                "path": [
+                  {
+                    "from": 1,
+                    "to": 2,
+                    "src": "memory/files/v1_to_v2.mo",
+                    "entry": "e61e4c494ad2ea0e541029098ace6db84222751382d638537fe65667f0e4bc44"
+                  }
+                ]
+              }
+            },
+            {
+              "memoryId": "files",
+              "from": 2,
+              "to": 2,
+              "plan": {
+                "kind": "keep",
+                "owner": "files",
+                "memoryId": "files",
+                "version": 2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "contacts",
+      "version": 308,
+      "file": "apps/contacts/contacts.v0.3.8.neutron",
+      "size": 309957,
+      "sha256": "bfcc0e7a6ac65204916c9fde79ac180531b1daa13f85d3743cd66ef21d7f785c",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 7518,
+        "sha256": "a7a4c656506331499159845237ec51d0a5ffd9f929d5735007360423b0dc3007"
+      },
+      "memoryRoots": [
+        "contacts"
+      ],
+      "immutableFiles": [
+        "apps/contacts/backend/memory/contacts/v1.mo",
+        "apps/contacts/backend/memory/contacts/v2.mo",
+        "apps/contacts/backend/memory/contacts/v1_to_v2.mo",
+        "apps/contacts/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 307,
+          "sha256": "8bc5da56c73f60c23a0a78fc944b87669f17c5c31edf2dc98d7e6a316cd2f5db",
+          "backendModules": 31,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 307,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "contacts",
+              "memoryId": "contacts",
+              "to": 2
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "contacts",
+              "memoryId": "contacts",
+              "version": 2
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "contacts",
+              "from": 1,
+              "to": 2,
+              "plan": {
+                "kind": "migrate",
+                "owner": "contacts",
+                "memoryId": "contacts",
+                "from": 1,
+                "to": 2,
+                "oldSchemaEntry": "0b95459dd1edee6e85f4af3a4296046ac167b42fa37c7fee6a420bbd85b3eb7c",
+                "path": [
+                  {
+                    "from": 1,
+                    "to": 2,
+                    "src": "memory/contacts/v1_to_v2.mo",
+                    "entry": "7fb71e8dc59671af575b9ef8dd26af05bcdf78b62cde07c9b54cefe3bdf4f8c5"
+                  }
+                ]
+              }
+            },
+            {
+              "memoryId": "contacts",
+              "from": 2,
+              "to": 2,
+              "plan": {
+                "kind": "keep",
+                "owner": "contacts",
+                "memoryId": "contacts",
+                "version": 2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kitchensink",
+      "version": 320,
+      "file": "apps/kitchensink/kitchensink.v0.3.20.neutron",
+      "size": 489722,
+      "sha256": "9e9d166b2a84b8b1baed8c03eca411b8f7e1ea9fef8414ac115f3f9d05cfd8ce",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 9628,
+        "sha256": "41a485f495b0dbcf75790eda577b02f75675992d54423caf4509d56eec139f6f"
+      },
+      "memoryRoots": [
+        "kitchensink"
+      ],
+      "immutableFiles": [
+        "apps/kitchensink/backend/memory/kitchensink/v1.mo",
+        "apps/kitchensink/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 319,
+          "sha256": "18b99fc1436ea6dddb260a14824ab0ae52de1b459d9ffefed97e0af14eb63abc",
+          "backendModules": 24,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 319,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "kitchensink",
+              "memoryId": "kitchensink",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "kitchensink",
+              "memoryId": "kitchensink",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "kitchensink",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "kitchensink",
+                "memoryId": "kitchensink",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wagyu",
+      "version": 308,
+      "file": "apps/wagyu/wagyu.v0.3.8.neutron",
+      "size": 1076058,
+      "sha256": "3a09b5b218968a991a4a36c94f940ff3ae3980c31b0ebb4baa7f2edbfbe95acb",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 13454,
+        "sha256": "6258ef69992a2de9e95044b5e935bab071a6bf1da3fba815e70406ab33dec2c3"
+      },
+      "memoryRoots": [
+        "wagyu"
+      ],
+      "immutableFiles": [
+        "apps/wagyu/backend/memory/wagyu/v1.mo",
+        "apps/wagyu/backend/memory/wagyu/v2.mo",
+        "apps/wagyu/backend/memory/wagyu/v3.mo",
+        "apps/wagyu/backend/memory/wagyu/v1_to_v2.mo",
+        "apps/wagyu/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 307,
+          "sha256": "2a2cc435020ff0face0f2341f45ce5245ed42d24bb50779e642aabea177a992d",
+          "backendModules": 96,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 307,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "wagyu",
+              "memoryId": "wagyu",
+              "to": 3
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "wagyu",
+              "memoryId": "wagyu",
+              "version": 3
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "wagyu",
+              "from": 3,
+              "to": 3,
+              "plan": {
+                "kind": "keep",
+                "owner": "wagyu",
+                "memoryId": "wagyu",
+                "version": 3
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "version": 322,
+      "file": "apps/agent/agent.v0.3.22.neutron",
+      "size": 535429,
+      "sha256": "6223cfb177a3f2f753493faa1973999f381c57f3e750af04f7ac282d481effb0",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 7118,
+        "sha256": "55fd8942ee67a1c0657a57159935a23b8e2c7c6044282ede7e0b715df05368dc"
+      },
+      "memoryRoots": [
+        "agent"
+      ],
+      "immutableFiles": [
+        "apps/agent/backend/memory/agent/v1.mo",
+        "apps/agent/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 321,
+          "sha256": "016e6c6feb2b9c5d85c1a3a8af091700633e39032690833d3a467d0499e6f80d",
+          "backendModules": 2,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 321,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "agent",
+              "memoryId": "agent",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "agent",
+              "memoryId": "agent",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "agent",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "agent",
+                "memoryId": "agent",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "jetcreeper",
+      "version": 306,
+      "file": "apps/jetcreeper/jetcreeper.v0.3.6.neutron",
+      "size": 336895,
+      "sha256": "405cfbbdaa8956904ab6bd5bd436169ca6f43b4f60945c78789fec218735460d",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 13294,
+        "sha256": "096cd13d9920f97d989b13e8f5df74655388f7eacc0f00e08f483bdac9750164"
+      },
+      "memoryRoots": [],
+      "immutableFiles": [],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 305,
+          "sha256": "f8f840e5b582829d529f1f9c0f68057099a7be1551a01e8c186b2a4f524e71bb",
+          "backendModules": 1,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 305,
+          "clean": [],
+          "retained": [],
+          "supportedSchemaPaths": []
+        }
+      ]
+    },
+    {
+      "id": "mail",
+      "version": 307,
+      "file": "apps/mail/mail.v0.3.7.neutron",
+      "size": 755921,
+      "sha256": "880f8e622796fa6737ac976dd853ca2841d83c3d0918b437be2ce2bf26f995b3",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 6746,
+        "sha256": "34d61ce812a52d97d7d67dab56f3e472d140baf0e0ed4e790e9d4069571cd92e"
+      },
+      "memoryRoots": [
+        "mail"
+      ],
+      "immutableFiles": [
+        "apps/mail/backend/memory/mail/v1.mo",
+        "apps/mail/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 306,
+          "sha256": "fc485f3250df3bf781237fd7bbe7df2baf78c1bd4c373e03161b11e254643712",
+          "backendModules": 64,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 306,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "mail",
+              "memoryId": "mail",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "mail",
+              "memoryId": "mail",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "mail",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "mail",
+                "memoryId": "mail",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mysubnet",
+      "version": 306,
+      "file": "apps/mysubnet/mysubnet.v0.3.6.neutron",
+      "size": 368398,
+      "sha256": "c73cd2261109a86772e16601dad7e7857f6d96dd8d4db1888e8004fb6aaa0857",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 13908,
+        "sha256": "fe580eeade06a6b0db08e9e29dad958999c37ddd3222ed1c438323406ebaa479"
+      },
+      "memoryRoots": [],
+      "immutableFiles": [],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 305,
+          "sha256": "c0009192119b26ac74bf45a76ba2a61eadb77c7d2bcf4bee0e2541ca7e905c45",
+          "backendModules": 1,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 305,
+          "clean": [],
+          "retained": [],
+          "supportedSchemaPaths": []
+        }
+      ]
+    },
+    {
+      "id": "wallet",
+      "version": 333,
+      "file": "apps/wallet/wallet.v0.3.33.neutron",
+      "size": 970902,
+      "sha256": "c2357102b16d903a30f112318a05b0abd82fb14446311f24a5819fb4be6288cf",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 11530,
+        "sha256": "adcce047a1278c3c029276ebfae72f5218d80beef781caea3b8eca512fe87ce5"
+      },
+      "memoryRoots": [
+        "wallet",
+        "wallet_commands",
+        "wallet_bridge",
+        "wallet_transfers",
+        "wallet_bridge_replacements",
+        "wallet_bridge_provider",
+        "wallet_bridge_activity",
+        "wallet_refills"
+      ],
+      "immutableFiles": [
+        "apps/wallet/backend/memory/wallet/v1.mo",
+        "apps/wallet/backend/memory/wallet_commands/v1.mo",
+        "apps/wallet/backend/memory/wallet_bridge/v1.mo",
+        "apps/wallet/backend/memory/wallet_transfers/v1.mo",
+        "apps/wallet/backend/memory/wallet_bridge_replacements/v1.mo",
+        "apps/wallet/backend/memory/wallet_bridge_provider/v1.mo",
+        "apps/wallet/backend/memory/wallet_bridge_activity/v1.mo",
+        "apps/wallet/backend/memory/wallet_refills/v1.mo",
+        "apps/wallet/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 332,
+          "sha256": "0f747a22c42a070ab0322b9e75a1f239c972288865f759f695d79490052ea51f",
+          "backendModules": 72,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 332,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "wallet",
+              "memoryId": "wallet",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "wallet",
+              "memoryId": "wallet_bridge",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "wallet",
+              "memoryId": "wallet_bridge_activity",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "wallet",
+              "memoryId": "wallet_bridge_provider",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "wallet",
+              "memoryId": "wallet_bridge_replacements",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "wallet",
+              "memoryId": "wallet_commands",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "wallet",
+              "memoryId": "wallet_refills",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "wallet",
+              "memoryId": "wallet_transfers",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "wallet",
+              "memoryId": "wallet",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "wallet",
+              "memoryId": "wallet_bridge",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "wallet",
+              "memoryId": "wallet_bridge_activity",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "wallet",
+              "memoryId": "wallet_bridge_provider",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "wallet",
+              "memoryId": "wallet_bridge_replacements",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "wallet",
+              "memoryId": "wallet_commands",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "wallet",
+              "memoryId": "wallet_refills",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "wallet",
+              "memoryId": "wallet_transfers",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "wallet",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "wallet",
+                "memoryId": "wallet",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "wallet_commands",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "wallet",
+                "memoryId": "wallet_commands",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "wallet_bridge",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "wallet",
+                "memoryId": "wallet_bridge",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "wallet_transfers",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "wallet",
+                "memoryId": "wallet_transfers",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "wallet_bridge_replacements",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "wallet",
+                "memoryId": "wallet_bridge_replacements",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "wallet_bridge_provider",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "wallet",
+                "memoryId": "wallet_bridge_provider",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "wallet_bridge_activity",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "wallet",
+                "memoryId": "wallet_bridge_activity",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "wallet_refills",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "wallet",
+                "memoryId": "wallet_refills",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "evm_wallet",
+      "version": 127,
+      "file": "apps/evm_wallet/evm_wallet.v0.1.27.neutron",
+      "size": 657078,
+      "sha256": "4589adb0ec04e086932eff594bd0f3b4ced47086279b83ea9cd185ce9f064bc9",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 8128,
+        "sha256": "1f7ebb464b7d935ad800d19e80b3ba98b60ba062a28b6f0d64c5a4ee55856de3"
+      },
+      "memoryRoots": [
+        "evm_wallet",
+        "evm_evidence",
+        "evm_decoders"
+      ],
+      "immutableFiles": [
+        "apps/evm_wallet/backend/memory/evm_wallet/v1.mo",
+        "apps/evm_wallet/backend/memory/evm_evidence/v1.mo",
+        "apps/evm_wallet/backend/memory/evm_decoders/v1.mo",
+        "apps/evm_wallet/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 126,
+          "sha256": "8b00579c33b574d53579f1548ab5cd22e891db263e4a1eb399a349e1db10a4ce",
+          "backendModules": 82,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 126,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "evm_wallet",
+              "memoryId": "evm_decoders",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "evm_wallet",
+              "memoryId": "evm_evidence",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "evm_wallet",
+              "memoryId": "evm_wallet",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "evm_wallet",
+              "memoryId": "evm_decoders",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "evm_wallet",
+              "memoryId": "evm_evidence",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "evm_wallet",
+              "memoryId": "evm_wallet",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "evm_wallet",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "evm_wallet",
+                "memoryId": "evm_wallet",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "evm_evidence",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "evm_wallet",
+                "memoryId": "evm_evidence",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "evm_decoders",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "evm_wallet",
+                "memoryId": "evm_decoders",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "uniswap",
+      "version": 120,
+      "file": "apps/uniswap/uniswap.v0.1.20.neutron",
+      "size": 1023017,
+      "sha256": "8d8cb0c5c4c05596889b697d9c18b71544b4ad12133fc31b58a65f0558545ede",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 12056,
+        "sha256": "a5cbe75ebf155e3da9c73814016b9adf44d9f62aefd44596b2ce0a3331e8eb08"
+      },
+      "memoryRoots": [
+        "uniswap",
+        "uniswap_actions"
+      ],
+      "immutableFiles": [
+        "apps/uniswap/backend/memory/uniswap/v1.mo",
+        "apps/uniswap/backend/memory/uniswap_actions/v1.mo",
+        "apps/uniswap/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 119,
+          "sha256": "68955e05f890989a3892cad0d2bf7accc08a187199ed3f2baa10166435536631",
+          "backendModules": 26,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 119,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "uniswap",
+              "memoryId": "uniswap",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "uniswap",
+              "memoryId": "uniswap_actions",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "uniswap",
+              "memoryId": "uniswap",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "uniswap",
+              "memoryId": "uniswap_actions",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "uniswap",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "uniswap",
+                "memoryId": "uniswap",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "uniswap_actions",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "uniswap",
+                "memoryId": "uniswap_actions",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "curve",
+      "version": 108,
+      "file": "apps/curve/curve.v0.1.8.neutron",
+      "size": 329503,
+      "sha256": "2aed54d79ed6a1b9bf613ee1effdd6f58fa873a661ff5f5458e8048517c18024",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 12052,
+        "sha256": "12c7fd18a6640231b302f0b4c842bc2b37a40edaa228ae75b16ea2e0914123b1"
+      },
+      "memoryRoots": [
+        "curve"
+      ],
+      "immutableFiles": [
+        "apps/curve/backend/memory/curve/v1.mo",
+        "apps/curve/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 107,
+          "sha256": "28c95b2300b984acd4f68b0b1dac7cf6b68f39d3fa912044174cce73becee61a",
+          "backendModules": 23,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 107,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "curve",
+              "memoryId": "curve",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "curve",
+              "memoryId": "curve",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "curve",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "curve",
+                "memoryId": "curve",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spreadsheet",
+      "version": 306,
+      "file": "apps/spreadsheet/spreadsheet.v0.3.6.neutron",
+      "size": 281087,
+      "sha256": "5c1f27f7b0a46dd51c1ca4d13998837184bb6dd61e26fe2deeba22cf62a14883",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 8628,
+        "sha256": "4d3ae1d1fd8da3e6c849739ca95310089bf1047708b22b290134e73dfd359e6f"
+      },
+      "memoryRoots": [
+        "spreadsheet"
+      ],
+      "immutableFiles": [
+        "apps/spreadsheet/backend/memory/spreadsheet/v1.mo",
+        "apps/spreadsheet/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 305,
+          "sha256": "998f645da10722388f98992a420d7a1c4caf6194c531c376853b94bcb626ddb0",
+          "backendModules": 2,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 305,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "spreadsheet",
+              "memoryId": "spreadsheet",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "spreadsheet",
+              "memoryId": "spreadsheet",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "spreadsheet",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "spreadsheet",
+                "memoryId": "spreadsheet",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "chess",
+      "version": 306,
+      "file": "apps/chess/chess.v0.3.6.neutron",
+      "size": 309858,
+      "sha256": "b1871ac44ce8bc9ab281404d4465f8fc4132bc470029c2a93f9ad97f0cff0f71",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 9388,
+        "sha256": "54b5ff74d0e9353eb4147fa794244bdf455e36db97493dc6fec9ed1822f1321d"
+      },
+      "memoryRoots": [
+        "chess"
+      ],
+      "immutableFiles": [
+        "apps/chess/backend/memory/chess/v1.mo",
+        "apps/chess/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 305,
+          "sha256": "a7d10245c912bfa9ecb0fa18119124e099f13c50738758845ada7ccac36b3fe8",
+          "backendModules": 31,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 305,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "chess",
+              "memoryId": "chess",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "chess",
+              "memoryId": "chess",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "chess",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "chess",
+                "memoryId": "chess",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hello",
+      "version": 206,
+      "file": "apps/hello/hello.v0.2.6.neutron",
+      "size": 149455,
+      "sha256": "41409a1b8b8ed3d720ad8989f4b81780812b79dd8ad43ff8763f4da034affba0",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 8316,
+        "sha256": "982febecdbb6a72b71016f3d4140d79021427e054be485f51050d816811c5ab9"
+      },
+      "memoryRoots": [
+        "hello"
+      ],
+      "immutableFiles": [
+        "apps/hello/backend/memory/hello/v1.mo",
+        "apps/hello/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 205,
+          "sha256": "cf425867db8de9fcea28925710c49a904b5f3b925a8fb1b26a9446581a4edc4d",
+          "backendModules": 2,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 205,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "hello",
+              "memoryId": "hello",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "hello",
+              "memoryId": "hello",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "hello",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "hello",
+                "memoryId": "hello",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gemma",
+      "version": 206,
+      "file": "apps/gemma/gemma.v0.2.6.neutron",
+      "size": 196068,
+      "sha256": "ae37bde20366dc0ad8129569b7403ec438471401196f763062a3179ab409e1de",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 10276,
+        "sha256": "76e8883f3c24396064e6c37343f5f330f4db7960a5ebcea6b20b3080977f9c9d"
+      },
+      "memoryRoots": [
+        "gemma"
+      ],
+      "immutableFiles": [
+        "apps/gemma/backend/memory/gemma/v1.mo",
+        "apps/gemma/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 205,
+          "sha256": "912fd020c09c765b64b86929cb1325908a3590ba18caaf8296d915590ff2b6b1",
+          "backendModules": 2,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 205,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "gemma",
+              "memoryId": "gemma",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "gemma",
+              "memoryId": "gemma",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "gemma",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "gemma",
+                "memoryId": "gemma",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hullshift",
+      "version": 209,
+      "file": "apps/hullshift/hullshift.v0.2.9.neutron",
+      "size": 484110,
+      "sha256": "f0887bedfcb1dffc0fb82c5d9367ab8c15497a35a8108813a283f07e9a5f2fff",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 13336,
+        "sha256": "40643a1315adc8faa6219e1d733f70216fc843c71474059542560edfa22277a5"
+      },
+      "memoryRoots": [],
+      "immutableFiles": [],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 208,
+          "sha256": "a88127f6e3d08075d4122d3c023e7d6142fd80be83dffb807a7b1b197099c60a",
+          "backendModules": 1,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 208,
+          "clean": [],
+          "retained": [],
+          "supportedSchemaPaths": []
+        }
+      ]
+    },
+    {
+      "id": "aave",
+      "version": 109,
+      "file": "apps/aave/aave.v0.1.9.neutron",
+      "size": 322435,
+      "sha256": "53405b738354a0d9e148fac198596f110e9d026b746ac21e6b1084c83283467e",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 5846,
+        "sha256": "a199d1bf8d2a42428636ce2fccf70e1f0da426db7bb98f54137d1d5a958819d6"
+      },
+      "memoryRoots": [
+        "aave"
+      ],
+      "immutableFiles": [
+        "apps/aave/backend/memory/aave/v1.mo",
+        "apps/aave/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 108,
+          "sha256": "8d35362e2b85bd5a9434479ace11996cfa7f1cdc2bfaf03830fb1f0fe0e589db",
+          "backendModules": 23,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 108,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "aave",
+              "memoryId": "aave",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "aave",
+              "memoryId": "aave",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "aave",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "aave",
+                "memoryId": "aave",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hyperliquid",
+      "version": 109,
+      "file": "apps/hyperliquid/hyperliquid.v0.1.9.neutron",
+      "size": 484733,
+      "sha256": "aee7c71a07b4507f246c11c8db1967d15cd013e9c18f6eb3c7ded61740342cbd",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 10908,
+        "sha256": "c6a200c5da7a3fe2bd040c9784afc659d198b1781334860aeb0d343c76f020df"
+      },
+      "memoryRoots": [
+        "hyperliquid"
+      ],
+      "immutableFiles": [
+        "apps/hyperliquid/backend/memory/hyperliquid/v1.mo",
+        "apps/hyperliquid/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 108,
+          "sha256": "120531cfd957fd6d634b03c3bde9ca1faaba7fbd7d300f056704eb699dcababb",
+          "backendModules": 23,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 108,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "hyperliquid",
+              "memoryId": "hyperliquid",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "hyperliquid",
+              "memoryId": "hyperliquid",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "hyperliquid",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "hyperliquid",
+                "memoryId": "hyperliquid",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "icpswap",
+      "version": 211,
+      "file": "apps/icpswap/icpswap.v0.2.11.neutron",
+      "size": 565742,
+      "sha256": "227dc78c223ae91178707f547a2927dc57d8ae593ca3c277139b036fb39a1c2d",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 11278,
+        "sha256": "7b3ef7cab8df1e76219c0d228b878304212df27b2f6f60cb8d0dbbb902f24fea"
+      },
+      "memoryRoots": [
+        "icpswap",
+        "icpswap_swap",
+        "icpswap_actions"
+      ],
+      "immutableFiles": [
+        "apps/icpswap/backend/memory/icpswap/v1.mo",
+        "apps/icpswap/backend/memory/icpswap_swap/v1.mo",
+        "apps/icpswap/backend/memory/icpswap_actions/v1.mo",
+        "apps/icpswap/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 210,
+          "sha256": "270277a2283749a1a64c5734513fb1ee97035484ec2a4ee4a4dbe4f2382081ea",
+          "backendModules": 42,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 210,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "icpswap",
+              "memoryId": "icpswap",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "icpswap",
+              "memoryId": "icpswap_actions",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "icpswap",
+              "memoryId": "icpswap_swap",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "icpswap",
+              "memoryId": "icpswap",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "icpswap",
+              "memoryId": "icpswap_actions",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "icpswap",
+              "memoryId": "icpswap_swap",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "icpswap",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "icpswap",
+                "memoryId": "icpswap",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "icpswap_swap",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "icpswap",
+                "memoryId": "icpswap_swap",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "icpswap_actions",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "icpswap",
+                "memoryId": "icpswap_actions",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "taggr",
+      "version": 110,
+      "file": "apps/taggr/taggr.v0.1.10.neutron",
+      "size": 322858,
+      "sha256": "a2368fc1a0d259da8310c5f73a1b088a18fd69784fe92944a32c305f10541a88",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 10022,
+        "sha256": "a2212537e57f5bf147e9073a26c69adb9eeff61de598c7b7bdcf4aa199d77893"
+      },
+      "memoryRoots": [
+        "identity"
+      ],
+      "immutableFiles": [
+        "apps/taggr/backend/memory/identity/v1.mo",
+        "apps/taggr/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 109,
+          "sha256": "341eec7d103a853c939a3376a3bc34323aef79f5d06a3c02269d932bc7b680fb",
+          "backendModules": 19,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 109,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "taggr",
+              "memoryId": "identity",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "taggr",
+              "memoryId": "identity",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "identity",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "taggr",
+                "memoryId": "identity",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "openchat",
+      "version": 125,
+      "file": "apps/openchat/openchat.v0.1.25.neutron",
+      "size": 277439,
+      "sha256": "31836a2a8497754309848b9caa810b438ca5b2267262cd04f464629ba0517124",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 7658,
+        "sha256": "594085d95b574120e201698da06e4f6d879d7a8a082f1e118b6d71b73e09542c"
+      },
+      "memoryRoots": [],
+      "immutableFiles": [],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 124,
+          "sha256": "69c0f5f88d758bc83748b683fe731133f1f3160d97b44299ac68535ca886bd37",
+          "backendModules": 1,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 124,
+          "clean": [],
+          "retained": [],
+          "supportedSchemaPaths": []
+        }
+      ]
+    },
+    {
+      "id": "nuance",
+      "version": 112,
+      "file": "apps/nuance/nuance.v0.1.12.neutron",
+      "size": 470650,
+      "sha256": "a1d1f799d7f19e684dabc67b653dcf52f8370edfa21d5e347a78bbeae04196fc",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 11336,
+        "sha256": "335bb5cf561349ef8d032e30eaa23b34cd5a440fbe5a100be34897dec00203cd"
+      },
+      "memoryRoots": [
+        "nuance"
+      ],
+      "immutableFiles": [
+        "apps/nuance/backend/memory/nuance/v1.mo",
+        "apps/nuance/backend/memory/nuance/v2.mo",
+        "apps/nuance/backend/memory/nuance/v1_to_v2.mo",
+        "apps/nuance/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 111,
+          "sha256": "8cba729dab1c89cc4a9e9f7dd5b5b949943818f7e48632688fd680427ea3fe59",
+          "backendModules": 33,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 111,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "nuance",
+              "memoryId": "nuance",
+              "to": 2
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "nuance",
+              "memoryId": "nuance",
+              "version": 2
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "nuance",
+              "from": 1,
+              "to": 2,
+              "plan": {
+                "kind": "migrate",
+                "owner": "nuance",
+                "memoryId": "nuance",
+                "from": 1,
+                "to": 2,
+                "oldSchemaEntry": "d6e05b198cc93289c36a5a2cff5d65330a35b2fd5ba0bd48e993ce17fec1f07f",
+                "path": [
+                  {
+                    "from": 1,
+                    "to": 2,
+                    "src": "memory/nuance/v1_to_v2.mo",
+                    "entry": "33b9a8b62505a0a139ea0221e8c88b5990774b9798010f42916377892667755f"
+                  }
+                ]
+              }
+            },
+            {
+              "memoryId": "nuance",
+              "from": 2,
+              "to": 2,
+              "plan": {
+                "kind": "keep",
+                "owner": "nuance",
+                "memoryId": "nuance",
+                "version": 2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "snsgov",
+      "version": 117,
+      "file": "apps/snsgov/snsgov.v0.1.17.neutron",
+      "size": 741743,
+      "sha256": "640d20ed1a789e617e2896005c509543f49a1955039a9fced800dcb7048b2fb5",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 11908,
+        "sha256": "3edf2e2f8e9e7e4afefc153d4bd2e52848b163c5c42f7b42336db60caffa6e10"
+      },
+      "memoryRoots": [
+        "snsgov",
+        "snsgov_operations"
+      ],
+      "immutableFiles": [
+        "apps/snsgov/backend/memory/snsgov/v1.mo",
+        "apps/snsgov/backend/memory/snsgov_operations/v1.mo",
+        "apps/snsgov/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 116,
+          "sha256": "53ffa46cdc04feba57c0f7fc8f8afbfde517a4a9d830aa2103251356df0a073b",
+          "backendModules": 30,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 116,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "snsgov",
+              "memoryId": "snsgov",
+              "to": 1
+            },
+            {
+              "kind": "initialize",
+              "owner": "snsgov",
+              "memoryId": "snsgov_operations",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "snsgov",
+              "memoryId": "snsgov",
+              "version": 1
+            },
+            {
+              "kind": "keep",
+              "owner": "snsgov",
+              "memoryId": "snsgov_operations",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "snsgov",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "snsgov",
+                "memoryId": "snsgov",
+                "version": 1
+              }
+            },
+            {
+              "memoryId": "snsgov_operations",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "snsgov",
+                "memoryId": "snsgov_operations",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "marketplace",
+      "version": 121,
+      "file": "apps/marketplace/marketplace.v0.1.21.neutron",
+      "size": 519184,
+      "sha256": "d6ac1fc5b3e563c5af4bf0d7cd5d40f9469d756a5d6bb988782fe9ea96671dcd",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 11646,
+        "sha256": "74ff2f5fd5f6ac88c5ef1f2c67991da7b12605daa67b0f3bcc6959f4fb6aacbc"
+      },
+      "memoryRoots": [
+        "state"
+      ],
+      "immutableFiles": [
+        "apps/marketplace/backend/memory/state/v1.mo",
+        "apps/marketplace/backend/memory/state/v2.mo",
+        "apps/marketplace/backend/memory/state/v1_to_v2.mo",
+        "apps/marketplace/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 118,
+          "sha256": "54136d8bd22c9d682fc958c1eef7904816f34e599f6dd2daf503c10c554eec20",
+          "backendModules": 49,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 119,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "marketplace",
+              "memoryId": "state",
+              "to": 2
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "marketplace",
+              "memoryId": "state",
+              "version": 2
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "state",
+              "from": 1,
+              "to": 2,
+              "plan": {
+                "kind": "migrate",
+                "owner": "marketplace",
+                "memoryId": "state",
+                "from": 1,
+                "to": 2,
+                "oldSchemaEntry": "13eed1d37736f93cd6931637052266d6c7c132eb024f9f76a394c13dd1a41863",
+                "path": [
+                  {
+                    "from": 1,
+                    "to": 2,
+                    "src": "memory/state/v1_to_v2.mo",
+                    "entry": "f8a0944817ddd2b304ed962c212474367c4ca0d22597de918fe2344a4835a767"
+                  }
+                ]
+              }
+            },
+            {
+              "memoryId": "state",
+              "from": 2,
+              "to": 2,
+              "plan": {
+                "kind": "keep",
+                "owner": "marketplace",
+                "memoryId": "state",
+                "version": 2
+              }
+            }
+          ]
+        },
+        {
+          "channel": "beta",
+          "from": 119,
+          "sha256": "1c029512eea22c7aaa412c958c1fc7089f2bc9e8c45e9a4702334b01753ef1a8",
+          "backendModules": 49,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 119,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "marketplace",
+              "memoryId": "state",
+              "to": 2
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "marketplace",
+              "memoryId": "state",
+              "version": 2
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "state",
+              "from": 1,
+              "to": 2,
+              "plan": {
+                "kind": "migrate",
+                "owner": "marketplace",
+                "memoryId": "state",
+                "from": 1,
+                "to": 2,
+                "oldSchemaEntry": "13eed1d37736f93cd6931637052266d6c7c132eb024f9f76a394c13dd1a41863",
+                "path": [
+                  {
+                    "from": 1,
+                    "to": 2,
+                    "src": "memory/state/v1_to_v2.mo",
+                    "entry": "f8a0944817ddd2b304ed962c212474367c4ca0d22597de918fe2344a4835a767"
+                  }
+                ]
+              }
+            },
+            {
+              "memoryId": "state",
+              "from": 2,
+              "to": 2,
+              "plan": {
+                "kind": "keep",
+                "owner": "marketplace",
+                "memoryId": "state",
+                "version": 2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "version": 102,
+      "file": "apps/feedback/feedback.v0.1.2.neutron",
+      "size": 442084,
+      "sha256": "f87082bb767b531415a9fafc5fcc3e0ed326d6a08bb70d5cbe90f352ecd0f822",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 6414,
+        "sha256": "f0a8cf20a972d407d1fa9f3a72c213030f9e37051c511e21800aab2388191819"
+      },
+      "memoryRoots": [
+        "state"
+      ],
+      "immutableFiles": [
+        "apps/feedback/backend/memory/state/v1.mo",
+        "apps/feedback/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 101,
+          "sha256": "f2bd2a40b95554425e0803c1550b806256be40198f0bc28b84d3e7e5087671bb",
+          "backendModules": 28,
+          "capabilityTypeRefresh": true,
+          "backendBaselineVersion": 101,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "feedback",
+              "memoryId": "state",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "feedback",
+              "memoryId": "state",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "state",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "feedback",
+                "memoryId": "state",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "blast",
+      "version": 104,
+      "file": "apps/blast/blast.v0.1.4.neutron",
+      "size": 1004296,
+      "sha256": "9a71e65a2176cebf60a274e20a79de4f56eb4fa222edb2560119fd338229702c",
+      "icon": {
+        "path": "web/static/icon.webp",
+        "width": 256,
+        "height": 256,
+        "size": 12396,
+        "sha256": "03c9dbbef7935a20050217ae1a2954f4784910aa1f4d75086effcd2f10ee8d91"
+      },
+      "memoryRoots": [
+        "blast"
+      ],
+      "immutableFiles": [
+        "apps/blast/backend/memory/blast/v1.mo",
+        "apps/blast/neutron.lock.json"
+      ],
+      "transitions": [
+        {
+          "channel": "stable",
+          "from": 103,
+          "sha256": "7b7b49842797aaada2f164f39a0b9f7db611eedecb110ee62090c0583e80f9a8",
+          "backendModules": 44,
+          "capabilityTypeRefresh": false,
+          "backendBaselineVersion": 103,
+          "clean": [
+            {
+              "kind": "initialize",
+              "owner": "blast",
+              "memoryId": "blast",
+              "to": 1
+            }
+          ],
+          "retained": [
+            {
+              "kind": "keep",
+              "owner": "blast",
+              "memoryId": "blast",
+              "version": 1
+            }
+          ],
+          "supportedSchemaPaths": [
+            {
+              "memoryId": "blast",
+              "from": 1,
+              "to": 1,
+              "plan": {
+                "kind": "keep",
+                "owner": "blast",
+                "memoryId": "blast",
+                "version": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

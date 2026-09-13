@@ -2,7 +2,7 @@
   "format": 3,
   "id": "uniswap",
   "name": "via Uniswap",
-  "version": 119,
+  "version": 120,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Uniswap V3/V4 swaps and liquidity positions using EVM Wallet",
   "src": "main.mo",
@@ -15,7 +15,7 @@
       "id": "uniswap",
       "title": "via Uniswap",
       "path": "index.html",
-      "icon": "static/icon.svg"
+      "icon": "static/icon.webp"
     }
   ],
   "capabilities": {

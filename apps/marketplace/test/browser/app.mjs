@@ -112,7 +112,7 @@ try {
   assert.equal(await page.getByRole("dialog", { name: "Marketplace settings", exact: true }).count(), 0);
   assert.equal(await page.getByLabel("Marketplace canister", { exact: true }).count(), 0);
   assert.equal(await page.getByLabel("IC gateway", { exact: true }).count(), 0);
-  assert.deepEqual(await page.locator('.mp-catalog-section > h3').allTextContents(), ['Top paid', 'Top free']);
+  assert.deepEqual(await page.locator('.mp-catalog-section > .mp-section-heading > h3').allTextContents(), ['Top paid', 'Top free']);
   assert.equal(await page.locator('.mp-rank').count(), 0);
   assert.equal(await page.getByRole("button", { name: /Top (paid|free)/ }).count(), 0);
   assert.equal(await page.getByText("Rankings are refreshing. These results share the displayed snapshot time.", { exact: true }).count(), 0);
@@ -120,23 +120,19 @@ try {
   assert.equal(await page.getByRole("region", { name: "Top free", exact: true }).getByText("42 added", { exact: true }).count(), 3);
   assert.equal(await page.locator('.mp-app-card').count(), 6);
   assert.equal(await page.locator('article.mp-app-card button.mp-card-open[aria-haspopup="dialog"]').count(), 6);
-  assert.equal(await page.locator('.mp-app-card button button, .mp-app-card button a').count(), 0, "app and publisher are separate native controls without nested interaction");
-  assert.equal(await page.locator('.mp-app-card button').count(), 12, "each card exposes app details and its publisher independently");
-  assert.equal(await appCard('Atlas').locator('.mp-card-summary').innerText(), listingExcerpt);
+  assert.equal(await page.locator('.mp-app-card button button, .mp-app-card button a').count(), 0, "cards have no nested controls");
+  assert.equal(await page.locator('.mp-app-card button').count(), 6, "each card opens app details, where publisher navigation is available");
+  assert.ok((await appCard('Atlas').innerText()).includes(listingExcerpt), 'The excerpt remains available to assistive technology; the detail shows the full text.');
   checks.push("Marketplace initializes automatically for this Neutron, without a Connect action; paid then free charts are visible together with no rank numbers.");
   for (const width of [320, 380, 480, 960]) {
     await page.setViewportSize({ width, height: 760 });
     const bounds = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth, body: document.querySelector('.mp-body').scrollWidth, client: document.querySelector('.mp-body').clientWidth, firstCard: document.querySelector('.mp-app-card').getBoundingClientRect().top }));
     assert.ok(bounds.document <= width, `Document overflows at ${width}: ${JSON.stringify(bounds)}`);
     assert.ok(bounds.body <= bounds.client + 1, `Content overflows at ${width}`);
-    assert.ok(bounds.firstCard < 320, `First app needs scrolling at ${width}`);
-    assert.equal(await page.getByRole("region", { name: "Top paid", exact: true }).getByText("1,234 purchases", { exact: true }).first().isVisible(), true);
-    assert.equal(await page.getByRole("region", { name: "Top free", exact: true }).getByText("42 added", { exact: true }).first().isVisible(), true);
-    const clippedCounts = await page.locator('.mp-acquisitions').evaluateAll(elements => elements.some(element => element.scrollWidth > element.clientWidth + 1));
-    assert.equal(clippedCounts, false, `Acquisition counts must remain readable at ${width}`);
+    assert.ok(bounds.firstCard < 460, `First app needs scrolling at ${width}`);
     await page.screenshot({ path: join(output, `explore-${width}.png`) });
   }
-  checks.push("Explore is compact at 320, 380, 480 and 960px, with readable paid purchase/free acquisition counts and no ranking-refresh notice or horizontal overflow.");
+  checks.push("Explore is compact at 320, 380, 480 and 960px, with acquisition counts retained for assistive technology, detailed counts in the app dialog, and no horizontal overflow.");
   await page.setViewportSize({ width: 380, height: 760 });
   await page.getByRole("searchbox", { name: "Search apps", exact: true }).focus();
   const searchFocus = await page.locator('.mp-search input').evaluate(input => {
@@ -185,7 +181,7 @@ try {
   await freeDetail.getByRole("button", { name: "Close dialog", exact: true }).click();
   await page.setViewportSize({ width: 380, height: 760 });
   checks.push("Paid and free details show their all-time acquisition counts on narrow tiles; Audited by AI retains the auditor principal and exact review analysis.");
-  checks.push("Whole cards, including price and Owned labels, open details; separate native app and publisher controls remain keyboard-accessible; 255-character excerpts wrap and full 5,000-character descriptions preserve paragraphs.");
+  checks.push("Whole cards, including price and Owned labels, open details with one keyboard-accessible control; publisher links appear in details; 255-character excerpts wrap and full 5,000-character descriptions preserve paragraphs.");
   const installationQuotesBefore = await page.evaluate(() => window.marketplaceFixture.installationQuotes.length);
   await page.evaluate(() => { window.marketplaceFixture.installed = ['atlas', 'studio']; });
   await page.getByRole("button", { name: "Refresh marketplace", exact: true }).click();

@@ -2617,7 +2617,7 @@ export function Sidebar({
   return (
     <aside className="wg-sidebar">
       <a className="wg-brand" href="#wagyu-main" aria-label="Wagyu home">
-        <img alt="" src="./static/wagyu-steak-topdown-v2.png" />
+        <img alt="" src="./static/icon.webp" />
         <span>
           <strong>Wagyu</strong>
         </span>
@@ -2774,7 +2774,7 @@ export function MobileNavigation({
 function LoadingScreen() {
   return (
     <div className="nt-app wg-app wg-boot">
-      <img alt="" src="./static/wagyu-steak-topdown-v2.png" />
+      <img alt="" src="./static/icon.webp" />
       <div className="wg-boot__pulse" />
       <strong>Prepping your Wagyu</strong>
       <span>Getting everything ready…</span>

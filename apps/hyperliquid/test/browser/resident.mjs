@@ -294,7 +294,7 @@ async function launch() {
         if (url.pathname.endsWith("service.js")) return route.fulfill({ status: 200, contentType: "text/javascript", body: serviceJs });
         if (url.pathname.endsWith("main.js")) return route.fulfill({ status: 200, contentType: "text/javascript", body: uiJs });
         if (url.pathname.endsWith("main.css")) return route.fulfill({ status: 200, contentType: "text/css", body: uiCss });
-        if (url.pathname === "/app/hyperliquid/static/icon.svg") return route.fulfill({ status: 200, contentType: "image/svg+xml", body: await readFile(new URL("../../public/static/icon.svg", import.meta.url), "utf8") });
+        if (url.pathname === "/app/hyperliquid/static/icon.webp") return route.fulfill({ status: 200, contentType: "image/webp", body: await readFile(new URL("../../public/static/icon.webp", import.meta.url)) });
         if (url.href === tileUrl) return route.fulfill({ status: 200, contentType: "text/html", body: '<!doctype html><html><head><link rel="stylesheet" href="./main.css"></head><body><div id="root"></div><script type="module" src="./main.js"></script></body></html>' });
         assert.equal(url.href, residentUrl);
         return route.fulfill({ status: 200, contentType: "text/html", body: '<!doctype html><html><body><script type="module" src="./service.js"></script></body></html>' });

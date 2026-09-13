@@ -1,0 +1,1065 @@
+{
+  "rankingWindow": "month",
+  "capturedAt": "2026-09-13T20:09:47.308Z",
+  "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "tags": [
+    {
+      "id": "games",
+      "name": "Games"
+    },
+    {
+      "id": "arcade",
+      "name": "Arcade"
+    },
+    {
+      "id": "crypto",
+      "name": "Crypto"
+    },
+    {
+      "id": "defi",
+      "name": "DeFi"
+    },
+    {
+      "id": "preppers",
+      "name": "Preppers"
+    },
+    {
+      "id": "social",
+      "name": "Social"
+    },
+    {
+      "id": "productivity",
+      "name": "Productivity"
+    },
+    {
+      "id": "tools",
+      "name": "Developer tools"
+    }
+  ],
+  "featured": [
+    {
+      "screenshots": [
+        {
+          "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/6d4707eb29bdc2a9c7bcb3a022451265f338fd2caff1e5f4cc42b7414a76acfc"
+        },
+        {
+          "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/8891617b9180cbba1070ce040b2ce7525ee191aa7828ebdfd73172786c7a385d"
+        },
+        {
+          "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/da65108253c03bd6adbf480fa51be564c504e778c32d63d7ac5abd4939393bb7"
+        }
+      ],
+      "id": "jetcreeper",
+      "title": "Jetfreeper",
+      "summary": "Fly into pixel-art arcade combat with Super Brain autopilot or direct manual control. Dodge cave walls, collect weapon upgrades, and take on waves of enemy craft and bosses.",
+      "description": "Launch into a scrolling cave full of hostile craft, bright weapons, and close calls. Jetfreeper combines a 3D battlefield with a GPU pixel-art finish and an automatic cannon that keeps the action moving. Let Super Brain handle movement and combat, nudge its course, or switch to Manual Flight whenever you want the controls.\n\nDash through danger, unleash a precision laser, fire homing missiles, detonate remote bombs, and call supporting wingmen. Collect temporary attachments that change your weapons and flight, then unlock special systems such as Counterflare, Gravity Knot, and Phoenix Squadron.\n\nTwenty enemy craft and six distinct bosses bring different movement and attack patterns to alternating combat waves. Optional Pilot Lines reward stylish human steering, while keyboard and touch controls keep the flight systems close at hand. The game bundles its runtime assets and plays without a network connection.",
+      "headline": "Fly fast. Light up the caves.",
+      "subtitle": "Dodge, dash, and take on the next wave.",
+      "tags": [
+        {
+          "id": "games",
+          "name": "Games"
+        },
+        {
+          "id": "arcade",
+          "name": "Arcade"
+        }
+      ],
+      "category": "Games · Arcade",
+      "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/da65108253c03bd6adbf480fa51be564c504e778c32d63d7ac5abd4939393bb7",
+      "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/096cd13d9920f97d989b13e8f5df74655388f7eacc0f00e08f483bdac9750164",
+      "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+      "publisherId": "aae",
+      "publisherName": "aae",
+      "priceUsdMicros": "0",
+      "version": "306",
+      "channel": "beta",
+      "rating": null,
+      "ratingCount": 0,
+      "freeAcquisitions": "0",
+      "paidPurchases": "0",
+      "owned": false,
+      "installed": false
+    },
+    {
+      "screenshots": [
+        {
+          "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/2483028adbe806bfbcedae3ecf1da73ebfaff645b4bc995a9200184d8a95c68e"
+        },
+        {
+          "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/e28f211bc747db231ed1a49f0cfd0d8e75316d481a3c4e18f3b9c4b09f2203a4"
+        },
+        {
+          "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/69716499a98a31eca9a625fc1e7bdd13c3089e029bbddbf0949356115ee4dad4"
+        }
+      ],
+      "id": "hullshift",
+      "title": "Hullshift",
+      "summary": "Fresh cargo puzzles with six interacting systems: pressure plates, relays, reactor docking, powered bridges, cracked floors, and disposal chutes. Connect power, make space, and fill every bay.",
+      "description": "Small moves. Big ideas. Guide a little maintenance droid through a changing cargo deck and fill every mint bay with a pod. Pushing is only the beginning.\n\nHold pressure plates down to supply power. Step onto relays to flip circuits. Dock gold reactor cells for permanent power. Cross bridges while they are powered, plan around floors that collapse behind you, and clear obstructions with disposal chutes. Cargo, machinery, and shared passages combine into different plans.\n\nEvery new puzzle generates a fresh layout and arrangement. Nine challenge levels introduce one or two systems, then grow into puzzles combining all six with several cargo pods. No timer, no lives, and no unlocking requirement.\n\nA clear 3D board, an on-deck guide, live circuit status, free undo, restart, and two-stage hints help you experiment. Hints can show the next useful action on a labelled map. Use arrow keys, WASD, or the on-screen direction pad. Share a puzzle code to reproduce a challenge.\n\nProgress saves in the current browser when local storage is available. Existing cargo and escape saves remain playable. The resident tools let agents generate puzzles, inspect state, move, request hints, and undo too.",
+      "headline": "A way out. One move at a time.",
+      "subtitle": "Reroute the power. Find your way home.",
+      "tags": [
+        {
+          "id": "games",
+          "name": "Games"
+        }
+      ],
+      "category": "Games",
+      "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/69716499a98a31eca9a625fc1e7bdd13c3089e029bbddbf0949356115ee4dad4",
+      "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/40643a1315adc8faa6219e1d733f70216fc843c71474059542560edfa22277a5",
+      "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+      "publisherId": "aae",
+      "publisherName": "aae",
+      "priceUsdMicros": "0",
+      "version": "209",
+      "channel": "beta",
+      "rating": null,
+      "ratingCount": 0,
+      "freeAcquisitions": "0",
+      "paidPurchases": "0",
+      "owned": false,
+      "installed": false
+    }
+  ],
+  "charts": {
+    "paid": [],
+    "free": [
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/a90e6cb6bb3da9175f788ddb33a04a8279ec044a4cc991c74e687dea9274ba06"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/330b9b5af0def0e6d4ba8617eee0c5911401be9cf0211543dcaf5e507c87347f"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/05b80754b61dc5fa16bcd1c8e2bf0eb1b33fb14fae373c827a08aca4e3461f20"
+          }
+        ],
+        "id": "wallet",
+        "title": "Wallet",
+        "summary": "Keep your Neutron's tokens close at hand. Track ICP and ICRC assets, send and receive funds, manage approvals, convert supported chain-key tokens, and give agents tools for balances, funding and transaction history.",
+        "description": "Make your Neutron the home for your Internet Computer assets. Wallet brings selected ICP and ICRC token balances, indicative portfolio values, transfers and activity into one app, with a convenient tray view for everyday access. Add supported assets or a custom ICRC ledger, send to saved contacts, and inspect or revoke supported spending approvals.\n\nReceive assets through supported native deposit routes and follow their progress. Convert supported Ethereum assets to their chain-key counterparts using EVM Wallet or a browser wallet, then redeem supported chain-key assets back to Ethereum. Reviews show the amount, destination and relevant fees; saved activity keeps transfers and conversions available for continuation after an interruption.\n\nWallet also connects your assets to other Neutron apps and agents. Agent tools read balances, live token metadata and fees, inspect transaction history and exact ledger records, add tokens, and prepare app funding. Authorized root agents can fund apps and carry out supported Ethereum conversions through dedicated tools. Wallet supplies the token and funding services used by apps such as ICPSwap, keeping the reviewed payment details in one place.",
+        "headline": "Your tokens, close at hand.",
+        "subtitle": "Manage assets and payments from your Neutron.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          }
+        ],
+        "category": "Crypto",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/05b80754b61dc5fa16bcd1c8e2bf0eb1b33fb14fae373c827a08aca4e3461f20",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/adcce047a1278c3c029276ebfae72f5218d80beef781caea3b8eca512fe87ce5",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "333",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "1",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/bac590a2dac759e4346938f39b74518802781ac9d434e718319e2c5abb932012"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/a98692772fb2a65b53455c578082afa18b30403a6a1735a2921076922bf44d5f"
+          }
+        ],
+        "id": "uniswap",
+        "title": "via Uniswap",
+        "summary": "Independently developed Neutron integration of Uniswap. Swap tokens and manage V3/V4 liquidity on Ethereum and Arbitrum, with pool quotes, position tracking and agent tools powered by EVM Wallet.",
+        "description": "Trade and manage concentrated liquidity from your Neutron on Ethereum and Arbitrum. Compare available direct Uniswap V3 and V4 pool quotes, choose Auto or a specific protocol version, and swap native ETH or supported tokens through EVM Wallet. Search the asset catalog or add a token contract, then inspect the quoted output, slippage settings, recipient and available network fee estimates before proceeding.\n\nThe Liquidity view brings V3 and V4 positions together. Create a position in an initialized pool, choose a price range, add or remove liquidity, collect available amounts and close a position. Previews show token budgets and transaction limits, while saved progress connects any required approvals with the final action. Activity helps you inspect receipts and continue an interrupted operation.\n\nAgent tools cover swap quotes and execution, pool and position discovery, liquidity previews and management, plus operation status, history and reconciliation. They use the same EVM Wallet transaction review and signing flow as the app. Pool quotes compare the supported direct routes; the integration does not require an API credential. This app is independently developed for Neutron and is not an official Uniswap application.",
+        "headline": "Find your next swap.",
+        "subtitle": "Trade tokens through Uniswap.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          },
+          {
+            "id": "defi",
+            "name": "DeFi"
+          }
+        ],
+        "category": "Crypto · DeFi",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/23f178bf84fc58dc3524a6d566f48219d19bfc8d54eca76af650804351d16d5e",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/a5cbe75ebf155e3da9c73814016b9adf44d9f62aefd44596b2ce0a3331e8eb08",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "120",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "1",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/86ca1b8599c11b186d18b28345f80f64234dd9c2ce2a8cf04215de788b9f0983"
+          }
+        ],
+        "id": "hello",
+        "title": "Hello",
+        "summary": "Start exploring Neutron app development with a small example that demonstrates responsive tiles, workspace context, and a typed backend call through the Kernel.",
+        "description": "Meet the basics of a Neutron app in a small, inspectable example. Hello shows how a responsive app tile behaves as you resize it, split a workspace, and open multiple instances. The tile displays its own app and tile context, making it useful when checking workspace integration.\n\nUse Test typed call to send a schema-backed request to the app's hello_world backend method through the Kernel's normal approval flow and inspect the returned result. With a React frontend and a managed-memory backend example, Hello gives developers a compact starting point for understanding the connection between interface, permissions, and canister code.",
+        "headline": "Start with a simple hello.",
+        "subtitle": "Meet the basics of a Neutron app.",
+        "tags": [
+          {
+            "id": "tools",
+            "name": "Developer tools"
+          }
+        ],
+        "category": "Developer tools",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/04adb1e6a1c011eb3e0b2157ed19fdb01525fedab6bccf4115900506abed6f53",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/982febecdbb6a72b71016f3d4140d79021427e054be485f51050d816811c5ab9",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "206",
+        "channel": "beta",
+        "rating": 5,
+        "ratingCount": 1,
+        "freeAcquisitions": "1",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/60070c28c4da293de1d87e5c7c6f3c171766a4765918c1aa06d97437ac2c87fb"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/8933d55b53588aaf4f8f5624a297e44932c2f0366864c934af70ec16d8d73c6d"
+          }
+        ],
+        "id": "contacts",
+        "title": "Contacts",
+        "summary": "One address book for people, your own accounts, and destinations across Neutron, Internet Computer, Bitcoin, Dogecoin, Ethereum, and Solana. Give apps and agents reusable contacts for messaging and payment workflows.",
+        "description": "Keep the people and destinations you use in one address book inside your Neutron. Save names, notes, labeled addresses, and preferred destinations for contacts or your own accounts. Supported destination types include Neutron addresses, Internet Computer accounts, Bitcoin, Dogecoin, Ethereum, and Solana.\n\nSearch by name or destination, filter by network, and copy the address you need from a compact contact view. Wallet can discover payment destinations, while Mail uses the same contacts to find Neutron recipients and show familiar sender names. An unknown Mail sender can become a prefilled contact draft that you review and save.\n\nResident tools let authorized agents search contacts, read details, resolve destinations for specific networks, create or update entries, and remove contacts. Apps and agents can work from the same saved information, reducing repeated address entry across your workflows. Your address book is stored in your Neutron's app memory.",
+        "headline": "Keep your people close.",
+        "subtitle": "One address book for people and destinations.",
+        "tags": [
+          {
+            "id": "productivity",
+            "name": "Productivity"
+          },
+          {
+            "id": "social",
+            "name": "Social"
+          }
+        ],
+        "category": "Productivity · Social",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/8933d55b53588aaf4f8f5624a297e44932c2f0366864c934af70ec16d8d73c6d",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/a7a4c656506331499159845237ec51d0a5ffd9f929d5735007360423b0dc3007",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "308",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "1",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/5621322f0758c4d10bc51531f0cfd5bc2247edce1fc820207f0c283f262aad7f"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/fb461e958c04224ebe7e56667fb1b2472208c1299680a846685644e83ef05d9d"
+          }
+        ],
+        "id": "chess",
+        "title": "Chess",
+        "summary": "Play against the computer, share a local board, or invite an opponent from another Neutron. Agent tools can inspect positions and play legal moves in local games.",
+        "description": "Keep a chess board alongside the rest of your Neutron workspace. Play the browser computer at easy, medium, or hard strength, move both colors in Local players mode, or send an invite to an opponent using Chess on another Neutron. Each open tile has its own persisted game, so several boards can run side by side.\n\nThe rules engine enforces legal moves, castling, en passant, promotions, checkmate, and common draw conditions. Computer thinking runs in the browser, while your Neutron keeps the authoritative game state.\n\nApproved agents can join Local players games through dedicated tools. They can list available boards, inspect the position, legal moves, and move history, then submit a move against the current game revision. That makes it possible to play with an agent while keeping every move subject to the same chess rules and concurrent-move checks.",
+        "headline": "Your next move starts here.",
+        "subtitle": "Settle in for a game of strategy.",
+        "tags": [
+          {
+            "id": "games",
+            "name": "Games"
+          }
+        ],
+        "category": "Games",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/fb461e958c04224ebe7e56667fb1b2472208c1299680a846685644e83ef05d9d",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/54b5ff74d0e9353eb4147fa794244bdf455e36db97493dc6fec9ed1822f1321d",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "306",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "1",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/35b516897561d5e861b4070682c06f93dbf41f20c4c5ce235f80cef512039f08"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/58bdc1256fe8035f6aef1ce07fbcb2af0441af006df0785fb01f77930e1b8d1c"
+          }
+        ],
+        "id": "wagyu",
+        "title": "Wagyu",
+        "summary": "Publish, follow, reply, like, and share across a social network of Neutrons. Your Neutron hosts your social identity and posts, with verified peer content, notifications, and tools for authorized agents.",
+        "description": "Make your Neutron part of a peer-to-peer social network. Wagyu brings together a Home feed, post composer, profiles, replies, relationships, likes, and notifications. Follow other Neutrons, publish your own updates, and share posts you want others to discover.\n\nYour Neutron is your Wagyu node and protocol identity. It stores your authored posts and social state, while peers push references to new activity. Before displaying remote content, the browser verifies the certified object and its source. A tray notification view helps you keep up with recent activity, and an outbound queue retains delivery work for recovery. Network deliveries use cycles.\n\nWagyu also exposes tools for authorized agents to read verified profiles, feeds, posts, reply threads, likes, and relationships. Agents can publish posts, reply, like, share, follow, and unfollow through the same workflows as the app. That makes it possible to review your feed or prepare and publish an update as part of a wider Neutron task.",
+        "headline": "Your voice. Your own space.",
+        "subtitle": "Share, follow, and connect across Neutrons.",
+        "tags": [
+          {
+            "id": "social",
+            "name": "Social"
+          }
+        ],
+        "category": "Social",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/58bdc1256fe8035f6aef1ce07fbcb2af0441af006df0785fb01f77930e1b8d1c",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/6258ef69992a2de9e95044b5e935bab071a6bf1da3fba815e70406ab33dec2c3",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "308",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/310c1e4deff84b4c3b7de49126cb86d929f55a9f5118d310143206deb90a0acb"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/006850debca738c7c8d0843baf9a811cc9653f80ad5a45e93030d00f9a0c6016"
+          }
+        ],
+        "id": "taggr",
+        "title": "Taggr",
+        "summary": "Explore Taggr from Neutron: browse hot and new posts, discover realms and trending tags, follow threads, and publish or react. Resident agent tools bring social research and participation into your workflows.",
+        "description": "Bring Taggr's conversations into your Neutron workspace. Browse hot, new, personal, and realm feeds; discover topic communities and trending tags; search posts, people, realms, and topics; and read a post with its surrounding conversation. Profiles, author histories, and inline post images help you explore further.\n\nUse a registered account to publish Markdown posts, reply, and react. The app keeps its own Taggr identity in your Neutron, with export and restore controls for portability. Registration supports an invite code or Taggr's paid invoice flow through Wallet when installed.\n\nResident tools give authorized agents access to feeds, search, threads, tags, realms, profiles, and author posts, as well as posting and reactions. Ask an agent to review a discussion or publish an update using the account connected here. This is a Neutron client for the separate Taggr network. The client supports new posts and replies; editing, deleting, moderation, and governance are not included.",
+        "headline": "Join the conversation.",
+        "subtitle": "Read and share across the TAGGR community.",
+        "tags": [
+          {
+            "id": "social",
+            "name": "Social"
+          }
+        ],
+        "category": "Social",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/310c1e4deff84b4c3b7de49126cb86d929f55a9f5118d310143206deb90a0acb",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/a2212537e57f5bf147e9073a26c69adb9eeff61de598c7b7bdcf4aa199d77893",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "110",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/2a0ce70865cb43f081864b0dca3a06914d0fd4980259459040ec04b267e0e21d"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/c5a3c7c1d1f7e591f55dac048c745f546ea00a7517511ce61648e543461a684c"
+          }
+        ],
+        "id": "spreadsheet",
+        "title": "Spreadsheet",
+        "summary": "Build workbooks with formulas, formatting, sorting, and filters. Work in the grid or let agents read, edit, and save through dedicated tools, with Files integration and CSV/XLSX exchange.",
+        "description": "Bring structured data into your Neutron workspace with a spreadsheet built for both hands-on editing and agent collaboration. Create multiple sheets, write formulas, fill ranges, format cells, resize rows and columns, sort with header awareness, and filter computed values. Searchable formula help provides syntax and examples as you work.\n\nDedicated agent tools can inspect a workbook, read and find cells, apply edits, manage sessions, undo or redo changes, and save files. Agents and the grid use the same revision-aware command engine, so concurrent changes are detected and reviewed instead of silently replacing an active edit.\n\nSave complete workbooks in the native .nsheet format through Files. Import CSV or XLSX data and export reviewed snapshots for sharing, with format limitations reported during exchange. A six-sheet example workbook demonstrates formulas, a dashboard, inventory, styles, and filters to help you get started.",
+        "headline": "Bring your numbers together.",
+        "subtitle": "Organize ideas and data in a familiar grid.",
+        "tags": [
+          {
+            "id": "productivity",
+            "name": "Productivity"
+          }
+        ],
+        "category": "Productivity",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/2a0ce70865cb43f081864b0dca3a06914d0fd4980259459040ec04b267e0e21d",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/4d3ae1d1fd8da3e6c849739ca95310089bf1047708b22b290134e73dfd359e6f",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "306",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/d3cebac6cb89b70fe94dfde87c7a935928d48efa548c4aaa4577ac32e0a7f50f"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/6bc394bda9223160c82c80376d3ec238192d814c454b25bf92b6a819c01fbf9a"
+          }
+        ],
+        "id": "snsgov",
+        "title": "SNS Governance",
+        "summary": "Explore Internet Computer SNS communities, compare governance, review proposals, and vote with eligible neurons. Agent tools support research, vote planning, and proposal drafts ready for your review.",
+        "description": "Make SNS governance easier to follow from your Neutron. Discover Service Nervous Systems, compare governance parameters, and inspect token information, treasuries, proposals, neurons, and canister health. Open a proposal to see its details, tally, deadline, and rendered payload.\n\nRegister your Neutron as a hotkey on the neurons you want it to use, then vote with eligible neurons across the SNSes you configure. Create proposals, including the custom proposal types registered by each DAO, and keep draft and action history in the app.\n\nResident tools give authorized agents a practical governance research workflow: compare SNSes, read proposals, inspect neurons and custom proposal types, validate custom payloads, and create a proposal draft for you to review. Agents can preview which neurons would vote and cast votes where you have enabled agent voting. Proposal submission and permission changes stay in the app's user interface, so drafts can move from agent-assisted preparation to your final review.",
+        "headline": "Have a say in what comes next.",
+        "subtitle": "Explore and participate in SNS governance.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          }
+        ],
+        "category": "Crypto",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/d3cebac6cb89b70fe94dfde87c7a935928d48efa548c4aaa4577ac32e0a7f50f",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/3edf2e2f8e9e7e4afefc153d4bd2e52848b163c5c42f7b42336db60caffa6e10",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "117",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/191a1866638783a1df2299162bfa22521f109256eb661a4920536e50cd25a0b3"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/1d13914f7136b14d57336ffd2b9f415607bcdd2a9f7c0f91588002f487f35341"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/aa925e3a0a18b9d8ec36c2e747f62fbfe48b29ae1afefc37ba63802b0ba8a138"
+          }
+        ],
+        "id": "openchat",
+        "title": "OpenChat",
+        "summary": "Bring OpenChat conversations into Neutron. Read and send direct messages, groups, and channels, discover public communities, and let authorized agents search, read, send, and join through built-in tools.",
+        "description": "Keep OpenChat conversations alongside the rest of your Neutron work. Browse your direct chats, groups, and channels, read recent messages, and send text replies. Search users to start a direct conversation, or explore the public group and community directories to find places to join.\n\nSign in through OpenChat's email flow and manage your profile from the app. The resident client connects to OpenChat's network from your browser and retains the account session on this device. Its shared chat engine keeps the tile and agent tools working with the same conversations.\n\nAuthorized agents can list chats, read messages, send to a selected chat or user, search people, browse and join public groups and communities, mark chats read, and open a conversation in the tile. Use these tools to catch up on a discussion and carry out the follow-up you request. This is an independently developed Neutron client, unaffiliated with OpenChat Labs.",
+        "headline": "A place to catch up.",
+        "subtitle": "Bring your OpenChat conversations into view.",
+        "tags": [
+          {
+            "id": "social",
+            "name": "Social"
+          }
+        ],
+        "category": "Social",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/aa925e3a0a18b9d8ec36c2e747f62fbfe48b29ae1afefc37ba63802b0ba8a138",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/594085d95b574120e201698da06e4f6d879d7a8a082f1e118b6d71b73e09542c",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "125",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/e0b99066697dae2b6b84816e08f081f021fc562b215800eb879ff62a8c312b47"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/6d007650849a141f3f1ceaec0c65793f074adca7153ad934ac03f4f014c84a90"
+          }
+        ],
+        "id": "nuance",
+        "title": "Nuance",
+        "summary": "Read, research, and publish on Nuance from Neutron. Discover articles, follow comments, save a reading list, and work with an agent on shared drafts that stay in sync with your editor.",
+        "description": "Move from reading to writing in one Neutron app. Explore the latest and most popular Nuance articles, search their text, read comment threads and related articles, and keep a reading list. The reader displays article covers and supported inline images alongside the text.\n\nWrite in a shared editor, save a private draft on Nuance, or publish when ready. Bring one of your own published articles back into the editor for revision. Drafts live in your Neutron so you and an agent can work on the same document; revision checks detect conflicting edits and keep unsaved typing visible.\n\nResident tools let authorized agents browse, search, read articles and comments, check for newer posts, create and edit drafts, publish, and reply. Use them to research a subject, develop an outline, refine an article, and take it through publication. Publishing here uses a separate Nuance account registered to your Neutron's canister, with its own handle, rather than your existing nuance.xyz login.",
+        "headline": "Stories worth your time.",
+        "subtitle": "Discover independent writing on Nuance.",
+        "tags": [
+          {
+            "id": "social",
+            "name": "Social"
+          }
+        ],
+        "category": "Social",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/e0b99066697dae2b6b84816e08f081f021fc562b215800eb879ff62a8c312b47",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/335bb5cf561349ef8d032e30eaa23b34cd5a440fbe5a100be34897dec00203cd",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "112",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/973725e958f40bf76a600164d61d5ca33beb924731d6f7bfd8908585cd069237"
+          }
+        ],
+        "id": "mysubnet",
+        "title": "My Subnet",
+        "summary": "See where your Neutron runs. Explore a live Earth globe of its Internet Computer subnet, with node locations drawn from the public NNS Registry.",
+        "description": "Make the infrastructure behind your Neutron visible. My Subnet discovers the Internet Computer subnet hosting your canister, reads its node membership, and places the nodes on an interactive Earth globe using data center coordinates from the NNS Registry.\n\nDrag or swipe to explore the globe, or rotate it with the keyboard. Nodes sharing a data center remain individually visible, and the topology refreshes automatically as the network changes. Subnet identity and membership come from the IC's certified state tree; locations reflect the Registry's recorded administrative metadata.\n\nThe app connects directly to public IC data without an API key or account setup. It is a simple way to explore the geographic distribution of the machines supporting your own Neutron.",
+        "headline": "See where your Neutron lives.",
+        "subtitle": "Explore the network behind your workspace.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          },
+          {
+            "id": "tools",
+            "name": "Developer tools"
+          }
+        ],
+        "category": "Crypto · Developer tools",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/973725e958f40bf76a600164d61d5ca33beb924731d6f7bfd8908585cd069237",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/fe580eeade06a6b0db08e9e29dad958999c37ddd3222ed1c438323406ebaa479",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "306",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/128d7d7ddc5bb9671586f782b5362247078ca1bb18800c3a6ee6413e3840c4b8"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/a99ed195b4f8830550a6dfc07b8ee8634c5d069a595faf157cdbd1f4e1d82546"
+          }
+        ],
+        "id": "mail",
+        "title": "Mail",
+        "summary": "Send private encrypted messages directly between Neutrons. Use Contacts to find recipients, read and reply from your inbox, track delivery in Outbox, and give authorized agents tools to help manage your mail.",
+        "description": "Keep private conversations inside your Neutron. Mail sends an encrypted message to one other Neutron at a time, with Inbox, Sent, Outbox, unread indicators, and replies to the authenticated sender. Find recipients through Contacts and turn a new sender into a contact draft for review.\n\nMessage subjects, bodies, and sender display names are encrypted in the browser before they reach a Neutron backend. Read and compose Markdown, check delivery state, retry a stored outbound message, and preview mailbox cleanup before applying it. A tray view keeps recent messages and unread counts close at hand. Delivery uses cycles from the sending Neutron.\n\nAuthorized agents can find recipients, list and read messages, search loaded message headers, send and reply, inspect status, mark messages read or unread, and help clean up the mailbox. These tools use the same encrypted delivery and reading workflows as the app. Mail connects Neutron mailboxes; it does not connect external email accounts or support attachments.",
+        "headline": "A more personal inbox.",
+        "subtitle": "Encrypted messages, from Neutron to Neutron.",
+        "tags": [
+          {
+            "id": "social",
+            "name": "Social"
+          },
+          {
+            "id": "productivity",
+            "name": "Productivity"
+          }
+        ],
+        "category": "Social · Productivity",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/a99ed195b4f8830550a6dfc07b8ee8634c5d069a595faf157cdbd1f4e1d82546",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/34d61ce812a52d97d7d67dab56f3e472d140baf0e0ed4e790e9d4069571cd92e",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "307",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/69320007d508db3700042be79cb25c7b48f8c85e5f45327117a7122256d2f12c"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/cce2ddf7d4dfeca555dfef7661871d17e38b8c2cad845970eda8f37504f42048"
+          }
+        ],
+        "id": "kitchensink",
+        "title": "Kitchen Sink",
+        "summary": "Explore Neutron's app capabilities in a hands-on developer workbench, with live backend examples, storage, wallet connections, agent tools, and a resident tray demo.",
+        "description": "Turn Neutron's app platform into something you can explore. Kitchen Sink is an interactive developer workbench with focused pages for backend calls, managed memory, revisioned notes, certified assets, randomness, signing, scheduled tasks, wallet connections, and the shared design system. Each demonstration shows its result and the permissions behind it.\n\nOpen the companion tile to see shared backend state in action, try the resident tray and browser storage examples, and explore integrations with Contacts, IC Wallet, and EVM Wallet. A dedicated agent entrypoint demonstrates a scoped nested tool call, while resident tools expose the demo's state and actions for approved app interactions.\n\nBuilt for developers learning how Neutron apps fit together, Kitchen Sink pairs working examples with visible failure states and capability details. Some demonstrations require external services, wallets, or capabilities available in the running Neutron.",
+        "headline": "Build something of your own.",
+        "subtitle": "Explore the possibilities of Neutron apps.",
+        "tags": [
+          {
+            "id": "tools",
+            "name": "Developer tools"
+          }
+        ],
+        "category": "Developer tools",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/69320007d508db3700042be79cb25c7b48f8c85e5f45327117a7122256d2f12c",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/41a485f495b0dbcf75790eda577b02f75675992d54423caf4509d56eec139f6f",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "320",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/285cd4f7e2616473b149ef5d9092ba531652a42d8cc1f859f0adf70448123c03"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/adbace62f9a95877d3e59d0d10463d0639457b8c36eb8092f42c9ea020db2385"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/c66d7355218557b65b612bd18ea820a11355a41c91412532e870e96424079d4b"
+          }
+        ],
+        "id": "icpswap",
+        "title": "via ICPSwap",
+        "summary": "Independently developed Neutron integration of ICPSwap. Research tokens, swap assets and manage concentrated liquidity, with market charts, watchlists, position insights and agent tools connected to Wallet.",
+        "description": "Explore Internet Computer markets and act from the same Neutron workspace. Search ICPSwap tokens, build a watchlist, inspect pools and recent trades, and study price, volume and liquidity charts. Pool views include reported token quantities alongside TVL, while position cards show holdings, estimated value, current uncollected fees and the market price within your chosen range.\n\nSwap supported tokens with a fresh quote and amount review, using Wallet for live token information, balances and funding. Create concentrated-liquidity positions in discovered pools, add or remove liquidity, close positions, claim fees and withdraw available unused pool tokens. Activity retains the original requests and separates protocol execution from wallet payout progress, with tools to continue interrupted operations and inspect recovery evidence.\n\nAgents can research tokens and rankings, read charts and pool composition, maintain watchlists, quote swaps, discover owned positions and calculate liquidity ranges. Execution tools support swaps and liquidity actions through the existing review and Wallet funding flows. Status, history and reconciliation tools help agents follow saved operations. This app is independently developed for Neutron and is not an official ICPSwap application.",
+        "headline": "Your gateway to IC markets.",
+        "subtitle": "Explore tokens, swaps, and liquidity on ICPSwap.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          },
+          {
+            "id": "defi",
+            "name": "DeFi"
+          }
+        ],
+        "category": "Crypto · DeFi",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/285cd4f7e2616473b149ef5d9092ba531652a42d8cc1f859f0adf70448123c03",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/7b3ef7cab8df1e76219c0d228b878304212df27b2f6f60cb8d0dbbb902f24fea",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "211",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/d20ef62df1f1d8af82c7e8d992508278913d93e57e317df75c9ac5164f727e31"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/f15b0ddceb31186461ec021f56cde5da02725dc80c48c39f023536baaae9c886"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/700fbbd416de65cf73267dd03a33a1642531778c5f2f5d06b5a7d8f924b3d7e7"
+          }
+        ],
+        "id": "hyperliquid",
+        "title": "via Hyperliquid",
+        "summary": "Independently developed Neutron integration of Hyperliquid. Trade perpetuals, analyze charts and order books, manage orders and positions, and move USDC to or from Ethereum and Arbitrum with tools for agents.",
+        "description": "Bring Hyperliquid perpetual trading into your Neutron. Explore the default perpetual markets with live market data, candlestick and volume charts, order books, account positions, fills and funding rates. Place market or limit orders, edit and cancel working orders, close positions fully or partially, and manage leverage and isolated margin. Independent reduce-only stop-loss and take-profit triggers are also available.\n\nMove native USDC between the same EVM Wallet account on Ethereum or Arbitrum and Hyperliquid through the supported Circle transfer routes. Quotes show current transfer fees and source gas needs, while saved funding activity tracks the original operation and exposes continuation or recovery when available. EVM Wallet approves browser trading access and handles the master account's signatures and funding transactions.\n\nAgents get tools for market discovery, chart and order-book analysis, positions, fees, funding rates and order capacity. They can preview and execute trades, manage positions and orders, transfer USDC, and check retained operation outcomes under the active authorization flow. Browser trading and agent strategies require the authorized Neutron browser to remain open; accepted venue orders remain active independently. This app is independently developed for Neutron and is not an official Hyperliquid application.",
+        "headline": "Markets at your fingertips.",
+        "subtitle": "Follow and trade on Hyperliquid.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          },
+          {
+            "id": "defi",
+            "name": "DeFi"
+          }
+        ],
+        "category": "Crypto · DeFi",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/700fbbd416de65cf73267dd03a33a1642531778c5f2f5d06b5a7d8f924b3d7e7",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/c6a200c5da7a3fe2bd040c9784afc659d198b1781334860aeb0d343c76f020df",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "109",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/cea05bb5e6d8614b40e556920d7adb9f3aaab1d20c6cb6f91bda7c4e43080097"
+          }
+        ],
+        "id": "gemma",
+        "title": "Gemma",
+        "summary": "Chat with a local Gemma model using your browser's GPU. A resident process keeps the model ready across workspace changes, with cached model assets and tools for chat and model control.",
+        "description": "Bring local language-model chat into your Neutron workspace. Gemma runs its bundled integration for the Heretic Gemma checkpoint through WebGPU, generating responses on your device after the model assets have downloaded. Ask questions, develop ideas, or draft text in a straightforward chat interface.\n\nA resident process owns the model and conversation, so switching workspaces or closing a chat tile keeps the loaded model available during the session. Model assets use the app's persistent browser cache to support later loads. You can stop a response or reset the model and shared conversation from the app.\n\nExposed tools let approved agents inspect model status, load the model, request a chat response, stop processing, or reset the session. Gemma itself provides chat generation; it does not run an agent loop or call other apps. A browser and device with WebGPU support are required.",
+        "headline": "A little intelligence, all yours.",
+        "subtitle": "Chat with a local model on your own device.",
+        "tags": [
+          {
+            "id": "productivity",
+            "name": "Productivity"
+          },
+          {
+            "id": "preppers",
+            "name": "Preppers"
+          }
+        ],
+        "category": "Productivity · Preppers",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/cea05bb5e6d8614b40e556920d7adb9f3aaab1d20c6cb6f91bda7c4e43080097",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/76e8883f3c24396064e6c37343f5f330f4db7960a5ebcea6b20b3080977f9c9d",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "206",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/ac7df0e86c40f4ec355fc44e560b7323eccb6491cae715faf0196d64bc2b054f"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/45e8db48c05a83bc3a5e59a7531f5e21b968dcea2d35a7b226bd7ca19a3190fa"
+          }
+        ],
+        "id": "files",
+        "title": "Files",
+        "summary": "Keep everyday files in Workspace, protect sensitive documents in Vault, and publish links from Shared. Organize folders, upload and preview files, and let authorized agents read, write, and manage your work.",
+        "description": "Bring your documents, notes, and app outputs into one familiar file tree. Files gives you three clear places to work: Workspace for everyday storage inside your Neutron, Vault for encrypted files, and Shared for files with public links.\n\nCreate nested folders, rename and move items, stage multiple uploads for review, download files, and preview supported images. Moving a file between roots applies the destination's storage policy. Files placed in Shared are published automatically, with Get link ready when you want to share them. Vault encrypts file names, metadata, and content in the browser before storing them in your Neutron. Workspace is unencrypted and has no public file route.\n\nBuilt-in tools let authorized agents and apps list folders, inspect files, read and write text or binary content, patch or append documents, write batches, and organize the tree. Workspace is the default working location. Agents can access Vault content while you have Vault open, and an authorized Agent Mode turn can publish files to Shared.",
+        "headline": "A place for everything.",
+        "subtitle": "Organize your workspace, vault, and shared files.",
+        "tags": [
+          {
+            "id": "productivity",
+            "name": "Productivity"
+          },
+          {
+            "id": "preppers",
+            "name": "Preppers"
+          }
+        ],
+        "category": "Productivity · Preppers",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/45e8db48c05a83bc3a5e59a7531f5e21b968dcea2d35a7b226bd7ca19a3190fa",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/c3da0ebcc6b3a404341c6561a9087d9e7247d72fb7a12cb78023b4bc795c48ce",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "412",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/99ac115943a33b304a9dc7775f4c8a68cc221a1f742812cf0db7ec94f99b9358"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/97c0888b917c4723e29cba8ba97e243a693ac350219f8f6f0a97977f6ca9ee46"
+          }
+        ],
+        "id": "feedback",
+        "title": "Feedback",
+        "summary": "Get help with Neutron and its apps, share feedback, and suggest what comes next.",
+        "description": "Get help with Neutron and its apps in one small inbox. Open a support ticket for a problem, share feedback without expecting a reply, or suggest a new app or feature.\n\nKeep the conversation in one place. Read support replies, add more details, and return from the tray when a new response arrives. Messages are text only: put images in Files → Shared and paste their public links into your message.\n\nYour conversations are visible to your Neutron and the assigned support team. Moderators use the same app to browse the support inbox and respond. Agent tools cover both sides, so your assistant can submit and follow up on your messages, and authorized support agents can review issues and reply.",
+        "headline": "Help shape what comes next.",
+        "subtitle": "Get support, share feedback, and suggest new ideas.",
+        "tags": [
+          {
+            "id": "productivity",
+            "name": "Productivity"
+          },
+          {
+            "id": "tools",
+            "name": "Developer tools"
+          }
+        ],
+        "category": "Productivity · Developer tools",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/99ac115943a33b304a9dc7775f4c8a68cc221a1f742812cf0db7ec94f99b9358",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/f0a8cf20a972d407d1fa9f3a72c213030f9e37051c511e21800aab2388191819",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "102",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/75794285285a65bdc9f25e64beda99a841205f8c0f7c34de43bb4fa0bfd58ee0"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/6aa604a6cb404356f244e567c8b8833cfeb879b2d8b0e76f3ad488402d13142f"
+          }
+        ],
+        "id": "evm_wallet",
+        "title": "EVM Wallet",
+        "summary": "Your Neutron's account for Ethereum, Arbitrum and HyperEVM. Manage assets, review transactions, sign messages and connect DeFi apps, with agent tools for contract reads, fee estimates, payments and transaction tracking.",
+        "description": "Bring an EVM account into your Neutron. EVM Wallet uses Internet Computer chain-key signing for an account that works across Ethereum, Arbitrum and HyperEVM, with separate balances and gas on each network. View native and selected ERC-20 assets, add custom tokens and send funds without a browser wallet extension or API key.\n\nReview transfers, contract calls, personal messages and typed data in the same app. Supported protocol transactions receive readable explanations of amounts, recipients, approvals and minimum outputs, with the original data available to inspect. Activity retains requests, signatures, receipts and pending transactions; replacement tools let you request a speed-up or cancellation. Settings include recorded token approvals and importable transaction explanations.\n\nEVM Wallet is the account and transaction provider for Neutron's EVM DeFi apps. Agents can discover accounts and networks, read balances and contracts, inspect price observations, estimate fees and follow transaction status. Transaction and signature tools support the owner or active agent review flow, while saved request identities help apps continue interrupted operations. Signing stays with the Wallet rather than being handed to consumer apps.",
+        "headline": "A wallet for your wider world.",
+        "subtitle": "Explore your assets across EVM networks.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          }
+        ],
+        "category": "Crypto",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/75794285285a65bdc9f25e64beda99a841205f8c0f7c34de43bb4fa0bfd58ee0",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/1f7ebb464b7d935ad800d19e80b3ba98b60ba062a28b6f0d64c5a4ee55856de3",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "127",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/cc4428472c838f40e583b8ded24824403d26a274b97a5a3d7ba3a485eab9cc50"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/898b75aa52f5847fdaebfb1d67a2797dffed12725fdb1eee816905d96ba93a39"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/04a48c78d6086e49e8ee6357436c6f6def9724fac7fc06304ab6e66870cf1fc3"
+          }
+        ],
+        "id": "curve",
+        "title": "via Curve",
+        "summary": "Independently developed Neutron integration of Curve. Swap assets, explore supported pools and manage liquidity on Ethereum and Arbitrum, with position previews, saved activity and agent tools through EVM Wallet.",
+        "description": "Put Curve swaps and liquidity within reach of your Neutron. Browse supported pools on Ethereum and Arbitrum, search assets by name or contract address, and compare direct swap quotes through Curve Router. The app brings token balances, available fee estimates, slippage settings and recipient controls into a focused Swap view, including supported ETH and WETH conversions.\n\nExplore StableSwap NG, Twocrypto NG, Tricrypto NG and selected legacy pools. Preview an exact token budget for adding liquidity, or withdraw proportionally or into one supported pool coin. Inspect your wallet's LP balance and its proportional underlying assets, then save pools to My pools for convenient return visits. Activity records approvals, final transactions and continuation progress.\n\nAgents can browse tokens and pools, inspect verified pool data and wallet positions, calculate quotes and network fees, and complete supported swap or liquidity operations. Dedicated tools track saved pools and read, continue or reconcile existing activity. EVM Wallet provides the account, contract reads, transaction review and signing. This app is independently developed for Neutron and is not an official Curve Finance application.",
+        "headline": "Go with the flow.",
+        "subtitle": "Explore Curve pools and token swaps.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          },
+          {
+            "id": "defi",
+            "name": "DeFi"
+          }
+        ],
+        "category": "Crypto · DeFi",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/04a48c78d6086e49e8ee6357436c6f6def9724fac7fc06304ab6e66870cf1fc3",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/12c7fd18a6640231b302f0b4c842bc2b37a40edaa228ae75b16ea2e0914123b1",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "108",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [],
+        "id": "blast",
+        "title": "Blast",
+        "summary": "Give Neutron agents a toolkit for the Internet Computer: discover canister interfaces, make calls, save reusable JavaScript, and collect and analyze data through scripts and browser-local collections.",
+        "description": "Extend what your agent can do on the Internet Computer. Blast discovers canister interfaces with ICBlast, exposes method schemas, validates inputs, and makes query or update calls. An agent can inspect a service and work with its public API without a dedicated app integration.\n\nTurn repeatable work into saved JavaScript scripts. Agents can evaluate code, run saved scripts, inspect run history and checkpoints, and stream paginated responses into collections. Collection inspection and JSONata queries help explore data; scripts can transform it into derived collections and return useful summaries.\n\nBlast works in the resident background and has no separate app tile. Saved script source lives in your Neutron. Collections, runs, checkpoints, and Blast's own calling identity stay in this browser and are not synchronized across devices. Calls normally use that separate identity; direct updates can also use the Kernel's authorized signed-call route.",
+        "headline": "A toolkit for curious agents.",
+        "subtitle": "Discover, call, and explore IC canisters.",
+        "tags": [
+          {
+            "id": "tools",
+            "name": "Developer tools"
+          }
+        ],
+        "category": "Developer tools",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/32e1f948d07fb3aaa0154360b891d839ba19861130736717448ef3e6c1c1cb29",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/03c9dbbef7935a20050217ae1a2954f4784910aa1f4d75086effcd2f10ee8d91",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "104",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/58ac3f45d1256dc72dda4e5890823a2e0e3c4e61447511b3ce9bded2673286bf"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/6d1be581bdf0344157e0893d7ac21fd2005df3dae3acb9e298f25a39576c4595"
+          }
+        ],
+        "id": "agent",
+        "title": "Agent",
+        "summary": "Turn requests into work across your Neutron apps. Choose your model, use app tools, organize workspaces, and tackle longer goals with saved progress, live steering, and parallel agent workers.",
+        "description": "Put an assistant to work inside your Neutron. Agent discovers the tools your installed apps expose, reads their current capabilities, and uses them to carry out your requests. It can also open and arrange app tiles, switch workspaces, and bring the next part of a task into view.\n\nConnect through OpenRouter and choose from compatible models with searchable names, context sizes, and displayed token pricing. A ChatGPT subscription connection is also available through the optional Neutron Chrome extension, using the models available to that account. OpenRouter connections offer an optional Web control for search and public-page research.\n\nGive longer work a saved goal, steer it with new instructions, or queue the next request. In Agent Mode, parallel workers can handle independent parts while the main agent checks their results. Each tile keeps its own conversation and saved progress, with pause, resume, and interruption recovery. Active work runs while the browser is open; saved work can be resumed afterward.",
+        "headline": "Big ideas. A little assistance.",
+        "subtitle": "Put your apps to work with your own AI agent.",
+        "tags": [
+          {
+            "id": "productivity",
+            "name": "Productivity"
+          }
+        ],
+        "category": "Productivity",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/6d1be581bdf0344157e0893d7ac21fd2005df3dae3acb9e298f25a39576c4595",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/55fd8942ee67a1c0657a57159935a23b8e2c7c6044282ede7e0b715df05368dc",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "322",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      },
+      {
+        "screenshots": [
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/8d94ba68dd479a4f015d8dd6f35496feceb330bdc9f5e142b398645517d64aee"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/56b759dc98f39d07471461bf18c789e0a9db7786817df93ae1b7c0cca89df4f6"
+          },
+          {
+            "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/34bbd94f0d262b82c176d6c7e6fefdbda443d20ea9a59a99cd63fca9193c7275"
+          }
+        ],
+        "id": "aave",
+        "title": "via Aave",
+        "summary": "Independently developed Neutron integration of Aave. Supply, borrow, repay and manage collateral on Ethereum Core V3 and Arbitrum V3, with account health previews, rewards and agent tools through EVM Wallet.",
+        "description": "Manage Aave lending from one place in your Neutron. Browse reserves on Ethereum Core V3 and Arbitrum V3, inspect supplied and borrowed assets, and follow current rates, borrowing capacity and account health. Action previews show the estimated effect on collateral and debt before EVM Wallet presents each transaction for review.\n\nSupply supported tokens or native ETH, withdraw available supply, open variable-rate debt and repay part or all of a position. Where supported, use supplied aTokens for repayment, change collateral settings, select an efficiency-mode category and claim market incentives. Focused dialogs bring the relevant balances and payment budgets into view, while saved activity connects approvals and delegations with the final lending transaction.\n\nAgent tools read market reserves, positions, rates, rewards and health; preview operations and fees; and execute supported lending actions through EVM Wallet. Status, history, continuation and reconciliation tools let an agent follow the same saved operation after an interruption. Rates and health are current observations that change with market and account conditions. This app is independently developed for Neutron and is not an official Aave Labs application.",
+        "headline": "Make room for your next move.",
+        "subtitle": "Explore lending and borrowing on Aave.",
+        "tags": [
+          {
+            "id": "crypto",
+            "name": "Crypto"
+          },
+          {
+            "id": "defi",
+            "name": "DeFi"
+          }
+        ],
+        "category": "Crypto · DeFi",
+        "coverUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/34bbd94f0d262b82c176d6c7e6fefdbda443d20ea9a59a99cd63fca9193c7275",
+        "iconUrl": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/media/a199d1bf8d2a42428636ce2fccf70e1f0da426db7bb98f54137d1d5a958819d6",
+        "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+        "publisherId": "aae",
+        "publisherName": "aae",
+        "priceUsdMicros": "0",
+        "version": "109",
+        "channel": "beta",
+        "rating": null,
+        "ratingCount": 0,
+        "freeAcquisitions": "0",
+        "paidPurchases": "0",
+        "owned": false,
+        "installed": false
+      }
+    ]
+  },
+  "readOnly": true
+}

@@ -1,0 +1,94 @@
+{
+  "protocol": {
+    "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+    "previousModuleSha256": "5742b989de18c7a653ed383b55ae2df78547f53452fb9de477dd22ab979fa0a2",
+    "moduleSha256": "4cb57655e1131670d1eafaa522b13d74b9a59081708764f5680f753a1f4aa477",
+    "mode": "upgrade",
+    "wasmMemoryPersistence": "keep",
+    "settingsUnchanged": true,
+    "certifiedRecordsUnchanged": 57,
+    "qualifiedPredecessorMatchesDeployed": true,
+    "sourceCommit": "558e7d317e68a4cc7800459f62140cc5ed7a8d2a"
+  },
+  "media": {
+    "status": "publication_verified",
+    "requestId": "0839c7e8b8967cff9cc86cdaeaf52ff4661fc11d01b1e4010f2d71b98a928bb6",
+    "updateCalls": 121,
+    "packagesChanged": false
+  },
+  "mediaRepeat": {
+    "status": "publication_verified",
+    "requestId": "0839c7e8b8967cff9cc86cdaeaf52ff4661fc11d01b1e4010f2d71b98a928bb6",
+    "updateCalls": 0,
+    "packagesChanged": false
+  },
+  "curation": {
+    "configRevision": "1",
+    "appRevisions": {
+      "hello": "2",
+      "uniswap": "2",
+      "openchat": "1",
+      "mail": "1",
+      "feedback": "1",
+      "taggr": "1",
+      "hyperliquid": "1",
+      "jetcreeper": "1",
+      "hullshift": "1",
+      "chess": "1",
+      "files": "1",
+      "nuance": "1",
+      "kitchensink": "1",
+      "blast": "2",
+      "snsgov": "1",
+      "mysubnet": "1",
+      "wagyu": "1",
+      "agent": "1",
+      "icpswap": "1",
+      "curve": "1",
+      "wallet": "1",
+      "aave": "1",
+      "contacts": "1",
+      "spreadsheet": "1",
+      "gemma": "1",
+      "evm_wallet": "1"
+    },
+    "exactRepeatUnchanged": true,
+    "chartCoverUpdates": {
+      "blast": {
+        "revision": "2",
+        "coverArtifact": [
+          "281"
+        ],
+        "exactRepeatUnchanged": true
+      },
+      "uniswap": {
+        "revision": "2",
+        "coverArtifact": [
+          "280"
+        ],
+        "exactRepeatUnchanged": true
+      },
+      "hello": {
+        "revision": "2",
+        "coverArtifact": [
+          "279"
+        ],
+        "exactRepeatUnchanged": true
+      }
+    }
+  },
+  "chartCoverMedia": {
+    "publish": {
+      "status": "publication_verified",
+      "requestId": "5c0e2d76ea1cbc7c86c75ddc31a4db5477039695d62f62830be074abb413a023",
+      "updateCalls": 12,
+      "packagesChanged": false
+    },
+    "repeat": {
+      "status": "publication_verified",
+      "requestId": "5c0e2d76ea1cbc7c86c75ddc31a4db5477039695d62f62830be074abb413a023",
+      "updateCalls": 0,
+      "packagesChanged": false
+    }
+  }
+}

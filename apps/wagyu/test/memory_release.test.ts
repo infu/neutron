@@ -19,7 +19,7 @@ const kernel: PackagedNeutronManifest = {
   entry: "f".repeat(64),
 };
 
-test("Wagyu 0.3.7 keeps the oldest production v3 memory root", async () => {
+test("Wagyu 0.3.8 keeps the oldest production v3 memory root", async () => {
   await assertWagyuCodeOnlyRelease({
     productionArchive: new URL("../wagyu.v0.3.2.neutron", import.meta.url),
     productionVersion: 302,
@@ -29,7 +29,7 @@ test("Wagyu 0.3.7 keeps the oldest production v3 memory root", async () => {
   });
 });
 
-test("Wagyu 0.3.7 keeps its exact 0.3.5 predecessor's v3 memory root", async () => {
+test("Wagyu 0.3.8 keeps its exact 0.3.5 predecessor's v3 memory root", async () => {
   await assertWagyuCodeOnlyRelease({
     productionArchive: new URL("../wagyu.v0.3.5.neutron", import.meta.url),
     productionVersion: 305,
@@ -64,7 +64,7 @@ async function assertWagyuCodeOnlyRelease({
   const source = JSON.parse(sourceText) as NeutronManifest;
   const lock = JSON.parse(lockText) as ReturnType<typeof createMemoryLock>;
   expect(production).toMatchObject({ id: "wagyu", version: productionVersion });
-  expect(source).toMatchObject({ id: "wagyu", version: 307 });
+  expect(source).toMatchObject({ id: "wagyu", version: 308 });
 
   const productionMemory = requiredMemory(production);
   const sourceMemory = requiredMemory(source);
@@ -130,7 +130,7 @@ function sourceShape(memory: NeutronMemoryConfig): NeutronMemoryConfig {
 }
 
 // The source-only repository move also keeps the immediate production root.
-test("Wagyu 0.3.7 keeps the exact production 0.3.6 v3 root", async () => {
+test("Wagyu 0.3.8 keeps the exact production 0.3.6 v3 root", async () => {
   await assertWagyuCodeOnlyRelease({
     productionArchive: new URL("../wagyu.v0.3.6.neutron", import.meta.url),
     productionVersion: 306,

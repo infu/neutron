@@ -23,6 +23,7 @@ import Memory "../backend/memory/nuance/v1";
 // below; they exist so the environment type-checks.
 let backendCalls : Caps.BackendCallsV1 = {
     canister_principal = Principal.fromText("aaaaa-aa");
+    owns_principal = func(principal : Principal) : Bool { principal == Principal.fromText("aaaaa-aa") };
     can_call = func(_ : Principal, _ : Text) : Bool { true };
     call = func(_ : Caps.BackendCallRequestV1) : async* Caps.BackendCallResultV1 {
         #err({ code = "test"; message = "offline" });

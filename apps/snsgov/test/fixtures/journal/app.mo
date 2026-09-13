@@ -19,6 +19,7 @@ persistent actor class Journal(gateId : Principal) = this {
   };
   transient let broker : Caps.BackendCallsV1 = {
     canister_principal = Principal.fromActor(this);
+    owns_principal = func(principal : Principal) : Bool { principal == Principal.fromActor(this) };
     can_call = func(_ : Principal, method : Text) : Bool { knownMethod(method) };
     call = func(request : Caps.BackendCallRequestV1) : async* Caps.BackendCallResultV1 {
       assert request.canister == gateId;

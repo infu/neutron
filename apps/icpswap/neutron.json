@@ -2,7 +2,7 @@
   "format": 3,
   "name": "via ICPSwap",
   "id": "icpswap",
-  "version": 210,
+  "version": 211,
   "description": "Independent ICPSwap integration for swaps, concentrated liquidity, positions, market research and agent tools.",
   "src": "main.mo",
   "backend": {
@@ -17,7 +17,7 @@
       "id": "main",
       "title": "via ICPSwap",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Trade tokens and manage ICPSwap liquidity"
     }
   ],

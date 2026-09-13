@@ -2,7 +2,7 @@
   "format": 3,
   "id": "feedback",
   "name": "Feedback",
-  "version": 101,
+  "version": 102,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Get help with Neutron and its apps, share feedback and suggest what comes next.",
   "src": "main.mo",
@@ -18,7 +18,7 @@
       "id": "main",
       "title": "Feedback",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Get help, share feedback and suggest improvements"
     }
   ],
@@ -29,7 +29,7 @@
   "tray": {
     "title": "Feedback",
     "path": "tray.html",
-    "icon": "static/icon.svg"
+    "icon": "static/icon.webp"
   },
   "capabilities": {
     "backend_calls": {

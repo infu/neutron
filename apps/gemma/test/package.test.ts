@@ -16,7 +16,7 @@ const jsUrl = new URL("../dist/web/main.js", import.meta.url);
 const serviceHtmlUrl = new URL("../dist/web/service.html", import.meta.url);
 const serviceJsUrl = new URL("../dist/web/service.js", import.meta.url);
 const workerJsUrl = new URL("../dist/web/model-worker.js", import.meta.url);
-const packageUrl = new URL("../gemma.v0.2.5.neutron", import.meta.url);
+const packageUrl = new URL("../gemma.v0.2.6.neutron", import.meta.url);
 
 async function readManifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -28,7 +28,7 @@ test("Gemma manifest validates as a persistent chat app", async () => {
   expect(manifest).toMatchObject({
     id: "gemma",
     name: "Gemma",
-    version: 205,
+    version: 206,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     description: "Private local Heretic Gemma 4 chat powered by WebGPU",
     src: "main.mo",
@@ -44,7 +44,7 @@ test("Gemma manifest validates as a persistent chat app", async () => {
         id: "chat",
         title: "Gemma",
         path: "index.html",
-        icon: "static/icon.svg",
+        icon: "static/icon.webp",
         description: "Chat with the resident local Heretic Gemma 4 model",
       },
     ],

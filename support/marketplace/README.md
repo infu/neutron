@@ -26,6 +26,9 @@ the [channel rollout](OPERATIONS.md#channel-protocol-rollout).
   screenshots, publisher ownership, ratings, and Top free/Top paid charts for
   rolling 7 days, 30 days, and all time. Rankings count distinct Neutron
   acquisitions, not downloads or retries.
+- The [storefront](spec/storefront.md) adds admin-editable categories, featured
+  order, short headlines/subtitles and cover selection. These live in a separate
+  persistent root; existing releases, prices and ownership retain their contracts.
 - A purchase belongs to the Neutron canister principal. Free claims and paid
   purchases grant enduring access to approved updates. Paid bytes use
   authenticated certified HTTP; browser read credentials do not authorize writes.
@@ -79,9 +82,11 @@ Install and Upgrade reviews show the applicable access cost.
 
 The admin exemption covers `admin_auditor_set`, `admin_reserve_app`,
 `admin_set_burn_account`, `rates_refresh`, and the explicit
-`admin_feedback_cutover` rollout action. They authenticate the actual
+`admin_feedback_cutover` rollout action. The storefront adds cycle-free
+`admin_storefront_set` and `admin_storefront_app_set`. They authenticate the actual
 configured admin principal, accept no attached cycles, and retain `feeVersion`
-only for Candid compatibility. Existing canister admin principals remain valid.
+only where present for Candid compatibility; the new storefront methods use
+revision checks instead. Existing canister admin principals remain valid.
 Admin or auditor status does not exempt purchases, uploads, or other ordinary
 writes. The separately configured first-party principal may publish and withdraw
 its own earnings directly without cycle charges; ledger withdrawal fees still

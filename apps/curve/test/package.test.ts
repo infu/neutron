@@ -44,11 +44,11 @@ test.each([
   if (version === 105) expect(previousBytes.byteLength).toBe(317_186);
   expect(createHash("sha256").update(previousBytes).digest("hex")).toBe(digest);
   const previous = unpackNeutronPackage(previousBytes);
-  const files = unpackNeutronPackage(await readFile(new URL("../curve.v0.1.7.neutron", import.meta.url)));
+  const files = unpackNeutronPackage(await readFile(new URL("../curve.v0.1.8.neutron", import.meta.url)));
   const manifest = JSON.parse(await readFile(new URL("../neutron.json", import.meta.url), "utf8"));
   expect(validate_neutron_conf(manifest).errors).toEqual([]);
-  expect(manifest).toMatchObject({ id: "curve", version: 107, update_source: "sj2r4-haaaa-aaaay-aadgq-cai" });
-  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "curve", version: 107 });
+  expect(manifest).toMatchObject({ id: "curve", version: 108, update_source: "sj2r4-haaaa-aaaay-aadgq-cai" });
+  expect(preparePackageInstall(files).manifest).toMatchObject({ id: "curve", version: 108 });
   expect(Object.keys(files)).toEqual(expect.arrayContaining(["web/index.html", "web/main.js", "web/main.css", "web/service.html", "web/service.js", "web/static/icon.svg"]));
   const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
   const old = JSON.parse(decode(previous["neutron.json"]!)), next = JSON.parse(decode(files["neutron.json"]!));
@@ -65,7 +65,7 @@ test.each([
   for (const path of modules) expect(files[path]).toEqual(previous[path]);
   const schema = JSON.parse(decode(files["schema.json"]!)), priorSchema = JSON.parse(decode(previous["schema.json"]!));
   expect(schema).toEqual(generateAppMethodSchemaArtifact(manifest, await readFile(new URL("../backend/main.mo", import.meta.url), "utf8")));
-  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Curve", version: 107 } });
+  expect(schema).toEqual({ ...priorSchema, app: { ...priorSchema.app, name: "via Curve", version: 108 } });
   const kernel = { format: 3 as const, id: "kernel", name: "Kernel", version: 100, entry: "f".repeat(64) };
   const clean = planMemoryMigrations({ kernel }, { kernel, curve: next });
   expect(clean.upgrades).toEqual([{ kind: "initialize", owner: "curve", memoryId: "curve", to: 1 }]);

@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Mail",
   "id": "mail",
-  "version": 306,
+  "version": 307,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "Private encrypted messages between Neutron canisters",
   "src": "main.mo",
@@ -23,14 +23,14 @@
   "tray": {
     "title": "Mail",
     "path": "tray.html",
-    "icon": "static/icon.svg"
+    "icon": "static/icon.webp"
   },
   "tiles": [
     {
       "id": "mail",
       "title": "Mail",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Read and send private Neutron Mail"
     }
   ],

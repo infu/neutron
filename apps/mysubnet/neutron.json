@@ -2,7 +2,7 @@
   "format": 3,
   "name": "My Subnet",
   "id": "mysubnet",
-  "version": 305,
+  "version": 306,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "A live globe of the Internet Computer nodes hosting this Neutron canister.",
   "src": "main.mo",
@@ -11,7 +11,7 @@
       "id": "globe",
       "title": "My Subnet",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Locate this canister's subnet and its nodes on a live Earth globe."
     }
   ],

@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Kitchen Sink",
   "id": "kitchensink",
-  "version": 319,
+  "version": 320,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "src": "main.mo",
   "backend": {
@@ -41,14 +41,14 @@
       "id": "main",
       "title": "Kitchen Sink",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Interactive Neutron app development workbench"
     },
     {
       "id": "companion",
       "title": "Shared Counter",
       "path": "index.html",
-      "icon": "static/icon.svg",
+      "icon": "static/icon.webp",
       "description": "Second tile sharing Kitchen Sink backend state"
     }
   ],
