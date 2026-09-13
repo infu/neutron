@@ -5,11 +5,14 @@ start with the 30-day ranking period. App-detail screenshots are 408px tall on
 desktop and 306px on small screens, exactly 70% above the previous 240px/180px.
 They retain their aspect ratio and scroll horizontally within the gallery.
 
-All 28 first-party listing prices are temporarily zero in stable and beta.
+All 28 first-party listing prices were temporarily zero in stable and beta
+when this release was published and the screenshots below were captured.
 The [original prices](../../../catalog/prices-before-temporary-free-2026-09-13.json)
 were committed before changing the five paid listings. The
-[restoration instructions](../../../catalog/TEMPORARY-FREE.md) preserve later
-listing edits. No restoration date was specified. The
+[price history](../../../catalog/TEMPORARY-FREE.md) records the subsequent
+restoration at the user's request. The original prices are now restored in both
+channels; [current screenshots and verification](../restored-prices/README.md)
+record that change. The free-period
 [price verification](prices-verified.json) records both channel views; each paid
 listing advanced once, and exact retries left its revision unchanged.
 
@@ -42,15 +45,15 @@ Kernel 362, installed Neutrons and the Dispenser starter were not changed.
 
 | Screenshot | View |
 |---|---|
-| [Desktop](desktop.png) | Smaller category labels, 30 days and current free chart |
+| [Desktop](desktop.png) | Smaller category labels, 30 days and temporary free chart |
 | [Sidebar](sidebar.png) | Compact labels on the left |
 | [Mobile](mobile.png) | Compact category row and stacked featured cards |
 | [App detail](detail-desktop.png) | 408px gallery images |
 | [Mobile detail](detail-mobile.png) | 306px gallery images |
 
 [Browser results](browser-results.json) include the rendered size and overflow
-checks. [Catalog snapshot](public-storefront.json) records the actual free prices
-and 30-day order.
+checks. [Catalog snapshot](public-storefront.json) records the free-period prices
+and 30-day order at capture time.
 
 ## Reproduce the screenshots
 

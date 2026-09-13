@@ -154,7 +154,8 @@ For release, follow the repository's canonical
    reproduce screenshot fixtures.
 
    The separately requested [temporary free period](../catalog/TEMPORARY-FREE.md)
-   retains all original prices for restoration and uses ordinary listing edits.
+   ended at the user's request. Original prices were restored through ordinary
+   listing edits; the backup and verification are retained.
 3. Build each affected app through its complete workspace package command and
    run its release checks. Review exact archives and offered-source bytes. Keep
    every released memory declaration and lineage, including Marketplace schema

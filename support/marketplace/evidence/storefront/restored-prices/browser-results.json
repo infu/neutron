@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "Two large featured cards, up to four medium cards per price tier including an empty paid tier, compact remainder, no duplicate featured apps, CSS blur/mask, responsive tile categories, default 30-day requests, DPR 2 screenshots at 320/390/960/1422/1800px.",
+    "Detail screenshots are 408px tall on desktop and 306px on mobile, with aspect ratio retained and horizontal scrolling contained in the gallery."
+  ],
+  "errors": [],
+  "capturedAt": "2026-09-13T20:40:03.067Z",
+  "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "fixture": "Read-only production beta catalog snapshot; exact verified media served locally."
+}
