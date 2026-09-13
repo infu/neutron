@@ -176,9 +176,12 @@ Install-reviewed backend-call reservation defaults are part of the
 `backend_calls` declaration. A pristine actor can materialize all compiled
 defaults synchronously. An incremental update prepares changed claims through
 the predecessor before installing the target. Target assembly enforces
-per-app and aggregate capability bounds and rejects the same exact default
-scope claimed across apps. Current bounds are owned by the capability catalog
-and assembly admission checks.
+per-app and aggregate capability bounds and rejects the same default scope
+claimed across apps. A principal default also conflicts with another app's
+exact default on that principal, regardless of declaration order. Method-wide
+defaults remain usable only where another app has not reserved the principal.
+Current bounds are owned by the capability catalog and assembly admission
+checks.
 
 ## Function Mapping
 

@@ -298,6 +298,7 @@ Map.add(freshBridges.intents, Blob.compare, evmBridgeId, evmIntent);
 
 let noCalls : BridgeCapabilities.BackendCalls = {
     canister_principal = Principal.fromText("aaaaa-aa");
+    owns_principal = func(_ : Principal) : Bool { false };
     can_call = func(_ : Principal, _ : Text) : Bool { false };
     call = func(_ : BridgeCapabilities.CallRequest) : async* BridgeCapabilities.CallResult { Runtime.trap("Restoring a memory root must not make a backend call") };
     call_batch = func(_ : [BridgeCapabilities.CallRequest]) : async* [BridgeCapabilities.CallResult] { Runtime.trap("Restoring a memory root must not make a backend batch call") };

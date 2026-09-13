@@ -56,6 +56,9 @@ module {
 
     public type BackendCallsV1 = {
         canister_principal : Principal;
+        // Whether this live capability exclusively owns every method on the
+        // destination. Exact and method-wide grants never satisfy this query.
+        owns_principal : Principal -> Bool;
         can_call : (Principal, Text) -> Bool;
         call : BackendCallRequestV1 -> async* BackendCallResultV1;
         call_batch : [BackendCallRequestV1] -> async* [BackendCallResultV1];

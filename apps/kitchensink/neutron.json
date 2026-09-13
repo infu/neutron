@@ -2,7 +2,7 @@
   "format": 3,
   "name": "Kitchen Sink",
   "id": "kitchensink",
-  "version": 318,
+  "version": 319,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "src": "main.mo",
   "backend": {
@@ -78,7 +78,7 @@
     },
     "backend_calls": {
       "api": 1,
-      "description": "Probe one owner-approved ledger method",
+      "description": "Read public network economics from an owner-approved NNS Governance canister",
       "reservation_scopes": [
         "exact"
       ],

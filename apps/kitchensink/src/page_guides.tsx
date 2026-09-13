@@ -110,7 +110,7 @@ let certifiedAssets = env.capabilities.certified_assets;`,
     benefit:
       "A backend can call one owner-reserved canister method and transfer a manifest-bounded cycle amount without receiving actor construction, arbitrary raw calls, or raw cycle primitives.",
     flow: [
-      "The tile asks the kernel to reserve the exact target principal plus icrc1_fee method for this installation.",
+      "The tile asks the kernel to reserve get_network_economics_parameters on NNS Governance for this installation.",
       "The injected Motoko handle checks a matching reservation and the per-call/day cycle ceilings, then the kernel performs the inter-canister call as the Neutron canister.",
       "Kitchen Sink decodes the bounded reply as the expected Candid type and reports malformed replies as errors.",
     ],
@@ -118,17 +118,17 @@ let certifiedAssets = env.capabilities.certified_assets;`,
       enforced:
         "Exact reservation, source installation, target and method, argument/reply limits, concurrency, gross cycles per call, charged plus unresolved cycles per UTC day, low-balance reserve, runtime toggle, and post-await revocation.",
       authority:
-        "The app cannot call Neutron itself, the management canister, anonymous targets, or a method outside an approved matching reservation.",
+        "The app cannot call Neutron itself, the management canister, anonymous targets, any principal reserved by another app, or a method outside an approved matching reservation. Ledger access uses Wallet's tools.",
       visibility:
         "Arguments and replies are replicated canister data. A successful transport does not make the remote reply semantically trustworthy.",
     },
     example: {
       title: "Call through the exact reserved method",
-      source: "backend/main.mo",
+      source: "backend/NetworkEconomicsProbe.mo",
       language: "Motoko",
       code: `await* backendCalls.call({
   canister = target;
-  method = "icrc1_fee";
+  method = "get_network_economics_parameters";
   args = to_candid ();
   cycles = 1_000_000;
 })`,

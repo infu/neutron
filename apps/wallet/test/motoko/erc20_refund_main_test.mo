@@ -81,6 +81,7 @@ persistent actor Erc20RefundMain {
                 stable_memory = { wallet_refills = RefillMemory.init(); wallet_bridge_activity = BridgeActivityMemory.init(); wallet; wallet_transfers = transfers; wallet_commands = CommandMemory.init(); wallet_bridge = BridgeMemory.init(); wallet_bridge_provider = BridgeProviderMemory.init(); wallet_bridge_replacements = ReplacementMemory.init() };
                 capabilities = { backend_calls = {
                     canister_principal = Principal.fromActor(Erc20RefundMain);
+                    owns_principal = func(_canister : Principal) : Bool { true };
                     can_call = func(_canister : Principal, _method : Text) : Bool { true };
                     call;
                     call_batch = func(requests : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] {

@@ -65,8 +65,8 @@ function kernelFixture({ owner, ledger, original, appOrigin }) {
     state.mutations++;
     if (!state.selected.includes(ledger)) state.selected.push(ledger);
     for (const action of message.actions) {
-      if (action.kind !== "reserve" || action.scope.kind !== "exact" || action.scope.principal !== ledger) throw Error("Non-additive or unrelated reservation");
-      state.reservations.push({ scopeKind: "exact", principal: action.scope.principal, method: action.scope.method });
+      if (action.kind !== "reserve" || action.scope.kind !== "principal" || action.scope.principal !== ledger) throw Error("Non-additive or unrelated reservation");
+      state.reservations.push({ scopeKind: "principal", principal: action.scope.principal });
     }
     reply(frame, message, { callResult: snapshot() });
   }
@@ -190,7 +190,7 @@ function selectedExactly(state) {
       feeAtoms: "0", balanceAtoms: "9007199254740993000000", observedAtNs: "1788900000000000000" },
   });
   const mutations = state.messages.filter(({ message }) => message.tool === "backend_calls.request");
-  assert.equal(mutations.length, 1); assert.equal(mutations[0].message.actions.length, 8);
+  assert.equal(mutations.length, 1); assert.equal(mutations[0].message.actions.length, 1);
   assert.deepEqual(mutations[0].message.args, [ledger]);
 }
 try {
@@ -209,7 +209,7 @@ try {
   const approved = await result(normal); selectedExactly(approved);
   assert.equal(approved.presentations.length, 1); assert.equal(approved.reviews.length, 1); assert.equal(approved.judges.length, 0);
   assert.equal(approved.reviews[0].frame, "wallet"); assert.equal(approved.reviews[0].message.context, undefined);
-  checks.push("Actual resident tools route Normal mode to the actual foreground Wallet registration; one exact additive reservation review precedes selection and preserves all atomic metadata.");
+  checks.push("Actual resident tools route Normal mode to the actual foreground Wallet registration; one exclusive principal reservation review precedes selection and preserves all atomic metadata.");
   await normal.close();
 
   for (const mode of ["root-public", "root-direct"]) {

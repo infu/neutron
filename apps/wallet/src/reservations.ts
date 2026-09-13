@@ -25,23 +25,12 @@ export function desiredWalletReservationScopes(
     if (gasLedger) {
       const gasCatalog = catalogByPrincipal.get(gasLedger);
       if (!gasCatalog) throw new Error("ckERC20 gas ledger is not in the catalog");
-      for (const scope of historyScopes(gasCatalog, true)) addScope(scopes, scope);
+      for (const scope of historyScopes(gasCatalog)) addScope(scopes, scope);
     }
   }
   for (const principal of selected) {
     if (catalogByPrincipal.has(principal)) continue;
-    for (const method of [
-      "icrc1_metadata",
-      "icrc1_balance_of",
-      "icrc1_fee",
-      "icrc1_transfer",
-      "icrc2_allowance",
-      "icrc2_approve",
-      "icrc3_get_blocks",
-      "icrc103_get_allowances",
-    ]) {
-      addScope(scopes, exact(principal, method));
-    }
+    addScope(scopes, { kind: "principal", principal });
   }
   return [...scopes.values()];
 }
@@ -114,61 +103,23 @@ function nativeScopes(
   route: CatalogNativeRoute | null,
 ): BackendCallReservationScope[] {
   if (!route) return [];
-  if (route.kind === "ckbtc") {
-    return [
-      exact(route.minter, "get_btc_address"),
-      exact(route.minter, "update_balance"),
-      exact(route.minter, "retrieve_btc_with_approval"),
-      exact(route.minter, "retrieve_btc_status_v2"),
-    ];
-  }
-  if (route.kind === "ckdoge") {
-    return [
-      exact(route.minter, "get_doge_address"),
-      exact(route.minter, "update_balance"),
-      exact(route.minter, "retrieve_doge_with_approval"),
-      exact(route.minter, "retrieve_doge_status"),
-    ];
-  }
-  if (route.kind === "cksol") {
-    return [
-      exact(route.minter, "update_balance"),
-      exact(route.minter, "withdraw"),
-      exact(route.minter, "withdrawal_status"),
-    ];
-  }
-  if (route.kind === "cketh") {
-    return [exact(route.minter, "withdraw_eth"), exact(route.minter, "retrieve_eth_status"), exact(route.minter, "get_minter_info"), exact(route.minter, "get_events")];
-  }
   if (route.kind === "ckerc20") {
     if (!route.gasLedger) throw new Error("ckERC20 route is missing ckETH ledger");
     return [
-      exact(route.minter, "get_minter_info"),
-      exact(route.minter, "get_events"),
-      exact(route.minter, "eip_1559_transaction_price"),
-      exact(route.minter, "withdraw_erc20"),
-      exact(route.minter, "retrieve_eth_status"),
-      exact(route.gasLedger, "icrc1_fee"),
-      exact(route.gasLedger, "icrc2_approve"),
+      { kind: "principal", principal: route.minter },
+      { kind: "principal", principal: route.gasLedger },
     ];
   }
-  return [];
+  return [{ kind: "principal", principal: route.minter }];
 }
 
-function historyScopes(
-  ledger: CatalogLedger,
-  includeBalanceRead = false,
-): BackendCallReservationScope[] {
+function historyScopes(ledger: CatalogLedger): BackendCallReservationScope[] {
   if (!ledger.index && ledger.historyKind === "icp") {
     throw new Error(`${ledger.symbol} requires a history index`);
   }
-  const scopes = ledger.index
+  return ledger.index
     ? [exact(ledger.index, "get_account_transactions")]
     : [exact(ledger.principal, "icrc3_get_blocks")];
-  if (includeBalanceRead) {
-    scopes.unshift(exact(ledger.principal, "icrc1_balance_of"));
-  }
-  return scopes;
 }
 
 function exact(principal: string, method: string): BackendCallReservationScope {
@@ -185,12 +136,8 @@ function addScope(
 /** Refill recovery stays available even when a source token is hidden in Assets. */
 export function walletRefillReservationScopes(): BackendCallReservationScope[] {
   return [
-    exact("ryjl3-tyaaa-aaaaa-aaaba-cai", "icrc1_transfer"),
-    exact("ryjl3-tyaaa-aaaaa-aaaba-cai", "icrc1_fee"),
-    exact("um5iw-rqaaa-aaaaq-qaaba-cai", "withdraw"),
-    exact("um5iw-rqaaa-aaaaq-qaaba-cai", "icrc1_transfer"),
-    exact("um5iw-rqaaa-aaaaq-qaaba-cai", "icrc1_fee"),
-    exact("rkp4c-7iaaa-aaaaa-aaaca-cai", "notify_top_up"),
-    exact("rkp4c-7iaaa-aaaaa-aaaca-cai", "notify_mint_cycles"),
+    { kind: "principal", principal: "ryjl3-tyaaa-aaaaa-aaaba-cai" },
+    { kind: "principal", principal: "um5iw-rqaaa-aaaaq-qaaba-cai" },
+    { kind: "principal", principal: "rkp4c-7iaaa-aaaaa-aaaca-cai" },
   ];
 }

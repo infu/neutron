@@ -22,6 +22,17 @@ func _request(canister : Principal) : Caps.BackendCallRequestV1 {
         cycles = 0;
     };
 };
+
+// Released consumers with the narrower capability record remain valid when
+// the Kernel adds its explicit principal-ownership query.
+func _releasedBackendConsumer(current : Caps.BackendCallsV1) : {
+    canister_principal : Principal;
+    can_call : (Principal, Text) -> Bool;
+    call : Caps.BackendCallRequestV1 -> async* Caps.BackendCallResultV1;
+    call_batch : [Caps.BackendCallRequestV1] -> async* [Caps.BackendCallResultV1];
+} {
+    current;
+};
 let _timerResult : Caps.DeferredTimerArmResultV1 = #err(#full);
 let _result : Caps.RandomnessResultV1 = #err(#busy);
 let _chainKeyAlgorithm : Caps.ChainKeyAlgorithmV1 = #schnorr_ed25519;

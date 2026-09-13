@@ -87,6 +87,7 @@ func preparationEdges() : () {
     var contactRevision = 5;
     let calls : Capabilities.BackendCalls = {
         canister_principal = self;
+        owns_principal = func(_target : Principal) : Bool { false };
         can_call = func(target : Principal, method : Text) : Bool {
             reservation and Principal.equal(target, recipient) and
             method == MAIL_INGRESS_METHOD;
@@ -266,6 +267,7 @@ func remoteClassificationEdges() : () {
     var contactIntegrity = true;
     let calls : Capabilities.BackendCalls = {
         canister_principal = self;
+        owns_principal = func(_target : Principal) : Bool { false };
         can_call = func(target : Principal, method : Text) : Bool {
             Principal.equal(target, recipient) and
             method == MAIL_INGRESS_METHOD;
@@ -450,6 +452,7 @@ func staleSendingRecoveryEdges() : () {
     var currentTime : Int = 5_000_000_000_000;
     let calls : Capabilities.BackendCalls = {
         canister_principal = self;
+        owns_principal = func(_target : Principal) : Bool { false };
         can_call = func(target : Principal, method : Text) : Bool {
             Principal.equal(target, recipient) and
             method == MAIL_INGRESS_METHOD;
@@ -747,6 +750,7 @@ func test() : () {
     var reservation = true;
     let calls : Capabilities.BackendCalls = {
         canister_principal = self;
+        owns_principal = func(_target : Principal) : Bool { false };
         can_call = func(target : Principal, method : Text) : Bool {
             reservation and Principal.equal(target, recipient) and
             method == MAIL_INGRESS_METHOD;

@@ -149,12 +149,17 @@ authorization boundary.
 | Call from trusted kernel UI or an authorized CLI | Actor or agent API | No app dialog | The caller already possesses an authorized principal; backend authorization still applies. |
 | Call a declared public-ingress route externally | Actor or agent API | No | Use the generated app/protocol/mode physical dispatcher and stable V1 wire. Queries obey recipient caller policy. A direct authenticated update requires a self-authenticating user principal and accepts no cycles; a paid update must come from a canister with at least its `required_cycles` floor. The recipient still applies admission. |
 
-Backend-call reservations remain bound to the exact installed `AppScope` and
-identical scopes remain exclusive within each scope tier. Principal, method,
-and exact tiers are evaluated independently: any matching reservation owned by
-the calling app authorizes that app, so another app's broader reservation does
-not silently disable an approved narrower one. Duplicate ownership within one
-tier is treated as corrupted state and fails closed.
+Backend-call reservations remain bound to the exact installed `AppScope`.
+A principal reservation is exclusive: only its owner may call any method on
+that canister, including read methods. Another app's exact or method-wide
+grant cannot override it, including grants retained from an earlier Kernel.
+Installing or requesting an exact grant on another app's reserved principal
+fails; acquiring a principal already covered by another app's exact grant also
+fails. Method-wide grants remain usable on other, unreserved principals.
+Without a principal reservation, a matching method or exact grant authorizes
+its owner. Duplicate ownership within one tier fails closed. Wallet-reserved
+ledgers must be accessed through Wallet's declared tools or exposed backend
+functions; there is no direct fee-read exception.
 
 All app helper routes above use the same frontend message bus. There is no raw
 app-facing action that signs an arbitrary canister call without the kernel's

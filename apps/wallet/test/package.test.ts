@@ -51,7 +51,7 @@ const mainFrontendUrl = new URL("../src/main.tsx", import.meta.url);
 const mountFrontendUrl = new URL("../src/mount.tsx", import.meta.url);
 const serviceUrl = new URL("../src/service.ts", import.meta.url);
 const trayFrontendUrl = new URL("../src/tray.tsx", import.meta.url);
-const packageUrl = new URL("../wallet.v0.3.31.neutron", import.meta.url);
+const packageUrl = new URL("../wallet.v0.3.32.neutron", import.meta.url);
 
 async function manifest(): Promise<NeutronManifest> {
   return JSON.parse(await readFile(manifestUrl, "utf8")) as NeutronManifest;
@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 331,
+    version: 332,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: {
       path: "service.html",
@@ -194,7 +194,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value.func).not.toHaveProperty("wallet_remove_ledger");
   expect(value.background).not.toHaveProperty("storage");
   expect(value.capabilities?.backend_calls?.install_reservations).toHaveLength(
-    25,
+    15,
   );
   expect(
     value.capabilities?.backend_calls?.install_reservations?.map(
@@ -206,27 +206,17 @@ test("Wallet declares managed memory and generic backend calls", async () => {
     "exact:qhbym-qaaaa-aaaaa-aaafq-cai:get_account_transactions",
     "principal:mxzaz-hqaaa-aaaar-qaada-cai:",
     "exact:n5wcd-faaaa-aaaar-qaaea-cai:get_account_transactions",
-    "exact:mqygn-kiaaa-aaaar-qaadq-cai:get_btc_address",
-    "exact:mqygn-kiaaa-aaaar-qaadq-cai:update_balance",
-    "exact:mqygn-kiaaa-aaaar-qaadq-cai:retrieve_btc_with_approval",
+    "principal:mqygn-kiaaa-aaaar-qaadq-cai:",
     "principal:xevnm-gaaaa-aaaar-qafnq-cai:",
     "exact:xrs4b-hiaaa-aaaar-qafoa-cai:get_account_transactions",
-    "exact:sv3dd-oaaaa-aaaar-qacoa-cai:eip_1559_transaction_price",
-    "exact:sv3dd-oaaaa-aaaar-qacoa-cai:withdraw_erc20",
-    "exact:ss2fx-dyaaa-aaaar-qacoq-cai:icrc1_fee",
-    "exact:ss2fx-dyaaa-aaaar-qacoq-cai:icrc2_approve",
-    "exact:ss2fx-dyaaa-aaaar-qacoq-cai:icrc1_balance_of",
+    "principal:sv3dd-oaaaa-aaaar-qacoa-cai:",
+    "principal:ss2fx-dyaaa-aaaar-qacoq-cai:",
     "exact:s3zol-vqaaa-aaaar-qacpa-cai:get_account_transactions",
-    "exact:sv3dd-oaaaa-aaaar-qacoa-cai:get_minter_info",
-    "exact:sv3dd-oaaaa-aaaar-qacoa-cai:get_events",
-    "exact:sv3dd-oaaaa-aaaar-qacoa-cai:retrieve_eth_status",
-    "exact:mqygn-kiaaa-aaaar-qaadq-cai:retrieve_btc_status_v2",
-    "exact:eqltq-xqaaa-aaaar-qb3vq-cai:retrieve_doge_status",
-    "exact:lh22c-kyaaa-aaaar-qb5nq-cai:withdrawal_status",
+    "principal:eqltq-xqaaa-aaaar-qb3vq-cai:",
+    "principal:lh22c-kyaaa-aaaar-qb5nq-cai:",
     "principal:um5iw-rqaaa-aaaaq-qaaba-cai:",
     "exact:ul4oc-4iaaa-aaaaq-qaabq-cai:get_account_transactions",
-    "exact:rkp4c-7iaaa-aaaaa-aaaca-cai:notify_top_up",
-    "exact:rkp4c-7iaaa-aaaaa-aaaca-cai:notify_mint_cycles",
+    "principal:rkp4c-7iaaa-aaaaa-aaaca-cai:",
   ]);
 });
 

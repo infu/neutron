@@ -2,7 +2,7 @@
   "format": 3,
   "id": "wallet",
   "name": "Wallet",
-  "version": 331,
+  "version": 332,
   "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
   "description": "IC token wallet, transfers and canister refills",
   "src": "main.mo",
@@ -108,19 +108,8 @@
           "method": "get_account_transactions"
         },
         {
-          "kind": "exact",
-          "principal": "mqygn-kiaaa-aaaar-qaadq-cai",
-          "method": "get_btc_address"
-        },
-        {
-          "kind": "exact",
-          "principal": "mqygn-kiaaa-aaaar-qaadq-cai",
-          "method": "update_balance"
-        },
-        {
-          "kind": "exact",
-          "principal": "mqygn-kiaaa-aaaar-qaadq-cai",
-          "method": "retrieve_btc_with_approval"
+          "kind": "principal",
+          "principal": "mqygn-kiaaa-aaaar-qaadq-cai"
         },
         {
           "kind": "principal",
@@ -132,29 +121,12 @@
           "method": "get_account_transactions"
         },
         {
-          "kind": "exact",
-          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
-          "method": "eip_1559_transaction_price"
+          "kind": "principal",
+          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai"
         },
         {
-          "kind": "exact",
-          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
-          "method": "withdraw_erc20"
-        },
-        {
-          "kind": "exact",
-          "principal": "ss2fx-dyaaa-aaaar-qacoq-cai",
-          "method": "icrc1_fee"
-        },
-        {
-          "kind": "exact",
-          "principal": "ss2fx-dyaaa-aaaar-qacoq-cai",
-          "method": "icrc2_approve"
-        },
-        {
-          "kind": "exact",
-          "principal": "ss2fx-dyaaa-aaaar-qacoq-cai",
-          "method": "icrc1_balance_of"
+          "kind": "principal",
+          "principal": "ss2fx-dyaaa-aaaar-qacoq-cai"
         },
         {
           "kind": "exact",
@@ -162,34 +134,12 @@
           "method": "get_account_transactions"
         },
         {
-          "kind": "exact",
-          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
-          "method": "get_minter_info"
+          "kind": "principal",
+          "principal": "eqltq-xqaaa-aaaar-qb3vq-cai"
         },
         {
-          "kind": "exact",
-          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
-          "method": "get_events"
-        },
-        {
-          "kind": "exact",
-          "principal": "sv3dd-oaaaa-aaaar-qacoa-cai",
-          "method": "retrieve_eth_status"
-        },
-        {
-          "kind": "exact",
-          "principal": "mqygn-kiaaa-aaaar-qaadq-cai",
-          "method": "retrieve_btc_status_v2"
-        },
-        {
-          "kind": "exact",
-          "principal": "eqltq-xqaaa-aaaar-qb3vq-cai",
-          "method": "retrieve_doge_status"
-        },
-        {
-          "kind": "exact",
-          "principal": "lh22c-kyaaa-aaaar-qb5nq-cai",
-          "method": "withdrawal_status"
+          "kind": "principal",
+          "principal": "lh22c-kyaaa-aaaar-qb5nq-cai"
         },
         {
           "kind": "principal",
@@ -201,14 +151,8 @@
           "method": "get_account_transactions"
         },
         {
-          "kind": "exact",
-          "principal": "rkp4c-7iaaa-aaaaa-aaaca-cai",
-          "method": "notify_top_up"
-        },
-        {
-          "kind": "exact",
-          "principal": "rkp4c-7iaaa-aaaaa-aaaca-cai",
-          "method": "notify_mint_cycles"
+          "kind": "principal",
+          "principal": "rkp4c-7iaaa-aaaaa-aaaca-cai"
         }
       ],
       "max_concurrency": 20,

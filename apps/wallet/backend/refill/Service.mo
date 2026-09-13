@@ -65,12 +65,20 @@ module {
             command.phase := #stopped;
             setError(command, text);
         };
+        func ownsCustody(command : Memory.Command) : Bool {
+            if (command.request.kind == #tcycles_topup) return calls.owns_principal(Journal.cycles());
+            calls.owns_principal(Journal.icp()) and calls.owns_principal(Journal.cmc()) and
+                (command.request.kind != #icp_to_tcycles or calls.owns_principal(Journal.cycles()));
+        };
         func run(id : Blob, approve : Bool) : async* Types.Result {
             let ?command = Map.get(mem.commands, Blob.compare, id) else return #err("Wallet refill was not found");
             if (command.owner != owner) return #err("This refill belongs to a different Neutron");
             if (Journal.terminal(command.phase)) return #ok(Journal.view(command, Time.now()));
             if (command.phase == #withdraw_pending and command.duplicate) return #ok(Journal.view(command, Time.now()));
             if (command.phase == #prepared and not approve) return #err("Review and approve this refill before executing it");
+            // The CMC chooses the mint destination for the caller identity.
+            // Do not pay it while another app could still notify this block.
+            if (not ownsCustody(command)) return #err("Wallet requires exclusive access to this refill's ledgers and CMC before execution");
             if (Set.contains(active, Blob.compare, id)) return #ok(Journal.view(command, Time.now()));
             Set.add(active, Blob.compare, id);
             // Record acceptance before any outbound call; close/reload never
@@ -136,6 +144,10 @@ module {
                 case null {
                     if (not (await* checkFee(command, Journal.icp(), command.request.icp_fee))) return;
                     if (command.phase != #transfer_pending) return;
+                    if (not ownsCustody(command)) {
+                        setError(command, "Exclusive refill access changed before ICP payment; no new debit was requested");
+                        return;
+                    };
                     switch (command.source_args) {
                         case (?existing) existing;
                         case null {
@@ -156,6 +168,10 @@ module {
                     };
                 };
             };
+            if (not ownsCustody(command)) {
+                setError(command, "Wallet requires exclusive refill access before sending the ICP payment");
+                return;
+            };
             let result = await* calls.call(Icrc.transferCandidRequest(Journal.icp(), args));
             if (command.phase != #transfer_pending) return;
             switch (decodeTransfer(result)) {
@@ -175,6 +191,10 @@ module {
             };
         };
         func notify(command : Memory.Command) : async* () {
+            if (not ownsCustody(command)) {
+                setError(command, "Wallet requires exclusive refill access before settling the saved ICP payment");
+                return;
+            };
             let ?block = command.source_block else { setError(command, "The saved ICP transfer has no verified block yet"); return };
             if (block > 18_446_744_073_709_551_615) { stop(command, "The ICP block is outside the CMC block range"); return };
             let block_index = Nat64.fromNat(block);

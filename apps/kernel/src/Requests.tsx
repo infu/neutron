@@ -533,7 +533,7 @@ function friendlyScopeDescription(scope: BackendCallScope): ReactNode {
   if (scope.kind === "principal") {
     return (
       <>
-        Every current and future method on canister{" "}
+        Exclusive access to every current and future method on canister{" "}
         <code>{scope.principal}</code>
       </>
     );
@@ -541,7 +541,8 @@ function friendlyScopeDescription(scope: BackendCallScope): ReactNode {
   if (scope.kind === "method") {
     return (
       <>
-        Method <code>{scope.method}</code> on any eligible non-system canister
+        Method <code>{scope.method}</code> on eligible non-system canisters
+        not reserved by another app
       </>
     );
   }
@@ -611,10 +612,10 @@ function backendAccessWarning(actions: BackendCallReservationAction[]): string {
   }
   const additions = actions.filter((action) => action.kind === "reserve");
   if (additions.some((action) => action.scope.kind === "method")) {
-    return "Added method-wide access applies to that method on eligible non-system canisters. It persists until removed, incompatible, or uninstalled. Repeated matching calls may use future app-chosen arguments.";
+    return "Added method-wide access applies to that method on eligible non-system canisters, excluding principals reserved by another app. It persists until removed, incompatible, or uninstalled. Repeated matching calls may use future app-chosen arguments.";
   }
   if (additions.some((action) => action.scope.kind === "principal")) {
-    return "Added whole-canister access applies to every current and future method on that canister. It persists until removed, incompatible, or uninstalled. Repeated calls may use future app-chosen arguments.";
+    return "Added whole-canister access is exclusive to this app and applies to every current and future method on that canister. Other apps must use this app's exposed interfaces. It persists until removed, incompatible, or uninstalled. Repeated calls may use future app-chosen arguments.";
   }
   if (additions.length > 0) {
     return "Added exact access applies only to the listed canister and method. It persists until removed, incompatible, or uninstalled. Matching calls may use future app-chosen arguments.";

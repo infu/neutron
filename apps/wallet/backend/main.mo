@@ -19,6 +19,7 @@ import AllowanceAccount "./allowances/Account";
 import IcpAllowances "./allowances/IcpLegacy";
 import Icrc103 "./allowances/Icrc103";
 import Capabilities "./capabilities/Types";
+import CustodyCalls "./capabilities/Custody";
 import ChainKey "./chainkey/Client";
 import Withdrawals "./chainkey/Withdrawals";
 import History "./history/Reconcile";
@@ -969,7 +970,7 @@ module {
         let commandMem = env.stable_memory.wallet_commands;
         let transferMem = env.stable_memory.wallet_transfers;
         let appCalls = env.app_calls;
-        let calls = env.capabilities.backend_calls;
+        let calls = CustodyCalls.guard(env.capabilities.backend_calls);
         let history = History.Service(mem, calls);
         let bridge = Bridge.ServiceWithReplacements(env.stable_memory.wallet_bridge, env.stable_memory.wallet_bridge_replacements, calls);
         let bridgeProvider = BridgeProvider.Service(env.stable_memory.wallet_bridge_provider, env.stable_memory.wallet_bridge);
@@ -1059,7 +1060,7 @@ module {
             (),
             /*task_capabilities*/ taskCapabilities : Capabilities.TaskCapabilities,
         ) : async* () {
-            await* history.tick(taskCapabilities.backend_calls);
+            await* history.tick(CustodyCalls.guard(taskCapabilities.backend_calls));
         };
 
         public func /*query*/wallet_contact_destinations(
@@ -1605,22 +1606,38 @@ module {
             };
             let ?request : ?WalletTransferRequest = from_candid command.intent else return #err("Invalid saved transfer intent");
             let ?context : ?SavedTransferContext = from_candid command.resolved else return #err("Invalid saved transfer destination");
+            if (not calls.owns_principal(request.ledger)) {
+                return #err("Wallet requires exclusive ledger access before resuming this transfer");
+            };
+            switch (context.route) {
+                case (?route) for (required in ChainKey.requiredCalls(route).vals()) {
+                    if (not calls.owns_principal(required.principal)) {
+                        return #err("Wallet requires exclusive minter and gas ledger access before resuming this transfer");
+                    };
+                };
+                case null {};
+            };
             let resolved = context.contact;
             transferInFlight := true;
             let replay = TransferJournal.Replay(command, calls);
+            // Cached journal replies do not substitute for current custody
+            // authority. Apply the same check around the replay adapter.
+            let replayCalls = CustodyCalls.guard(replay.backend_calls);
             switch (context.route) {
                 case (?#ckerc20(value)) {
                     let minter = Principal.fromText(value.minter);
                     // Only new sequences receive this optional read prefix.
                     // Existing released fee/approval bytes keep their positions.
                     if (command.calls.size() == 0 or isRefundTail(command.calls[0], minter)) {
-                        let result = await* replay.backend_calls.call(TransferRefund.tailRequest(minter));
+                        let result = await* replayCalls.call(TransferRefund.tailRequest(minter));
                         switch (result) {
                             case (#err(error)) {
                                 // A failed pre-dispatch read stays failed: a
                                 // later retry must not substitute a tail captured
                                 // after the withdrawal. Recovery can scan backwards.
-                                command.calls[0].outcome := #rejected(error);
+                                if (error.code != "not_reserved" and command.calls.size() > 0) {
+                                    command.calls[0].outcome := #rejected(error);
+                                };
                             };
                             case (_) {};
                         };
@@ -1628,7 +1645,7 @@ module {
                 };
                 case (_) {};
             };
-            let feeResult = Icrc.decodeFee(await* replay.backend_calls.call(Icrc.feeRequest(request.ledger)));
+            let feeResult = Icrc.decodeFee(await* replayCalls.call(Icrc.feeRequest(request.ledger)));
             let result : WalletTransferResult = switch (feeResult) {
                 case (#err(error)) #err("Could not read the ledger fee: " # error);
                 case (#ok(fee)) {
@@ -1639,9 +1656,9 @@ module {
                         case (#err(error)) #err(error);
                         case (#ok(())) {
                             if (not command.native) {
-                                await* transferIcrc(request, resolved, fee, replay.backend_calls, command.created_at, ?command.request_id);
+                                await* transferIcrc(request, resolved, fee, replayCalls, command.created_at, ?command.request_id);
                             } else switch (context.route) {
-                                case (?route) await* transferNative(request, resolved, route, fee, replay.backend_calls, command.created_at, TransferJournal.minterDispatched(command), ?command.request_id, context.withdrawal_quote, context.destination_binding);
+                                case (?route) await* transferNative(request, resolved, route, fee, replayCalls, command.created_at, TransferJournal.minterDispatched(command), ?command.request_id, context.withdrawal_quote, context.destination_binding);
                                 case null #err("Saved native route is missing");
                             };
                         };
@@ -1832,6 +1849,7 @@ module {
         };
         public func /*query*/wallet_bridge_provider_binding_v1(id : Blob) : WalletBridgeProviderBindingResultV1 { bridgeProvider.lookup(id) };
         public func /*update*/wallet_bridge_provider_prepare_v1(request : WalletBridgeProviderPrepareRequestV1) : async* WalletBridgeIntentResultV1 {
+            switch (bridge.requireCustody(request.bridge.ledger)) { case (#err(error)) return #err(error); case (_) {} };
             switch (bridgeProvider.reserve(request)) { case (#err(error)) return #err(error); case (_) {} };
             await* bridge.prepare(request.bridge);
         };
@@ -2049,6 +2067,12 @@ module {
                     );
                 };
                 case (_) {};
+            };
+            if (not calls.owns_principal(command.ledger)) {
+                if (command.call_args != null) {
+                    return pendingExecution(request.command_id, "The saved funding outcome remains unresolved; Wallet requires exclusive ledger access before reconciliation");
+                };
+                return rejectedExecution(request.command_id, "Wallet requires exclusive ledger access before executing this funding command");
             };
             // Accept is durable even when another Wallet action currently owns
             // the ledger-call slot. A retry then resumes without another owner
@@ -4409,6 +4433,7 @@ module {
             epoch : Nat,
         ) : async* NativeCounts {
             let pending = List.empty<NativeCall>();
+            var denied = 0;
             for (ledger in ledgers.vals()) {
                 switch (Catalog.find(ledger.principal)) {
                     case null clearNativeAddressError(ledger);
@@ -4422,7 +4447,10 @@ module {
                                 )) {
                                     case null clearNativeAddressError(ledger);
                                     case (?request) {
-                                        switch (ledger.native_address) {
+                                        if (not calls.owns_principal(ledger.principal) or not calls.owns_principal(request.canister)) {
+                                            denied += 1;
+                                            updateNativeAddressError(ledger, "Wallet requires exclusive ledger and minter access before providing a deposit address");
+                                        } else switch (ledger.native_address) {
                                             case null List.add(pending, { ledger; request; route });
                                             case (?_) clearNativeAddressError(ledger);
                                         };
@@ -4434,7 +4462,7 @@ module {
                 };
             };
             let operations = List.toArray(pending);
-            if (operations.size() == 0) return emptyNativeCounts();
+            if (operations.size() == 0) return { attempted = denied; succeeded = 0; failed = denied; stale = 0 };
             let results = await* calls.call_batch(
                 Array.map<NativeCall, Capabilities.CallRequest>(
                     operations,
@@ -4443,18 +4471,21 @@ module {
             );
             if (mem.native_epoch != epoch) {
                 return {
-                    attempted = operations.size();
+                    attempted = operations.size() + denied;
                     succeeded = 0;
-                    failed = 0;
+                    failed = denied;
                     stale = operations.size();
                 };
             };
             var succeeded = 0;
-            var failed = 0;
+            var failed = denied;
             var index = 0;
             while (index < operations.size()) {
                 let operation = operations[index];
-                switch (ChainKey.decodeAddress(results[index])) {
+                if (not calls.owns_principal(operation.ledger.principal) or not calls.owns_principal(operation.request.canister)) {
+                    failed += 1;
+                    updateNativeAddressError(operation.ledger, "Exclusive ledger or minter access changed while discovering the deposit address");
+                } else switch (ChainKey.decodeAddress(results[index])) {
                     case (#ok(address)) {
                         succeeded += 1;
                         updateNativeAddress(operation.ledger, address);
@@ -4467,7 +4498,7 @@ module {
                 index += 1;
             };
             {
-                attempted = operations.size();
+                attempted = operations.size() + denied;
                 succeeded;
                 failed;
                 stale = 0;
@@ -4479,6 +4510,7 @@ module {
             epoch : Nat,
         ) : async* NativeCounts {
             let pending = List.empty<NativeCall>();
+            var denied = 0;
             for (ledger in ledgers.vals()) {
                 switch (Catalog.find(ledger.principal)) {
                     case null clearNativeRefreshError(ledger);
@@ -4491,7 +4523,12 @@ module {
                                     calls.canister_principal,
                                 )) {
                                     case null clearNativeRefreshError(ledger);
-                                    case (?request) List.add(pending, { ledger; request; route });
+                                    case (?request) {
+                                        if (not calls.owns_principal(ledger.principal) or not calls.owns_principal(request.canister)) {
+                                            denied += 1;
+                                            updateNativeRefreshError(ledger, "Wallet requires exclusive ledger and minter access before minting a deposit");
+                                        } else List.add(pending, { ledger; request; route });
+                                    };
                                 };
                             };
                         };
@@ -4499,7 +4536,7 @@ module {
                 };
             };
             let operations = List.toArray(pending);
-            if (operations.size() == 0) return emptyNativeCounts();
+            if (operations.size() == 0) return { attempted = denied; succeeded = 0; failed = denied; stale = 0 };
             let results = await* calls.call_batch(
                 Array.map<NativeCall, Capabilities.CallRequest>(
                     operations,
@@ -4508,18 +4545,21 @@ module {
             );
             if (mem.native_epoch != epoch) {
                 return {
-                    attempted = operations.size();
+                    attempted = operations.size() + denied;
                     succeeded = 0;
-                    failed = 0;
+                    failed = denied;
                     stale = operations.size();
                 };
             };
             var succeeded = 0;
-            var failed = 0;
+            var failed = denied;
             var index = 0;
             while (index < operations.size()) {
                 let operation = operations[index];
-                switch (ChainKey.decodeRefresh(operation.route, results[index])) {
+                if (not calls.owns_principal(operation.ledger.principal) or not calls.owns_principal(operation.request.canister)) {
+                    failed += 1;
+                    updateNativeRefreshError(operation.ledger, "Exclusive ledger or minter access changed after deposit refresh dispatch; its mint outcome may be unknown");
+                } else switch (ChainKey.decodeRefresh(operation.route, results[index])) {
                     case (#ok(progress)) {
                         succeeded += 1;
                         updateNativeRefresh(operation.ledger, operation.route, progress);
@@ -4532,7 +4572,7 @@ module {
                 index += 1;
             };
             {
-                attempted = operations.size();
+                attempted = operations.size() + denied;
                 succeeded;
                 failed;
                 stale = 0;

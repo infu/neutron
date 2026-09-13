@@ -1935,6 +1935,11 @@ function validate_config(confs: AssemblyConfig): AppDependencyPlan {
   let runtimeCapabilityRegistrationCount = 0;
   const moduleIds = new Set<string>();
   const backendCallInstallReservationOwners = new Map<string, string>();
+  const backendCallPrincipalReservationOwners = new Map<string, string>();
+  const backendCallExactReservationOwners = new Map<
+    string,
+    Map<string, string>
+  >();
   const physicalMemorySymbols = new Map<string, string>();
   const publicFunctions = new Map<string, string>([
     ["kernel_runtime_info", "generated runtime"],
@@ -1970,6 +1975,42 @@ function validate_config(confs: AssemblyConfig): AppDependencyPlan {
         throw new Error(
           `Assembly backend_calls install reservation ${key} is declared by both ${owner} and ${conf.id}`,
         );
+      }
+      if (reservation.kind === "principal") {
+        const exactOwners = backendCallExactReservationOwners.get(
+          reservation.principal,
+        );
+        for (const [exactKey, exactOwner] of exactOwners ?? []) {
+          if (exactOwner !== conf.id) {
+            throw new Error(
+              `Assembly backend_calls install reservation ${exactKey} for ${exactOwner} conflicts with exclusive principal reservation ${key} for ${conf.id}`,
+            );
+          }
+        }
+        backendCallPrincipalReservationOwners.set(
+          reservation.principal,
+          conf.id,
+        );
+      } else if (reservation.kind === "exact") {
+        const principalOwner = backendCallPrincipalReservationOwners.get(
+          reservation.principal,
+        );
+        if (principalOwner !== undefined && principalOwner !== conf.id) {
+          throw new Error(
+            `Assembly backend_calls install reservation ${key} for ${conf.id} conflicts with exclusive principal reservation principal:${reservation.principal}: for ${principalOwner}`,
+          );
+        }
+        let exactOwners = backendCallExactReservationOwners.get(
+          reservation.principal,
+        );
+        if (!exactOwners) {
+          exactOwners = new Map();
+          backendCallExactReservationOwners.set(
+            reservation.principal,
+            exactOwners,
+          );
+        }
+        exactOwners.set(key, conf.id);
       }
       backendCallInstallReservationOwners.set(key, conf.id);
     }

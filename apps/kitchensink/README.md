@@ -15,7 +15,7 @@ entrypoint, and background-initiated permission example.
 
 | Capability | Live demonstration | State |
 | --- | --- | --- |
-| `backend_calls` | Review an exact `icrc1_fee` reservation, attach one million cycles within the installed financial ceilings, and read the ICP ledger fee in one flow. | Implemented; a destination that retains no cycles refunds them, and the durable reservation remains if the probe fails. |
+| `backend_calls` | Review an exact `get_network_economics_parameters` reservation on NNS Governance, attach one million cycles within the installed financial ceilings, and read network parameters in one flow. | Implemented; a destination that retains no cycles refunds them, and the durable reservation remains if the probe fails. Ledger reads and funding use Wallet's tools; another app's principal reservation blocks every direct method. |
 | `https_outcalls` | Run a paid, single-node GET or HEAD against the exact `https://example.com/` prefix and inspect the bounded status/body result. | Development implementation; PocketIC may lack an HTTPS adapter and a live call can fail without fabricating success. |
 | `randomness` | Fetch one app-scoped 32-byte consensus seed. | Implemented; concurrency and low-cycle safety remain, with no hourly request limit. |
 | `chain_key_signing` | Fetch the app-installation public key and sign one fixed, harmless receipt assertion while showing the domain, digest, fingerprint, key, and signature evidence. | Development implementation; the page reports an unavailable local key or management failure honestly and never fabricates or retries a signature. |

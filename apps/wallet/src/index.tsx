@@ -146,6 +146,7 @@ import {
   desiredWalletReservationScopes,
   parseWalletReservationScopes,
   reservationActions,
+  walletRefillReservationScopes,
 } from "./reservations.ts";
 import {
   historyAddressText,
@@ -922,6 +923,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
   const [refillRevision, setRefillRevision] = useState(0);
   const [catalog, setCatalog] = useState<CatalogLedger[]>([]);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [ledgerAccessRequired, setLedgerAccessRequired] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [customLedgers, setCustomLedgers] = useState<string[]>([]);
@@ -992,15 +994,26 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
     ]);
     const nextSnapshot = parseWalletSnapshot(snapshotValue);
     const nextCatalog = parseWalletCatalog(catalogValue);
+    const nextSelected = new Set(nextSnapshot.ledgers.map((ledger) => ledger.principal));
+    const desiredPrincipals = desiredWalletReservationScopes(nextCatalog, nextSelected)
+      .filter((scope) => scope.kind === "principal");
+    const currentScopes = desiredPrincipals.length > 0
+      ? parseWalletReservationScopes(await listBackendCallReservations())
+      : [];
+    const currentPrincipals = new Set(currentScopes.flatMap((scope) =>
+      scope.kind === "principal" ? [scope.principal] : [],
+    ));
+    const accessRequired = desiredPrincipals.some((scope) => !currentPrincipals.has(scope.principal));
+    setLedgerAccessRequired(accessRequired);
     setSnapshot(nextSnapshot);
     setCatalog(nextCatalog);
-    setSelected(new Set(nextSnapshot.ledgers.map((ledger) => ledger.principal)));
+    setSelected(nextSelected);
     setCustomLedgers(customLedgerIds(nextSnapshot, nextCatalog));
     setCustomLedgerOpen(false);
     setCustomLedgerInput("");
     setCustomLedgerError(null);
     setSearch("");
-    setSetupOpen(!nextSnapshot.configured);
+    setSetupOpen(accessRequired || !nextSnapshot.configured);
   }, []);
 
   const reloadSnapshot = useCallback(async () => {
@@ -1319,8 +1332,20 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
         await listBackendCallReservations(),
       );
       const desiredSet = new Set(desired);
-      const desiredScopes = desiredWalletReservationScopes(catalog, desiredSet);
-      const actions = reservationActions(currentScopes, desiredScopes);
+      const desiredScopes = [
+        ...desiredWalletReservationScopes(catalog, desiredSet),
+        ...walletRefillReservationScopes(),
+      ];
+      const changes = reservationActions(currentScopes, desiredScopes);
+      const savedSelection = new Set(snapshot?.ledgers.map((ledger) => ledger.principal));
+      const repairingAccess = ledgerAccessRequired && desiredSet.size === savedSelection.size &&
+        [...desiredSet].every((principal) => savedSelection.has(principal));
+      // Reconnecting saved assets only needs their missing principal grants.
+      // Existing same-app method rows cannot override those principal owners,
+      // and retiring them must not inflate this approval beyond the selection.
+      const actions = repairingAccess
+        ? changes.filter((action) => action.kind === "reserve" && action.scope.kind === "principal")
+        : changes;
       if (actions.length > 64) {
         throw new Error(
           "This selection needs more than 64 access changes. Apply a smaller selection first, then add the remaining ledgers in a second change.",
@@ -1347,6 +1372,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       setCustomLedgerOpen(false);
       setCustomLedgerInput("");
       setCustomLedgerError(null);
+      setLedgerAccessRequired(false);
       setSetupOpen(false);
       publishWalletInvalidation();
     } catch (reason) {
@@ -2070,6 +2096,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
       <main className={`nt-app wallet-app wallet-app--${surface}`}>
         <div className="wallet-shell wallet-setup-shell">
           <div className="wallet-setup-body">
+            {ledgerAccessRequired ? <WalletNotice message="Approve exclusive ledger access to finish connecting your selected assets." /> : null}
             {error ? <WalletNotice message={error} /> : null}
 
             <section
@@ -2301,6 +2328,17 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
               {surface === "tray" ? "Open Wallet" : "Apply"}
             </button>
           </footer>
+        </div>
+      </main>
+    );
+  }
+
+  if (ledgerAccessRequired) {
+    return (
+      <main className={`nt-app wallet-app wallet-app--${surface}`} aria-label="Wallet access required">
+        <div className="wallet-shell">
+          <WalletNotice message="Approve exclusive ledger access to finish connecting your selected assets." />
+          <button className="nt-button" onClick={openSetup} type="button">Review ledger access</button>
         </div>
       </main>
     );

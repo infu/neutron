@@ -1717,7 +1717,7 @@ Declare backend-call authority and select its V1 interface:
   "capabilities": {
     "backend_calls": {
       "api": 1,
-      "description": "Connect to owner-approved ICRC ledger canisters",
+      "description": "Read public network economics from NNS Governance",
       "reservation_scopes": ["principal", "exact"],
       "max_concurrency": 20,
       "max_cycles_per_call": 0,
@@ -1733,13 +1733,17 @@ same `exact`, `principal`, or `method` scope objects accepted by
 listed grants. The runtime request remains available for grants omitted from
 the package, added later by the user, or restored after revocation.
 Per-app and whole-installation default counts are bounded by the capability
-catalog; exact duplicate default scopes across apps are rejected.
+catalog. A principal reservation excludes every other app from that canister,
+including method-wide grants. Conflicting principal/exact defaults across apps
+are rejected. Wallet ledger access belongs behind Wallet's tools and exposed
+backend functions, including fee reads.
 
 Use the reviewed leaf types from the type-only `neutron-capabilities` Mops
 package, while keeping the aggregate local and exact:
 
 ```motoko
 import NeutronCapabilities "mo:neutron-capabilities";
+import Principal "mo:core/Principal";
 
 public type AppBackendEnvironment = {
   capabilities : {
@@ -1749,10 +1753,10 @@ public type AppBackendEnvironment = {
 
 public class Init(env : AppBackendEnvironment) {
   let backendCalls = env.capabilities.backend_calls;
-  public func readFee(ledger : Principal) : async* NeutronCapabilities.BackendCallResultV1 {
+  public func readNetworkEconomics() : async* NeutronCapabilities.BackendCallResultV1 {
     await* backendCalls.call({
-      canister = ledger;
-      method = "icrc1_fee";
+      canister = Principal.fromText("rrkah-fqaaa-aaaaa-aaaaq-cai");
+      method = "get_network_economics_parameters";
       args = to_candid ();
       cycles = 0;
     });
@@ -1771,6 +1775,14 @@ registry epoch before dispatch: disabling and then re-enabling the resource
 cannot revive that old operation. If a remote update was already dispatched,
 Neutron suppresses its reply and reports an unknown outcome rather than
 claiming that the mutation was cancelled.
+
+`backendCalls.owns_principal(principal)` reports whether this live app
+installation owns the exclusive principal reservation. An exact or method-wide
+grant never satisfies this check. Custody providers must check ownership in
+their backend before using a ledger or a service that consumes custody funds; checking
+only individual methods cannot establish exclusive control. Wallet applies
+this requirement to ordinary, scheduled, and replayed custody calls. Existing
+method grants do not serve as a fallback while exclusive access is missing.
 
 From a tile or resident frame, ask the trusted kernel UI to apply one batch of
 reservation changes. An optional same-app call runs after the batch succeeds:
@@ -1814,7 +1826,8 @@ handler invocation.
 
 Supported reservation modes are `exact` (one method on one principal),
 `principal` (all current and future methods on one principal), and `method`
-(one method name on any non-system principal). An app may request only modes in
+(one method name on non-system principals that another app has not reserved).
+An app may request only modes in
 its installed manifest. Approval is persistent until revoked, capability
 removal, or uninstall. A batch is all-or-nothing and cannot contain the same
 scope twice. `backend_calls.list` exposes only the source app's own

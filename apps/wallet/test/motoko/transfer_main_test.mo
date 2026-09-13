@@ -82,6 +82,7 @@ persistent actor {
         var feeCalls = 0;
         var networkCalls = 0;
         var nextBlock = 81;
+        var exclusivePrincipal = true;
 
         // Ledger deduplication sees wire arguments, not Wallet's request ID.
         // Without a request-specific memo, equal transfers in this update
@@ -118,6 +119,7 @@ persistent actor {
 
         let calls : Capabilities.BackendCalls = {
             canister_principal = wallet;
+            owns_principal = func(target : Principal) : Bool { exclusivePrincipal and target == ledger };
             can_call = func(target : Principal, method : Text) : Bool {
                 target == ledger and (method == "icrc1_fee" or method == "icrc1_transfer");
             };
@@ -188,6 +190,18 @@ persistent actor {
         assert (app.wallet_transfers_pending_v2(()) == [prepared]);
         assert (operation(app.wallet_transfer_status_v2(firstRequest.request_id)) == prepared);
         assert (networkCalls == 0);
+        // A restored resident command cannot use historical fee/transfer
+        // grants after Wallet has lost exclusive ownership of the ledger.
+        exclusivePrincipal := false;
+        assert calls.can_call(ledger, "icrc1_fee") and calls.can_call(ledger, "icrc1_transfer");
+        switch (await* Main.Init(env).wallet_transfer_resume_v2(firstRequest.request_id)) {
+            case (#err(message)) assert Text.contains(message, #text("exclusive ledger access"));
+            case (#ok(_)) Runtime.trap("Saved transfer resumed without exclusive ledger access");
+        };
+        assert operation(app.wallet_transfer_status_v2(firstRequest.request_id)) == prepared;
+        assert Map.size(env.stable_memory.wallet_transfers.commands) == 1;
+        assert networkCalls == 0 and feeCalls == 0 and transferBytes.size() == 0;
+        exclusivePrincipal := true;
         // Every await is async*, so both commands execute within the same
         // update and receive the same Time.now() value.
         let first = operation(await* app.wallet_transfer_resume_v2(firstRequest.request_id));
@@ -346,6 +360,7 @@ persistent actor {
         };
         let nativeCalls : Capabilities.BackendCalls = {
             canister_principal = wallet;
+            owns_principal = func(target : Principal) : Bool { target == ledger or target == gasLedger or target == minter };
             can_call = func(_target : Principal, _method : Text) : Bool { true };
             call = nativeCall;
             call_batch = func(requests : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] {

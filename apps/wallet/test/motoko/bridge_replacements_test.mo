@@ -66,6 +66,7 @@ persistent actor {
             public var onLedgerReply : () -> () = func() {};
             public let calls : Capabilities.BackendCalls = {
                 canister_principal = owner;
+                owns_principal = func(_ : Principal) : Bool { true };
                 can_call = func(_ : Principal, _ : Text) { true };
                 call = func(request : Capabilities.CallRequest) : async* Capabilities.CallResult {
                     switch (request.method) {

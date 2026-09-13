@@ -74,6 +74,7 @@ class Script(command : Memory.Command, expected : [ExpectedCall]) {
 
     public let calls : Capabilities.BackendCalls = {
         canister_principal = wallet;
+        owns_principal = func(_canister : Principal) : Bool { true };
         can_call = func(_canister : Principal, _method : Text) : Bool { true };
         call;
         call_batch = func(requests : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] {
@@ -107,6 +108,7 @@ class QuoteScript(expected : [ExpectedCall]) {
 
     public let calls : Capabilities.BackendCalls = {
         canister_principal = wallet;
+        owns_principal = func(_canister : Principal) : Bool { true };
         can_call = func(_canister : Principal, method : Text) : Bool { permitted(method) };
         call;
         call_batch = func(requests : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] {

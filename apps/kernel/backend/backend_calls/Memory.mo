@@ -195,6 +195,7 @@ module {
         caller : Principal,
         now : Nat64,
     ) : Bool {
+        if (not recoveryPlansFeasible(plans)) return false;
         if (hasInstallClaims(mem)) {
             return installClaimsEqual(mem, plans);
         };
@@ -207,6 +208,9 @@ module {
         for (plan in plans.vals()) {
             var finalAppCount = activeAppCount(working, plan.app_scope);
             for (scope in plan.reservations.vals()) {
+                if (installScopeConflict(working, plan.app_scope.app_id, scope) != null) {
+                    return false;
+                };
                 if (installClaimForScope(working, scope) != null) {
                     return false;
                 };
@@ -303,10 +307,14 @@ module {
         now : Nat64,
         persist : Bool,
     ) : Bool {
+        if (not recoveryPlansFeasible(plans)) return false;
         let working = normalizedInstallMemory(mem, supports);
 
         for (plan in plans.vals()) {
             for (scope in plan.reservations.vals()) {
+                if (installScopeConflict(working, plan.app_scope.app_id, scope) != null) {
+                    return false;
+                };
                 switch (activeReservationOwnership(working, scope)) {
                     case (#conflict) return false;
                     case (#reservation(active)) {
@@ -400,6 +408,10 @@ module {
         // desired scope.
         for (plan in plans.vals()) {
             for (scope in plan.reservations.vals()) {
+                switch (installScopeConflict(working, plan.app_scope.app_id, scope)) {
+                    case (?active) return [recoveryBlocker(active, #scope_conflict)];
+                    case null {};
+                };
                 switch (activeReservationOwnership(working, scope)) {
                     case (#none) {};
                     case (#reservation(active)) {
@@ -527,13 +539,28 @@ module {
         false;
     };
 
+    public func ownsPrincipal(
+        mem : Types.Memory,
+        appScope : CapabilityTypes.AppScope,
+        canister : Principal,
+    ) : Bool {
+        switch (activeReservationOwnership(mem, #principal(canister))) {
+            case (#reservation(reservation)) {
+                CapabilityScope.equal(reservation.app_scope, appScope);
+            };
+            case (_) false;
+        };
+    };
+
     public func allows(
         mem : Types.Memory,
         appScope : CapabilityTypes.AppScope,
         canister : Principal,
         method : Text,
     ) : Bool {
-        var allowed = false;
+        // A principal reservation owns every method on that destination.
+        // This check precedes all narrower grants so persisted overlaps from
+        // an earlier Kernel cannot retain access after the policy changes.
         switch (owner(mem, func(reservation) {
             switch (reservation.scope) {
                 case (#principal(principal)) Principal.equal(principal, canister);
@@ -541,11 +568,12 @@ module {
             };
         })) {
             case (#owner(ownerScope)) {
-                if (CapabilityScope.equal(ownerScope, appScope)) allowed := true;
+                return CapabilityScope.equal(ownerScope, appScope);
             };
             case (#conflict) return false;
             case (#none) {};
         };
+        var allowed = false;
         switch (owner(mem, func(reservation) {
             switch (reservation.scope) {
                 case (#method(name)) name == method;
@@ -583,10 +611,38 @@ module {
         for (reservation in Map.values(mem.reservations)) {
             if (
                 not CapabilityScope.equal(reservation.app_scope, appScope) and
-                scopeEqual(reservation.scope, scope)
+                scopesConflict(reservation.scope, scope)
             ) return true;
         };
         false;
+    };
+
+    // Method-wide grants apply only to destinations without another app's
+    // principal reservation. They do not claim every principal and therefore
+    // do not conflict at grant time. Exact destinations do conflict with a
+    // principal owner, in either acquisition order.
+    func scopesConflict(left : Types.ReservationScope, right : Types.ReservationScope) : Bool {
+        if (scopeEqual(left, right)) return true;
+        switch (left, right) {
+            case (#principal(principal), #exact(exact)) Principal.equal(principal, exact.principal);
+            case (#exact(exact), #principal(principal)) Principal.equal(exact.principal, principal);
+            case (_) false;
+        };
+    };
+
+    func installScopeConflict(
+        mem : Types.Memory,
+        appId : Text,
+        scope : Types.ReservationScope,
+    ) : ?Types.Reservation {
+        var candidate : ?Types.Reservation = null;
+        for (reservation in Map.values(mem.reservations)) {
+            if (
+                reservation.app_scope.app_id != appId and
+                scopesConflict(reservation.scope, scope)
+            ) candidate := lowerId(candidate, reservation);
+        };
+        candidate;
     };
 
     public func summary(reservation : Types.Reservation) : Types.ReservationSummary {
@@ -810,6 +866,8 @@ module {
     ) : Bool {
         let appIds = Set.empty<Text>();
         let scopes = Set.empty<Text>();
+        let principalOwners = Map.empty<Principal, Text>();
+        let exactOwners = Map.empty<Principal, Set.Set<Text>>();
         var total = 0;
         for (plan in plans.vals()) {
             if (
@@ -831,6 +889,37 @@ module {
                         recoveryScopeKey(scope),
                     )
                 ) return false;
+                switch (scope) {
+                    case (#principal(principal)) {
+                        switch (Map.get(exactOwners, Principal.compare, principal)) {
+                            case (?owners) {
+                                for (appId in Set.values(owners)) {
+                                    if (appId != plan.app_scope.app_id) return false;
+                                };
+                            };
+                            case null {};
+                        };
+                        Map.add(principalOwners, Principal.compare, principal, plan.app_scope.app_id);
+                    };
+                    case (#exact(exact)) {
+                        switch (Map.get(principalOwners, Principal.compare, exact.principal)) {
+                            case (?appId) {
+                                if (appId != plan.app_scope.app_id) return false;
+                            };
+                            case null {};
+                        };
+                        let owners = switch (Map.get(exactOwners, Principal.compare, exact.principal)) {
+                            case (?existing) existing;
+                            case null {
+                                let created = Set.empty<Text>();
+                                Map.add(exactOwners, Principal.compare, exact.principal, created);
+                                created;
+                            };
+                        };
+                        Set.add(owners, Text.compare, plan.app_scope.app_id);
+                    };
+                    case (#method(_)) {};
+                };
             };
         };
         true;

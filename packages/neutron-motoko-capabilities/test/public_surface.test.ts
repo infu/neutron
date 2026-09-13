@@ -12,6 +12,7 @@ test("reviewed capability package exports leaf types only", async () => {
   expect(source).toContain("public type DeferredTimersV1");
   expect(source).toContain("callback : () -> ();");
   expect(source).toContain("public type BackendCallsV1");
+  expect(source).toContain("owns_principal : Principal -> Bool;");
   expect(
     source.match(/public type BackendCallRequestV1 = \{([\s\S]*?)\};/)?.[1],
   ).toContain("cycles : Nat");

@@ -48,7 +48,7 @@ const execFile = promisify(execFileCallback);
 const MIB = 1024 * 1024;
 
 /** This generator is release-specific and must not silently label later bytes. */
-export const KERNEL_NPL_RELEASE_VERSION = 360;
+export const KERNEL_NPL_RELEASE_VERSION = 361;
 export const KERNEL_NPL_LICENSE_ID = "LicenseRef-Neutron-Public-License-1.0";
 export const KERNEL_NPL_LICENSE_SHA256 =
   "8295489ea3ba02b704c3e7c39a85c16a2a00369bb16efbdec12e43a1f41e7c91";
@@ -285,6 +285,9 @@ const KERNEL_REVIEWED_BINARY_FIXTURE_IDENTITIES = new Map<
 
 /** Explicitly reviewed new files in this uncommitted release candidate. */
 const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
+  // Kernel 361 exclusive principal authorization and preserved-memory regressions.
+  "apps/kernel/test/exclusive_reservations_memory.test.ts",
+  "apps/kernel/test/motoko/exclusive_principal_reservations_test.mo",
   // Kernel 352 preserves provider error codes across the generic message bus.
   "packages/neutron-tools/test/ethereum_error_codes.test.ts",
   // Kernel 351 generic source access, consent, and compiled-IC regressions.
@@ -441,6 +444,8 @@ const KERNEL_REVIEWED_UNTRACKED_SOURCE_PATHS = new Set([
 export const KERNEL_PACKAGE_BUILD_INPUT_PATHS = Object.freeze([
   "apps/kernel/LICENSE",
   "apps/kernel/NOTICE",
+  "apps/kernel/backend/backend_calls/Memory.mo",
+  "apps/kernel/backend/backend_calls/Service.mo",
   "apps/kernel/backend/capabilities/Registry.mo",
   "apps/kernel/backend/capabilities/Types.mo",
   "apps/kernel/backend/chain_key_signing/Namespace.mo",
@@ -1406,7 +1411,7 @@ function assertKernelApplicationNotice(content: Uint8Array): void {
     "Copyright 2026 3V Interactive",
     "Neutron Public License, Version 1.0",
     `SPDX-License-Identifier: ${KERNEL_NPL_LICENSE_ID}`,
-    "Package release: v0.3.60 (packed version 360)",
+    "Package release: v0.3.61 (packed version 361)",
     "provider-hosted HTTPS source artifact",
     "modified browser compiler is maintained in its own source repository",
     "3V Interactive remains responsible for keeping the referenced source available",

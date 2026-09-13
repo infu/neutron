@@ -90,3 +90,31 @@ test("Kitchen Sink 0.3.18 preserves the released 0.3.17 v1 root for iframe form 
     candidateVersion: 318,
   });
 });
+
+for (const production of [
+  {
+    version: 310,
+    bytes: 430_618,
+    sha256: "a9998e28ace0f3525bad787aa0f21ccaaf8389252d6f9bf7d063d36bd284d795",
+    archive: "kitchensink.v0.3.10.neutron",
+  },
+  {
+    version: 318,
+    bytes: 479_150,
+    sha256: "07433bd7e88994ade59e4a4d33470efb9367706054bc6b9a3c30bb1ee29a8e33",
+    archive: "kitchensink.v0.3.18.neutron",
+  },
+]) {
+  test(`Kitchen Sink 0.3.19 preserves released ${production.version} v1 memory while removing direct ledger access`, async () => {
+    await assertManagedMemoryCodeOnlyRelease({
+      appId: "kitchensink",
+      memoryId: "kitchensink",
+      memoryVersion: 1,
+      productionArchive: new URL(`../${production.archive}`, import.meta.url),
+      candidateArchive: new URL("../kitchensink.v0.3.19.neutron", import.meta.url),
+      lock: new URL("../neutron.lock.json", import.meta.url),
+      production,
+      candidateVersion: 319,
+    });
+  });
+}

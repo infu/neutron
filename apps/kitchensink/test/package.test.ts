@@ -51,7 +51,7 @@ const htmlUrl = new URL("../dist/web/index.html", import.meta.url);
 const cssUrl = new URL("../dist/web/main.css", import.meta.url);
 const trayHtmlUrl = new URL("../dist/web/tray.html", import.meta.url);
 const trayCssUrl = new URL("../dist/web/tray.css", import.meta.url);
-const packageUrl = new URL("../kitchensink.v0.3.18.neutron", import.meta.url);
+const packageUrl = new URL("../kitchensink.v0.3.19.neutron", import.meta.url);
 const decoder = new TextDecoder();
 
 async function readManifest(): Promise<NeutronManifest> {
@@ -156,7 +156,7 @@ test("kitchen sink declares the complete closed capability lab", async () => {
   expect(manifest).toMatchObject({
     id: "kitchensink",
     name: "Kitchen Sink",
-    version: 318,
+    version: 319,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     src: "main.mo",
     tiles: [
@@ -396,6 +396,7 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   const platformFrontend = await readFile(platformFrontendUrl, "utf8");
   const walletFundingDemo = await readFile(walletFundingDemoUrl, "utf8");
   const walletTokenInfoDemo = await readFile(walletTokenInfoDemoUrl, "utf8");
+  const networkEconomicsProbe = await readFile(new URL("../backend/NetworkEconomicsProbe.mo", import.meta.url), "utf8");
 
   for (const demo of [
     "overview",
@@ -533,6 +534,9 @@ test("kitchen sink workbench exposes one page per capability and scoped tile too
   );
   expect(walletTokenInfoDemo).toContain("WALLET_FUNDING_TARGET");
   expect(walletTokenInfoDemo).not.toContain("icrc1_fee");
+  expect(capabilityFrontend).not.toContain("icrc1_fee");
+  expect(backend).not.toContain("icrc1_fee");
+  expect(networkEconomicsProbe).not.toMatch(/\bicrc[123]_/);
   expect(walletTokenInfoDemo).not.toContain("icrc1_balance_of");
   expect(backend).not.toContain("icrc1_transfer");
   expect(backend).not.toContain("icrc2_approve");

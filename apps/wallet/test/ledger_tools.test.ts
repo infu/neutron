@@ -60,8 +60,9 @@ function fixture(initial: string[] = [other]) {
       calls.push({ kind: "access", value: request });
       for (const action of request.actions) {
         expect(action.kind).toBe("reserve");
-        if (action.scope.kind === "exact") access.set(`${action.scope.principal}:${action.scope.method}`, {
-          scopeKind: "exact", principal: action.scope.principal, method: action.scope.method,
+        expect(action.scope).toEqual({ kind: "principal", principal: ledger });
+        if (action.scope.kind === "principal") access.set(action.scope.principal, {
+          scopeKind: "principal", principal: action.scope.principal,
         });
       }
       expect(request.call).toEqual({ method: "wallet_add_ledger_v1", args: [ledger] });
@@ -72,23 +73,22 @@ function fixture(initial: string[] = [other]) {
     },
     publish: async () => { calls.push({ kind: "publish", value: null }); },
   };
-  return { context, calls, services, selected, abort,
+  return { context, calls, services, selected, access, abort,
     failMetadata: (error: Error) => { metadataError = error; },
     loseReply: () => { replyLost = true; },
     wrongMetadataLedger: () => { metadataLedger = other; },
   };
 }
 
-test("Root adds a custom ledger through scoped exact access and returns compact live metadata", async () => {
+test("Root adds a custom ledger through exclusive principal access and returns compact live metadata", async () => {
   const f = fixture();
   const result = await handleWalletAddLedgerRoot({ ledger }, f.context, f.services);
   expect(result).toMatchObject({ ledger, selected: true, alreadySelected: false, metadataError: null,
     tokenInfo: { decimals: 6, feeAtoms: "0", balanceAtoms: "9007199254740993000000", account: owner },
   });
   expect(() => validateToolResult(descriptor, result)).not.toThrow();
-  const request = f.calls.find(({ kind }) => kind === "access")!.value as { actions: { scope: { principal: string; method: string } }[] };
-  expect(request.actions).toHaveLength(8);
-  expect(request.actions.every(({ scope }) => scope.principal === ledger)).toBe(true);
+  const request = f.calls.find(({ kind }) => kind === "access")!.value as { actions: unknown[] };
+  expect(request.actions).toEqual([{ kind: "reserve", scope: { kind: "principal", principal: ledger } }]);
   expect(f.selected).toEqual(new Set([other, ledger]));
   expect(f.calls.some(({ kind }) => kind === "judge")).toBe(false);
   expect(JSON.stringify(result)).not.toContain("logo");
@@ -150,8 +150,20 @@ test("same-ledger recovery after a lost reply keeps current selections and refre
   const result = await handleWalletAddLedgerRoot({ ledger }, f.context, f.services);
   expect(result).toMatchObject({ selected: true, alreadySelected: true, metadataError: null });
   const actions = f.calls.filter(({ kind }) => kind === "access").map(({ value }) => (value as { actions: unknown[] }).actions);
-  expect(actions.map((action) => action.length)).toEqual([8, 0]);
+  expect(actions.map((action) => action.length)).toEqual([1, 0]);
   expect(f.selected.size).toBe(3);
+});
+
+test("an already selected custom ledger still requires exclusive principal access", async () => {
+  const f = fixture([other, ledger]);
+  for (const method of ["icrc1_fee", "icrc1_transfer", "icrc2_approve"]) {
+    f.access.set(`${ledger}:${method}`, { scopeKind: "exact", principal: ledger, method });
+  }
+  const result = await handleWalletAddLedgerRoot({ ledger }, f.context, f.services);
+  expect(result).toMatchObject({ selected: true, alreadySelected: true });
+  const request = f.calls.find(({ kind }) => kind === "access")!.value as { actions: unknown[] };
+  expect(request.actions).toEqual([{ kind: "reserve", scope: { kind: "principal", principal: ledger } }]);
+  expect(f.selected).toEqual(new Set([other, ledger]));
 });
 
 test("metadata failure is explicit after durable selection and never invents a zero balance", async () => {

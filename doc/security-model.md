@@ -480,14 +480,28 @@ within the authority the provider approved. Any protocol-specific attestation
 belongs in the provider or consumer app, not in Core policy.
 
 All assembled app backends call external canisters as the same Neutron canister
-principal. For a Swap-owned `icrc2_transfer_from`, the ledger authenticates that
-principal and applies the supplied `spender_subaccount` and arguments; it does
-not attest the internal AppScope or Motoko module which requested the call.
-Security therefore depends on compiler-enforced capability isolation, the
-Swap's exact ledger-method reservation, and reviewed backend code which
-hard-codes or validates the spender subaccount and every financial argument.
-The allowance itself is not a cryptographic per-app sandbox, and Kernel remains
-token-agnostic.
+principal. An external ledger therefore cannot distinguish the internal app
+which requested a call. A backend principal reservation supplies that boundary:
+only its exact owning AppScope may call the reserved canister, regardless of
+another app's method-wide or exact grants. New conflicting principal/exact
+grants fail during installation and runtime approval; retained overlapping
+grants never override a principal owner. This includes reads such as ledger
+fees and balances. Consumers use the owning provider's reviewed tools or
+explicitly exported backend functions instead. Provider code still owns
+financial validation, and external allowances do not themselves isolate apps.
+Kernel applies this rule to every principal without knowing token standards
+or special-casing Wallet.
+
+Wallet reserves its custody ledgers, native withdrawal minters, and cycles
+minting canister as principals. A minter can spend an allowance previously approved by Wallet, so
+protecting only the ledger would leave an indirect spending path through the
+shared Neutron identity. The cycles minting service can consume a paid refill
+block using a caller-selected destination subaccount, which also requires
+Wallet's exclusive control (see the [CMC notification implementation](https://github.com/dfinity/ic/blob/master/rs/nns/cmc/src/main.rs#L1148-L1170)).
+Wallet's backend requires exclusive ownership before
+custody calls, including scheduled work and journal replay; old exact grants
+cannot substitute for that ownership. Explicit owner-approved release still
+relinquishes a reservation.
 
 For the API and provider obligations, see
 [App Method Access And Call Consent](./app-method-access-and-call-consent.md).

@@ -76,10 +76,13 @@ test("only explicit absent status permits preparation; read errors remain errors
   await expect(readRefillStatus(requestId, { ...calls, querySelf: async () => { throw new Error("connection replaced"); } })).rejects.toThrow("connection replaced");
 });
 
-test("removing tokens from Assets retains only the exact refill recovery grants", () => {
+test("removing tokens from Assets preserves exclusive refill ledger custody", () => {
   const scopes = walletRefillReservationScopes();
-  expect(scopes).toHaveLength(7);
-  expect(scopes.every((scope) => scope.kind === "exact")).toBe(true);
+  expect(scopes).toEqual([
+    { kind: "principal", principal: "ryjl3-tyaaa-aaaaa-aaaba-cai" },
+    { kind: "principal", principal: "um5iw-rqaaa-aaaaq-qaaba-cai" },
+    { kind: "principal", principal: "rkp4c-7iaaa-aaaaa-aaaca-cai" },
+  ]);
   expect(reservationActions([...scopes, { kind: "principal", principal: "aaaaa-aa" }], [])).toEqual([{ kind: "release", scope: { kind: "principal", principal: "aaaaa-aa" } }]);
 });
 

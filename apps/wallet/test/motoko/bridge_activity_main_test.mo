@@ -59,6 +59,7 @@ persistent actor {
         Map.add(bridge.intents, Blob.compare, other.id, other);
         let noCalls : Capabilities.BackendCalls = {
             canister_principal = Principal.fromText("aaaaa-aa");
+            owns_principal = func(_ : Principal) : Bool { false };
             can_call = func(_ : Principal, _ : Text) : Bool { Runtime.trap("Activity cannot need network permissions") };
             call = func(_ : Capabilities.CallRequest) : async* Capabilities.CallResult { Runtime.trap("Activity cannot call Ethereum, minters or ledgers") };
             call_batch = func(_ : [Capabilities.CallRequest]) : async* [Capabilities.CallResult] { Runtime.trap("Activity cannot send a call batch") };
