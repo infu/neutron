@@ -6,11 +6,11 @@ import Access "./Access";
 import API "./API";
 import Audits "./Audits";
 import Catalog "./Catalog";
+import Dependencies "./Dependencies";
 import Store "./Store";
 import Types "./Types";
 import ReleaseStore "./ReleaseStore";
-import Retention "./Retention";
-import Rankings "./Rankings";
+import ReleaseTransitions "./ReleaseTransitions";
 import Map "mo:core/Map";
 import Text "mo:core/Text";
 
@@ -40,35 +40,6 @@ module {
       });
     };
     #ok({ entries = List.toArray(entries) });
-  };
-
-  // The whole dependency graph is resolved from the resulting stable heads,
-  // including selected successors and the Kernel, before the first write.
-  func validatePromotionDependencies(db : Store.DB, selected : Map.Map<Text, Types.Candidate>) : API.Result<()> {
-    let seen = Map.empty<Text, Types.Candidate>();
-    let pending = List.empty<{ appId : Text; minimum : Nat }>();
-    for ((appId, _) in Map.entries(selected)) List.add(pending, { appId; minimum = 100 });
-    label walk loop {
-      let ?required = List.removeLast(pending) else break walk;
-      let candidate = switch (Map.get(seen, Text.compare, required.appId)) {
-        case (?value) value;
-        case null {
-          let value = switch (Map.get(selected, Text.compare, required.appId)) {
-            case (?value) value;
-            case null {
-              let ?app = Store.getApp(db, required.appId) else return error("dependency_unavailable", "No stable dependency exists for " # required.appId # ".");
-              let ?value = Catalog.release(db, app, #stable_) else return error("dependency_unavailable", "Promote the required " # required.appId # " beta in this same transaction.");
-              value;
-            };
-          };
-          Map.add(seen, Text.compare, required.appId, value);
-          for (dependency in value.dependencies.vals()) List.add(pending, { appId = dependency.appId; minimum = dependency.minVersion });
-          value;
-        };
-      };
-      if (candidate.version < required.minimum) return error("dependency_version", "The resulting stable " # required.appId # " does not satisfy the required version.");
-    };
-    #ok(());
   };
 
   public func promote(db : Store.DB, caller : Principal, input : API.PromotionRequest, now : Int) : API.Result<Promoted> {
@@ -116,7 +87,7 @@ module {
       };
       Map.add(selected, Text.compare, entry.appId, candidate);
     };
-    switch (validatePromotionDependencies(db, selected)) { case (#err(value)) return #err(value); case (_) {} };
+    switch (Dependencies.promotion(db, selected)) { case (#err(value)) return #err(value); case (_) {} };
     let receipt : API.PromotionReceipt = { id = if (changed) db.channels.nextPromotionId else 0; owner = caller; publisher = caller; requestId = input.requestId; operation = "promote"; channel = "stable"; entries = input.entries; createdAtNs = now };
     if (not changed) {
       // A no-op still binds its caller's retry identity. Keep its id zero so it
@@ -124,21 +95,10 @@ module {
       Map.add(db.channels.promotions, ReleaseStore.requestCompare, (caller, input.requestId), receipt);
       return #ok({ receipt; retiredArtifacts = []; appIds = [] });
     };
-    let appIds = List.empty<Text>();
-    for (entry in input.entries.vals()) {
-      let heads = ReleaseStore.heads(db.channels, entry.appId);
-      if (heads.stableHead.candidateId != ?entry.candidateId) {
-        ReleaseStore.putHeads(db.channels, entry.appId, { heads with stableHead = { candidateId = ?entry.candidateId; revision = heads.stableHead.revision + 1 } });
-        let ?app = Store.getApp(db, entry.appId) else Runtime.trap("Promotion app disappeared without await");
-        switch (db.apps.update({ app with updatedAtNs = now })) { case (#ok(value)) Rankings.refreshEligibility(db, value); case (#err(value)) Runtime.trap(debug_show(value)) };
-        List.add(appIds, entry.appId);
-      };
-    };
-    let retired = List.empty<Types.Artifact>();
-    for (appId in List.values(appIds)) for (artifact in Retention.afterDecision(db, appId).vals()) List.add(retired, artifact);
+    let effects = ReleaseTransitions.promote(db, input.entries, now);
     db.channels.nextPromotionId += 1;
     Map.add(db.channels.promotions, ReleaseStore.requestCompare, (caller, input.requestId), receipt);
-    #ok({ receipt; retiredArtifacts = List.toArray(retired); appIds = List.toArray(appIds) });
+    #ok({ effects with receipt });
   };
 
   func matches(saved : Types.PublishBatch, input : API.TrustedPublishRequest) : Bool {

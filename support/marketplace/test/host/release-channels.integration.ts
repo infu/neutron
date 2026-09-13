@@ -13,6 +13,10 @@ import { installFixture, relayCall, session, wire, type IntegrationCase } from "
 // also exercises the complete public API and a same-module keep upgrade.
 const previousPath = process.env.MARKETPLACE_CHANNELS_PREVIOUS_WASM;
 const deployedHash = "62538acd0b35afad2d4222a82c4d5476ea200266dbab49516046711efd0eb438";
+// The channel-aware PR baseline qualifies the subsequent architecture cleanup
+// separately from the deployed predecessor's original channel-root bootstrap.
+const baselinePath = process.env.MARKETPLACE_CHANNELS_BASELINE_WASM;
+const baselineHash = "6f7776b9b7dda18288836791d0ed28909b7d645e8b9a5dea804e962b09d2f0b7";
 const principal = (seed: number) => Ed25519KeyIdentity.generate(new Uint8Array(32).fill(seed)).getPrincipal();
 const digest = (bytes: Uint8Array) => new Uint8Array(createHash("sha256").update(bytes).digest());
 const hex = (bytes: Uint8Array) => Buffer.from(digest(bytes)).toString("hex");
@@ -27,7 +31,7 @@ const stablePath = (appId: string) => `/repo/v1/releases/${appId}.json`;
 const betaPath = (appId: string) => `/repo/v1/channels/beta/releases/${appId}.json`;
 const headsPath = (appId: string) => `/repo/v1/channels/apps/${appId}.json`;
 
-async function setup(previous?: string) {
+async function setup(previous?: string, expectedHash = deployedHash) {
   const env = await session();
   try {
     const buyer = await installFixture(env.pic, "release_channels_relay", "test/fixtures/Relay.mo");
@@ -48,8 +52,10 @@ async function setup(previous?: string) {
     let wasm: any = compiled.wasmPath;
     if (previous) {
       const bytes = await readFile(previous);
-      assert.equal(hex(bytes), deployedHash, "Qualification installs the exact production predecessor from the retained local release record");
-      assert.notEqual(compiled.wasmHash, deployedHash);
+      assert.equal(hex(bytes), expectedHash, expectedHash === deployedHash
+        ? "Qualification installs the exact production predecessor from the retained local release record"
+        : "Qualification installs the exact channel-aware PR baseline before the architecture cleanup");
+      assert.notEqual(compiled.wasmHash, expectedHash);
       wasm = gzipSync(bytes, { level: 9 });
     }
     await env.pic.installCode({ canisterId, wasm, arg });
@@ -112,10 +118,10 @@ async function setup(previous?: string) {
 }
 
 export const cases: IntegrationCase[] = [{
-  name: "Release channels: certified beta isolation, exact atomic Kernel promotion, conflicts and historical receipt recovery",
+  name: `Release channels: certified beta isolation, exact atomic Kernel promotion, conflicts and historical receipt recovery${baselinePath ? " from exact PR baseline" : ""}`,
   scope: "protocol",
   async run() {
-    const ctx = await setup();
+    const ctx = await setup(baselinePath, baselineHash);
     try {
       const { publisher, candidate, publish, prepare, promote, heads, http, body, json, detail } = ctx;
       const appIds = ["kernel", "channel_app"];
@@ -199,7 +205,8 @@ export const cases: IntegrationCase[] = [{
       assert.deepEqual(await heads(appIds), current, "Recovery cannot reinstall an old channel head");
 
       const app104 = await candidate(app100.appId, 104n, [{ appId: "kernel", minVersion: 101n }]);
-      await publish("beta-104", [app104]);
+      const publish104 = ctx.batch("beta-104", [app104]);
+      const beta104 = success(await publisher.trusted_publish_beta_batch(publish104));
       const commentRelease = { appId: app104.appId, candidateId: app104.row.id, version: app104.version, digest: app104.row.digest };
       const commentRequest = { ...commentRelease, text: "Feedback on this exact beta", feeVersion: 1n };
       const comment = await ctx.charged("version_comment_set_v2", commentRequest);
@@ -210,6 +217,76 @@ export const cases: IntegrationCase[] = [{
       assert.equal(starsBeforeRevocation.four, 1n);
       const revocationPlan = await prepare("revoked-beta", [app100.appId]);
       const stable103Bytes = await body(stablePath(app100.appId));
+
+      // Execute both public purchase contracts before upgrading. Query-only
+      // quotes do not create durable snapshots; completed free purchases retain
+      // their exact Candid quote, commitment and spender without ledger effects.
+      const legacyStatusRequest = { requestId: acquiredQuote.request.requestId };
+      const legacyFinancial = success(await ctx.browser.purchase_status(legacyStatusRequest))[0];
+      const legacyQuote = success(await ctx.browser.purchase_quote(acquiredQuote.request));
+      assert.deepEqual(legacyFinancial.quote, [legacyQuote]);
+      assert.deepEqual(legacyQuote.commitment, acquiredQuote.commitment);
+      assert.deepEqual(legacyQuote.spender, acquiredQuote.spender);
+      assert.deepEqual(legacyFinancial.order.quoteCommitment, legacyQuote.commitment);
+      assert.deepEqual(legacyQuote.items.map((item: any) => item.appId), [app100.appId]);
+
+      const channelBuyer = await installFixture(ctx.pic, "release_channels_relay", "test/fixtures/Relay.mo");
+      const channelBrowserId = principal(164);
+      const channelBrowser = ctx.as(channelBrowserId);
+      const channelCharged = async (method: string, input: unknown) => success(await relayCall(channelBuyer, ctx.market, method, [input], 1_000_000_000n));
+      await channelCharged("read_delegate_set", { browser: channelBrowserId, active: true, feeVersion: 1n });
+      const channelRequest = {
+        request: { requestId: "retained-beta-acquisition", appIds: [app104.appId], ledger: ctx.ledger.canisterId, referralCode: [] },
+        mode: { beta: null }, expectedSelection: [],
+      };
+      const reviewedChannelQuote = success(await channelBrowser.purchase_quote_v2(channelRequest));
+      const channelFinancial = await channelCharged("purchase_v2", { quote: reviewedChannelQuote, feeVersion: 1n });
+      assert.ok("complete" in channelFinancial.purchase.order.state);
+      const channelQuote = channelFinancial.quote[0];
+      assert.ok(channelQuote, "The completed v2 order retains its channel-aware financial snapshot");
+      assert.deepEqual(channelQuote.quote.commitment, reviewedChannelQuote.quote.commitment);
+      assert.deepEqual(channelQuote.quote.spender, reviewedChannelQuote.quote.spender);
+      assert.deepEqual(channelFinancial.purchase.order.quoteCommitment, channelQuote.quote.commitment);
+      assert.deepEqual(channelQuote.quote.items.map((item: any) => item.appId), [app104.appId]);
+      assert.deepEqual(channelQuote.selection.map((entry: any) => [entry.appId, entry.candidateId, entry.version, Object.keys(entry.channel)[0]]), [
+        [app104.appId, app104.row.id, 104n, "beta"], [kernel101.appId, kernel101.row.id, 101n, "stable"],
+      ]);
+      const channelReplayRequest = { ...channelRequest, expectedSelection: [channelQuote.selection] };
+      const channelStatusRequest = { requestId: channelRequest.request.requestId };
+      assert.deepEqual(success(await channelBrowser.purchase_quote_v2(channelReplayRequest)), channelQuote);
+      assert.deepEqual(success(await channelBrowser.purchase_status_v2(channelStatusRequest)), [channelFinancial]);
+
+      const liveCommentPage = success(await ctx.browser.version_comments_v2(commentPage));
+      assert.deepEqual(liveCommentPage.ownComment, [comment]);
+      const certifiedPaths = appIds.flatMap(appId => [headsPath(appId), stablePath(appId), betaPath(appId)]);
+      const certifiedBefore = await Promise.all(certifiedPaths.map(path => body(path)));
+      const liveArtifacts = [app103.pkg, app103.source, app104.pkg, app104.source];
+      const artifactBytesBefore = await Promise.all(liveArtifacts.map(artifact => body(artifact.path)));
+      const ledgerBeforeUpgrade = await ctx.ledger.actor.stats();
+      await ctx.upgrade();
+      assert.deepEqual(await Promise.all(certifiedPaths.map(path => body(path))), certifiedBefore, "Keep upgrade preserves exact certified stable/beta heads and release bodies while beta is live");
+      assert.deepEqual(await Promise.all(liveArtifacts.map(artifact => body(artifact.path))), artifactBytesBefore);
+      assert.deepEqual(success(await ctx.browser.version_comments_v2(commentPage)), liveCommentPage, "Live beta comments and editor ownership survive the architecture cleanup");
+      assert.deepEqual(success(await ctx.market.actor.rating_summary_v2(app104.appId)), starsBeforeRevocation);
+      for (const receipt of [firstPromotion, receipt101, receipt103, noop]) {
+        assert.deepEqual(success(await publisher.promotion_status({ requestId: receipt.requestId })), [receipt]);
+      }
+      for (const receipt of [beta100, beta101, beta104]) {
+        assert.deepEqual(success(await publisher.trusted_publish_beta_status({ requestId: receipt.requestId })), [receipt]);
+      }
+      assert.deepEqual(success(await publisher.release_promote(exact)), receipt101);
+      assert.deepEqual(success(await publisher.release_promote(noopRequest)), noop);
+      assert.deepEqual(success(await publisher.trusted_publish_beta_batch(publish101)), beta101);
+      assert.deepEqual(success(await publisher.trusted_publish_beta_batch(publish104)), beta104);
+      assert.deepEqual(success(await ctx.browser.purchase_status(legacyStatusRequest)), [legacyFinancial]);
+      assert.deepEqual(success(await ctx.browser.purchase_quote(acquiredQuote.request)), legacyQuote);
+      assert.deepEqual(await ctx.charged("purchase", { quote: legacyQuote, feeVersion: 1n }), legacyFinancial, "Legacy financial replay retains its original saved quote and order");
+      assert.deepEqual(success(await channelBrowser.purchase_status_v2(channelStatusRequest)), [channelFinancial]);
+      assert.deepEqual(success(await channelBrowser.purchase_quote_v2(channelReplayRequest)), channelQuote);
+      assert.deepEqual(await channelCharged("purchase_v2", { quote: channelQuote, feeVersion: 1n }), channelFinancial, "V2 replay retains its original quote commitment, spender and exact release selection");
+      assert.deepEqual(await ctx.ledger.actor.stats(), ledgerBeforeUpgrade, "Snapshot and receipt recovery cannot create a ledger effect");
+      assert.deepEqual(await Promise.all(certifiedPaths.map(path => body(path))), certifiedBefore, "Historical receipt replay cannot replace the live heads");
+
       success(await ctx.revoke(app104));
       failure(await ctx.browser.version_comments_v2(commentPage), "feedback_release_retired");
       failure(await relayCall(ctx.buyer, ctx.market, "version_comment_set_v2", [commentRequest], 1_000_000_000n), "feedback_release_retired");

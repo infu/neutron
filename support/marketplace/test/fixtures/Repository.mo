@@ -22,7 +22,7 @@ persistent actor Fixture {
   var extraPackageIds : [Nat64] = [];
   let publisherMemory = PublisherStore.init();
   let releaseMemory = ReleaseStore.init();
-  transient let db = Store.UseWithChannels(memory, publisherMemory, releaseMemory);
+  transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   transient let repo = Repository.Service(db, certification, Principal.fromActor(Fixture));
   transient let http = Http.Store(certification, {
     artifact = func(path) { switch (repo.artifact(path)) { case (?value) ?value; case null Certification.artifact(db, path) } };

@@ -28,7 +28,7 @@ persistent actor RepositoryTests {
   func setup() : Context {
     let memory = F.memory();
     let publisherMemory = PublisherStore.init();
-    let db = Store.Use(memory, publisherMemory);
+    let db = Store.Use(memory, publisherMemory, ReleaseStore.init());
     let certification = Http.init();
     let repo = Repository.Service(db, certification, Principal.fromActor(RepositoryTests));
     let http = Http.Store(certification, {

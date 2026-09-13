@@ -37,7 +37,7 @@ persistent actor {
       let memory = Fixtures.memory();
       let publisherMemory = PublisherStore.init();
       let channelMemory = ReleaseStore.init();
-      let db = Store.UseWithChannels(memory, publisherMemory, channelMemory);
+      let db = Store.Use(memory, publisherMemory, channelMemory);
       ignore Fixtures.draft(db, "listedapp", 0);
       let stableIcon = Fixtures.upload(db, "listedapp", "stable-icon", #image);
       let stableScreen = Fixtures.upload(db, "listedapp", "stable-screen", #image);
@@ -103,14 +103,14 @@ persistent actor {
       assert ok(Views.catalogFor(db, Fixtures.owner(), null, catalogRequest("Unreleased", #paid), 10, #beta)).apps.size() == 0;
       assert ok(Views.catalogFor(db, Fixtures.owner(), null, catalogRequest("", #free), 10, #beta)).apps.size() == 0;
 
-      let restored = Store.UseWithChannels(memory, publisherMemory, channelMemory);
+      let restored = Store.Use(memory, publisherMemory, channelMemory);
       assert Views.channelApp(restored, Fixtures.owner(), ?Fixtures.other(), draft, #beta) == opted;
     });
   };
 
   public func beta_only_discovery_uses_shared_rankings_and_release_search() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
       ignore ok(Publishers.register(db, Fixtures.owner(), { publisherId = "fixture"; name = "Fixture"; description = ""; feeVersion = 1 }, 1));
       for (appId in ["alpha", "bravo", "zulu"].vals()) {
         ignore Fixtures.draft(db, appId, 0);
@@ -147,7 +147,7 @@ persistent actor {
 
   public func revocation_falls_back_only_to_an_independently_offered_head() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
       let app = Fixtures.draft(db, "fallback", 0);
       let older = released(db, app.appId, 100, "older");
       let newer = released(db, app.appId, 101, "newer");

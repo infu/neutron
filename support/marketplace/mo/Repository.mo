@@ -12,9 +12,9 @@ import CertTree "mo:ic-certification/CertTree";
 import Access "./Access";
 import API "./API";
 import Catalog "./Catalog";
+import Dependencies "./Dependencies";
 import Encoding "./Encoding";
 import Http "./Http";
-import Publishing "./Publishing";
 import ReleaseStore "./ReleaseStore";
 import Store "./Store";
 import Types "./Types";
@@ -40,7 +40,7 @@ module {
 
   func failure<T>(code : Text, message : Text) : API.Result<T> { #err({ code; message }) };
   func validId(id : Text) : Bool {
-    Catalog.validAppId(id) and id != "constructor" and id != "prototype" and id != "__proto__";
+    Dependencies.validInstallerId(id);
   };
   func rootIds(values : [Text]) : [Text] {
     let result = List.empty<Text>();
@@ -58,9 +58,7 @@ module {
     ",\"size\":" # Nat64.toText(artifact.size);
   };
   func compatible(candidate : Types.Candidate, artifact : Types.Artifact) : Bool {
-    validId(candidate.appId) and Publishing.validReleaseVersion(candidate.version) and
-    candidate.digest.size() == 32 and candidate.digest == artifact.digest and
-    artifact.size > 0 and Nat64.toNat(artifact.size) <= Publishing.maxPackageBytes;
+    Dependencies.installerCompatible(candidate, artifact);
   };
   func modeText(mode : ReleaseStore.Mode) : Text { switch (mode) { case (#stable_) "stable"; case (#beta) "beta" } };
   func sortedSelection(values : [ReleaseStore.Selection]) : [ReleaseStore.Selection] {
@@ -242,57 +240,13 @@ module {
 
     public func selection(owner : Principal, request : API.ChannelInstallQuery) : API.Result<API.ChannelInstallSelection> {
       let roots = switch (validRoots(owner, request.appIds)) { case (#err(error)) return #err(error); case (#ok(value)) value };
-      for (appId in roots.vals()) {
-        if (Store.getEntitlement(db, owner, appId) == null) return failure("app_not_owned", "Add " # appId # " to My apps before installing it.");
-      };
-      let selected = Map.empty<Text, ReleaseStore.Selection>();
-      let digests = Map.empty<Text, Text>();
-      var totalBytes = 0;
-      func visit(appId : Text, minimum : Nat) : API.Result<()> {
-        // Setup cannot contain a Kernel archive. The package's retained
-        // dependency metadata is checked against the installed Kernel by the
-        // existing installer; incompatible Kernels are upgraded in Settings.
-        if (appId == "kernel") return #ok(());
-        switch (Map.get(selected, Text.compare, appId)) {
-          case (?value) {
-            if (value.version < minimum) return failure("dependency_version", "The selected " # appId # " release does not satisfy the dependency minimum.");
-            return #ok(());
-          };
-          case null {};
-        };
-        let ?app = Store.getApp(db, appId) else return failure("dependency_unavailable", "No marketplace app exists for " # appId # ".");
-        let ?entry = Catalog.selection(db, app, request.mode) else return failure("release_unavailable", "No approved published release is available in the selected channel for " # appId # ".");
-        let ?candidate = Store.getCandidate(db, entry.candidateId) else Runtime.trap("Selected candidate disappeared without an await");
-        if (candidate.version < minimum) return failure("dependency_version", "The selected " # appId # " release does not satisfy the dependency minimum.");
-        let ?value = Store.getArtifact(db, candidate.artifactId) else return failure("release_unavailable", "The package for " # appId # " is unavailable.");
-        if (not compatible(candidate, value)) return failure("installer_incompatible", "The approved " # appId # " release does not fit the existing Neutron package format.");
-        if (app.priceUsdMicros > 0 and Store.getEntitlement(db, owner, appId) == null) return failure("dependency_not_owned", "This selection needs the paid app " # appId # ". Add it to My apps before installing.");
-        if (not Access.canAccess(db, owner, candidate.artifactId, #buyer)) return failure("release_unavailable", "The approved package for " # appId # " is not accessible to this Neutron.");
-        // These are the existing installer codec limits, not catalog quotas.
-        if (Map.size(selected) >= 64 or totalBytes + Nat64.toNat(value.size) > 67_108_864) return failure("installer_batch_limit", "This selection exceeds Neutron's existing 64-package or 64 MiB install batch format. Select fewer apps.");
-        let digest = Encoding.hex(candidate.digest);
-        switch (Map.get(digests, Text.compare, digest)) {
-          case (?other) return failure("duplicate_package", "The same package digest cannot identify both " # other # " and " # appId # ".");
-          case null {};
-        };
-        Map.add(selected, Text.compare, appId, entry);
-        Map.add(digests, Text.compare, digest, appId);
-        totalBytes += Nat64.toNat(value.size);
-        for (dependency in candidate.dependencies.vals()) {
-          switch (visit(dependency.appId, dependency.minVersion)) { case (#err(error)) return #err(error); case (#ok(())) {} };
-        };
-        #ok(());
-      };
-      for (root in roots.vals()) {
-        switch (visit(root, 100)) { case (#err(error)) return #err(error); case (#ok(())) {} };
-      };
-      let entries = List.empty<ReleaseStore.Selection>();
-      for ((_, entry) in Map.entries(selected)) {
-        List.add(entries, entry);
+      let entries = switch (Dependencies.installation(db, owner, roots, request.mode)) {
+        case (#err(error)) return #err(error);
+        case (#ok(value)) value;
       };
       // Echo the reviewed roots; the separate selection contains the complete
       // sorted dependency closure. Request identity normalizes roots later.
-      #ok({ appIds = request.appIds; mode = request.mode; selection = List.toArray(entries) });
+      #ok({ appIds = request.appIds; mode = request.mode; selection = entries });
     };
 
     func replay(owner : Principal, saved : Types.Manifest, id : Text) : API.Result<API.InstallResult> {

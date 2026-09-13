@@ -18,7 +18,7 @@ persistent actor Fixture {
   let channels = ReleaseStore.init();
   let certification = Http.init();
   var seeded = false;
-  transient let db = Store.UseWithChannels(memory, publishers, channels);
+  transient let db = Store.Use(memory, publishers, channels);
   transient let repo = Repository.Service(db, certification, Principal.fromActor(Fixture));
   transient let http = Http.Store(certification, {
     artifact = func(path) { switch (repo.artifact(path)) { case (?value) ?value; case null Certification.artifact(db, path) } };

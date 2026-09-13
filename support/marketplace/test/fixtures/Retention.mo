@@ -18,7 +18,7 @@ persistent actor {
   let memory = F.memory();
   let publisherMemory = PublisherStore.init();
   let releaseMemory = ReleaseStore.init();
-  transient let db = Store.UseWithChannels(memory, publisherMemory, releaseMemory);
+  transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   var phase : Nat = 0;
   var seeded = false;
   var candidates : [Types.Candidate] = [];

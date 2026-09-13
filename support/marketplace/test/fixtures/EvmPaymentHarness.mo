@@ -27,7 +27,7 @@ persistent actor class EvmPaymentHarness(config : Types.Config, ledgerId : Princ
   var failGrant = false;
   let publisherMemory = PublisherStore.init();
   let releaseMemory = ReleaseStore.init();
-  transient let db = Store.UseWithChannels(memory, publisherMemory, releaseMemory);
+  transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   transient let marketplace = Principal.fromActor(self);
   transient let ledger : Ledger.Client = {
     transfer = func(expected : Principal, args : Ledger.TransferArgs) : async* Ledger.Outcome {

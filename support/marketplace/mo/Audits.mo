@@ -1,8 +1,7 @@
 // All rights reserved. See ../LICENSE.
 import Catalog "Catalog";
 import Publishing "Publishing";
-import Rankings "Rankings";
-import Retention "Retention";
+import ReleaseTransitions "ReleaseTransitions";
 import Store "Store";
 import Types "Types";
 import API "API";
@@ -124,20 +123,8 @@ module {
     }));
     let savedCandidate = must(db.candidates.update(nextCandidate));
     let savedApp = if (nextApp != app) must(db.apps.update(nextApp)) else app;
-    if (input.decision == #approved and publicationChanged) {
-      let heads = ReleaseStore.heads(db.channels, app.appId);
-      ReleaseStore.putHeads(db.channels, app.appId, { heads with betaHead = { candidateId = ?candidate.id; revision = heads.betaHead.revision + 1 } });
-    };
-    if (input.decision == #revoked) {
-      let heads = ReleaseStore.heads(db.channels, app.appId);
-      ReleaseStore.putHeads(db.channels, app.appId, {
-        stableHead = if (heads.stableHead.candidateId == ?candidate.id) ({ heads.stableHead with revision = heads.stableHead.revision + 1 }) else heads.stableHead;
-        betaHead = if (heads.betaHead.candidateId == ?candidate.id) ({ heads.betaHead with revision = heads.betaHead.revision + 1 }) else heads.betaHead;
-      });
-    };
-    Rankings.refreshEligibility(db, savedApp);
     let ?audit = db.audits.get(auditId) else Runtime.trap("Saved audit missing");
-    let retiredArtifacts = Retention.afterDecision(db, savedApp.appId);
+    let retiredArtifacts = ReleaseTransitions.afterAudit(db, savedApp, savedCandidate, input.decision, publicationChanged);
     #ok({ audit; candidate = savedCandidate; app = savedApp; publicationChanged; retiredArtifacts });
   };
 

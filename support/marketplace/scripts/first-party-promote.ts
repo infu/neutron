@@ -7,7 +7,7 @@ import { REPOSITORY_LIMITS, repositoryPackagePath, repositoryReleasePath } from 
 import { parseRepositoryChannelHeads, repositoryChannelHeadsPath, type RepositoryChannelHeads } from "neutron-tools/src/release_channels.js";
 import { readCertifiedAsset, readReleaseAsset, updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
 import { PACKAGE_CONTENT_TYPE, RELEASE_CACHE_CONTROL, SOURCE_CONTENT_TYPE, SOURCE_COMPRESSED_MAX_BYTES, sha256Hex, UPDATE_SOURCE_RECEIPT_PROTOCOL } from "../../update-source/src/model.ts";
-import { TRUSTED_PUBLISHER_CALLER, verifyArtifact, verifyChannelSupport } from "./first-party-publish.ts";
+import { TRUSTED_PUBLISHER_CALLER, verifyArtifact, verifyChannelSupport } from "./publication-evidence.ts";
 import { lockPublisherJournal, savePublisherJournal } from "./publisher-journal.ts";
 import { json } from "./operator-wire.ts";
 

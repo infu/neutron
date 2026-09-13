@@ -1,7 +1,6 @@
 // All rights reserved. See ../LICENSE.
 import Array "mo:core/Array";
 import Int "mo:core/Int";
-import List "mo:core/List";
 import Map "mo:core/Map";
 import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";
@@ -13,6 +12,7 @@ import API "./API";
 import Accounting "./Accounting";
 import Billing "./Billing";
 import Catalog "./Catalog";
+import Dependencies "./Dependencies";
 import Encoding "./Encoding";
 import Pricing "./Pricing";
 import Purchases "./Purchases";
@@ -91,62 +91,6 @@ module {
     };
   };
 
-  type PurchaseGraph = { apps : [Types.App]; releases : Map.Map<Text, Types.Candidate>; selection : [API.ReleaseSelection] };
-
-  // Resolve one synchronous snapshot before any allowance or collection.
-  // Ownership removes a price line, not a dependency or release commitment.
-  // Legacy requests preserve their installed-Kernel compatibility behavior;
-  // channel requests additionally select the Kernel for dependency evidence.
-  func purchaseApps(db : Store.DB, buyer : Principal, roots : [Text], mode : ?API.ChannelMode) : API.Result<PurchaseGraph> {
-    let apps = List.empty<Types.App>();
-    let releases = Map.empty<Text, Types.Candidate>();
-    let selection = List.empty<API.ReleaseSelection>();
-    let pending = List.empty<{ appId : Text; minimum : Nat; root : Bool }>();
-    var previous : ?Text = null;
-    for (appId in Array.sort<Text>(roots, Text.compare).vals()) {
-      if (previous == ?appId) return error("duplicate_app", "Select each app once.");
-      previous := ?appId;
-      if (appId == "kernel") return error("invalid_app", "Upgrade the Kernel through Settings; it is not an app purchase.");
-      List.add(pending, { appId; minimum = 100; root = true });
-    };
-    label walk loop {
-      let ?required = List.removeLast(pending) else break walk;
-      if (required.appId != "kernel" or mode != null) {
-        switch (Map.get(releases, Text.compare, required.appId)) {
-          case (?release) {
-            if (release.version < required.minimum) return error("dependency_version", "The selected " # required.appId # " release does not satisfy the dependency minimum.");
-          };
-          case null {
-            let ?app = Store.getApp(db, required.appId) else return error(
-              if (required.root) "app_missing" else "dependency_unavailable",
-              "No marketplace app exists for " # required.appId # ".");
-            let selected = switch (mode) {
-              case null Catalog.approvedRelease(db, app);
-              case (?value) Catalog.release(db, app, value);
-            };
-            let ?release = selected else return error("not_available", "No approved published release is available for " # required.appId # ".");
-            if (release.version < required.minimum) return error("dependency_version", "The selected " # required.appId # " release does not satisfy the dependency minimum.");
-            let owned = Store.getEntitlement(db, buyer, app.appId) != null;
-            if (app.appId != "kernel" and not owned and not app.visible) return error("not_available", "This required app is not available to acquire: " # app.appId # ".");
-            Map.add(releases, Text.compare, app.appId, release);
-            if (app.appId != "kernel" and not owned) List.add(apps, app);
-            switch (mode) {
-              case null {};
-              case (?value) {
-                let ?identity = Catalog.selection(db, app, value) else Runtime.trap("Selected release disappeared from synchronous snapshot");
-                List.add(selection, identity);
-              };
-            };
-            for (dependency in release.dependencies.vals()) {
-              if (dependency.appId != "kernel" or mode != null) List.add(pending, { appId = dependency.appId; minimum = dependency.minVersion; root = false });
-            };
-          };
-        };
-      };
-    };
-    #ok({ apps = List.toArray(apps); releases; selection = Array.sort<API.ReleaseSelection>(List.toArray(selection), func(a, b) { Text.compare(a.appId, b.appId) }) });
-  };
-
   func purchaseSnapshot(db : Store.DB, marketplace : Principal, buyer : Principal, request : API.PurchaseRequest, mode : ?API.ChannelMode, now : Int) : API.Result<{ quote : API.CheckoutQuote; selection : [API.ReleaseSelection] }> {
     if (not Catalog.hasText(request.requestId)) return error("request_id", "A purchase request ID is required.");
     if (request.appIds.size() == 0) return error("empty_cart", "Select an app to acquire.");
@@ -156,7 +100,7 @@ module {
       case (#ok(null)) null;
       case (#ok(?value)) ?value.owner;
     };
-    let graph = switch (purchaseApps(db, buyer, request.appIds, mode)) { case (#ok(value)) value; case (#err(value)) return #err(value) };
+    let graph = switch (Dependencies.purchase(db, buyer, request.appIds, mode)) { case (#ok(value)) value; case (#err(value)) return #err(value) };
     let rate = Store.getRate(db, request.ledger);
     let pricingRate : ?Pricing.Rate = switch (rate) {
       case null null;

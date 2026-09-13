@@ -38,10 +38,7 @@ module {
 
   // Construct once as a transient actor value. Existing retained records are
   // restored directly; initialization is never used as an upgrade fallback.
-  public func Use(mem : Mem, publisherMem : PublisherStore.Mem) : DB {
-    UseWithChannels(mem, publisherMem, ReleaseStore.init());
-  };
-  public func UseWithChannels(mem : Mem, publisherMem : PublisherStore.Mem, channels : ReleaseStore.Mem) : DB {
+  public func Use(mem : Mem, publisherMem : PublisherStore.Mem, channels : ReleaseStore.Mem) : DB {
     let ?retained = mem.store.value else Runtime.trap("Marketplace storage is not initialized");
     let generated = Generated.Use(mem, retained);
     ReleaseStore.bootstrap(channels, generated.apps.iterPrimary(#fwd, null));

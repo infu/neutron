@@ -38,6 +38,7 @@ import Store "./Store";
 import Types "./Types";
 import Views "./Views";
 import ReleaseStore "./ReleaseStore";
+import ReleaseTransitions "./ReleaseTransitions";
 import FeedbackStore "./FeedbackStore";
 import Feedback "./Feedback";
 import Map "mo:core/Map";
@@ -51,7 +52,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   let certificationMemory = Http.init();
   let releaseMemory = ReleaseStore.init();
   let feedbackMemory = FeedbackStore.init();
-  transient let db = Store.UseWithChannels(memory, publisherMemory, releaseMemory);
+  transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   transient let source = Principal.fromActor(this);
   transient let feedback = Feedback.Service(db, feedbackMemory, func(appId, candidateId, version, digest) {
     let ?candidate = Store.getCandidate(db, candidateId) else return false;
@@ -73,6 +74,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     };
   });
   transient let certificates = Certification.Service(db, http);
+  transient let releases = ReleaseTransitions.Projection(http, repository, certificates);
   transient let jobs = Jobs.Engine(db, operations.withdrawals, source, Time.now, Rates.client());
   transient var timer : ?Timer.TimerId = null;
   transient var maintenanceActive = false;
@@ -100,10 +102,6 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   func fixedCharge<system>(operation : Billing.Operation, feeVersion : Nat) : API.Result<Nat> {
     Billing.accept<system>(Billing.quote(Store.config(db).fees, operation, 0, 0), feeVersion);
   };
-  func changedApp(appId : Text) {
-    repository.refreshApp(http, appId);
-    certificates.refreshApp(appId);
-  };
   transient let ethereum = EvmPayments.Service(db, source, Time.now, {
     ledger = Ledger.client();
     minter = EvmMinter.client();
@@ -122,7 +120,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
         atNs = now; paidAtoms = item.paidAtoms;
         ledger = if (item.paidAtoms == 0) null else ?order.ledger; block;
       });
-      changedApp(item.appId);
+      releases.refreshApp(item.appId);
     };
   });
   func validateConfig() {
@@ -273,7 +271,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     let visible = switch (Store.getApp(db, request.appId)) { case null true; case (?value) value.visible };
     switch (Catalog.save(db, owner, { request with visible }, Time.now())) {
       case (#err(message)) failure("listing", message);
-      case (#ok(app)) { changedApp(app.appId); #ok(Views.app(db, source, ?owner, app)) };
+      case (#ok(app)) { releases.refreshApp(app.appId); #ok(Views.app(db, source, ?owner, app)) };
     };
   };
   public shared ({ caller }) func rating_set(request : API.RatingRequest) : async API.Result<Types.Rating> {
@@ -479,7 +477,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     switch (publisherCharge<system>(caller, #update, to_candid(request), request.feeVersion)) { case (#err(value)) return #err(value); case (_) {} };
     switch (Publishing.submit(db, owner, request, Time.now())) {
       case (#err(message)) failure("candidate", message);
-      case (#ok(value)) { changedApp(value.appId); #ok(value) };
+      case (#ok(value)) { releases.refreshApp(value.appId); #ok(value) };
     };
   };
   public shared ({ caller }) func candidate_submit_v2(input : API.CandidateRequestV2) : async API.Result<Types.Candidate> {
@@ -494,7 +492,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
       case (#err(message)) failure("candidate", message);
       case (#ok(value)) {
         if (existing == null) ReleaseStore.putNotes(db.channels, value.id, input.releaseNotes);
-        changedApp(value.appId);
+        releases.refreshApp(value.appId);
         #ok(value);
       };
     };
@@ -530,8 +528,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
       case (#ok(value)) {
         let receipt : API.BetaPublishReceipt = { value.batch with requestId = request.requestId; operation = "publish"; channel = "beta" };
         Map.add(db.channels.betaReceipts, ReleaseStore.requestCompare, (caller, request.requestId), receipt);
-        certificates.removeArtifacts(value.retiredArtifacts);
-        for (appId in value.appIds.vals()) changedApp(appId);
+        releases.certify(value);
         #ok(receipt);
       };
     };
@@ -550,8 +547,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     switch (BatchPublishing.promote(db, owner, request, Time.now())) {
       case (#err(value)) #err(value);
       case (#ok(value)) {
-        certificates.removeArtifacts(value.retiredArtifacts);
-        for (appId in value.appIds.vals()) changedApp(appId);
+        releases.certify(value);
         #ok(value.receipt);
       };
     };
@@ -564,8 +560,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     switch (BatchPublishing.publish(db, caller, request, Time.now())) {
       case (#err(value)) #err(value);
       case (#ok(value)) {
-        certificates.removeArtifacts(value.retiredArtifacts);
-        for (appId in value.appIds.vals()) changedApp(appId);
+        releases.certify(value);
         #ok(value.batch);
       };
     };
@@ -587,7 +582,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
     // Only assigned auditors on this audit endpoint receive the update subsidy.
     switch (Audits.stamp(db, caller, request, Time.now())) {
       case (#err(message)) failure("audit", message);
-      case (#ok(value)) { certificates.removeArtifacts(value.retiredArtifacts); changedApp(value.app.appId); #ok(value.audit) };
+      case (#ok(value)) { releases.certify({ appIds = [value.app.appId]; retiredArtifacts = value.retiredArtifacts }); #ok(value.audit) };
     };
   };
   public shared ({ caller }) func admin_auditor_set(request : API.AuditorRequest) : async API.Result<()> {

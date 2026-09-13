@@ -4,12 +4,13 @@ import Feedback "../../mo/Feedback";
 import FeedbackStore "../../mo/FeedbackStore";
 import PublisherStore "../../mo/PublisherStore";
 import Store "../../mo/Store";
+import ReleaseStore "../../mo/ReleaseStore";
 import Fixtures "Fixtures";
 
 persistent actor {
   public func feedback_clean_initialization_and_first_rating() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.Use(Fixtures.memory(), PublisherStore.init());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
       let memory = FeedbackStore.init();
       let feedback = Feedback.Service(db, memory, func(_ : Text, _ : Nat64, _ : Nat, _ : Blob) : Bool { false });
       ignore Fixtures.stored(Store.insertApp(db, {

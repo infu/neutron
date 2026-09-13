@@ -16,7 +16,7 @@ persistent actor {
   let mem = Fixtures.memory();
   let publisherMemory = PublisherStore.init();
   let releaseMemory = ReleaseStore.init();
-  transient let db = Store.UseWithChannels(mem, publisherMemory, releaseMemory);
+  transient let db = Store.Use(mem, publisherMemory, releaseMemory);
   var apps = 0;
   var acquisitions = 0;
 

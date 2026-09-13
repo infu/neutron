@@ -8,7 +8,8 @@ import { readFile } from "node:fs/promises";
 import { loadExistingBlastIdentity } from "../../../packages/neutron-provision/src/identity.ts";
 import { AccessRequest, AccessReply, blob, result, unwrap, type Target } from "./operator-wire.ts";
 import { Listing, ListingReply, UploadBegin, UploadChunk, UploadFinish, UploadReply, Submit, SubmitReply, publish, type Transport } from "./publisher.ts";
-import { TRUSTED_PUBLISHER_CALLER, type BatchReceipt, type LegacyBatchReceipt, type TrustedPublishTransport } from "./first-party-publish.ts";
+import type { BatchReceipt, LegacyBatchReceipt, TrustedPublishTransport } from "./first-party-publish.ts";
+import { TRUSTED_PUBLISHER_CALLER } from "./publication-evidence.ts";
 import { reader, type HttpReader } from "./audit-download.ts";
 import { updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
 import { SOURCE_COMPRESSED_MAX_BYTES } from "../../update-source/src/model.ts";
@@ -24,13 +25,15 @@ export const TrustedBatchRequest = IDL.Record({
   candidates: IDL.Vec(IDL.Record({ candidateId: IDL.Nat64, expectedDigest: blob, expectedSourceDigest: IDL.Opt(blob) })),
   analysis: IDL.Text,
 });
-const BatchFields = {
+// Frozen legacy stable-publication receipt fields. New beta fields extend this
+// shape without changing the original status query contract.
+const LegacyBatchFields = {
   id: IDL.Nat64, owner: IDL.Principal, publisher: IDL.Principal, requestId: IDL.Text,
   entries: IDL.Vec(IDL.Record({ candidateId: IDL.Nat64, appId: IDL.Text, version: IDL.Nat, digest: blob, sourceDigest: IDL.Opt(blob), auditId: IDL.Nat64 })),
   analysis: IDL.Text, createdAtNs: IDL.Int,
 };
-export const LegacyTrustedBatch = IDL.Record(BatchFields);
-export const TrustedBatch = IDL.Record({ ...BatchFields, operation: IDL.Text, channel: IDL.Text });
+export const LegacyTrustedBatch = IDL.Record(LegacyBatchFields);
+export const TrustedBatch = IDL.Record({ ...LegacyBatchFields, operation: IDL.Text, channel: IDL.Text });
 export const PromotionEntryWire = IDL.Record({
   appId: IDL.Text, candidateId: IDL.Nat64, version: IDL.Nat, digest: blob,
   sourceDigest: IDL.Opt(blob), packageSize: IDL.Nat64, sourceSize: IDL.Opt(IDL.Nat64),

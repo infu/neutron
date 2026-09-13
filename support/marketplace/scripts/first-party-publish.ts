@@ -4,17 +4,18 @@
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Principal } from "@dfinity/principal";
-import { inspectUpdatePackage, sha256Hex, UPDATE_SOURCE_RECEIPT_PROTOCOL, PACKAGE_CONTENT_TYPE, SOURCE_CONTENT_TYPE, RELEASE_CACHE_CONTROL } from "../../update-source/src/model.ts";
-import { assertGatewayCertificationV2, readCertifiedAsset, readReleaseAsset, updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
+import { inspectUpdatePackage, sha256Hex, UPDATE_SOURCE_RECEIPT_PROTOCOL, PACKAGE_CONTENT_TYPE, SOURCE_CONTENT_TYPE } from "../../update-source/src/model.ts";
+import { readReleaseAsset, updateSourceOrigin, type CertifiedFetch } from "../../update-source/src/http.ts";
 import { resolveReleaseCatalogPackageFiles, type ReleaseCatalog } from "../../update-source/src/release_catalog.ts";
-import { REPOSITORY_LIMITS, repositoryReleasePath, type RepositoryReleaseRecord } from "neutron-tools/src/repository.ts";
-import { parseRepositoryChannelsDescriptor, repositoryBetaReleasePath, repositoryChannelsPath } from "neutron-tools/src/release_channels.ts";
+import { repositoryReleasePath, type RepositoryReleaseRecord } from "neutron-tools/src/repository.ts";
+import { repositoryBetaReleasePath } from "neutron-tools/src/release_channels.ts";
 import { preparePackageInstall } from "neutron-compiler/src/install.ts";
 import { json } from "./operator-wire.ts";
-import { preparePublisher, validatePreparedPublisher, TRUSTED_FIRST_PARTY_PUBLISHER, type Prepared } from "./publisher.ts";
+import { preparePublisher, validatePreparedPublisher, type Prepared } from "./publisher.ts";
 import { lockPublisherJournal, savePublisherJournal } from "./publisher-journal.ts";
+import { TRUSTED_PUBLISHER_CALLER, verifyArtifact, verifyChannelSupport } from "./publication-evidence.ts";
 
-export const TRUSTED_PUBLISHER_CALLER = TRUSTED_FIRST_PARTY_PUBLISHER;
+export { TRUSTED_PUBLISHER_CALLER, verifyArtifact, verifyChannelSupport } from "./publication-evidence.ts";
 export const AUTOMATED_PUBLICATION_ANALYSIS = "Trusted first-party publication. Automated checks verified the exact .neutron archive SHA-256 and size, packed manifest identity/version/update source, package compiler install-preparation checks (including declared dependencies and memory migration structure), and any declared Complete App Source digest, size and build-input compatibility. This stamp records automated package validation; it is not a manual malware or application-behavior review.";
 
 export type TrustedRelease = {
@@ -29,7 +30,9 @@ export type CandidateBinding = { candidateId: bigint; expectedDigest: Uint8Array
 export type BatchRequest = { operation: "publish"; channel: "beta"; requestId: string; candidates: CandidateBinding[]; analysis: string };
 export type BatchEntry = { candidateId: bigint; appId: string; version: bigint; digest: Uint8Array; sourceDigest: [] | [Uint8Array]; auditId: bigint };
 export type BatchReceipt = { operation: "publish"; channel: "beta"; id: bigint; owner: Principal; publisher: Principal; requestId: string; entries: BatchEntry[]; analysis: string; createdAtNs: bigint };
-export type LegacyBatchReceipt = Omit<BatchReceipt, "operation" | "channel">;
+// The original wire receipt is frozen independently of current beta types.
+type LegacyBatchEntry = { candidateId: bigint; appId: string; version: bigint; digest: Uint8Array; sourceDigest: [] | [Uint8Array]; auditId: bigint };
+export type LegacyBatchReceipt = { id: bigint; owner: Principal; publisher: Principal; requestId: string; entries: LegacyBatchEntry[]; analysis: string; createdAtNs: bigint };
 export type StagedCandidate = BatchEntry & { publisher: Principal };
 export type TrustedPublishTransport = {
   /** Actual loaded signing identity, checked before queries or writes. */
@@ -43,7 +46,10 @@ export type TrustedPublishTransport = {
 export type PublishOptions = { publisher: string; requestId: string; journal: string; execute?: boolean; fetch?: CertifiedFetch };
 type SavedCandidate = { candidateId: string; appId: string; version: string; digest: string; sourceDigest: string | null };
 type SavedBatch = { operation: "publish"; channel: "beta"; id: string; owner: string; publisher: string; requestId: string; entries: (SavedCandidate & { auditId: string })[]; analysis: string; createdAtNs: string };
-type SavedLegacyBatch = Omit<SavedBatch, "operation" | "channel">;
+// These persisted v1 shapes must not inherit future beta journal changes.
+type SavedLegacyCandidate = { candidateId: string; appId: string; version: string; digest: string; sourceDigest: string | null };
+type SavedLegacyBatchEntry = { candidateId: string; appId: string; version: string; digest: string; sourceDigest: string | null; auditId: string };
+type SavedLegacyBatch = { id: string; owner: string; publisher: string; requestId: string; entries: SavedLegacyBatchEntry[]; analysis: string; createdAtNs: string };
 type ReleaseChannel = "stable" | "beta";
 type Journal = {
   format: "marketplace-first-party-publish-v2";
@@ -60,8 +66,16 @@ type Journal = {
   batchRequested: boolean;
   batch: SavedBatch | null;
 };
-type LegacyJournal = Omit<Journal, "format" | "operation" | "channel" | "releaseChannels" | "batch"> & {
+type LegacyJournal = {
   format: "marketplace-first-party-publish-v1";
+  fingerprint: string;
+  requestId: string;
+  canister: string;
+  caller: string;
+  publisher: string;
+  changedAppIds: string[];
+  staged: SavedLegacyCandidate[];
+  batchRequested: boolean;
   batch: SavedLegacyBatch | null;
 };
 const hex = (value: Uint8Array) => Buffer.from(value).toString("hex");
@@ -194,42 +208,6 @@ async function currentHeads(id: string, options: Pick<PublishOptions, "fetch">, 
   return [stable, beta] as const;
 }
 
-export async function verifyChannelSupport(canister: string, options: Pick<PublishOptions, "fetch">, origin: string): Promise<void> {
-  const asset = await readCertifiedAsset({ origin, path: repositoryChannelsPath(), maximumBytes: REPOSITORY_LIMITS.releaseJsonBytes, expectedContentType: "application/json", expectedCacheControl: RELEASE_CACHE_CONTROL, accept: "application/json", cache: "no-cache", ...(options.fetch ? { fetch: options.fetch } : {}) });
-  if (asset.status !== "found") throw new Error("The marketplace has no certified release-channel descriptor. Deploy channel support before publishing beta releases.");
-  const descriptor = parseRepositoryChannelsDescriptor(asset.bytes);
-  if (descriptor.source !== canister) throw new Error("Certified release-channel descriptor identifies a different source.");
-  if (asset.etag.replace(/^W\//, "").replace(/^\"|\"$/g, "").toLowerCase() !== sha256Hex(asset.bytes)) throw new Error("Certified release-channel descriptor ETag differs from its SHA-256.");
-}
-
-/** Preserve authenticated private cache headers. The old public-source reader
- * requires immutable public caching, which a paid artifact must never use. */
-export async function verifyArtifact(input: { origin: string; path: string; digest: string; size: number; mediaType: string }, options: Pick<PublishOptions, "fetch">) {
-  const response = await (options.fetch ?? fetch)(`${input.origin}${input.path}`, { method: "GET", credentials: "omit", redirect: "error", cache: "no-store", headers: { Accept: input.mediaType, "Accept-Encoding": "identity" }, signal: AbortSignal.timeout(30_000) });
-  if (response.url && new URL(response.url).origin !== input.origin) throw new Error("Certified artifact returned from a different origin.");
-  assertGatewayCertificationV2(response, input.path);
-  if (response.status !== 200) throw new Error(`Certified artifact '${input.path}' returned HTTP ${response.status}.`);
-  if (response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== input.mediaType) throw new Error("Certified artifact has an unexpected media type.");
-  const cache = new Set((response.headers.get("cache-control") ?? "").toLowerCase().split(",").map(value => value.trim()));
-  if (!(cache.has("private") && cache.has("no-store")) && !(cache.has("public") && cache.has("immutable"))) throw new Error("Certified artifact has an unexpected cache policy.");
-  if (response.headers.get("content-encoding") && response.headers.get("content-encoding") !== "identity") throw new Error("Certified artifact is not identity encoded.");
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  if (response.body) {
-    const reader = response.body.getReader();
-    try {
-      for (;;) {
-        const { done, value } = await reader.read(); if (done) break;
-        total += value.length;
-        if (total > input.size) { await reader.cancel(); throw new Error("Certified artifact exceeds its expected size."); }
-        chunks.push(value);
-      }
-    } finally { reader.releaseLock(); }
-  }
-  const body = Uint8Array.from(Buffer.concat(chunks));
-  if (total !== input.size || sha256Hex(body) !== input.digest) throw new Error("Certified artifact bytes differ from their expected size or SHA-256.");
-  if (response.headers.get("etag")?.replace(/^W\//, "").replace(/^\"|\"$/g, "").toLowerCase() !== input.digest) throw new Error("Certified artifact ETag differs from its SHA-256.");
-}
 async function postflight(catalog: TrustedCatalog, journal: Pick<Journal, "releaseChannels">, options: PublishOptions, origin: string) {
   const releaseDigests = new Map<string, string>();
   for (const release of catalog.releases) {

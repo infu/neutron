@@ -3,6 +3,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import API "../../mo/API";
 import PublisherStore "../../mo/PublisherStore";
+import ReleaseStore "../../mo/ReleaseStore";
 import Publishers "../../mo/Publishers";
 import Rankings "../../mo/Rankings";
 import Ratings "../../mo/Ratings";
@@ -14,7 +15,8 @@ import Fixtures "../motoko/Fixtures";
 persistent actor {
   let memory = Fixtures.memory();
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(memory, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   var seeded = false;
 
   func buyer(index : Nat) : Principal {

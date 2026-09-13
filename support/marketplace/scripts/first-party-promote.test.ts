@@ -8,7 +8,7 @@ import { NEUTRON_REPOSITORY_PROTOCOL, repositoryPackagePath, repositoryReleasePa
 import { REPOSITORY_CHANNELS_PROTOCOL, REPOSITORY_CHANNEL_HEADS_PROTOCOL, repositoryChannelsPath, repositoryChannelHeadsPath, type RepositoryChannelHeads } from "neutron-tools/src/release_channels.ts";
 import { packageHeaders, releaseHeaders, sourceHeaders, sha256Hex, PACKAGE_CONTENT_TYPE, SOURCE_CONTENT_TYPE, UPDATE_SOURCE_RECEIPT_PROTOCOL } from "../../update-source/src/model.ts";
 import { updateSourceOrigin } from "../../update-source/src/http.ts";
-import { TRUSTED_PUBLISHER_CALLER } from "./first-party-publish.ts";
+import { TRUSTED_PUBLISHER_CALLER } from "./publication-evidence.ts";
 import { promoteTrustedReleases, promotionRequestId, PromotionRejectedError, type PromotionEntry, type PromotionReceipt, type PromotionOptions, type TrustedPromotionTransport } from "./first-party-promote.ts";
 
 const canister = "rrkah-fqaaa-aaaaa-aaaaq-cai";

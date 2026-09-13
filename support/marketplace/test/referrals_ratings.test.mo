@@ -4,6 +4,7 @@ import Test "mo:test";
 import Principal "mo:core/Principal";
 import Store "../mo/Store";
 import PublisherStore "../mo/PublisherStore";
+import ReleaseStore "../mo/ReleaseStore";
 import Types "../mo/Types";
 
 persistent actor {
@@ -49,7 +50,7 @@ persistent actor {
     Test.test(func () {
       let mem = memory();
       let publisherMemory = PublisherStore.init();
-      let db = Store.Use(mem, publisherMemory);
+      let db = Store.Use(mem, publisherMemory, ReleaseStore.init());
       let firstOwner = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
       let buyer = Principal.fromText("mxzaz-hqaaa-aaaar-qaada-cai");
       let first = Referrals.getOrCreate(db, firstOwner, 10);
@@ -62,7 +63,7 @@ persistent actor {
       assert Referrals.resolve(db, buyer, ?" ") == #ok(null);
       assert Referrals.resolve(db, firstOwner, ?first.code) == #err("You cannot use your own affiliate code.");
       assert Referrals.resolve(db, buyer, ?"NUNKNOWN") == #err("This affiliate code is not registered.");
-      let restored = Store.Use(mem, publisherMemory);
+      let restored = Store.Use(mem, publisherMemory, db.channels);
       assert Referrals.getOrCreate(restored, firstOwner, 100) == first;
       assert restored.referrals.size() == 2;
     });
@@ -72,7 +73,7 @@ persistent actor {
     Test.test(func () {
       let mem = memory();
       let publisherMemory = PublisherStore.init();
-      let db = Store.Use(mem, publisherMemory);
+      let db = Store.Use(mem, publisherMemory, ReleaseStore.init());
       let affiliate = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
       let buyer = Principal.fromText("mxzaz-hqaaa-aaaar-qaada-cai");
       let anotherBuyer = Principal.fromText("xevnm-gaaaa-aaaar-qafnq-cai");
@@ -88,7 +89,7 @@ persistent actor {
       assert Store.getReferralByOwner(db, anotherBuyer) == null;
       // Read validation did not advance the durable code sequence.
       assert Referrals.getOrCreate(db, buyer, 20).code == "N2";
-      assert Referrals.quote(Store.Use(mem, publisherMemory), anotherBuyer, referral.code) == expected;
+      assert Referrals.quote(Store.Use(mem, publisherMemory, db.channels), anotherBuyer, referral.code) == expected;
     });
   };
 
@@ -96,7 +97,7 @@ persistent actor {
     Test.test(func () {
       let mem = memory();
       let publisherMemory = PublisherStore.init();
-      let db = Store.Use(mem, publisherMemory);
+      let db = Store.Use(mem, publisherMemory, ReleaseStore.init());
       let freeOwner = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
       let paidOwner = Principal.fromText("mxzaz-hqaaa-aaaar-qaada-cai");
       let nonOwner = Principal.fromText("xevnm-gaaaa-aaaar-qafnq-cai");
@@ -121,7 +122,7 @@ persistent actor {
       assert edited.id == first.id and edited.createdAtNs == first.createdAtNs and edited.updatedAtNs == 6;
       assert db.ratings.size() == 2;
       assert db.entitlements.size() == 2 and db.acquisitions.size() == 0 and db.rankings.size() == 0;
-      let restored = Store.Use(mem, publisherMemory);
+      let restored = Store.Use(mem, publisherMemory, db.channels);
       let ?updatedApp = Store.getApp(restored, app.appId) else { assert false; loop {} };
       assert updatedApp.ratingCount == 2 and updatedApp.ratingTotal == 4;
       assert updatedApp.revision == app.revision and updatedApp.updatedAtNs == app.updatedAtNs;

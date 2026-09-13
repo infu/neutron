@@ -6,6 +6,7 @@ import Runtime "mo:core/Runtime";
 import Feedback "../../mo/Feedback";
 import FeedbackStore "../../mo/FeedbackStore";
 import PublisherStore "../../mo/PublisherStore";
+import ReleaseStore "../../mo/ReleaseStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
 import Fixtures "../motoko/Fixtures";
@@ -13,8 +14,9 @@ import Fixtures "../motoko/Fixtures";
 persistent actor {
   let memory = Fixtures.memory();
   let publisherMemory = PublisherStore.init();
+  let releaseMemory = ReleaseStore.init();
   let feedbackMemory = FeedbackStore.init();
-  transient let db = Store.Use(memory, publisherMemory);
+  transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   var stableHead : ?Nat64 = null;
   var betaHead : ?Nat64 = null;
   var seeded = false;

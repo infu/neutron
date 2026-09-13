@@ -9,6 +9,7 @@ import { inspectPackageFiles, inspectUpdatePackage, PACKAGE_CONTENT_TYPE, SOURCE
 import { preparePackageInstall } from "neutron-compiler/src/install.ts";
 import { normalizeManifestDependencies } from "neutron-tools/src/schema.ts";
 import { blob, Candidate, call, decode, encode, json, natural, principal, relay, result, unwrap, type Target } from "./operator-wire.ts";
+import { TRUSTED_PUBLISHER_CALLER } from "./publication-evidence.ts";
 import { savePublisherJournal as save, lockPublisherJournal as lock } from "./publisher-journal.ts";
 
 const nat = IDL.Nat, text = IDL.Text, nat64 = IDL.Nat64, rec = IDL.Record, opt = IDL.Opt;
@@ -30,7 +31,7 @@ type Outcome<T> = { ok: T } | { err: { code: string; message: string } };
 type ListingInput = { appId: string; title: string; summary: string; description: string; priceUsdMicros: bigint; iconArtifact: bigint[]; screenshots: bigint[]; expectedRevision: bigint[] };
 type File = { purpose: "package" | "source"; digest: string; bytes: Uint8Array; mediaType: string };
 export type Prepared = { appId: string; version: bigint; dependencies: { appId: string; minVersion: bigint }[]; files: File[]; listing?: ListingInput };
-export const TRUSTED_FIRST_PARTY_PUBLISHER = "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe";
+export const TRUSTED_FIRST_PARTY_PUBLISHER = TRUSTED_PUBLISHER_CALLER;
 export type PublisherOptions = { target: Target; neutron?: string; trustedDirect?: { caller: string }; requestId: string; journal: string; execute?: boolean; maxCycles?: bigint };
 export type Transport = { callerPrincipal?: () => Promise<string>; query: (target: Target, method: string, args: Uint8Array) => Promise<Uint8Array>; update: (target: Target, neutronOrCaller: string, method: string, args: Uint8Array, cycles: bigint) => Promise<Uint8Array> };
 export type PublisherCandidate = { id: bigint; appId: string; version: bigint; publisher: Principal; artifactId: bigint; sourceArtifactId: bigint[]; digest: Uint8Array; sourceDigest: Uint8Array[]; dependencies: { appId: string; minVersion: bigint }[] };

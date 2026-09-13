@@ -4,6 +4,7 @@ import Iter "mo:core/Iter";
 import Result "mo:core/Result";
 import Runtime "mo:core/Runtime";
 import PublisherStore "../../mo/PublisherStore";
+import ReleaseStore "../../mo/ReleaseStore";
 import Store "../../mo/Store";
 import Types "../../mo/Types";
 
@@ -13,7 +14,8 @@ persistent actor {
     fees = { version = 1; updateBase = 12; updateByte = 2; storageByteYear = 3; purchase = 4; withdraw = 5; grant = 6; xrc = 7 };
     referralTerms = { version = 1; discountBps = 1_000; affiliateBps = 3_000; developerBps = 3_000 } });
   let publisherMemory = PublisherStore.init();
-  transient let db = Store.Use(mem, publisherMemory);
+  let releaseMemory = ReleaseStore.init();
+  transient let db = Store.Use(mem, publisherMemory, releaseMemory);
   var seeded = false;
   func require<T,E>(r : Result.Result<T,E>) : T { switch (r) { case (#ok(v)) v; case (#err(_)) Runtime.trap("Fixture setup failed") } };
 

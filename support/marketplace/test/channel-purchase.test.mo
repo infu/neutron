@@ -30,7 +30,7 @@ persistent actor ChannelPurchaseTests {
   };
   func marketplace() : Principal { Principal.fromActor(ChannelPurchaseTests) };
   func setup() : Store.DB {
-    let db = Store.Use(F.memory(), PublisherStore.init());
+    let db = Store.Use(F.memory(), PublisherStore.init(), ReleaseStore.init());
     Store.setConfig(db, { Store.config(db) with tokens = [{ ledger = F.other(); symbol = "ckUSDC"; decimals = 6; fee = 10_000; rateSymbol = "USDC"; burnAccount = null }] });
     ignore F.stored(Store.putRate(db, { ledger = F.other(); symbol = "USDC"; usdRate = 1_000_000_000; decimals = 9; observedAtNs = 1; refreshedAtNs = 1; lastError = null }));
     db;

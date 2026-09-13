@@ -44,7 +44,7 @@ persistent actor {
     Test.test(func() {
       let memory = Fixtures.memory();
       let publishers = PublisherStore.init();
-      let predecessor = Store.Use(memory, publishers);
+      let predecessor = Store.Use(memory, publishers, ReleaseStore.init());
       let liveApp = Fixtures.draft(predecessor, "legacy_live", 0);
       let revokedApp = Fixtures.draft(predecessor, "legacy_revoked", 0);
       let live = Fixtures.candidate(predecessor, liveApp.appId, 100, "legacy-live");
@@ -54,7 +54,7 @@ persistent actor {
       ignore Fixtures.stored(predecessor.apps.update({ liveApp with approvedCandidate = ?live.id }));
       ignore Fixtures.stored(predecessor.apps.update({ revokedApp with approvedCandidate = ?revoked.id }));
       let channels = ReleaseStore.init();
-      let db = Store.UseWithChannels(memory, publishers, channels);
+      let db = Store.Use(memory, publishers, channels);
       assert channels.bootstrapped;
       assert ReleaseStore.heads(channels, liveApp.appId) == {
         stableHead = { candidateId = ?live.id; revision = 1 }; betaHead = { candidateId = null; revision = 0 };
@@ -69,7 +69,7 @@ persistent actor {
       assert ReleaseStore.heads(channels, liveApp.appId).betaHead.candidateId == ?next.id;
       ignore promote(db, "first-promotion", [liveApp.appId]);
       let advanced = ReleaseStore.heads(channels, liveApp.appId);
-      let restored = Store.UseWithChannels(memory, publishers, channels);
+      let restored = Store.Use(memory, publishers, channels);
       ReleaseStore.bootstrap(channels, restored.apps.iterPrimary(#fwd, null));
       assert ReleaseStore.heads(channels, liveApp.appId) == advanced;
       assert advanced.stableHead.candidateId == ?next.id;
@@ -82,7 +82,7 @@ persistent actor {
 
   public func promotion_validates_the_complete_resulting_dependency_graph_before_writes() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
       ignore beta(db, "kernel", 100, "kernel100", []);
       ignore beta(db, "library", 100, "library100", [{ appId = "kernel"; minVersion = 100 }]);
       ignore beta(db, "application", 100, "application100", [{ appId = "library"; minVersion = 100 }]);
@@ -126,7 +126,7 @@ persistent actor {
 
   public func unrelated_publication_does_not_invalidate_selection_and_noop_replays_are_durable() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(Fixtures.memory(), PublisherStore.init(), ReleaseStore.init());
       ignore beta(db, "application", 100, "app100", []);
       let reviewed = plan(db, "reviewed", ["application"]);
       ignore beta(db, "unrelated", 100, "other100", []);

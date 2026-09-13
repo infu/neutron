@@ -12,6 +12,19 @@ entitlement; assigned publishers/auditors have access to their review materials.
 The Kernel handles generic authenticated acquisition and its existing install
 and update workflows. Marketplace business rules stay in this protocol.
 
+The three deployed components have separate responsibilities:
+
+| Component | Owns |
+| --- | --- |
+| Kernel | Owner preferences, capabilities, certified repository verification, and checked installation/migration of packages from participating sources |
+| Marketplace app | Browsing and publisher UI, reviewed user requests, and recovery of its requests through the protocol's public interface |
+| Marketplace protocol | Catalog and channel selection, publisher/auditor authority, dependency eligibility, purchases, promotion, retention, and feedback |
+
+Protocol implementation modules stay under `support/marketplace`. The Kernel
+and Marketplace app consume public contracts; they do not import those domain
+modules. Shared repository formats describe evidence that any source can serve.
+They do not carry Marketplace ownership, pricing, audit, or entitlement policy.
+
 ## Browser authentication and routing
 
 Use the existing signed IC browser-agent model with a recoverable read delegation:
@@ -74,7 +87,7 @@ browser-agent and storage facilities, not Taggr's account-ownership semantics.
 | Private library, checkout previews/progress, publisher status and earnings queries | Signed browser directly to protocol after read authorization |
 | Ordinary purchases, withdrawals, listing edits, uploads and grant changes | Existing Neutron backend calls with native cycles attached to each update |
 | Authorized auditor updates | Direct CLI-to-protocol calls; cycle-funding exemption |
-| The four authorized admin endpoints | Direct CLI-to-protocol calls; cycle-funding exemption |
+| Authorized admin endpoints | Direct CLI-to-protocol calls; cycle-funding exemption |
 | Configured first-party publishing and withdrawal of its own earnings | Direct CLI-to-protocol calls; cycle-funding exemption |
 | Approving payment from the Neutron Wallet | Existing Wallet tools and their authority/approval flow |
 | Collection, payouts, daily XRC and forwarding | Protocol calls the ledgers/XRC |
@@ -95,19 +108,24 @@ Wallet's own normal/root interface.
 
 ## Persistent state and domain modules
 
-Proposed structure under `support/marketplace/`:
+Responsibilities under `support/marketplace/`:
 
 ```text
-icp.yaml                    # future standalone canister project
+icp.yaml                    # standalone canister project
 mo/main.mo                 # caller capture and Candid entrypoints
-mo/Context.mo              # shared domain dependencies and external services
+mo/Store.mo                # database access with explicit retained memory roots
+mo/ReleaseStore.mo         # retained channel heads, exact selections and receipts
 mo/Catalog.mo              # listings, list-price bounds, visible catalog
+mo/Dependencies.mo         # one dependency walk with explicit operation requirements
+mo/Repository.mo           # certified release metadata and exact install selections
+mo/Views.mo                # catalog/library read projections and versioned adapters
 mo/Publishing.mo           # publisher ownership, uploads, release submission
 mo/Audits.mo               # assigned reviewers, exact-release verdicts
 mo/BatchPublishing.mo      # trusted first-party atomic release batches
+mo/ReleaseTransitions.mo   # channel changes and their derived publication effects
 mo/Access.mo               # Neutron identity, browser read delegates and resource grants
-mo/Purchases.mo            # one public purchase operation and its continuation
-mo/Entitlements.mo         # durable library and acquisition claims
+mo/Operations.mo           # common purchase orchestration and versioned API adapters
+mo/Purchases.mo            # purchase execution and its retained continuation
 mo/Accounting.mo           # synchronous credits, splits and reservations
 mo/Billing.mo              # fixed cycle estimates, upload coverage and charge receipts
 mo/Withdrawals.mo          # one public withdrawal and internal forwarding
@@ -115,7 +133,8 @@ mo/Ledger.mo               # one typed ICRC call/error adapter
 mo/Pricing.mo              # USD/rate arithmetic, daily XRC snapshots
 mo/Rankings.mo             # acquisition counters and rolling expiry
 mo/Referrals.mo            # codes and frozen referral attribution
-mo/Ratings.mo              # entitled reviews and rating summaries
+mo/Ratings.mo              # permanent entitled ratings and rating summaries
+mo/Feedback.mo             # version comments and histogram/retirement maintenance
 mo/Assets.mo               # immutable artifact identity and stored content
 mo/Retention.mo            # retire unreferenced superseded package/source content
 mo/Http.mo                 # certified HTTP and authorized streaming
@@ -128,6 +147,20 @@ test/                      # local protocol, browser and upgrade fixtures
 This is a responsibility map, not a requirement to split every small helper into
 another file. Keep one ledger adapter and one accounting implementation shared by
 purchases, withdrawals and daily forwarding. `main.mo` should remain wiring.
+
+Dependency traversal belongs to the protocol. Purchasing, installation and
+promotion retain their explicit differences in Kernel participation, ownership,
+and eligible channel heads while sharing candidate lookup, traversal and minimum
+version checks. Release transitions coordinate channel revisions with rankings,
+retention and certified publication. These operations remain synchronous through
+their state changes and projection updates.
+
+Legacy and channel purchase endpoints adapt their existing wire snapshots to one
+execution path. They retain the original commitments and financial request
+identities. Database construction takes every retained memory root explicitly;
+fresh initialization is an explicit operation by the actor or test fixture.
+Publisher commands share protocol-local evidence verification helpers, while
+upload and promotion keep their separate transport capabilities.
 
 Internal persistent storage retains domain records, immutable content and
 unfinished operation journals. Its implementation is outside this specification.

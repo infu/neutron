@@ -98,7 +98,7 @@ persistent actor {
       let mem = memory();
       let publisherMemory = PublisherStore.init();
       let channelMemory = ReleaseStore.init();
-      let db = Store.UseWithChannels(mem, publisherMemory, channelMemory);
+      let db = Store.Use(mem, publisherMemory, channelMemory);
       assert Access.isAdmin(db, publisher) and not Access.isAdmin(db, buyer);
       assert Access.isAuditor(db, auditor) and not Access.isAuditor(db, buyer);
       assert accepted(Access.readOwner(db, buyer)) == buyer;
@@ -114,7 +114,7 @@ persistent actor {
       ignore accepted(Access.setDelegate(db, buyer, browser, false, 12));
       rejected(Access.readOwner(db, browser));
       rejected(Access.setDelegate(db, stranger, browser, true, 12));
-      let restored = Store.UseWithChannels(mem, publisherMemory, channelMemory);
+      let restored = Store.Use(mem, publisherMemory, channelMemory);
       rejected(Access.readOwner(restored, browser));
       ignore accepted(Access.setDelegate(restored, buyer, browser, true, 13));
       assert accepted(Access.readOwner(restored, browser)) == buyer;
@@ -123,7 +123,7 @@ persistent actor {
 
   public func approved_paid_artifacts_require_ownership_or_review_access() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(memory(), PublisherStore.init(), ReleaseStore.init());
       let f = fixture(db, false);
       own(db, buyer, f.app);
       assert Access.canAccess(db, buyer, f.package.id, #buyer);
@@ -154,7 +154,7 @@ persistent actor {
       let mem = memory();
       let publisherMemory = PublisherStore.init();
       let channelMemory = ReleaseStore.init();
-      let db = Store.UseWithChannels(mem, publisherMemory, channelMemory);
+      let db = Store.Use(mem, publisherMemory, channelMemory);
       let f = fixture(db, false);
       own(db, buyer, f.app);
       ignore accepted(Access.grant(db, buyer, request([packagePath(f.package), sourcePath(f.source)]), #buyer, 10));
@@ -166,7 +166,7 @@ persistent actor {
       assert not Access.authorizeHttp(db, sourcePath(f.source), ?token);
       assert Access.canAccess(db, publisher, f.package.id, #publisher);
       assert Access.canAccess(db, auditor, f.source.id, #auditor);
-      assert Store.getEntitlement(Store.UseWithChannels(mem, publisherMemory, channelMemory), buyer, f.app.appId) != null;
+      assert Store.getEntitlement(Store.Use(mem, publisherMemory, channelMemory), buyer, f.app.appId) != null;
       let review = { request([packagePath(f.package)]) with token = otherToken; request_id = otherRequestId };
       ignore accepted(Access.grant(db, auditor, review, #auditor, 12));
       assert Access.authorizeHttp(db, packagePath(f.package), ?otherToken);
@@ -177,7 +177,7 @@ persistent actor {
 
   public func public_free_downloads_and_media_follow_listing_eligibility() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(memory(), PublisherStore.init(), ReleaseStore.init());
       let f = fixture(db, true);
       let orphan = artifact(db, "unlinked-image", "image/png");
       assert Access.publicArtifact(db, f.package.id);
@@ -201,7 +201,7 @@ persistent actor {
 
   public func auditors_read_images_bound_to_retained_candidate_listings() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(memory(), PublisherStore.init(), ReleaseStore.init());
       let f = fixture(db, false);
       let unrelated = artifact(db, "new-unsubmitted-image", "image/png");
       ignore stored(db.candidates.update({ f.candidate with state = #pending; published = false }));
@@ -253,7 +253,7 @@ persistent actor {
 
   public func publisher_grants_combine_owned_drafts_with_purchased_releases() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(memory(), PublisherStore.init(), ReleaseStore.init());
       let purchased = fixture(db, false);
       own(db, buyer, purchased.app);
       let draftPackage = artifact(db, "buyers-unapproved-package", "application/octet-stream");
@@ -289,14 +289,14 @@ persistent actor {
       let mem = memory();
       let publisherMemory = PublisherStore.init();
       let channelMemory = ReleaseStore.init();
-      let db = Store.UseWithChannels(mem, publisherMemory, channelMemory);
+      let db = Store.Use(mem, publisherMemory, channelMemory);
       let f = fixture(db, false);
       own(db, buyer, f.app);
       own(db, stranger, f.app);
       let input = request([packagePath(f.package)]);
       let first = accepted(Access.grant(db, buyer, input, #buyer, 10));
       assert first.new;
-      let retry = accepted(Access.grant(Store.UseWithChannels(mem, publisherMemory, channelMemory), buyer, input, #buyer, 20));
+      let retry = accepted(Access.grant(Store.Use(mem, publisherMemory, channelMemory), buyer, input, #buyer, 20));
       assert not retry.new and retry.grant == first.grant;
       assert db.grants.size() == 1;
       rejected(Access.grant(db, buyer, { input with token = otherToken }, #buyer, 21));
@@ -313,7 +313,7 @@ persistent actor {
 
   public func malformed_or_mixed_authorization_requests_create_no_partial_grant() : async Test.Metrics {
     Test.test(func() {
-      let db = Store.UseWithChannels(memory(), PublisherStore.init(), ReleaseStore.init());
+      let db = Store.Use(memory(), PublisherStore.init(), ReleaseStore.init());
       let f = fixture(db, false);
       own(db, buyer, f.app);
       let orphan = artifact(db, "another-unlinked-image", "image/png");

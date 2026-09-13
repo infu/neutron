@@ -33,7 +33,7 @@ persistent actor {
   var paths : [Text] = [];
   let publisherMemory = PublisherStore.init();
   let channelMemory = ReleaseStore.init();
-  transient let db = Store.UseWithChannels(memory, publisherMemory, channelMemory);
+  transient let db = Store.Use(memory, publisherMemory, channelMemory);
   transient let http = Http.Store(httpMemory, {
     artifact = func(path : Text) : ?Http.Artifact { Certification.artifact(db, path) };
     authorize = func(path : Text, bearer : ?Text) : Bool { Access.authorizeHttp(db, path, bearer) };

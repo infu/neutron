@@ -22,7 +22,7 @@ persistent actor RepositoryChannelTests {
   type Selection = API.ChannelInstallSelection and { roots : [Text] };
 
   func setup() : Context {
-    let db = Store.Use(F.memory(), PublisherStore.init());
+    let db = Store.Use(F.memory(), PublisherStore.init(), ReleaseStore.init());
     let certification = Http.init();
     let repo = Repository.Service(db, certification, Principal.fromActor(RepositoryChannelTests));
     let http = Http.Store(certification, {
