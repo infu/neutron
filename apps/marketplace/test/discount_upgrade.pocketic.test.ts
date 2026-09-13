@@ -3,7 +3,7 @@
  *
  * NEUTRON_RUN_MARKETPLACE_DISCOUNT_UPGRADE=1 \
  * NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256=<reviewed archive SHA-256> \
- * NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION=119 \
+ * NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION=122 \
  * NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
  * bun test apps/marketplace/test/discount_upgrade.pocketic.test.ts
  *
@@ -103,12 +103,13 @@ function assertReleasedMemoryHistory(previous: PreparedArchive, next: PreparedAr
 const predecessors = [
   { version: 112, memoryVersion: 1, digest: "6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21", size: 476_452 },
   { version: 118, memoryVersion: 2, digest: "54136d8bd22c9d682fc958c1eef7904816f34e599f6dd2daf503c10c554eec20", size: 489_788 },
+  { version: 121, memoryVersion: 2, digest: "d6ac1fc5b3e563c5af4bf0d7cd5d40f9469d756a5d6bb988782fe9ea96671dcd", size: 519_184 },
 ] as const;
 
 for (const predecessor of predecessors) qualify(`Marketplace${predecessor.version} managed state ${predecessor.memoryVersion === 1 ? "migrates once" : "keeps v2 unchanged"} and retains identity, journals and discount preference`, async () => {
   const candidateDigest = process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256;
   if (!candidateDigest || !/^[0-9a-f]{64}$/.test(candidateDigest)) throw new Error("Set the exact reviewed candidate archive digest after packaging");
-  const candidateVersion = Number(process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION ?? "119");
+  const candidateVersion = Number(process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION ?? "122");
   expect(candidateVersion).toBeGreaterThan(predecessor.version);
   const kernel = await pinned("kernel", 359, "6b506590ab9160a6e8e31859a791d40e60b797f06e9fde28781b8f0beb89574d", 2_466_756);
   const previous = await pinned("marketplace", predecessor.version, predecessor.digest, predecessor.size);
@@ -277,7 +278,7 @@ for (const predecessor of predecessors) qualify(`Marketplace${predecessor.versio
       retainedDiscount, retainedStateSha256: sha256(bytes(savedState)),
       externalInstallModes: direct.externalInstallModes,
     };
-    const receiptName = predecessor.memoryVersion === 1 ? "receipt.json" : "receipt-state2.json";
+    const receiptName = predecessor.memoryVersion === 1 ? "receipt.json" : predecessor.version === 118 ? "receipt-state2.json" : `receipt-state2-${predecessor.version}.json`;
     await writeFile(path.join(output, receiptName), JSON.stringify(receipt, null, 2) + "\n");
     console.log(`Marketplace discount upgrade passed; evidence ${path.join(output, receiptName)}`);
   } finally {

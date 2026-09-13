@@ -1,0 +1,14 @@
+{
+  "id": "marketplace",
+  "version": 122,
+  "package": "apps/marketplace/marketplace.v0.1.22.neutron",
+  "sha256": "ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42",
+  "size": 519194,
+  "offeredSource": {
+    "file": "apps/marketplace/.neutron/sources/d13805dcf4143c949598ac0d07c617379d62341b3d57588dcb444c9a5ccd2f8f.source.v1.msgpack.gz",
+    "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/d13805dcf4143c949598ac0d07c617379d62341b3d57588dcb444c9a5ccd2f8f.source.v1.msgpack.gz",
+    "path": "/repo/v1/sources/d13805dcf4143c949598ac0d07c617379d62341b3d57588dcb444c9a5ccd2f8f.source.v1.msgpack.gz",
+    "sha256": "d13805dcf4143c949598ac0d07c617379d62341b3d57588dcb444c9a5ccd2f8f",
+    "size": 1880898
+  }
+}

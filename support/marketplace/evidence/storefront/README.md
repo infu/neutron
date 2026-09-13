@@ -1,5 +1,8 @@
 # Marketplace storefront and icon release evidence
 
+The latest [0.1.22 refinements and temporary free period](refinements/README.md)
+have separate evidence. The records below document the original 0.1.21 rollout.
+
 The storefront has admin-editable categories, app tags, short promotional titles
 and subtitles, and an ordered featured selection. Wide tiles use a left category
 sidebar; smaller tiles use a horizontal row. Two featured apps use large covers

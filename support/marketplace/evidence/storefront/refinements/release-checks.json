@@ -1,0 +1,43 @@
+{
+  "version": 122,
+  "sha256": "ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42",
+  "allPassed": true,
+  "commands": [
+    {
+      "command": "npm --workspace neutron-marketplace run package",
+      "exitCode": 0
+    },
+    {
+      "command": "npm --workspace neutron-marketplace test",
+      "exitCode": 0,
+      "testsPassed": 173,
+      "assertions": 920,
+      "motokoBackendPassed": true
+    },
+    {
+      "command": "npm --workspace neutron-marketplace run typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "npm --workspace neutron-marketplace run test:browser",
+      "exitCode": 0,
+      "suitesPassed": 9
+    },
+    {
+      "command": "npm --workspace neutron-marketplace run test:protocol",
+      "exitCode": 0
+    },
+    {
+      "command": "NEUTRON_RUN_MARKETPLACE_DISCOUNT_UPGRADE=1 NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION=122 NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256=ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42 bun test apps/marketplace/test/discount_upgrade.pocketic.test.ts",
+      "exitCode": 0,
+      "testsPassed": 3,
+      "assertions": 343,
+      "gatedImportsSkipped": 26,
+      "predecessors": [
+        112,
+        118,
+        121
+      ]
+    }
+  ]
+}

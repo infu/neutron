@@ -27,7 +27,7 @@ if (snapshot) {
     assetUrls[`${origin}/repo/v1/media/${sha}`] = `/media/${relative}`;
   }
   for (const app of [...snapshot.featured, ...snapshot.charts.paid, ...snapshot.charts.free]) {
-    for (const remote of [app.iconUrl, app.coverUrl].filter(Boolean)) {
+    for (const remote of [app.iconUrl, app.coverUrl, ...(app.screenshots || []).map(shot => shot.url)].filter(Boolean)) {
       if (assetUrls[remote]) continue;
       const image = new URL(remote), sha = image.pathname.split("/").at(-1);
       assert.equal(image.origin, origin); assert.match(sha, /^[a-f0-9]{64}$/);
@@ -65,7 +65,7 @@ const client={
  discount:async()=>({code:null,active:false,discountBps:0,affiliate:null,error:null}),recentOperations:async()=>[],
  storefront:async input=>{state.calls.push(['storefront',input]);return {tags:content.tags,featured:(snapshot?snapshot.featured.map(app=>app.id):content.featured).map(id=>listings.find(app=>app.id===id)).filter(app=>matches(app,input))};},
  catalog:async input=>{state.calls.push(['catalog',input]);if(state.failTier===input.tier){state.failTier=null;throw Error('Fixture chart unavailable.');}const rows=listings.filter(app=>(input.tier==='paid'?app.priceUsdMicros!=='0':app.priceUsdMicros==='0')&&matches(app,input)&&!input.exclude?.includes(app.id));const start=Number(input.cursor||0);return {items:rows.slice(start,start+7),nextCursor:start+7<rows.length?String(start+7):null};},
- detail:async id=>({...listings.find(app=>app.id===id),description:'Local visual fixture. Prices and acquisition counts are examples.',screenshots:[],audit:null,ownRating:null}),
+ detail:async id=>{const app=listings.find(app=>app.id===id);return {...app,description:snapshot?app.description:'Local visual fixture. Prices and acquisition counts are examples.',screenshots:snapshot?(app.screenshots||[]).map(shot=>({...shot,url:assetUrls[shot.url]})):(media.apps.find(app=>app.appId===id)?.screenshots||[]).map(url=>({url:'/media/'+url})),audit:null,ownRating:null};},
  publisherProfile:async()=>({id:'neutron',name:'Neutron',description:'Apps for your Neutron.',principal:'aaaaa-aa',rating:null,ratingCount:0,totalUsers:'0',statsComplete:true}),
  publisherCatalog:async()=>({items:listings,nextCursor:null}),
 };
@@ -112,10 +112,14 @@ try {
   await page.goto(url);
   await page.getByRole("button", { name: names.jetcreeper, exact: true }).waitFor();
   await page.assertSandbox();
-  await page.waitForFunction(() => document.querySelectorAll('.mp-card-medium').length === 8);
+  const mediumCounts = Object.fromEntries(['paid', 'free'].map(tier => [tier, snapshot ? Math.min(4, snapshot.charts[tier].length) : 4]));
+  await page.waitForFunction(count => document.querySelectorAll('.mp-card-medium').length === count, mediumCounts.paid + mediumCounts.free);
   await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(image => image.decode().catch(() => {}))); });
   assert.equal(await page.locator('.mp-card-large').count(), 2);
-  for (const tier of ['paid', 'free']) assert.equal(await page.getByRole('region', { name: `Top ${tier}`, exact: true }).locator('.mp-card-medium').count(), 4);
+  for (const tier of ['paid', 'free']) assert.equal(await page.getByRole('region', { name: `Top ${tier}`, exact: true }).locator('.mp-card-medium').count(), mediumCounts[tier]);
+  assert.equal(await page.getByRole('combobox', { name: 'Ranking period' }).inputValue(), 'month');
+  assert.ok(await page.evaluate(() => window.storefrontFixture.calls.filter(([method]) => method === 'catalog').every(([, input]) => input.window === 'month')));
+  assert.equal(await page.locator('.mp-categories button').first().evaluate(button => getComputedStyle(button).fontSize), '12px');
   assert.equal(await page.getByRole('button', { name: names.jetcreeper, exact: true }).count(), 1, 'featured apps are not repeated in the charts');
   const blur = await page.locator('.mp-card-large .mp-card-glass').first().evaluate(el => ({ blur: getComputedStyle(el,'::before').backdropFilter, mask: getComputedStyle(el,'::before').maskImage }));
   assert.match(blur.blur, /blur\(18px\)/); assert.match(blur.mask, /linear-gradient/);
@@ -128,8 +132,26 @@ try {
     if (width>=1480) assert.ok(layout.nav.right < layout.content.left); else assert.ok(layout.nav.bottom <= layout.content.top);
     await page.screenshot({ path: path.join(output, `storefront-${width}.png`) });
   }
-  checks.push('Two large featured cards, four medium cards per price tier, compact remainder, no duplicate featured apps, CSS blur/mask, responsive tile categories, DPR 2 screenshots at 320/390/960/1422/1800px.');
+  checks.push('Two large featured cards, up to four medium cards per price tier including an empty paid tier, compact remainder, no duplicate featured apps, CSS blur/mask, responsive tile categories, default 30-day requests, DPR 2 screenshots at 320/390/960/1422/1800px.');
   await page.setViewportSize({ width: 1422, height: 1106 });
+  if (!snapshot || snapshot.featured.find(app => app.id === 'jetcreeper')?.screenshots?.length) {
+  await page.getByRole('button', { name: names.jetcreeper, exact: true }).click();
+  await page.getByRole('dialog', { name: names.jetcreeper, exact: true }).waitFor();
+  await page.locator('.mp-screenshots img').first().waitFor();
+  for (const width of [1422, 390]) {
+    await page.setViewportSize({ width, height: width > 1000 ? 1106 : 900 });
+    await page.locator('.mp-screenshots').scrollIntoViewIfNeeded();
+    await page.evaluate(async () => { await Promise.all([...document.querySelectorAll('.mp-screenshots img')].map(image => image.decode())); });
+    const detail = await page.locator('.mp-modal').evaluate(modal => ({ imageHeight: modal.querySelector('.mp-screenshots img').getBoundingClientRect().height, overflow: modal.scrollWidth > modal.clientWidth + 1 }));
+    assert.equal(detail.imageHeight, width > 480 ? 408 : 306);
+    assert.equal(detail.overflow, false, 'The enlarged gallery scrolls within the dialog');
+    await page.screenshot({ path: path.join(output, `detail-${width}.png`) });
+  }
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.setViewportSize({ width: 1422, height: 1106 });
+  await page.evaluate(() => { document.querySelector('.mp-body').scrollTop=0; });
+  checks.push('Detail screenshots are 408px tall on desktop and 306px on mobile, with aspect ratio retained and horizontal scrolling contained in the gallery.');
+  }
   if (snapshot) {
     await page.screenshot({ path: path.join(output, "storefront-reference.png") });
     await page.getByRole("region", { name: "Top free", exact: true }).scrollIntoViewIfNeeded();

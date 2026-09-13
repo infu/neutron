@@ -6,7 +6,7 @@ import { ErrorNote, Icon, dateLabel, errorMessage, useRead } from "./primitives.
 type Props = { client: MarketplaceClient; refresh: number; discount: DiscountPreference; select: (app: AppListing) => void };
 
 export function Explore({ client, refresh, discount, select }: Props) {
-  const [window, setWindow] = useState<RankingWindow>("week"), [search, setSearch] = useState(""), [tag, setTag] = useState<string>();
+  const [window, setWindow] = useState<RankingWindow>("month"), [search, setSearch] = useState(""), [tag, setTag] = useState<string>();
   const [retry, setRetry] = useState(0);
   const selection = { search: search.trim(), ...(tag ? { tag } : {}) };
   const home = useRead(JSON.stringify(selection), () => client.storefront ? client.storefront(selection) : Promise.resolve({ tags: [], featured: [] }), refresh + retry, search ? 200 : 0);

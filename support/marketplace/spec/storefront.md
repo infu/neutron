@@ -114,6 +114,9 @@ same image. Medium cards use the same asset with a compact footer; small cards
 use icons. Categories move from a horizontally scrollable top row to a left
 navigation at a tile width of 1480px. The layout uses the tile container width,
 so a narrow Neutron tile on a wide monitor still gets the compact navigation.
+Category labels render at 12px. Both charts default to 30 days. App-detail
+gallery images retain their aspect ratio at 408px tall, or 306px on small
+screens, and scroll horizontally within the dialog.
 
 Follow [Storefront curation](../OPERATIONS.md#storefront-curation) to publish
 media, prepare exact artifact IDs/revisions and apply reviewed admin edits.
@@ -122,9 +125,9 @@ media, prepare exact artifact IDs/revisions and apply reviewed admin edits.
 
 The app has one managed root, `state`, still at schema **2**. Its complete
 declaration, released `v1.mo`, `v2.mo`, `v1_to_v2.mo` and `neutron.lock.json`
-remain unchanged. Release version **121** is independent of that memory version.
+remain unchanged. Release version **122** is independent of that memory version.
 The existing exact-archive qualification covers saved schema 1 from release 112
-and saved schema 2 from release 118, through the checked Kernel installation
+and saved schema 2 from releases 118 and 121, through the checked Kernel installation
 transaction, plus clean initialization. It retains read identity, configuration,
 discount and original/revised recovery journals.
 
@@ -149,6 +152,9 @@ For release, follow the repository's canonical
    workflow, then apply reviewed config and per-app presentations. Repeat exact
    admin requests to verify unchanged revisions. Do not change app prices to
    reproduce screenshot fixtures.
+
+   The separately requested [temporary free period](../catalog/TEMPORARY-FREE.md)
+   retains all original prices for restoration and uses ordinary listing edits.
 3. Build each affected app through its complete workspace package command and
    run its release checks. Review exact archives and offered-source bytes. Keep
    every released memory declaration and lineage, including Marketplace schema
