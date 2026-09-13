@@ -1,0 +1,549 @@
+{
+  "action": "publication_verified",
+  "protocol": "neutron-update-source-publish-v2",
+  "operation": "publish",
+  "channel": "beta",
+  "requestId": "d15a219bdd9ace2a5955c7460bec75fb7246539987fe3c58d32bf3d9508c6abe",
+  "canister_id": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "origin": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io",
+  "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+  "skippedListingAppIds": [],
+  "atomic": true,
+  "batch_id": "24",
+  "reconciled_batch_id": "24",
+  "published_at": "2026-09-13T23:45:37.723Z",
+  "packages": [
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "kernel",
+      "version": 363,
+      "sha256": "bbfd5490115830ba45acc63bad6c9a9c1d7258a35cb80246c0186ac31cbe886a",
+      "size": 2484345,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/bbfd5490115830ba45acc63bad6c9a9c1d7258a35cb80246c0186ac31cbe886a.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/kernel.json",
+      "release_digest": "6c0984c6310135e40eb0f3c6b99f59e251a7b9b51150535dcf5238d6ee329d15",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/7dac85be26d172fc0a9b84e654fac1a4fa48eefdb2ff2d69a449ac29a3b6a165.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/7dac85be26d172fc0a9b84e654fac1a4fa48eefdb2ff2d69a449ac29a3b6a165.source.v1.msgpack.gz",
+        "sha256": "7dac85be26d172fc0a9b84e654fac1a4fa48eefdb2ff2d69a449ac29a3b6a165",
+        "size": 3360026,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "files",
+      "version": 412,
+      "sha256": "e252927479e41a063b352d451650475db6c94dd2c6ef60721fd493affad99235",
+      "size": 775174,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/e252927479e41a063b352d451650475db6c94dd2c6ef60721fd493affad99235.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/files.json",
+      "release_digest": "69666a7a1bbd8b8286dde20d9da5657737daa3f8ed185caaf910c88eabb561ef",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/e11fff03e6b4a89d03625129390cbe0dda76defedc1f63b1b6dc08425a518025.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/e11fff03e6b4a89d03625129390cbe0dda76defedc1f63b1b6dc08425a518025.source.v1.msgpack.gz",
+        "sha256": "e11fff03e6b4a89d03625129390cbe0dda76defedc1f63b1b6dc08425a518025",
+        "size": 1906063,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "contacts",
+      "version": 308,
+      "sha256": "bfcc0e7a6ac65204916c9fde79ac180531b1daa13f85d3743cd66ef21d7f785c",
+      "size": 309957,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/bfcc0e7a6ac65204916c9fde79ac180531b1daa13f85d3743cd66ef21d7f785c.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/contacts.json",
+      "release_digest": "5f96e97985f649c06690add2a8595f51245c30a2880ac9b4a83131f0b58e88d7",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/2dab42e9952a91035dd3023ee26c75603a94b3fc57504b05caaf0828fb0e71cc.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/2dab42e9952a91035dd3023ee26c75603a94b3fc57504b05caaf0828fb0e71cc.source.v1.msgpack.gz",
+        "sha256": "2dab42e9952a91035dd3023ee26c75603a94b3fc57504b05caaf0828fb0e71cc",
+        "size": 451774,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "kitchensink",
+      "version": 320,
+      "sha256": "9e9d166b2a84b8b1baed8c03eca411b8f7e1ea9fef8414ac115f3f9d05cfd8ce",
+      "size": 489722,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/9e9d166b2a84b8b1baed8c03eca411b8f7e1ea9fef8414ac115f3f9d05cfd8ce.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/kitchensink.json",
+      "release_digest": "f8ec8b1ef6aa4e32b149184d937151c7b1d592d2c40eee8b7ea1e6a2af5d2db1",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/22d858cb20311b7a3c283361687056a893147c9b5dd8f6692fe2e78441bfac87.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/22d858cb20311b7a3c283361687056a893147c9b5dd8f6692fe2e78441bfac87.source.v1.msgpack.gz",
+        "sha256": "22d858cb20311b7a3c283361687056a893147c9b5dd8f6692fe2e78441bfac87",
+        "size": 559376,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "wagyu",
+      "version": 308,
+      "sha256": "3a09b5b218968a991a4a36c94f940ff3ae3980c31b0ebb4baa7f2edbfbe95acb",
+      "size": 1076058,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/3a09b5b218968a991a4a36c94f940ff3ae3980c31b0ebb4baa7f2edbfbe95acb.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/wagyu.json",
+      "release_digest": "1397938f3f3894b4e2190f989a98dfc34e04b06bbb9f657c5652e596a4ca5e3f",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/2ccc44cd239dc7e91bcd83fe9f8b95657a75dc0bfdfef9773b6b908724762297.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/2ccc44cd239dc7e91bcd83fe9f8b95657a75dc0bfdfef9773b6b908724762297.source.v1.msgpack.gz",
+        "sha256": "2ccc44cd239dc7e91bcd83fe9f8b95657a75dc0bfdfef9773b6b908724762297",
+        "size": 1089465,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "agent",
+      "version": 322,
+      "sha256": "6223cfb177a3f2f753493faa1973999f381c57f3e750af04f7ac282d481effb0",
+      "size": 535429,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/6223cfb177a3f2f753493faa1973999f381c57f3e750af04f7ac282d481effb0.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/agent.json",
+      "release_digest": "bf34bc6d33b7786d5e73f4b9545313cb8dc11a81972a5b164594b5d4d1830352",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/0b242e852bbf8d9b66d8e7bbfb37ab09e4ad5c4486dd2d3de35ef463199f1244.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/0b242e852bbf8d9b66d8e7bbfb37ab09e4ad5c4486dd2d3de35ef463199f1244.source.v1.msgpack.gz",
+        "sha256": "0b242e852bbf8d9b66d8e7bbfb37ab09e4ad5c4486dd2d3de35ef463199f1244",
+        "size": 565827,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "blast",
+      "version": 104,
+      "sha256": "9a71e65a2176cebf60a274e20a79de4f56eb4fa222edb2560119fd338229702c",
+      "size": 1004296,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/9a71e65a2176cebf60a274e20a79de4f56eb4fa222edb2560119fd338229702c.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/blast.json",
+      "release_digest": "01019c046ecaf8b893f51449a37e3bc8a8663016a6e30e0931a244f0370c552e",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/a47b1c4ee09aa8bf252521e941da28ff027fe0f9443d7ad818c96f559297698f.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/a47b1c4ee09aa8bf252521e941da28ff027fe0f9443d7ad818c96f559297698f.source.v1.msgpack.gz",
+        "sha256": "a47b1c4ee09aa8bf252521e941da28ff027fe0f9443d7ad818c96f559297698f",
+        "size": 556551,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "jetcreeper",
+      "version": 306,
+      "sha256": "405cfbbdaa8956904ab6bd5bd436169ca6f43b4f60945c78789fec218735460d",
+      "size": 336895,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/405cfbbdaa8956904ab6bd5bd436169ca6f43b4f60945c78789fec218735460d.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/jetcreeper.json",
+      "release_digest": "ea5a3a0ed392af74e5cd7a92f0f02067dee7b4ad3b3fbf75a72be149b41b80d0",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/361fea20de7d77a23a45165efb5f22f2ef2423bf6cfbf43ab8d0045bf42e2809.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/361fea20de7d77a23a45165efb5f22f2ef2423bf6cfbf43ab8d0045bf42e2809.source.v1.msgpack.gz",
+        "sha256": "361fea20de7d77a23a45165efb5f22f2ef2423bf6cfbf43ab8d0045bf42e2809",
+        "size": 371715,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "mail",
+      "version": 307,
+      "sha256": "880f8e622796fa6737ac976dd853ca2841d83c3d0918b437be2ce2bf26f995b3",
+      "size": 755921,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/880f8e622796fa6737ac976dd853ca2841d83c3d0918b437be2ce2bf26f995b3.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/mail.json",
+      "release_digest": "5d6732d14687cfb63dc5ac7e888a68eb97a899c95781222c5f3d21ba0432959b",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/f894b28e4afbe4fdb8cbf94827cc45e3db114a26bd7f627d5225bc3814232689.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/f894b28e4afbe4fdb8cbf94827cc45e3db114a26bd7f627d5225bc3814232689.source.v1.msgpack.gz",
+        "sha256": "f894b28e4afbe4fdb8cbf94827cc45e3db114a26bd7f627d5225bc3814232689",
+        "size": 782043,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "mysubnet",
+      "version": 306,
+      "sha256": "c73cd2261109a86772e16601dad7e7857f6d96dd8d4db1888e8004fb6aaa0857",
+      "size": 368398,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/c73cd2261109a86772e16601dad7e7857f6d96dd8d4db1888e8004fb6aaa0857.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/mysubnet.json",
+      "release_digest": "266b02a758c6e417ad18d406575d5f1eb70e4e848df2225c37b310d26447fd79",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/f778ef1cecf69b916a317c13e9097b475fff7ce473bced41af3a5b9c65b52c3d.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/f778ef1cecf69b916a317c13e9097b475fff7ce473bced41af3a5b9c65b52c3d.source.v1.msgpack.gz",
+        "sha256": "f778ef1cecf69b916a317c13e9097b475fff7ce473bced41af3a5b9c65b52c3d",
+        "size": 466600,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "wallet",
+      "version": 333,
+      "sha256": "c2357102b16d903a30f112318a05b0abd82fb14446311f24a5819fb4be6288cf",
+      "size": 970902,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/c2357102b16d903a30f112318a05b0abd82fb14446311f24a5819fb4be6288cf.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/wallet.json",
+      "release_digest": "48f77774fedabae2cffe16d1e7a16be634fd0289563ce93c6f10dafd1be0f3bf",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/e6e15a73ba306f17a52bb8d50c1940bb902372cbebed31680e9f9e673fe594d8.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/e6e15a73ba306f17a52bb8d50c1940bb902372cbebed31680e9f9e673fe594d8.source.v1.msgpack.gz",
+        "sha256": "e6e15a73ba306f17a52bb8d50c1940bb902372cbebed31680e9f9e673fe594d8",
+        "size": 889731,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "evm_wallet",
+      "version": 127,
+      "sha256": "4589adb0ec04e086932eff594bd0f3b4ced47086279b83ea9cd185ce9f064bc9",
+      "size": 657078,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/4589adb0ec04e086932eff594bd0f3b4ced47086279b83ea9cd185ce9f064bc9.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/evm_wallet.json",
+      "release_digest": "2ca7f16576d466ff2e285ca8522b9ce30fa6e2029007c639c144492c7002387f",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/2d62ee8ab3fef24ebe90c37570529ae8acba66efd221444109bd217655531040.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/2d62ee8ab3fef24ebe90c37570529ae8acba66efd221444109bd217655531040.source.v1.msgpack.gz",
+        "sha256": "2d62ee8ab3fef24ebe90c37570529ae8acba66efd221444109bd217655531040",
+        "size": 766430,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "uniswap",
+      "version": 120,
+      "sha256": "8d8cb0c5c4c05596889b697d9c18b71544b4ad12133fc31b58a65f0558545ede",
+      "size": 1023017,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/8d8cb0c5c4c05596889b697d9c18b71544b4ad12133fc31b58a65f0558545ede.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/uniswap.json",
+      "release_digest": "d457a2fb703b331105c54a436451be8940335d4a3581913fc7babd63ef22f6bf",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/9e0b4d7e62a2d6df9119b59ea0cc0c96119994e87e40d8011e74da86740a5dfd.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/9e0b4d7e62a2d6df9119b59ea0cc0c96119994e87e40d8011e74da86740a5dfd.source.v1.msgpack.gz",
+        "sha256": "9e0b4d7e62a2d6df9119b59ea0cc0c96119994e87e40d8011e74da86740a5dfd",
+        "size": 666224,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "curve",
+      "version": 108,
+      "sha256": "2aed54d79ed6a1b9bf613ee1effdd6f58fa873a661ff5f5458e8048517c18024",
+      "size": 329503,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/2aed54d79ed6a1b9bf613ee1effdd6f58fa873a661ff5f5458e8048517c18024.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/curve.json",
+      "release_digest": "e84d39d79afa82ec2e5d6426d32ed73f35947352348f5bc7b0ff36cfe0815a49",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/c6f7fc08609a91993b93568c439730bea1b6c9ed50a02afa18d174bc490f5d04.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/c6f7fc08609a91993b93568c439730bea1b6c9ed50a02afa18d174bc490f5d04.source.v1.msgpack.gz",
+        "sha256": "c6f7fc08609a91993b93568c439730bea1b6c9ed50a02afa18d174bc490f5d04",
+        "size": 493637,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "spreadsheet",
+      "version": 306,
+      "sha256": "5c1f27f7b0a46dd51c1ca4d13998837184bb6dd61e26fe2deeba22cf62a14883",
+      "size": 281087,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/5c1f27f7b0a46dd51c1ca4d13998837184bb6dd61e26fe2deeba22cf62a14883.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/spreadsheet.json",
+      "release_digest": "4173489bf12be310799bbc57a3a6d51898e128ca99d18641ec0593230b8e1b41",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/09ce0fd89efae38f913afd6ed4056a5d4bcd676db032dae88792bc3eab605120.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/09ce0fd89efae38f913afd6ed4056a5d4bcd676db032dae88792bc3eab605120.source.v1.msgpack.gz",
+        "sha256": "09ce0fd89efae38f913afd6ed4056a5d4bcd676db032dae88792bc3eab605120",
+        "size": 587885,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "chess",
+      "version": 306,
+      "sha256": "b1871ac44ce8bc9ab281404d4465f8fc4132bc470029c2a93f9ad97f0cff0f71",
+      "size": 309858,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/b1871ac44ce8bc9ab281404d4465f8fc4132bc470029c2a93f9ad97f0cff0f71.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/chess.json",
+      "release_digest": "735e8553c6d258ab42dd4a2c0ab944b56f12cfb6e8def7a22702f088790ef87f",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/4cc2d65f6f79f3ad4d2ddf9252082dc24c1d8b34e8bdaf8749b6cebad811f5a2.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/4cc2d65f6f79f3ad4d2ddf9252082dc24c1d8b34e8bdaf8749b6cebad811f5a2.source.v1.msgpack.gz",
+        "sha256": "4cc2d65f6f79f3ad4d2ddf9252082dc24c1d8b34e8bdaf8749b6cebad811f5a2",
+        "size": 512660,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "hello",
+      "version": 206,
+      "sha256": "41409a1b8b8ed3d720ad8989f4b81780812b79dd8ad43ff8763f4da034affba0",
+      "size": 149455,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/41409a1b8b8ed3d720ad8989f4b81780812b79dd8ad43ff8763f4da034affba0.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/hello.json",
+      "release_digest": "66c63268e409f4303ac438f61cbeed16070c9d68fedf5e6af4d97b021649acb0",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/71d1e6f6532d6ff37b6e504167ca987edfc1dda0ea0d359cc6cef6bbb999926a.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/71d1e6f6532d6ff37b6e504167ca987edfc1dda0ea0d359cc6cef6bbb999926a.source.v1.msgpack.gz",
+        "sha256": "71d1e6f6532d6ff37b6e504167ca987edfc1dda0ea0d359cc6cef6bbb999926a",
+        "size": 417049,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "gemma",
+      "version": 206,
+      "sha256": "ae37bde20366dc0ad8129569b7403ec438471401196f763062a3179ab409e1de",
+      "size": 196068,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/ae37bde20366dc0ad8129569b7403ec438471401196f763062a3179ab409e1de.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/gemma.json",
+      "release_digest": "2a999cf8389b1ed3bcda3eddbb2f14d40f92f6810e00637f683820cacbb9e92b",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/2c7d795ec1a0bec871c3c3d53170609a7d1c1015d1a50b59ea409fac9657a712.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/2c7d795ec1a0bec871c3c3d53170609a7d1c1015d1a50b59ea409fac9657a712.source.v1.msgpack.gz",
+        "sha256": "2c7d795ec1a0bec871c3c3d53170609a7d1c1015d1a50b59ea409fac9657a712",
+        "size": 434528,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "hullshift",
+      "version": 209,
+      "sha256": "f0887bedfcb1dffc0fb82c5d9367ab8c15497a35a8108813a283f07e9a5f2fff",
+      "size": 484110,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/f0887bedfcb1dffc0fb82c5d9367ab8c15497a35a8108813a283f07e9a5f2fff.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/hullshift.json",
+      "release_digest": "be44434364287bae64ff91c95e68899a9f5a6cf6bc7ebc9a0a4a5681a4eac06d",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/f1ebff6bca661a6c42c27f701fdde4a0245246bbe82bcd37058936663e3f9a3e.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/f1ebff6bca661a6c42c27f701fdde4a0245246bbe82bcd37058936663e3f9a3e.source.v1.msgpack.gz",
+        "sha256": "f1ebff6bca661a6c42c27f701fdde4a0245246bbe82bcd37058936663e3f9a3e",
+        "size": 957088,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "aave",
+      "version": 109,
+      "sha256": "53405b738354a0d9e148fac198596f110e9d026b746ac21e6b1084c83283467e",
+      "size": 322435,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/53405b738354a0d9e148fac198596f110e9d026b746ac21e6b1084c83283467e.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/aave.json",
+      "release_digest": "8508beeffb6afdb4189eadb17dfa6e1d6f37ac3e4db83cec420c6a0ec358d81f",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/161074f70b90760735cd4dd1644963a66ce5853d4a28f630012a6a38d7301b07.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/161074f70b90760735cd4dd1644963a66ce5853d4a28f630012a6a38d7301b07.source.v1.msgpack.gz",
+        "sha256": "161074f70b90760735cd4dd1644963a66ce5853d4a28f630012a6a38d7301b07",
+        "size": 501777,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "hyperliquid",
+      "version": 109,
+      "sha256": "aee7c71a07b4507f246c11c8db1967d15cd013e9c18f6eb3c7ded61740342cbd",
+      "size": 484733,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/aee7c71a07b4507f246c11c8db1967d15cd013e9c18f6eb3c7ded61740342cbd.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/hyperliquid.json",
+      "release_digest": "abf283a57d00546f28975d1f7ab5f2d34d9a5bca0c0ad2fce8bae94cc09a989e",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/6b15715df31e6437d09da4bc8cd35bb1eedff94f1d8442779ecc2edd1d0bb185.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/6b15715df31e6437d09da4bc8cd35bb1eedff94f1d8442779ecc2edd1d0bb185.source.v1.msgpack.gz",
+        "sha256": "6b15715df31e6437d09da4bc8cd35bb1eedff94f1d8442779ecc2edd1d0bb185",
+        "size": 641484,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "icpswap",
+      "version": 211,
+      "sha256": "227dc78c223ae91178707f547a2927dc57d8ae593ca3c277139b036fb39a1c2d",
+      "size": 565742,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/227dc78c223ae91178707f547a2927dc57d8ae593ca3c277139b036fb39a1c2d.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/icpswap.json",
+      "release_digest": "aba9d58703d9c5f6ad96666849dbe38c10e2cf678fb807d56eeb87fc4a6cd4d4",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/bc57ee47808cff976dd432e2d6c98a96dcc8445a4e11f29b80b8d4ca8027c2d0.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/bc57ee47808cff976dd432e2d6c98a96dcc8445a4e11f29b80b8d4ca8027c2d0.source.v1.msgpack.gz",
+        "sha256": "bc57ee47808cff976dd432e2d6c98a96dcc8445a4e11f29b80b8d4ca8027c2d0",
+        "size": 839810,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "taggr",
+      "version": 110,
+      "sha256": "a2368fc1a0d259da8310c5f73a1b088a18fd69784fe92944a32c305f10541a88",
+      "size": 322858,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/a2368fc1a0d259da8310c5f73a1b088a18fd69784fe92944a32c305f10541a88.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/taggr.json",
+      "release_digest": "9279b3e28624bc3efa85e48476bbaac8e1e33d0ee5653920f7ce91f670f1aecb",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/9f43d01eac29714d216f82256d3c4505540d7a35180d614b8b8b7a99006bca43.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/9f43d01eac29714d216f82256d3c4505540d7a35180d614b8b8b7a99006bca43.source.v1.msgpack.gz",
+        "sha256": "9f43d01eac29714d216f82256d3c4505540d7a35180d614b8b8b7a99006bca43",
+        "size": 535376,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "openchat",
+      "version": 125,
+      "sha256": "31836a2a8497754309848b9caa810b438ca5b2267262cd04f464629ba0517124",
+      "size": 277439,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/31836a2a8497754309848b9caa810b438ca5b2267262cd04f464629ba0517124.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/openchat.json",
+      "release_digest": "857aee9239cd5c326ab0ef81bbce72e85f1b99b8574d10c55b27cc8d3ee37dae",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/c9b9f0963e4a6fe2fe30d89c38dc55fd00ae1d95f636d702c4cc0aae1b6c9c45.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/c9b9f0963e4a6fe2fe30d89c38dc55fd00ae1d95f636d702c4cc0aae1b6c9c45.source.v1.msgpack.gz",
+        "sha256": "c9b9f0963e4a6fe2fe30d89c38dc55fd00ae1d95f636d702c4cc0aae1b6c9c45",
+        "size": 499098,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "nuance",
+      "version": 112,
+      "sha256": "a1d1f799d7f19e684dabc67b653dcf52f8370edfa21d5e347a78bbeae04196fc",
+      "size": 470650,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/a1d1f799d7f19e684dabc67b653dcf52f8370edfa21d5e347a78bbeae04196fc.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/nuance.json",
+      "release_digest": "6057d36939998b9b036abc5f467b96e38405f05db9ef2e79a758e581540ad73d",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/fae73a3c5addc16803a1095292b894369ec0f9e841cceefa5986b93373e49296.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/fae73a3c5addc16803a1095292b894369ec0f9e841cceefa5986b93373e49296.source.v1.msgpack.gz",
+        "sha256": "fae73a3c5addc16803a1095292b894369ec0f9e841cceefa5986b93373e49296",
+        "size": 522771,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "snsgov",
+      "version": 117,
+      "sha256": "640d20ed1a789e617e2896005c509543f49a1955039a9fced800dcb7048b2fb5",
+      "size": 741743,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/640d20ed1a789e617e2896005c509543f49a1955039a9fced800dcb7048b2fb5.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/snsgov.json",
+      "release_digest": "f78007b80ebb47a8505aa660c94ffe405564c16bb5edf8d6c9d7b30219155d55",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/eb6d2c0409e4786877b22a4e303d3df2db263daa215664f903202ef032a4fafc.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/eb6d2c0409e4786877b22a4e303d3df2db263daa215664f903202ef032a4fafc.source.v1.msgpack.gz",
+        "sha256": "eb6d2c0409e4786877b22a4e303d3df2db263daa215664f903202ef032a4fafc",
+        "size": 815355,
+        "status": "unchanged"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "marketplace",
+      "version": 124,
+      "sha256": "9db663a9b0b5dbc38d54a08a9eb7d2ae8ea602aa97433aac62afaa11d398c2c0",
+      "size": 520871,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/9db663a9b0b5dbc38d54a08a9eb7d2ae8ea602aa97433aac62afaa11d398c2c0.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/marketplace.json",
+      "release_digest": "28b273e7b3eb0a5ddfc1a3878b562605684030567064f1ce1eb095d450fce885",
+      "status": "published",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/06535f788f23e874ac9a29f460ae13599d8221cbe934b31efc2f792be198cf77.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/06535f788f23e874ac9a29f460ae13599d8221cbe934b31efc2f792be198cf77.source.v1.msgpack.gz",
+        "sha256": "06535f788f23e874ac9a29f460ae13599d8221cbe934b31efc2f792be198cf77",
+        "size": 1887108,
+        "status": "published"
+      }
+    },
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "feedback",
+      "version": 102,
+      "sha256": "f87082bb767b531415a9fafc5fcc3e0ed326d6a08bb70d5cbe90f352ecd0f822",
+      "size": 442084,
+      "channel": "beta",
+      "package_path": "/repo/v1/packages/f87082bb767b531415a9fafc5fcc3e0ed326d6a08bb70d5cbe90f352ecd0f822.neutron",
+      "release_path": "/repo/v1/channels/beta/releases/feedback.json",
+      "release_digest": "a09a9b615a7628e5f5f54cebe043f73a40f2dffd069adeec91318d9aff4ef49a",
+      "status": "unchanged",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/afe868456e5678693496cbe729ad2f097af07e48558992ee4b320a6110affae2.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/afe868456e5678693496cbe729ad2f097af07e48558992ee4b320a6110affae2.source.v1.msgpack.gz",
+        "sha256": "afe868456e5678693496cbe729ad2f097af07e48558992ee4b320a6110affae2",
+        "size": 486489,
+        "status": "unchanged"
+      }
+    }
+  ]
+}

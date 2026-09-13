@@ -1,0 +1,77 @@
+{
+  "status": "passed",
+  "qualification": "marketplace121-state2-to-state2",
+  "scope": "Exact released archives and immutable memory source/lock lineage, generated actor compatibility, one checked app upgrade, retained complete state root, read key/delegation and original/revised journal bytes/history, clean v2 initialization. No browser or protocol financial calls.",
+  "kernel": {
+    "version": 359,
+    "sha256": "6b506590ab9160a6e8e31859a791d40e60b797f06e9fde28781b8f0beb89574d"
+  },
+  "predecessor": {
+    "version": 121,
+    "memoryVersion": 2,
+    "sha256": "d6ac1fc5b3e563c5af4bf0d7cd5d40f9469d756a5d6bb988782fe9ea96671dcd",
+    "size": 519184
+  },
+  "successor": {
+    "version": 124,
+    "sha256": "9db663a9b0b5dbc38d54a08a9eb7d2ae8ea602aa97433aac62afaa11d398c2c0"
+  },
+  "migrationPlan": {
+    "upgrades": [
+      {
+        "kind": "keep",
+        "owner": "kernel",
+        "memoryId": "kernel",
+        "version": 4
+      },
+      {
+        "kind": "keep",
+        "owner": "kernel",
+        "memoryId": "kernel_activation",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "marketplace",
+        "memoryId": "state",
+        "version": 2
+      }
+    ],
+    "removedApps": [],
+    "destructiveMemoryRoots": []
+  },
+  "runtimeMemories": [
+    [
+      "kernel",
+      "kernel",
+      4
+    ],
+    [
+      "kernel",
+      "kernel_activation",
+      1
+    ],
+    [
+      "marketplace",
+      "state",
+      2
+    ]
+  ],
+  "deploymentBefore": "fc2de8332644156b99d7c38c82ad5f3b",
+  "deploymentAfter": "c87de6682bdaf4cfe5b73db884392b3d",
+  "readPublicKeySha256": "bb6f4afb1ee7976c2c8c963f97184f723e69934cdbb3a0d5dbe771ec6b2c8ced",
+  "journalSha256": [
+    "a062c96080d691f2e68854716fb808762fe7d0b27b10d58f9e88a03dc4bebd86",
+    "e607ae97323dda2d233a45c1559d84334d4c665041929ad8669632aa16d215bd",
+    "5fb7a5d07caa37421b9fe17163b5f6c7422e978bdff7ec45eff79c337e848c7e",
+    "7d2c3b2bc6169d3989145f4200a9e2683b848f28ca667e2ff4d955b92ba1359e"
+  ],
+  "retainedDiscount": [
+    "RETAINED118"
+  ],
+  "retainedStateSha256": "1fb2cfccc0f6ea645fce0c8d923400eff6e684ea2187592e0137d77899356688",
+  "externalInstallModes": [
+    "install",
+    "install"
+  ]
+}
