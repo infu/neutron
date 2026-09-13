@@ -768,3 +768,24 @@ publication receipts and the catalog inventory are retained under
 `.neutron/release-receipts/beta-channels-2026-09-13/`. The durable publication
 journal remains under `.neutron/marketplace-publications/` for exact-request
 recovery.
+
+
+## Kernel 362 production bootstrap
+
+On 2026-09-13, promotion **1** marked the existing Kernel **0.3.62** candidate
+**55** as **stable**, making the beta preference available through normal
+production updates. It retains the exact archive and offered-source identities
+recorded above; promotion rebuilt and uploaded no package bytes. Request:
+`a2c9d02a1b3193b9d4698d9075748d92f47896120393fee14803c620b95aea83`.
+
+Certified public stable v1 discovery now returns Kernel 362. Existing users can
+check for updates in Settings, install the Kernel update, then enable
+**Settings → Advanced users → Beta updates**. The setting remains off by default.
+Marketplace 119 remains beta; its stable release remains 118.
+
+The promotion receipt verified the exact package and source. Repeating the same
+command and retained journal returned `batch_id: null`, with both artifacts
+`unchanged` and their paths, sizes, versions and SHA-256 identities verified.
+Promotion receipts, the retained selection and certified stable-discovery
+responses are saved under
+`.neutron/release-receipts/kernel362-stable-2026-09-13/`.
