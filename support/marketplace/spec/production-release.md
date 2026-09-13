@@ -710,3 +710,61 @@ The repeat returned `batch_id: null`, with all 27 packages and offered sources
 `unchanged`, matching every version, URL/path, size and SHA-256 across all 54
 frozen artifacts. Existing users obtain this fix through the Wallet update in
 Settings. The legacy source and Dispenser starter are unchanged.
+
+
+## Beta channels: Kernel 362 and Marketplace 119
+
+On 2026-09-13, the Marketplace protocol at
+`sj2r4-haaaa-aaaay-aadgq-cai` was upgraded in place with
+`--mode upgrade --wasm-memory-persistence keep`, from Wasm
+`62538acd0b35afad2d4222a82c4d5476ea200266dbab49516046711efd0eb438`
+to the qualified successor
+`5742b989de18c7a653ed383b55ae2df78547f53452fb9de477dd22ab979fa0a2`.
+The running module and unchanged controller settings were verified. Certified
+before/after checks preserved all 28 stable release bodies exactly and verified
+the new channel descriptor, stable bootstrap and initially empty beta heads.
+
+Marketplace batch **20** published Kernel **0.3.62** and Marketplace
+**0.1.19** atomically to **beta**. The other 26 catalog packages and sources
+were unchanged. Publication request:
+`12a1fc28ac21cbfac12b1fe4a8545fe479ac4a517f067749ca9e2ab065fbf8c3`.
+
+| Package | Archive bytes | Archive SHA-256 | Offered-source bytes | Offered-source SHA-256 |
+| --- | ---: | --- | ---: | --- |
+| kernel 362 | 2,484,212 | `253f19c9d97d8d1a2138004de98a9645d79708582db2cc9fc90df891eebd87e5` | 3,359,740 | `d91cd4a0c41c2f3abe0341122582e673ae03c63a648c577d561f81bb320f224a` |
+| marketplace 119 | 504,223 | `1c029512eea22c7aaa412c958c1fc7089f2bc9e8c45e9a4702334b01753ef1a8` | 1,856,818 | `300f57ec4fbc9a97c19a7141944934ac1be84eaa853ed2ba9f1329089099438d` |
+
+The first receipt-v2 postflight verified all 28 packages and 28 offered sources.
+The identical-byte repeat returned `batch_id: null`, with every package and
+source `unchanged` and matching its version, URL/path, size and SHA-256. Its first
+invocation hit the previously observed local WebAssembly response-verifier
+crash; a fresh invocation using the same bytes and journal passed without
+bypassing verification.
+No package or source bytes were rebuilt between qualification and publication.
+A separate 85-response certified metadata check verified unchanged stable
+candidate IDs, revisions and release bodies for every catalog app, exactly two
+new beta heads, and certified absence of beta releases for the other 26 apps.
+Stable discovery remains Kernel 361 and Marketplace 118.
+
+The Settings **Advanced users** tab adds the persistent **Beta updates** switch,
+off by default, for updates and Marketplace installs. Initial testers use an
+intentional owner-reviewed Kernel staging path to obtain the new toggle.
+Stable promotion is a separate rollout step. Legacy versionless review-text
+cutover remains deferred until the successor Marketplace is offered as stable;
+permanent ratings and currently offered versions' comments remain retained.
+The Dispenser starter was not changed by this publication.
+
+Kernel retains its released roots and migrations and adds the independent
+preference root. Marketplace retains schema v2 and its released v1 migration.
+The final protocol refactor preserves public Candid and persistent-state types
+byte-for-byte relative to its pre-refactor channel build. Validation passed:
+168 unit/CLI tests, 130 Motoko cases, all 67 host cases, the exact deployed
+protocol predecessor upgrade and both pre-refactor baseline cases. Exact
+Kernel 361→362 and Marketplace 112/118→119 checked upgrades qualified the
+published archives with their matching source artifacts.
+
+Deployment status, certified snapshots, frozen artifacts, qualification logs,
+publication receipts and the catalog inventory are retained under
+`.neutron/release-receipts/beta-channels-2026-09-13/`. The durable publication
+journal remains under `.neutron/marketplace-publications/` for exact-request
+recovery.
