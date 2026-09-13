@@ -9,6 +9,7 @@ const workerSources = [
   "./src/generator_worker.ts",
   "./src/worker_protocol.ts",
   "./src/generator.ts",
+  "./src/cargo_puzzles.ts",
   "./src/brain_catalog.ts",
   "./src/brain_quality.ts",
   "./src/milestone_dsl.ts",

@@ -1,5 +1,6 @@
 import type { GeneratedLevel, GenerationProgress } from "./generator.ts";
-import type { LevelDefinition } from "./model.ts";
+import type { LevelDefinition, EngineSnapshot, Direction } from "./model.ts";
+import { SUPPORTED_GENERATOR_VERSIONS, type GeneratorVersion } from "./share_code.ts";
 import type { AnalysisReport } from "./solver.ts";
 
 export const WORKER_PROTOCOL_VERSION = 1 as const;
@@ -38,12 +39,14 @@ export type WorkerRequest =
       readonly jobId: string;
       readonly seed: string;
       readonly difficulty: number;
+      readonly generatorVersion?: GeneratorVersion;
     }
   | {
       readonly protocol: typeof WORKER_PROTOCOL_VERSION;
       readonly type: "analyze";
       readonly jobId: string;
       readonly level: LevelDefinition;
+      readonly current?: { snapshot: EngineSnapshot; knownRoute: readonly Direction[] };
     }
   | {
       readonly protocol: typeof WORKER_PROTOCOL_VERSION;
@@ -142,7 +145,8 @@ export function isWorkerRequest(value: unknown): value is WorkerRequest {
   }
   if (value.type === "generate") {
     return (
-      hasExactKeys(value, ["protocol", "type", "jobId", "seed", "difficulty"]) &&
+      hasExactKeys(value, ["protocol", "type", "jobId", "seed", "difficulty", ...(value.generatorVersion === undefined ? [] : ["generatorVersion"])]) &&
+      (value.generatorVersion === undefined || SUPPORTED_GENERATOR_VERSIONS.includes(value.generatorVersion as GeneratorVersion)) &&
       typeof value.seed === "string" &&
       SEED_PATTERN.test(value.seed) &&
       Number.isInteger(value.difficulty) &&
@@ -152,7 +156,8 @@ export function isWorkerRequest(value: unknown): value is WorkerRequest {
   }
   if (value.type === "analyze") {
     return (
-      hasExactKeys(value, ["protocol", "type", "jobId", "level"]) &&
+      hasExactKeys(value, ["protocol", "type", "jobId", "level", ...(value.current === undefined ? [] : ["current"])]) &&
+      (value.current === undefined || isRecord(value.current) && isRecord(value.current.snapshot) && Array.isArray(value.current.knownRoute) && value.current.knownRoute.every((d) => ["N", "E", "S", "W"].includes(d))) &&
       isRecord(value.level)
     );
   }

@@ -31,7 +31,14 @@ const disposedModels = new WeakSet<HullshiftTerrainModelDescriptor>();
  */
 export function createHullshiftTerrainModel(
   kind: HullshiftTerrainModelKind,
+  cargo = false,
 ): HullshiftTerrainModelDescriptor {
+  if (cargo && (kind === "floor" || kind === "bulkhead")) return descriptor(kind, "beveled cargo deck", mergeOwned([
+    extrudedPanel(chamferedRectangle(0.96, 0.96, 0.065), {
+      depth: kind === "bulkhead" ? 0.48 : 0.07, bevel: 0.025, z: -0.07,
+    }),
+    ...(kind === "bulkhead" ? [box(0.65, 0.028, 0.014, 0, 0.28, 0.436)] : []),
+  ], `cargo:${kind}`));
   switch (kind) {
     case "floor":
       return descriptor(kind, "walkable beveled deck panel", mergeOwned([

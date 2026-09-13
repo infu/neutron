@@ -7,6 +7,7 @@ import {
   type Coord,
   type DerivedMechanics,
   type DoorFixture,
+  type EngineSnapshot,
   type FixtureDefinition,
   type FixtureKind,
   type GateFixture,
@@ -48,6 +49,11 @@ export interface FixtureCompatibilityRule {
 export const MECHANIC_COMPATIBILITY: Readonly<
   Record<FixtureKind, FixtureCompatibilityRule>
 > = Object.freeze({
+  bay: Object.freeze({
+    terrains: Object.freeze(["floor"] as const),
+    player: "occupy",
+    object: "occupy",
+  }),
   plate: Object.freeze({
     terrains: Object.freeze(["floor"] as const),
     player: "occupy",
@@ -106,6 +112,7 @@ const TERRAIN_KINDS: readonly TerrainKind[] = [
 ];
 
 const FIXTURE_KINDS: readonly FixtureKind[] = [
+  "bay",
   "plate",
   "relay",
   "socket",
@@ -241,7 +248,9 @@ export function deriveMechanics(level: LevelDefinition, state: PuzzleState): Der
           kind: fixture.kind,
           channel: fixture.channel,
           position,
-          active: entityOccupies(state, position),
+          active: level.objective === "cargo"
+            ? objectAt(state, position)?.kind === "cargo"
+            : entityOccupies(state, position),
         });
         break;
       case "relay":
@@ -320,6 +329,7 @@ export function classifyPlayerEntry(
 
   switch (fixture?.kind) {
     case undefined:
+    case "bay":
     case "plate":
     case "relay":
       return { kind: "stable" };
@@ -366,6 +376,7 @@ export function classifyObjectEntry(
 
   switch (fixture?.kind) {
     case undefined:
+    case "bay":
     case "plate":
     case "relay":
       return { kind: "stable" };
@@ -421,7 +432,7 @@ function validateFixture(
     );
   }
 
-  if (fixture.kind !== "disposal") {
+  if (fixture.kind !== "disposal" && fixture.kind !== "bay") {
     if (!nonEmptyId(fixture.channel) || !channelIds.has(fixture.channel)) {
       issues.push(
         issue(
@@ -638,7 +649,23 @@ export function validateLevel(level: LevelDefinition): readonly ValidationIssue[
   if (fixtureCount > BOARD_LIMITS.maxStatefulFixtures) {
     issues.push(issue("fixture-limit", `Board exceeds the ${BOARD_LIMITS.maxStatefulFixtures}-fixture limit`));
   }
-  if (gateCount !== 1) {
+  if (level.objective !== undefined && level.objective !== "cargo" && level.objective !== "freight") {
+    issues.push(issue("objective", "Unknown puzzle objective"));
+  }
+  if (level.objective === "cargo") {
+    const bays = level.cells.filter((cell) => cell.fixture?.kind === "plate");
+    if (bays.length === 0 || bays.length !== level.objects.length || gateCount !== 0
+      || level.objects.some((object) => object.kind !== "cargo")
+      || level.cells.some((cell) => cell.terrain !== "floor" && cell.terrain !== "bulkhead")
+      || level.cells.some((cell) => cell.fixture !== undefined && cell.fixture.kind !== "plate")) {
+      issues.push(issue("cargo-objective", "Cargo puzzles need one bay per cargo pod and only floor, walls, and bays"));
+    }
+  } else if (level.objective === "freight") {
+    const bays = level.cells.filter((cell) => cell.fixture?.kind === "bay");
+    if (bays.length === 0 || bays.length > level.objects.filter((object) => object.kind === "cargo").length || gateCount !== 0) {
+      issues.push(issue("freight-objective", "Freight puzzles need cargo for every bay and no evacuation gate"));
+    }
+  } else if (gateCount !== 1) {
     issues.push(issue("gate-count", `Board must contain exactly one evacuation gate; found ${gateCount}`));
   }
 
@@ -681,7 +708,7 @@ export function compatibleFixtureTerrain(
 export function fixtureChannel(
   fixture: FixtureDefinition,
 ): string | undefined {
-  return fixture.kind === "disposal" ? undefined : fixture.channel;
+  return fixture.kind === "disposal" || fixture.kind === "bay" ? undefined : fixture.channel;
 }
 
 export function isCircuitConsumer(
@@ -712,4 +739,9 @@ export function compatibilityIssueForCell(cell: CellDefinition): string | null {
 // This helper makes the simultaneous OR rule explicit for analyzer tests.
 export function derivedChannelActive(derived: DerivedMechanics, channel: string): boolean {
   return channelActive(derived, channel);
+}
+
+export function bayProgress(level: LevelDefinition, snapshot: EngineSnapshot): { total: number; filled: number } {
+  const bays = level.cells.flatMap((cell, i) => cell.fixture?.kind === (level.objective === "cargo" ? "plate" : "bay") ? [i] : []);
+  return { total: bays.length, filled: bays.filter((i) => snapshot.state.objects.some((o) => o.kind === "cargo" && o.position.y * level.width + o.position.x === i)).length };
 }

@@ -37,6 +37,7 @@ export interface Coord {
 export type TerrainKind = "floor" | "bulkhead" | "vacuum" | "fracture";
 export type ObjectKind = "cargo" | "reactor-cell";
 export type FixtureKind =
+  | "bay"
   | "plate"
   | "relay"
   | "socket"
@@ -63,6 +64,11 @@ interface CircuitFixtureBase extends FixtureBase {
 
 export interface PlateFixture extends CircuitFixtureBase {
   readonly kind: "plate";
+}
+
+/** A parking goal, deliberately independent of the power circuits. */
+export interface BayFixture extends FixtureBase {
+  readonly kind: "bay";
 }
 
 export interface RelayFixture extends CircuitFixtureBase {
@@ -97,6 +103,7 @@ export interface GateFixture extends CircuitFixtureBase {
 }
 
 export type FixtureDefinition =
+  | BayFixture
   | PlateFixture
   | RelayFixture
   | SocketFixture
@@ -118,6 +125,8 @@ export interface ObjectDefinition {
 
 export interface LevelDefinition {
   readonly generatorVersion: string;
+  /** Absent on evacuation puzzles. Freight bays are independent of circuits; g5 cargo retains its original plate goals. */
+  readonly objective?: "cargo" | "freight";
   readonly width: number;
   readonly height: number;
   /** Canonically serialized by id, irrespective of the input array order. */

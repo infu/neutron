@@ -16,6 +16,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
  */
 
 export const HULLSHIFT_FIXTURE_MODEL_KINDS = [
+  "bay",
   "plate",
   "relay",
   "socket",
@@ -32,6 +33,7 @@ export const HULLSHIFT_FIXTURE_MATERIAL_ROLES = [
 ] as const;
 
 export const HULLSHIFT_FIXTURE_MODEL_STATES = Object.freeze({
+  bay: Object.freeze(["released", "depressed"] as const),
   plate: Object.freeze(["released", "depressed"] as const),
   relay: Object.freeze(["off", "on"] as const),
   socket: Object.freeze(["empty", "installed"] as const),
@@ -89,6 +91,7 @@ export function createHullshiftFixtureModel(
   kind: HullshiftFixtureModelKind,
 ): HullshiftFixtureModelDescriptor {
   switch (kind) {
+    case "bay": return createCargoBayModel("bay");
     case "plate": return createMassPlateModel();
     case "relay": return createRelayModel();
     case "socket": return createReactorSocketModel();
@@ -142,6 +145,21 @@ export function createMassPlateModel(): HullshiftFixtureModelDescriptor {
     "momentary any-mass pressure plate",
     [released, depressed],
   );
+}
+
+/** Low, open cargo-bay brackets stay visible around a parked pod. */
+export function createCargoBayModel(kind: "plate" | "bay" = "plate"): HullshiftFixtureModelDescriptor {
+  return fixtureDescriptor(kind, "cargo parking bay", (["released", "depressed"] as const).map((state) => variant(kind, state, "illuminated cargo bay", {
+    base: [chamferedPrism(0.85, 0.85, 0.025, 0.012, 0.055)],
+    detail: [chamferedPrism(0.65, 0.65, 0.015, 0.04, 0.045)],
+    emissive: [
+      ...[-1, 1].flatMap((side) => [
+        chamferedPrism(0.82, 0.045, 0.025, 0.06, 0.01, 0, side * 0.39),
+        chamferedPrism(0.045, 0.82, 0.025, 0.06, 0.01, side * 0.39, 0),
+      ]),
+      chamferedPrism(0.16, 0.16, 0.02, 0.06, 0.02),
+    ],
+  })));
 }
 
 /**

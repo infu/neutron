@@ -1,0 +1,624 @@
+{
+  "schema": 1,
+  "savedAt": 1789171200000,
+  "payload": {
+    "serviceRevision": 5,
+    "runs": [
+      {
+        "saveVersion": 1,
+        "id": "run_ff69920926515df27bdd96c53d0334f3",
+        "trainingId": null,
+        "revision": 3,
+        "identity": {
+          "generatorVersion": "g5",
+          "seed": "ffffffffabcd1234",
+          "difficulty": 2
+        },
+        "levelHash": "e82f13df94aa38b0a745a0c663f568f7af548992e4c1515f457ed1861f80d84f",
+        "shareCode": "HS1-G5-D2-Sffffffffabcd1234-Cc0cc2865",
+        "level": {
+          "generatorVersion": "g5",
+          "objective": "cargo",
+          "width": 9,
+          "height": 7,
+          "channels": [
+            {
+              "id": "cargo",
+              "symbol": "◇"
+            }
+          ],
+          "cells": [
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor",
+              "fixture": {
+                "kind": "plate",
+                "id": "bay-1",
+                "channel": "cargo"
+              }
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor",
+              "fixture": {
+                "kind": "plate",
+                "id": "bay-2",
+                "channel": "cargo"
+              }
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "floor"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            },
+            {
+              "terrain": "bulkhead"
+            }
+          ],
+          "playerStart": {
+            "x": 3,
+            "y": 4
+          },
+          "objects": [
+            {
+              "id": "cargo-1",
+              "kind": "cargo",
+              "position": {
+                "x": 4,
+                "y": 4
+              }
+            },
+            {
+              "id": "cargo-2",
+              "kind": "cargo",
+              "position": {
+                "x": 4,
+                "y": 2
+              }
+            }
+          ]
+        },
+        "analysis": {
+          "cargo": {
+            "layout": "Freight quarters",
+            "boxLines": 6,
+            "turns": 4,
+            "revisits": 0,
+            "detours": 0,
+            "searchComplete": true
+          },
+          "solvable": true,
+          "initialStateKey": "[\"hullshift-state\",1,[3,4],[[\"cargo-1\",\"cargo\",4,4],[\"cargo-2\",\"cargo\",4,2]],[],[],[],[]]",
+          "fatalFrontier": [],
+          "preferredSolution": {
+            "actions": [
+              "N",
+              "E",
+              "E",
+              "N",
+              "N",
+              "W",
+              "S",
+              "N",
+              "W",
+              "W",
+              "S",
+              "S",
+              "E",
+              "E",
+              "N",
+              "E",
+              "E",
+              "S",
+              "S",
+              "W",
+              "N",
+              "W",
+              "N",
+              "E",
+              "S",
+              "W",
+              "W",
+              "S",
+              "S",
+              "E",
+              "N",
+              "E",
+              "N",
+              "W",
+              "W"
+            ],
+            "pushes": 7,
+            "totalActions": 35,
+            "commitments": 6
+          },
+          "optimalActions": null,
+          "optimalPushes": 7,
+          "retainedNearOptimalSolutions": [],
+          "stateCount": 8,
+          "transitionCount": 0,
+          "physicalFailureTransitionCount": 0,
+          "victoryTransitionCount": 1,
+          "estimatedBytes": 0,
+          "limits": {
+            "maxStates": 200000,
+            "maxTransitions": 800000,
+            "maxEstimatedBytes": 134217728,
+            "cooperateEvery": 512
+          },
+          "milestones": {
+            "mandatoryIds": [],
+            "precedence": [],
+            "dependencyDepth": 0,
+            "planningHorizon": 0,
+            "crossMechanicCoupling": 0
+          },
+          "features": {
+            "commitments": 6,
+            "dependencyDepth": 0,
+            "planningHorizon": 0,
+            "interleaving": 0,
+            "irreversibility": 0,
+            "decisionPressure": 0,
+            "crossMechanicCoupling": 0,
+            "stateSpaceComplexity": 0,
+            "fatalChoicePressure": 0,
+            "mechanicFamilies": 1
+          },
+          "difficulty": {
+            "requestedDifficulty": 2,
+            "ratedDifficulty": 2,
+            "profileMatch": true,
+            "hardViolations": [],
+            "targetDistance": 0,
+            "challengeScore": 14
+          }
+        },
+        "difficulty": {
+          "requestedDifficulty": 2,
+          "ratedDifficulty": 2,
+          "profileMatch": true,
+          "hardViolations": [],
+          "targetDistance": 0,
+          "challengeScore": 14
+        },
+        "initialSnapshot": {
+          "state": {
+            "player": {
+              "x": 3,
+              "y": 4
+            },
+            "objects": [
+              {
+                "id": "cargo-1",
+                "kind": "cargo",
+                "position": {
+                  "x": 4,
+                  "y": 4
+                }
+              },
+              {
+                "id": "cargo-2",
+                "kind": "cargo",
+                "position": {
+                  "x": 4,
+                  "y": 2
+                }
+              }
+            ],
+            "activeRelayIds": [],
+            "installedCells": [],
+            "collapsedFractures": [],
+            "removedObjectIds": []
+          },
+          "derived": {
+            "sources": [
+              {
+                "fixtureId": "bay-1",
+                "kind": "plate",
+                "channel": "cargo",
+                "position": {
+                  "x": 6,
+                  "y": 2
+                },
+                "active": false
+              },
+              {
+                "fixtureId": "bay-2",
+                "kind": "plate",
+                "channel": "cargo",
+                "position": {
+                  "x": 2,
+                  "y": 3
+                },
+                "active": false
+              }
+            ],
+            "channels": [
+              {
+                "id": "cargo",
+                "symbol": "◇",
+                "active": false
+              }
+            ],
+            "consumers": []
+          },
+          "outcome": {
+            "kind": "playing"
+          }
+        },
+        "snapshot": {
+          "state": {
+            "player": {
+              "x": 5,
+              "y": 3
+            },
+            "objects": [
+              {
+                "id": "cargo-1",
+                "kind": "cargo",
+                "position": {
+                  "x": 4,
+                  "y": 4
+                }
+              },
+              {
+                "id": "cargo-2",
+                "kind": "cargo",
+                "position": {
+                  "x": 4,
+                  "y": 2
+                }
+              }
+            ],
+            "activeRelayIds": [],
+            "installedCells": [],
+            "collapsedFractures": [],
+            "removedObjectIds": []
+          },
+          "derived": {
+            "sources": [
+              {
+                "fixtureId": "bay-1",
+                "kind": "plate",
+                "channel": "cargo",
+                "position": {
+                  "x": 6,
+                  "y": 2
+                },
+                "active": false
+              },
+              {
+                "fixtureId": "bay-2",
+                "kind": "plate",
+                "channel": "cargo",
+                "position": {
+                  "x": 2,
+                  "y": 3
+                },
+                "active": false
+              }
+            ],
+            "channels": [
+              {
+                "id": "cargo",
+                "symbol": "◇",
+                "active": false
+              }
+            ],
+            "consumers": []
+          },
+          "outcome": {
+            "kind": "playing"
+          }
+        },
+        "commands": [
+          "N",
+          "E",
+          "E"
+        ],
+        "cursor": 3,
+        "checkpoints": [
+          {
+            "cursor": 0,
+            "snapshot": {
+              "state": {
+                "player": {
+                  "x": 3,
+                  "y": 4
+                },
+                "objects": [
+                  {
+                    "id": "cargo-1",
+                    "kind": "cargo",
+                    "position": {
+                      "x": 4,
+                      "y": 4
+                    }
+                  },
+                  {
+                    "id": "cargo-2",
+                    "kind": "cargo",
+                    "position": {
+                      "x": 4,
+                      "y": 2
+                    }
+                  }
+                ],
+                "activeRelayIds": [],
+                "installedCells": [],
+                "collapsedFractures": [],
+                "removedObjectIds": []
+              },
+              "derived": {
+                "sources": [
+                  {
+                    "fixtureId": "bay-1",
+                    "kind": "plate",
+                    "channel": "cargo",
+                    "position": {
+                      "x": 6,
+                      "y": 2
+                    },
+                    "active": false
+                  },
+                  {
+                    "fixtureId": "bay-2",
+                    "kind": "plate",
+                    "channel": "cargo",
+                    "position": {
+                      "x": 2,
+                      "y": 3
+                    },
+                    "active": false
+                  }
+                ],
+                "channels": [
+                  {
+                    "id": "cargo",
+                    "symbol": "◇",
+                    "active": false
+                  }
+                ],
+                "consumers": []
+              },
+              "outcome": {
+                "kind": "playing"
+              }
+            },
+            "pushes": 0,
+            "commitments": 0,
+            "lastEvents": []
+          }
+        ],
+        "statistics": {
+          "acceptedActions": 3,
+          "pushes": 0,
+          "commitments": 0,
+          "rewinds": 0,
+          "restarts": 0,
+          "hints": 0
+        },
+        "lastEvents": [
+          {
+            "type": "entity-exited",
+            "entity": {
+              "kind": "player"
+            },
+            "position": {
+              "x": 4,
+              "y": 3
+            }
+          },
+          {
+            "type": "player-moved",
+            "from": {
+              "x": 4,
+              "y": 3
+            },
+            "to": {
+              "x": 5,
+              "y": 3
+            }
+          },
+          {
+            "type": "entity-entered",
+            "entity": {
+              "kind": "player"
+            },
+            "position": {
+              "x": 5,
+              "y": 3
+            }
+          }
+        ],
+        "createdAt": 1789171200000,
+        "updatedAt": 1789171200000,
+        "completedAt": null
+      }
+    ],
+    "tileBindings": {
+      "cargo-release-test": "run_ff69920926515df27bdd96c53d0334f3"
+    },
+    "settings": {
+      "sound": true,
+      "reducedMotion": "system",
+      "skipKnownBriefings": false
+    },
+    "learnedMechanics": [],
+    "completions": []
+  }
+}

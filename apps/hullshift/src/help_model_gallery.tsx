@@ -102,6 +102,7 @@ export type HullshiftHelpGalleryResources = Readonly<{
 }>;
 
 export type HullshiftHelpModelGalleryProps = Readonly<{
+  only?: readonly string[];
   className?: string;
   /** Overrides the system setting. Help previews remain static either way. */
   reducedMotion?: boolean;
@@ -114,8 +115,10 @@ export type HullshiftHelpModelGalleryProps = Readonly<{
 export function HullshiftHelpModelGallery({
   className,
   reducedMotion,
+  only,
 }: HullshiftHelpModelGalleryProps) {
   const headingId = useId();
+  const entries = HULLSHIFT_HELP_MODEL_ENTRIES.filter((entry) => only === undefined || only.includes(entry.key));
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const viewportRefs = useRef(new Map<HullshiftHelpModelKey, HTMLDivElement>());
@@ -299,11 +302,11 @@ export function HullshiftHelpModelGallery({
     >
       <header className="nt-section-header">
         <h2 className="nt-section-heading" id={headingId}>Board machinery</h2>
-        <span className="nt-section-count">{HULLSHIFT_HELP_MODEL_ENTRIES.length}</span>
+        <span className="nt-section-count">{entries.length}</span>
       </header>
       <p className="nt-help hullshift-help-model-gallery__intro">
-        These are the same code-native 3D models used on the board. State pairs
-        show the physical change that follows a rule.
+        Match each shape to the machinery on your deck. The paired views show
+        how it changes when you use it.
       </p>
       {gpuMessage === null ? null : (
         <div
@@ -323,7 +326,7 @@ export function HullshiftHelpModelGallery({
           ref={canvasRef}
         />
         <div className="hullshift-help-model-gallery__grid">
-          {HULLSHIFT_HELP_MODEL_ENTRIES.map((entry) => {
+          {entries.map((entry) => {
             const labelId = `${headingId}-${entry.key}`;
             return (
               <article

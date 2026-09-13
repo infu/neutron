@@ -30,10 +30,12 @@ import type {
 } from "./worker_protocol.ts";
 import type { GenerationProgress } from "./generator.ts";
 import { isMeaningfulDecisionTransition } from "./solver.ts";
-import { encodeShareCode } from "./share_code.ts";
+import { encodeShareCode, GENERATOR_VERSION, type GeneratorVersion } from "./share_code.ts";
 import { parseCanonicalSeed } from "./prng.ts";
 import { mechanicReferencesForLevel } from "./mechanic_reference.ts";
 import { createSolverHint, type HintResponse, type HintTier } from "./hints.ts";
+import { createCargoHint } from "./cargo_hints.ts";
+import { createFreightHint } from "./freight_hints.ts";
 import { evaluateDifficulty } from "./difficulty.ts";
 import {
   getTrainingDefinition,
@@ -113,6 +115,7 @@ export type ResidentSave = {
 };
 
 export type GenerationJob = {
+  generatorVersion?: GeneratorVersion;
   id: string;
   ownerTileId: string;
   seed: string;
@@ -256,6 +259,7 @@ export class HullshiftResident {
     expectedServiceRevision: number,
     seed: string,
     difficulty: number,
+    generatorVersion: GeneratorVersion = GENERATOR_VERSION,
   ): Promise<ResidentResult> {
     assertTileId(tileId);
     parseCanonicalSeed(seed);
@@ -268,6 +272,7 @@ export class HullshiftResident {
       throw new Error("Another Hullshift generation job is already active");
     }
     const job: GenerationJob = {
+      generatorVersion,
       id: randomIdentifier("gen"),
       ownerTileId: tileId,
       seed,
@@ -435,7 +440,7 @@ export class HullshiftResident {
     run = requireRun(this.#save, runId);
     const lateConflict = runConflict(run, expectedRevision);
     if (lateConflict !== null) return this.#conflict(tileId, lateConflict);
-    const transition = resolveDirectionalAction(run.level, run.snapshot, direction, { winningStateKeys });
+    const transition = resolveDirectionalAction(run.level, run.snapshot, direction, winningStateKeys ? { winningStateKeys } : {});
     if (!transition.accepted) {
       return {
         ok: true,
@@ -574,13 +579,18 @@ export class HullshiftResident {
     let run = requireRun(this.#save, runId);
     const conflict = runConflict(run, expectedRevision);
     if (conflict !== null) return this.#conflict(tileId, conflict);
-    const winningStateKeys = await this.#winningSet(run);
-    const hint = await createSolverHint(
-      run.level,
-      run.snapshot,
-      { winningStateKeys },
-      tier,
-    );
+    const hint = run.level.objective === "freight"
+      ? await createFreightHint(run.level, run.snapshot, run.analysis.preferredSolution?.actions ?? [], tier, async () => {
+        const analysis = await this.#worker.analyze(run.level, undefined, { snapshot: run.snapshot, knownRoute: run.analysis.preferredSolution?.actions ?? [] });
+        return { actions: analysis.preferredSolution?.actions ?? null, complete: analysis.freight?.searchComplete ?? false, explored: analysis.stateCount };
+      })
+      : run.level.objective === "cargo"
+      ? await createCargoHint(run.level, run.snapshot, run.analysis.preferredSolution?.actions ?? [], tier, async (level) => {
+        const analysis = await this.#worker.analyze(level);
+        return { actions: analysis.preferredSolution ? [...analysis.preferredSolution.actions] : null,
+          pushes: analysis.optimalPushes, complete: analysis.cargo?.searchComplete ?? false, explored: analysis.stateCount };
+      })
+      : await createSolverHint(run.level, run.snapshot, { winningStateKeys: (await this.#winningSet(run))! }, tier);
     run = requireRun(this.#save, runId);
     const lateConflict = runConflict(run, expectedRevision);
     if (lateConflict !== null) return this.#conflict(tileId, lateConflict);
@@ -674,7 +684,7 @@ export class HullshiftResident {
           this.#save.serviceRevision += 1;
           void this.#notify();
         }
-      });
+      }, job.generatorVersion);
       if (this.#generation !== job) return;
       const run = this.#createRun(generated);
       this.#pruneForIncomingRun(job.ownerTileId, null);
@@ -692,7 +702,7 @@ export class HullshiftResident {
         job.error = null;
       } else {
         job.state = "error";
-        job.error = "The installed HullshiftBrain catalog failed exact certification. Your current mission is unchanged.";
+        job.error = "Couldn’t finish making this puzzle. Try a fresh one. Your saved game is still here.";
       }
       await this.#commit();
     }
@@ -781,7 +791,10 @@ export class HullshiftResident {
     };
   }
 
-  async #winningSet(run: SavedRun): Promise<ReadonlySet<string>> {
+  async #winningSet(run: SavedRun): Promise<ReadonlySet<string> | undefined> {
+    // Sokoban allows experimentation and ordinary dead ends, with free undo.
+    // Its solution search does not enumerate the complete winning-state graph.
+    if (run.level.objective === "cargo" || run.level.objective === "freight") return undefined;
     const cached = this.#winningSets.get(run.levelHash);
     if (cached !== undefined) return cached;
     const analysis = await this.#worker.analyze(run.level);
@@ -813,7 +826,7 @@ export class HullshiftResident {
     for (let index = checkpoint.cursor; index < cursor; index += 1) {
       const direction = run.commands[index];
       if (direction === undefined) throw new Error("Hullshift command history is corrupt");
-      const transition = resolveDirectionalAction(run.level, snapshot, direction, { winningStateKeys });
+      const transition = resolveDirectionalAction(run.level, snapshot, direction, winningStateKeys ? { winningStateKeys } : {});
       if (!transition.accepted) throw new Error("Hullshift command history no longer replays exactly");
       snapshot = transition.after;
       if (transition.pushed) pushes += 1;

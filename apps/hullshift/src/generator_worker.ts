@@ -1,11 +1,15 @@
 import { generateLevel, type GenerationProgress } from "./generator.ts";
 import { GENERATOR_VERSION } from "./share_code.ts";
 import { analyzeLevel } from "./solver.ts";
+import { cargoAnalysis, solveCargo } from "./cargo_puzzles.ts";
+import { freightAnalysis } from "./freight_puzzles.ts";
+import { solveFreight } from "./freight_solver.ts";
 import {
   MAX_WORKER_MESSAGE_BYTES,
   WORKER_PROTOCOL_VERSION,
   serializeAnalysis,
   workerMessageBytes,
+  isWorkerRequest,
   type WorkerRequest,
   type WorkerResponse,
 } from "./worker_protocol.ts";
@@ -58,7 +62,7 @@ async function run(request: Exclude<WorkerRequest, { type: "cancel" }>): Promise
   try {
     if (request.type === "generate") {
       const generated = await generateLevel(
-        { generatorVersion: GENERATOR_VERSION, seed: request.seed, difficulty: request.difficulty },
+        { generatorVersion: request.generatorVersion ?? GENERATOR_VERSION, seed: request.seed, difficulty: request.difficulty },
         hooks,
       );
       if (cancelled.has(request.jobId)) throw new WorkerCancelledError();
@@ -71,7 +75,11 @@ async function run(request: Exclude<WorkerRequest, { type: "cancel" }>): Promise
       return;
     }
 
-    const analysis = await analyzeLevel(request.level, hooks);
+    const analysis = request.level.objective === "freight"
+      ? freightAnalysis(request.level, await solveFreight(request.level, request.current?.snapshot, request.current?.knownRoute, hooks), 0, "Systems deck", request.current?.snapshot)
+      : request.level.objective === "cargo"
+      ? cargoAnalysis(request.level, await solveCargo(request.level, hooks), 0)
+      : await analyzeLevel(request.level, hooks);
     if (cancelled.has(request.jobId)) throw new WorkerCancelledError();
     respond({
       protocol: WORKER_PROTOCOL_VERSION,
@@ -95,37 +103,7 @@ async function run(request: Exclude<WorkerRequest, { type: "cancel" }>): Promise
 }
 
 function parseRequest(value: unknown): WorkerRequest | null {
-  let size = 0;
-  try {
-    size = new TextEncoder().encode(JSON.stringify(value)).byteLength;
-  } catch {
-    return null;
-  }
-  if (size > MAX_WORKER_MESSAGE_BYTES || typeof value !== "object" || value === null) return null;
-  const request = value as Partial<WorkerRequest>;
-  if (
-    request.protocol !== WORKER_PROTOCOL_VERSION ||
-    typeof request.type !== "string" ||
-    typeof request.jobId !== "string" ||
-    !/^[a-zA-Z0-9_-]{1,80}$/.test(request.jobId)
-  ) {
-    return null;
-  }
-  if (request.type === "cancel") return request as WorkerRequest;
-  if (
-    request.type === "generate" &&
-    typeof request.seed === "string" &&
-    /^[0-9a-f]{16}$/.test(request.seed) &&
-    Number.isInteger(request.difficulty) &&
-    request.difficulty! >= 0 &&
-    request.difficulty! <= 8
-  ) {
-    return request as WorkerRequest;
-  }
-  if (request.type === "analyze" && typeof request.level === "object" && request.level !== null) {
-    return request as WorkerRequest;
-  }
-  return null;
+  return isWorkerRequest(value) ? value : null;
 }
 
 function respond(response: WorkerResponse): void {

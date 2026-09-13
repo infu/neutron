@@ -188,6 +188,21 @@ export interface InteractionMetrics {
 }
 
 export interface AnalysisReport {
+  /** g6 carries a replayed route and describes the systems actually used. */
+  readonly freight?: Readonly<{
+    layout: string;
+    mechanisms: readonly import("./freight_puzzles.ts").FreightMechanism[];
+    searchComplete: boolean;
+  }>;
+  /** g5 uses solution search, never a purported exhaustive winning-state set. */
+  readonly cargo?: Readonly<{
+    layout: string;
+    boxLines: number;
+    turns: number;
+    revisits: number;
+    detours: number;
+    searchComplete: boolean;
+  }>;
   readonly solvable: boolean;
   readonly initialStateKey: string;
   readonly winningStateKeys: ReadonlySet<string>;
