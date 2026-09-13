@@ -1,0 +1,71 @@
+{
+  "status": "passed",
+  "qualification": "paired-checked-upgrade",
+  "packages": [
+    {
+      "id": "kernel",
+      "version": 363,
+      "sha256": "bbfd5490115830ba45acc63bad6c9a9c1d7258a35cb80246c0186ac31cbe886a"
+    },
+    {
+      "id": "marketplace",
+      "version": 123,
+      "sha256": "74dbfa3edf839d8c80b3ded6f77fb674041bd53001164907fe888dfb70e304e2"
+    }
+  ],
+  "predecessors": [
+    {
+      "id": "kernel",
+      "version": 362,
+      "sha256": "253f19c9d97d8d1a2138004de98a9645d79708582db2cc9fc90df891eebd87e5"
+    },
+    {
+      "id": "marketplace",
+      "version": 122,
+      "sha256": "ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42"
+    }
+  ],
+  "migrationPlan": {
+    "upgrades": [
+      {
+        "kind": "keep",
+        "owner": "kernel",
+        "memoryId": "kernel",
+        "version": 4
+      },
+      {
+        "kind": "keep",
+        "owner": "kernel",
+        "memoryId": "kernel_activation",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "kernel",
+        "memoryId": "kernel_cycle_calls",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "kernel",
+        "memoryId": "kernel_release_preferences",
+        "version": 1
+      },
+      {
+        "kind": "keep",
+        "owner": "marketplace",
+        "memoryId": "state",
+        "version": 2
+      }
+    ],
+    "removedApps": [],
+    "destructiveMemoryRoots": []
+  },
+  "retainedBetaPreferences": true,
+  "retainedMarketplaceJournalSha256": "d780e80a42f864001139308f7dcc4a153a50a32127327b3b174defdcbf5fcfb7",
+  "externalInstallModes": [
+    "install"
+  ],
+  "deploymentBefore": "bfb585207141e32e04b0c1984b19ad92",
+  "deploymentAfter": "f6eadb49c93e21c20af8e70708f091cc"
+}

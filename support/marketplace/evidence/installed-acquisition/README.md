@@ -24,7 +24,32 @@ Checked Marketplace upgrades from [112](upgrade-112.json),
 preserve identity, journals and the complete saved state, alongside clean
 initialization. Kernel qualification covers clean initialization and checked
 upgrades from 361 and 362, including saved authorization, activation, cycle
-receipts and beta preferences. Release publication evidence is being collected.
+receipts and beta preferences.
+
+The [combined upgrade](paired-upgrade.json) additionally installs the exact
+Kernel 363 and Marketplace 123 archives together over released Kernel 362 and
+Marketplace 122 in one checked transaction, preserving all five memory roots,
+the saved beta preference and a Marketplace purchase journal.
+
+[Release checks](release-checks.json) record the complete package commands,
+Marketplace's 173 tests, all nine browser suites and actual client/protocol
+integration, Kernel's 980 tests, 35 Motoko tests, owner-cycle integration and
+Certified Assets qualification, plus the exact-archive upgrade checks. The
+protocol passed 170 unit tests, 131 Motoko cases and 68 canister integration
+cases, including the actual deployed predecessor's keep upgrade.
+
+The [protocol deployment](protocol-deployment.json) preserves memory and
+settings. Its deployed Wasm matches the qualified successor, and all 57
+certified catalog records remained unchanged across deployment.
+
+Kernel **0.3.63** and Marketplace **0.1.23** were [published to beta](beta-publish.json)
+together in batch **23** through root `npm run updates:publish`. The exact same
+command and bytes produced the [verified receipt-v2 no-op](beta-repeat.json):
+`batch_id: null`, with all 28 selected packages and offered sources `unchanged`.
+[Publication verification](publication-verification.json) matches each version,
+URL, path, byte length and SHA-256 against the frozen local artifacts.
+[Certified catalog checks](catalog-verification.json) confirm the two expected
+beta successors and unchanged stable heads and other beta heads.
 
 The [browser regression results](browser-results.json) include acquiring an
 already installed paid app through the existing checkout, with exactly one
@@ -37,3 +62,11 @@ production Neutron.
 | Installed, acquisition available | [Before purchase](installed-unowned.png) |
 | Installed and owned after acquisition | [After purchase](installed-owned.png) |
 | App selection in Settings | [Selection icons](settings-selection.png) |
+
+Run the fixed pair qualification from the repository root:
+
+```sh
+NEUTRON_RUN_INSTALLED_ACQUISITION_UPGRADE=1 \
+NEUTRON_POCKETIC_BIN="$PWD/.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic" \
+bun test ./support/marketplace/evidence/installed-acquisition/paired-upgrade.test.ts
+```

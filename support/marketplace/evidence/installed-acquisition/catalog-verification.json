@@ -1,0 +1,12 @@
+{
+  "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "capturedAt": "2026-09-13T22:58:51.579Z",
+  "verification": "Official request-bound certified HTTP v2, artifact grants disabled",
+  "verifiedRecords": 57,
+  "changedBetaAppIds": [
+    "kernel",
+    "marketplace"
+  ],
+  "allStableHeadsUnchanged": true,
+  "otherBetaHeadsUnchanged": true
+}

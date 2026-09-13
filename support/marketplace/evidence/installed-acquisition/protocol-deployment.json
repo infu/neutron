@@ -1,0 +1,12 @@
+{
+  "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "deployedAt": "2026-09-13T22:53:28.806472+00:00",
+  "previousModuleSha256": "4cb57655e1131670d1eafaa522b13d74b9a59081708764f5680f753a1f4aa477",
+  "moduleSha256": "757493f6d7c412df13af148095af00994c9d60c627d2ff72c516b484b3003ae9",
+  "mode": "upgrade",
+  "wasmMemoryPersistence": "keep",
+  "settingsUnchanged": true,
+  "certifiedRecordsUnchanged": 57,
+  "qualifiedPredecessorMatchesDeployed": true,
+  "sourceCommit": "e432263d77da49ba0d25c0b28b42586ee903192a"
+}

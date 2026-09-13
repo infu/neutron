@@ -1,0 +1,14 @@
+{
+  "verifiedAt": "2026-09-13T23:02:35.433399+00:00",
+  "status": "passed",
+  "batchId": "23",
+  "changedAppIds": [
+    "kernel",
+    "marketplace"
+  ],
+  "packageCount": 28,
+  "sourceCount": 28,
+  "frozenBytesUnchanged": true,
+  "repeatBatchId": null,
+  "allRepeatedPackagesAndSourcesUnchanged": true
+}

@@ -1,0 +1,191 @@
+{
+  "qualifiedAt": "2026-09-13T22:51:12.854149+00:00",
+  "implementationCommit": "e432263d77da49ba0d25c0b28b42586ee903192a",
+  "status": "passed",
+  "checks": [
+    {
+      "command": "npm --workspace neutron-kernel run package",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/kernel-package-accent.log",
+      "logSha256": "cc37122658c5c06df4c57b301f280735d031798931bfb8c69a1241d1d4e0d031"
+    },
+    {
+      "command": "npm --workspace neutron-marketplace run package",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/marketplace-package.log",
+      "logSha256": "3617860f1d6c9f23926dc8f02aa984d98eff0b377576d1bb6a12a718213e89af"
+    },
+    {
+      "command": "bun test (apps/kernel)",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/kernel-test-accent.log",
+      "logSha256": "0efc8e48fb271d3cbd4242f5013de924fb4368d860bcf3403705138855d6c1cc"
+    },
+    {
+      "command": "npm --workspace neutron-kernel test",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/kernel-test-final.log",
+      "logSha256": "e4d150e76db4d2723ccaa4c17a3ba9d0da7bb8842b596f0539758dac5c4ceda3"
+    },
+    {
+      "command": "NEUTRON_RUN_RELEASE_PREFERENCES_POCKETIC=1 bun test ./apps/kernel/test/release_preferences_upgrade.pocketic.test.ts",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/kernel-upgrade-accent.log",
+      "logSha256": "d45d251ac4ac258fc9d988890122b60db7cdfd3e9031813df31d605cd03a947f"
+    },
+    {
+      "command": "NEUTRON_RUN_MARKETPLACE_DISCOUNT_UPGRADE=1 bun test ./apps/marketplace/test/discount_upgrade.pocketic.test.ts",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/marketplace-upgrade-final.log",
+      "logSha256": "154dac70d130a01d2864f6213f62d091a8172cd3b56509f6c8c786fff19e1281"
+    },
+    {
+      "command": "npm --workspace neutron-marketplace test",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/marketplace-test.log",
+      "logSha256": "84d34c94d57a6c84cfdd23d9ab4d3b4b402c4bdf09a2d8c9d7467912f9a5bd25"
+    },
+    {
+      "command": "npm --workspace neutron-marketplace run test:browser",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/marketplace-browser-all.log",
+      "logSha256": "7f524372771035256338a31cf3cd9279684d75126ebc411cc04e124ee24d9622"
+    },
+    {
+      "command": "npm --workspace neutron-marketplace run test:protocol",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/marketplace-protocol-test.log",
+      "logSha256": "bb334463cc516347fa02a3c6a2a933856981d2ff7d511907704f20aaf922fded"
+    },
+    {
+      "command": "npm --workspace neutron-kernel run certified-assets:qualify",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/kernel-qualification.log",
+      "logSha256": "aa3b37b8aa269dee6f6a08770d26a8dc5b50c9eb3c4576ab56cdbafe02f896e4"
+    },
+    {
+      "command": "npm --workspace neutron-marketplace-protocol run test:unit -- --timeout 30000",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/protocol-unit-qualified.log",
+      "logSha256": "32a872376a76bebdbaca8b5571e1af850cb628a3181d0036e78937aa3386aaed"
+    },
+    {
+      "command": "npm --workspace neutron-marketplace-protocol run test:ash",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/protocol-ash-final.log",
+      "logSha256": "368a5babee8e62b6df2606610c58ca12a6c110944c9daf41d57d725c9cc5f397"
+    },
+    {
+      "command": "npm --workspace neutron-marketplace run typecheck",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/typecheck.log",
+      "logSha256": "a144807c7a0915f1677d58c9ba6b58aac5e0e4fa35deca5d230994644f76e353"
+    },
+    {
+      "command": "MARKETPLACE_STOREFRONT_PREVIOUS_WASM=<exact deployed predecessor> npm --workspace neutron-marketplace-protocol run test:integration",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/protocol-integration-final.log",
+      "logSha256": "5158a0a49c3df3730391f1a1e1ffdc468d1b39e189f3beb10a1f91e6fd1c6f38"
+    },
+    {
+      "command": "NEUTRON_RUN_INSTALLED_ACQUISITION_UPGRADE=1 NEUTRON_POCKETIC_BIN=<pinned PocketIC> bun test ./support/marketplace/evidence/installed-acquisition/paired-upgrade.test.ts",
+      "status": "passed",
+      "log": "tmp/marketplace-ownership-fix/paired-upgrade-evidence-final.log",
+      "logSha256": "86c012a650e692f54daedbeea8a71177ef96ba5e4818cfcefa0d80e6a604e6a7"
+    }
+  ],
+  "protocolIntegration": {
+    "passed": 68,
+    "failed": 0,
+    "scopes": {
+      "upgrade": 23,
+      "protocol": 25,
+      "http": 7,
+      "fixture": 13
+    }
+  },
+  "protocolUnitTimeoutNote": "The unchanged media journal tests exceeded Bun\u2019s default five-second timeout in two earlier runs. The full 170-test suite passed with --timeout 30000; assertions and runtime behavior were unchanged.",
+  "kernelMotokoTests": 35,
+  "pairedUpgrade": {
+    "status": "passed",
+    "qualification": "paired-checked-upgrade",
+    "packages": [
+      {
+        "id": "kernel",
+        "version": 363,
+        "sha256": "bbfd5490115830ba45acc63bad6c9a9c1d7258a35cb80246c0186ac31cbe886a"
+      },
+      {
+        "id": "marketplace",
+        "version": 123,
+        "sha256": "74dbfa3edf839d8c80b3ded6f77fb674041bd53001164907fe888dfb70e304e2"
+      }
+    ],
+    "predecessors": [
+      {
+        "id": "kernel",
+        "version": 362,
+        "sha256": "253f19c9d97d8d1a2138004de98a9645d79708582db2cc9fc90df891eebd87e5"
+      },
+      {
+        "id": "marketplace",
+        "version": 122,
+        "sha256": "ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42"
+      }
+    ],
+    "migrationPlan": {
+      "upgrades": [
+        {
+          "kind": "keep",
+          "owner": "kernel",
+          "memoryId": "kernel",
+          "version": 4
+        },
+        {
+          "kind": "keep",
+          "owner": "kernel",
+          "memoryId": "kernel_activation",
+          "version": 1
+        },
+        {
+          "kind": "keep",
+          "owner": "kernel",
+          "memoryId": "kernel_cycle_calls",
+          "version": 1
+        },
+        {
+          "kind": "keep",
+          "owner": "kernel",
+          "memoryId": "kernel_release_preferences",
+          "version": 1
+        },
+        {
+          "kind": "keep",
+          "owner": "marketplace",
+          "memoryId": "state",
+          "version": 2
+        }
+      ],
+      "removedApps": [],
+      "destructiveMemoryRoots": []
+    },
+    "retainedBetaPreferences": true,
+    "retainedMarketplaceJournalSha256": "d780e80a42f864001139308f7dcc4a153a50a32127327b3b174defdcbf5fcfb7",
+    "externalInstallModes": [
+      "install"
+    ],
+    "deploymentBefore": "bfb585207141e32e04b0c1984b19ad92",
+    "deploymentAfter": "f6eadb49c93e21c20af8e70708f091cc"
+  },
+  "publication": {
+    "batchId": "23",
+    "repeatBatchId": null,
+    "verifiedPackages": 28,
+    "verifiedOfferedSources": 28,
+    "changedAppIds": [
+      "kernel",
+      "marketplace"
+    ],
+    "retryNote": "One certificate-verifier runtime error was reconciled by retrying the same root publication command, bytes and publication identity. Strict verification remained enabled."
+  }
+}
