@@ -7,9 +7,9 @@ import { readIdentity, readState, configureState, readDiscountCode, saveDiscount
 import { createDiscountPreferences, type ReferralQuote } from "./discount.ts";
 import { makeAgent, makeTransport } from "./transport.ts";
 import { readAccess } from "./read_access.ts";
-import { CONTRACT, first, some, encodeOpaque, checkoutType, channelCheckoutType, withdrawalType, type Info, type WireApp, type WirePublisherProfile, type Fee, type Checkout, type WithdrawQuote, type WireResult, type Option, type Token, type WireCandidate, type WireChannelApp, type WireChannelMode, type WireRatingSummary, type WireVersionComment, type ChannelCheckout, type ChannelPurchaseResult, type WireReleaseSelection } from "./protocol.ts";
+import { CONTRACT, first, some, encodeOpaque, checkoutType, channelCheckoutType, withdrawalType, type Info, type WireApp, type WirePublisherProfile, type Fee, type Checkout, type WithdrawQuote, type WireResult, type Option, type Token, type WireCandidate, type WireChannelApp, type WireChannelMode, type WireRatingSummary, type WireVersionComment, type ChannelCheckout, type ChannelPurchaseResult, type WireReleaseSelection, type WireStorefrontApp } from "./protocol.ts";
 import { readWalletTokenInfo, type WalletTokenInfo } from "./wallet.ts";
-import type { AppDetail, AppListing, Page, LibraryApp, PublishedApp, PublisherProfile, PublisherProfileInput, PublisherProfileQuote, Earnings, Session, Money, CycleEstimate, OperationResult, PurchaseQuote, WithdrawalQuote, PaymentToken, AppTier, RankingWindow, ReleaseIdentity, ReleaseSelection, ReleaseSelectionPackage, PurchaseSelection, VersionComment } from "./view-types.ts";
+import type { AppDetail, AppListing, Page, LibraryApp, PublishedApp, PublisherProfile, PublisherProfileInput, PublisherProfileQuote, Earnings, Session, Money, CycleEstimate, OperationResult, PurchaseQuote, WithdrawalQuote, PaymentToken, CatalogInput, StorefrontSelection, ReleaseIdentity, ReleaseSelection, ReleaseSelectionPackage, PurchaseSelection, VersionComment } from "./view-types.ts";
 import { readReleasePreferences, assertReleasePreferences, assertReleasePreferencesUnchanged, parseReleasePreferences, type ReleasePreferences } from "./release_preferences.ts";
 
 export class ProtocolError extends Error { constructor(public readonly code: string, message: string) { super(message); } }
@@ -230,6 +230,11 @@ export async function protocolClient(context: MsgBusToolContext) {
     const selection = selected && mode ? selectionView(mode, [{ appId: value.app.appId, candidateId: selected.id, version: selected.version, digest: selected.digest, sourceDigest: selected.sourceDigest, channel: mode, revision: "beta" in mode ? value.betaHead.revision : value.stableHead.revision }]).packages[0] : undefined;
     return { ...listing(value.app, installed), version: selected ? String(selected.version) : "", ...(mode ? { channel: "beta" in mode ? "beta" as const : "stable" as const } : {}), ...(selection ? { releaseSelection: selection } : {}), ...(preferences ? { releasePreferences: preferences } : {}) };
   }
+  function storefrontListing(value: WireStorefrontApp, installed: ReadonlySet<string> | null, preferences: ReleasePreferences): AppListing {
+    const cover = first(value.presentation.coverUrl);
+    return { ...channelListing(value.release, installed, preferences), headline: value.presentation.title, subtitle: value.presentation.subtitle,
+      tags: value.presentation.tags, category: value.presentation.tags.map(tag => tag.name).join(" · ") || "Apps", ...(cover ? { coverUrl: artifactUrl(cover) } : {}) };
+  }
   async function purchaseSelection(appIds: string[], supplied?: PurchaseSelection) {
     const releasePreferences = await readReleasePreferences(context);
     let packages: WireReleaseSelection[] = [];
@@ -396,11 +401,22 @@ export async function protocolClient(context: MsgBusToolContext) {
     discount: () => preference.discount(discountAccess),
     setDiscountCode: (code: string) => preference.set(discountAccess, code),
     purchaseCode: (explicit: string | undefined) => preference.purchaseCode(discountAccess, explicit), estimateUpdate, grantSourceAccess, listing, detailWire, detail, purchaseView, withdrawalView,
-    async catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>> {
+    async storefront(input: StorefrontSelection) {
+      const preferences = await readReleasePreferences(context);
+      const [home, installed] = await Promise.all([
+        query<{ config: { tags: { id: string; name: string }[] }; featured: WireStorefrontApp[] }>("storefront_query", [{ search: input.search, tag: some(input.tag), mode: releaseMode(preferences) }]),
+        installedApps(context),
+      ]);
+      await assertReleasePreferences(context, preferences);
+      return { tags: home.config.tags, featured: home.featured.map(app => storefrontListing(app, installed, preferences)) };
+    },
+    async catalog(input: CatalogInput): Promise<Page<AppListing>> {
       const preferences = await readReleasePreferences(context);
       const parsed = consumerCursor<{ generation: string; offset: string }>(input.cursor, preferences);
+      const curated = input.exclude !== undefined || input.tag !== undefined;
+      const request = { search: input.search, tier: { [input.tier]: null }, window: { [input.window]: null }, cursor: parsed ? [{ generation: BigInt(parsed.generation), offset: BigInt(parsed.offset) }] : [], limit: 24n };
       const [value, installed] = await Promise.all([
-        query<{ apps: WireChannelApp[]; nextCursor: Option<{ generation: bigint; offset: bigint }>; asOfNs: bigint; refreshing: boolean }>("catalog_query_v2", [{ request: { search: input.search, tier: { [input.tier]: null }, window: { [input.window]: null }, cursor: parsed ? [{ generation: BigInt(parsed.generation), offset: BigInt(parsed.offset) }] : [], limit: 24n }, mode: releaseMode(preferences) }]),
+        query<{ apps: (WireChannelApp | WireStorefrontApp)[]; nextCursor: Option<{ generation: bigint; offset: bigint }>; asOfNs: bigint; refreshing: boolean }>(curated ? "storefront_browse" : "catalog_query_v2", [{ request, mode: releaseMode(preferences), ...(curated ? { tag: some(input.tag), exclude: input.exclude ?? [] } : {}) }]),
         installedApps(context),
       ]);
       await assertReleasePreferences(context, preferences);
@@ -408,7 +424,7 @@ export async function protocolClient(context: MsgBusToolContext) {
       const warning = [value.refreshing ? "Rankings are refreshing. These results share the displayed snapshot time." : "", installed === null ? "Installed-app status is unavailable." : ""].filter(Boolean).join(" ");
       // System packages stay available to the installer and update source, but
       // do not occupy the storefront or its discovery-tool results.
-      return { items: value.apps.filter(value => value.app.appId !== "kernel" && value.app.appId !== "marketplace").map(app => channelListing(app, installed, preferences)), nextCursor: nextConsumerCursor(next ? { generation: String(next.generation), offset: String(next.offset) } : null, preferences), asOf: date(value.asOfNs), ...(warning ? { warning } : {}) };
+      return { items: value.apps.map(app => "presentation" in app ? storefrontListing(app, installed, preferences) : channelListing(app, installed, preferences)).filter(app => app.id !== "kernel" && app.id !== "marketplace"), nextCursor: nextConsumerCursor(next ? { generation: String(next.generation), offset: String(next.offset) } : null, preferences), asOf: date(value.asOfNs), ...(warning ? { warning } : {}) };
     },
     async library(cursor?: string): Promise<Page<LibraryApp>> {
       const preferences = await readReleasePreferences(context), after = consumerCursor<string>(cursor, preferences);

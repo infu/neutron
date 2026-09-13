@@ -40,7 +40,7 @@
   .mp-discount-indicator { position: absolute; right: -2px; bottom: -2px; border-radius: 50%; background: #9ce0b7; color: #102719; display: grid; place-items: center; border: 2px solid var(--nt-bg); }
   .mp-discount-indicator .mp-icon { width: 10px; height: 10px; }
   .mp-body { padding: 20px; overflow: auto; flex: 1; min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; }
-  .mp-stack, .mp-explore { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .mp-stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
   .mp-muted { color: var(--mp-muted); font-size: 12px; }
   .mp-positive { color: var(--nt-success); }
   .mp-eyebrow { color: var(--nt-accent); font-size: 9px; letter-spacing: .13em; line-height: 1.5; font-weight: 700; }
@@ -55,14 +55,7 @@
   .mp-setup-error { align-items: center; justify-content: space-between; }
   .mp-setup-error > div { flex: 1; min-width: 160px; }
   .mp-setup-error p { margin-top: 4px; }
-  .mp-chart-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .mp-chart-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: 1; }
-  .mp-chart-actions .mp-discount-link { font-size: 11px !important; white-space: nowrap; }
-  .mp-discount-link.is-active { color: #ace0c4; }
-  .mp-chart-controls select { min-width: 90px; background: transparent; border-color: var(--mp-line); font-size: 12px; padding-block: 6px; }
   .mp-app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; }
-  .mp-app-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--mp-line); border-radius: var(--mp-radius); padding: 14px; background: linear-gradient(145deg, #181a23, #101218); color: inherit; text-align: left; min-width: 0; width: 100%; transition: border-color 140ms, background 140ms; }
-  .mp-app-card:hover { border-color: #514767; background: linear-gradient(145deg, #1c1e29, #15171e); }
   .mp-card-open { border: 0; padding: 0; background: none; color: inherit; text-align: left; min-width: 0; }
   .mp-card-open::after { content: ""; position: absolute; inset: 0; border-radius: var(--mp-radius); }
   .mp-card-open:focus-visible { outline: none !important; }
@@ -70,20 +63,10 @@
   .mp-publisher-link { align-self: flex-start; color: var(--nt-accent); background: none; border: 0; padding: 1px 0; font-size: 11px !important; line-height: 1.6; text-align: left; }
   .mp-publisher-link:hover { text-decoration: underline; }
   .mp-app-card .mp-publisher-link { position: relative; z-index: 1; }
-  .mp-card-main { display: flex; gap: 10px; align-items: flex-start; width: 100%; }
   .mp-app-icon { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 23px; font-weight: 600; box-shadow: inset 0 0 0 1px #ffffff0b; overflow: hidden; }
   .mp-app-icon img { object-fit: cover; width: 100%; height: 100%; }
   .mp-app-icon-large { width: 76px; height: 76px; flex-basis: 76px; border-radius: 18px; font-size: 34px; }
-  .mp-card-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .mp-card-copy strong { display: block; color: var(--nt-text-strong); font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mp-card-category { color: var(--mp-muted); font-size: 11px; }
-  .mp-card-summary { font-size: 11px; color: #acb1be; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .mp-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 13px; margin-top: auto; width: 100%; }
-  .mp-card-metrics { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   .mp-acquisitions { color: var(--mp-muted); font-size: 11px; overflow-wrap: anywhere; }
-  .mp-rating { color: var(--mp-muted); font-size: 11px; }
-  .mp-rating small { color: #687080; font-size: 10px; }
-  .mp-card-price { border-radius: 20px; color: var(--nt-accent); background: #2c263c; padding: 5px 13px; min-width: 62px; font-size: 12px; font-weight: 600; white-space: nowrap; text-align: center; }
   .mp-get-button { border: 0; border-radius: 20px; color: var(--nt-accent); background: #2c263c; padding: 5px 13px; min-width: 62px; font-size: 12px !important; font-weight: 600 !important; white-space: nowrap; }
   .mp-get-button:hover { background: #392f50; }
   .mp-price { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.4; }
@@ -92,7 +75,6 @@
   .mp-detail-stats .mp-price { font-size: inherit; }
   .mp-detail-stats .mp-price > span { font-size: inherit; color: inherit; }
   .mp-detail-stats .mp-price.is-discounted > span { color: #b8e7c9; }
-  .mp-chart-footnote { color: #687080; font-size: 10px; text-align: center; }
   .mp-card-skeleton { height: 132px; border: 1px solid var(--mp-line); border-radius: var(--mp-radius); padding: 18px; display: flex; gap: 12px; background: var(--mp-paper); }
   .mp-card-skeleton > span { width: 48px; height: 48px; border-radius: 10px; background: #242632; }
   .mp-card-skeleton > div { flex: 1; }
@@ -299,7 +281,7 @@
     .mp-navigation { padding-inline: 14px; gap: 0; justify-content: space-between; }
     .mp-nav-item { padding-block: 11px; font-size: 11px !important; gap: 5px; }
     .mp-body { padding: 14px; }
-    .mp-explore, .mp-stack { gap: 16px; }
+    .mp-stack { gap: 16px; }
     .mp-library-row { gap: 8px; }
     .mp-library-app { gap: 9px; }
     .mp-library-app .mp-app-icon { width: 40px; height: 40px; flex-basis: 40px; border-radius: 10px; }

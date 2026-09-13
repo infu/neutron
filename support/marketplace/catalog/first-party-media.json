@@ -6,28 +6,32 @@
       "icon": "media/aave/icon.svg",
       "screenshots": [
         "media/aave/overview.png",
-        "media/aave/compact.png"
+        "media/aave/compact.png",
+        "media/aave/cover.webp"
       ]
     },
     {
       "appId": "agent",
       "icon": "media/agent/icon.svg",
       "screenshots": [
-        "media/agent/overview.png"
+        "media/agent/overview.png",
+        "media/agent/cover.webp"
       ]
     },
     {
       "appId": "chess",
       "icon": "media/chess/icon.svg",
       "screenshots": [
-        "media/chess/overview.png"
+        "media/chess/overview.png",
+        "media/chess/cover.webp"
       ]
     },
     {
       "appId": "contacts",
       "icon": "media/contacts/icon.svg",
       "screenshots": [
-        "media/contacts/overview.png"
+        "media/contacts/overview.png",
+        "media/contacts/cover.webp"
       ]
     },
     {
@@ -50,7 +54,8 @@
       "appId": "files",
       "icon": "media/files/icon.svg",
       "screenshots": [
-        "media/files/overview.png"
+        "media/files/overview.png",
+        "media/files/cover.webp"
       ]
     },
     {
@@ -72,7 +77,8 @@
       "icon": "media/hullshift/icon.svg",
       "screenshots": [
         "media/hullshift/overview.png",
-        "media/hullshift/entry.png"
+        "media/hullshift/entry.png",
+        "media/hullshift/cover.webp"
       ]
     },
     {
@@ -97,7 +103,8 @@
       "icon": "media/jetcreeper/icon.svg",
       "screenshots": [
         "media/jetcreeper/overview.png",
-        "media/jetcreeper/entry.png"
+        "media/jetcreeper/entry.png",
+        "media/jetcreeper/cover.webp"
       ]
     },
     {
@@ -112,7 +119,8 @@
       "appId": "mail",
       "icon": "media/mail/icon.svg",
       "screenshots": [
-        "media/mail/overview.png"
+        "media/mail/overview.png",
+        "media/mail/cover.webp"
       ]
     },
     {
@@ -174,7 +182,8 @@
       "appId": "wagyu",
       "icon": "media/wagyu/icon.png",
       "screenshots": [
-        "media/wagyu/overview.png"
+        "media/wagyu/overview.png",
+        "media/wagyu/cover.webp"
       ]
     },
     {
@@ -182,7 +191,8 @@
       "icon": "media/wallet/icon.svg",
       "screenshots": [
         "media/wallet/overview.png",
-        "media/wallet/compact.png"
+        "media/wallet/compact.png",
+        "media/wallet/cover.webp"
       ]
     }
   ]

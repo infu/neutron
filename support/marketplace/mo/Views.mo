@@ -16,7 +16,7 @@ import Text "mo:core/Text";
 
 module {
   func failure<T>(code : Text, message : Text) : API.Result<T> { #err({ code; message }) };
-  func imageUrl(db : Store.DB, source : Principal, artifactId : Nat64) : ?Text {
+  public func imageUrl(db : Store.DB, source : Principal, artifactId : Nat64) : ?Text {
     let ?artifact = Store.getArtifact(db, artifactId) else return null;
     if (not Text.startsWith(artifact.mediaType, #text "image/")) return null;
     ?("https://" # Principal.toText(source) # ".icp0.io" # Access.artifactPath(artifact, #image));
@@ -94,7 +94,7 @@ module {
     };
   };
 
-  func matches(record : API.App, needle : Text) : Bool {
+  public func matches(record : API.App, needle : Text) : Bool {
     needle == "" or Text.contains(Text.toLower(record.appId), #text needle) or
       Text.contains(Text.toLower(record.title), #text needle) or Text.contains(Text.toLower(record.summary), #text needle);
   };
@@ -107,8 +107,14 @@ module {
   };
 
   public func catalogFor(db : Store.DB, source : Principal, owner : ?Principal, request : API.CatalogRequest, now : Int, mode : API.ChannelMode) : API.Result<API.ChannelCatalogPage> {
-    if (request.limit == 0) return failure("invalid_page", "Choose a positive catalog page size.");
     let needle = Text.toLower(Text.trim(request.search, #predicate(func(c : Char) : Bool { c == ' ' or c == '\t' or c == '\n' or c == '\r' })));
+    catalogMatching(db, source, owner, request, now, mode, func(record) { matches(record, needle) });
+  };
+
+  // Storefront filters traverse the same coherent ranking snapshot as legacy
+  // catalog reads, advancing the cursor over filtered and ineligible entries.
+  public func catalogMatching(db : Store.DB, source : Principal, owner : ?Principal, request : API.CatalogRequest, now : Int, mode : API.ChannelMode, accept : API.App -> Bool) : API.Result<API.ChannelCatalogPage> {
+    if (request.limit == 0) return failure("invalid_page", "Choose a positive catalog page size.");
     let results = List.empty<API.ChannelApp>();
     var cursor = request.cursor;
     var generation : Nat64 = 0;
@@ -127,7 +133,7 @@ module {
         switch (Store.getApp(db, entry.appId)) {
           case (?record) {
             let projection = channelApp(db, source, owner, record, mode);
-            if (matches(projection.app, needle)) List.add(results, projection);
+            if (accept(projection.app)) List.add(results, projection);
           };
           case null {};
         };

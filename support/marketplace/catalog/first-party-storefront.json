@@ -1,0 +1,264 @@
+{
+  "format": 1,
+  "tags": [
+    {
+      "id": "games",
+      "name": "Games"
+    },
+    {
+      "id": "arcade",
+      "name": "Arcade"
+    },
+    {
+      "id": "crypto",
+      "name": "Crypto"
+    },
+    {
+      "id": "defi",
+      "name": "DeFi"
+    },
+    {
+      "id": "preppers",
+      "name": "Preppers"
+    },
+    {
+      "id": "social",
+      "name": "Social"
+    },
+    {
+      "id": "productivity",
+      "name": "Productivity"
+    },
+    {
+      "id": "tools",
+      "name": "Developer tools"
+    }
+  ],
+  "featured": [
+    "jetcreeper",
+    "hullshift"
+  ],
+  "apps": [
+    {
+      "appId": "jetcreeper",
+      "title": "Fly fast. Light up the caves.",
+      "subtitle": "Dodge, dash, and take on the next wave.",
+      "tags": [
+        "games",
+        "arcade"
+      ],
+      "cover": "media/jetcreeper/cover.webp"
+    },
+    {
+      "appId": "hullshift",
+      "title": "A way out. One move at a time.",
+      "subtitle": "Reroute the power. Find your way home.",
+      "tags": [
+        "games"
+      ],
+      "cover": "media/hullshift/cover.webp"
+    },
+    {
+      "appId": "aave",
+      "title": "Make room for your next move.",
+      "subtitle": "Explore lending and borrowing on Aave.",
+      "tags": [
+        "crypto",
+        "defi"
+      ],
+      "cover": "media/aave/cover.webp"
+    },
+    {
+      "appId": "agent",
+      "title": "Big ideas. A little assistance.",
+      "subtitle": "Put your apps to work with your own AI agent.",
+      "tags": [
+        "productivity"
+      ],
+      "cover": "media/agent/cover.webp"
+    },
+    {
+      "appId": "chess",
+      "title": "Your next move starts here.",
+      "subtitle": "Settle in for a game of strategy.",
+      "tags": [
+        "games"
+      ],
+      "cover": "media/chess/cover.webp"
+    },
+    {
+      "appId": "wallet",
+      "title": "Your tokens, close at hand.",
+      "subtitle": "Manage assets and payments from your Neutron.",
+      "tags": [
+        "crypto"
+      ],
+      "cover": "media/wallet/cover.webp"
+    },
+    {
+      "appId": "contacts",
+      "title": "Keep your people close.",
+      "subtitle": "One address book for people and destinations.",
+      "tags": [
+        "productivity",
+        "social"
+      ],
+      "cover": "media/contacts/cover.webp"
+    },
+    {
+      "appId": "mail",
+      "title": "A more personal inbox.",
+      "subtitle": "Encrypted messages, from Neutron to Neutron.",
+      "tags": [
+        "social",
+        "productivity"
+      ],
+      "cover": "media/mail/cover.webp"
+    },
+    {
+      "appId": "files",
+      "title": "A place for everything.",
+      "subtitle": "Organize your workspace, vault, and shared files.",
+      "tags": [
+        "productivity",
+        "preppers"
+      ],
+      "cover": "media/files/cover.webp"
+    },
+    {
+      "appId": "wagyu",
+      "title": "Your voice. Your own space.",
+      "subtitle": "Share, follow, and connect across Neutrons.",
+      "tags": [
+        "social"
+      ],
+      "cover": "media/wagyu/cover.webp"
+    },
+    {
+      "appId": "evm_wallet",
+      "title": "A wallet for your wider world.",
+      "subtitle": "Explore your assets across EVM networks.",
+      "tags": [
+        "crypto"
+      ]
+    },
+    {
+      "appId": "uniswap",
+      "title": "Find your next swap.",
+      "subtitle": "Trade tokens through Uniswap.",
+      "tags": [
+        "crypto",
+        "defi"
+      ]
+    },
+    {
+      "appId": "curve",
+      "title": "Go with the flow.",
+      "subtitle": "Explore Curve pools and token swaps.",
+      "tags": [
+        "crypto",
+        "defi"
+      ]
+    },
+    {
+      "appId": "hyperliquid",
+      "title": "Markets at your fingertips.",
+      "subtitle": "Follow and trade on Hyperliquid.",
+      "tags": [
+        "crypto",
+        "defi"
+      ]
+    },
+    {
+      "appId": "icpswap",
+      "title": "Your gateway to IC markets.",
+      "subtitle": "Explore tokens, swaps, and liquidity on ICPSwap.",
+      "tags": [
+        "crypto",
+        "defi"
+      ]
+    },
+    {
+      "appId": "openchat",
+      "title": "A place to catch up.",
+      "subtitle": "Bring your OpenChat conversations into view.",
+      "tags": [
+        "social"
+      ]
+    },
+    {
+      "appId": "taggr",
+      "title": "Join the conversation.",
+      "subtitle": "Read and share across the TAGGR community.",
+      "tags": [
+        "social"
+      ]
+    },
+    {
+      "appId": "nuance",
+      "title": "Stories worth your time.",
+      "subtitle": "Discover independent writing on Nuance.",
+      "tags": [
+        "social"
+      ]
+    },
+    {
+      "appId": "snsgov",
+      "title": "Have a say in what comes next.",
+      "subtitle": "Explore and participate in SNS governance.",
+      "tags": [
+        "crypto"
+      ]
+    },
+    {
+      "appId": "spreadsheet",
+      "title": "Bring your numbers together.",
+      "subtitle": "Organize ideas and data in a familiar grid.",
+      "tags": [
+        "productivity"
+      ]
+    },
+    {
+      "appId": "gemma",
+      "title": "A little intelligence, all yours.",
+      "subtitle": "Chat with a local model on your own device.",
+      "tags": [
+        "productivity",
+        "preppers"
+      ]
+    },
+    {
+      "appId": "kitchensink",
+      "title": "Build something of your own.",
+      "subtitle": "Explore the possibilities of Neutron apps.",
+      "tags": [
+        "tools"
+      ]
+    },
+    {
+      "appId": "mysubnet",
+      "title": "See where your Neutron lives.",
+      "subtitle": "Explore the network behind your workspace.",
+      "tags": [
+        "crypto",
+        "tools"
+      ]
+    },
+    {
+      "appId": "hello",
+      "title": "Start with a simple hello.",
+      "subtitle": "Meet the basics of a Neutron app.",
+      "tags": [
+        "tools"
+      ]
+    },
+    {
+      "appId": "blast",
+      "title": "A toolkit for curious agents.",
+      "subtitle": "Discover, call, and explore IC canisters.",
+      "tags": [
+        "tools"
+      ]
+    }
+  ]
+}

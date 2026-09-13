@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { onAppStateChange } from "neutron-tools/app";
 import { connectEthereumFundingBrowser } from "./ethereum.ts";
 import { createMarketplaceClient } from "./tile_client.ts";
-import type { AppListing, AppTier, LibraryApp, MarketplaceClient, OperationResult, Page, RankingWindow, Session, InstallationQuote, DiscountPreference } from "./view-types.ts";
+import type { AppListing, LibraryApp, MarketplaceClient, OperationResult, Page, Session, InstallationQuote, DiscountPreference } from "./view-types.ts";
 import { Checkout } from "./components/checkout.tsx";
 import { AppDetailDialog } from "./components/detail.tsx";
 import { EarningsPanel } from "./components/earnings.tsx";
+import { Explore } from "./components/explore.tsx";
 import { PublisherPanel } from "./components/publisher.tsx";
 import { PublisherProfileDialog } from "./components/publisher_profile.tsx";
-import { AppCard, PublisherLink } from "./components/app_card.tsx";
+import { PublisherLink } from "./components/app_card.tsx";
 import { InstallControl } from "./components/install.tsx";
 import { NotificationsPanel, NotificationBell } from "./components/notifications.tsx";
 import { canDismissNotification, notificationAttentionCount, notificationFingerprint, readDismissedNotifications, visibleNotifications, type DismissedNotifications } from "./notification-state.ts";
@@ -194,7 +195,7 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
       {setupError && <div className="mp-error mp-setup-error" role="alert"><div><strong>Marketplace setup is unavailable</strong><p>{setupError}</p></div><button type="button" className="mp-secondary" disabled={initializing} onClick={retrySetup}>{initializing ? "Retrying…" : "Retry setup"}</button></div>}
       {initializing && <Loading label={session?.configured ? "Preparing your apps…" : "Opening marketplace…"} />}
       {session && !session.configured && !setupError && <ErrorNote error="Marketplace setup is unavailable." retry={retrySetup} />}
-      {session?.configured && (tab === "explore" ? <Explore key={`${session.canisterId}:${releasePreferenceRevision}`} client={client} refresh={revision} discount={discount} editDiscount={() => setDiscountOpen(true)} select={openApp} publisher={openPublisher} /> : tab === "library" ? <Library key={`${session.canisterId}:${session.account ?? ""}:${releasePreferenceRevision}`} client={client} connected={session.connected} refresh={revision} select={openApp} install={(ids, quote) => install(ids, quote)} installing={installing} explore={() => setTab("explore")} publisher={openPublisher} /> : tab === "activity" ? <NotificationsPanel operations={notifications} onDismiss={dismissOperation} loading={saved.loading} error={saved.error || activityError} onRefresh={() => setRevision(v => v + 1)} onCheck={item => observe(client.operation(item.operationId))} onResume={resumeOperation} onVerify={(item, hash) => observe(client.verifyEthereumTransaction(item.operationId, hash))} onCancel={item => observe(client.cancelEthereumCheckout(item.operationId))} /> : tab === "earnings" ? <EarningsPanel key={session.canisterId} client={client} connected={session.connected} refresh={revision} onOperation={onOperation} /> : null)}
+      {session?.configured && (tab === "explore" ? <Explore key={`${session.canisterId}:${releasePreferenceRevision}`} client={client} refresh={revision} discount={discount} select={openApp} publisher={openPublisher} /> : tab === "library" ? <Library key={`${session.canisterId}:${session.account ?? ""}:${releasePreferenceRevision}`} client={client} connected={session.connected} refresh={revision} select={openApp} install={(ids, quote) => install(ids, quote)} installing={installing} explore={() => setTab("explore")} publisher={openPublisher} /> : tab === "activity" ? <NotificationsPanel operations={notifications} onDismiss={dismissOperation} loading={saved.loading} error={saved.error || activityError} onRefresh={() => setRevision(v => v + 1)} onCheck={item => observe(client.operation(item.operationId))} onResume={resumeOperation} onVerify={(item, hash) => observe(client.verifyEthereumTransaction(item.operationId, hash))} onCancel={item => observe(client.cancelEthereumCheckout(item.operationId))} /> : tab === "earnings" ? <EarningsPanel key={session.canisterId} client={client} connected={session.connected} refresh={revision} onOperation={onOperation} /> : null)}
       {session?.configured && publisherOpened && <div hidden={tab !== "publish"}><PublisherPanel key={`${session.canisterId}:${session.account ?? ""}`} client={client} connected={session.connected} refresh={revision} onChanged={() => setRevision((v) => v + 1)} publisher={openPublisher} /></div>}
     </div>
     {detail && <AppDetailDialog key={`${session?.canisterId ?? ""}:${session?.account ?? ""}:${detail.id}`} client={client} app={detail} refreshRevision={revision} discount={discount} installing={installing} close={() => setDetail(null)} acquire={(app) => void acquire(app)} install={(ids, quote) => install(ids, quote)} connected={session?.connected ?? false} connect={connect} publisher={openPublisher} />}
@@ -203,47 +204,6 @@ export default function App({ client: suppliedClient }: { client?: MarketplaceCl
     {discountOpen && <DiscountCodeDialog client={client} discount={discount} close={() => setDiscountOpen(false)} changed={changeDiscount} />}
     <AgentReviewHost />
   </div></main>;
-}
-
-function Explore({ client, refresh, discount, editDiscount, select, publisher }: { client: MarketplaceClient; refresh: number; discount: DiscountPreference; editDiscount: () => void; select: (app: AppListing) => void; publisher: (id: string) => void }) {
-  const [window, setWindow] = useState<RankingWindow>("week"), [search, setSearch] = useState("");
-  return <div className="mp-explore">
-    <label className="mp-search"><Icon name="search" /><span className="mp-sr-only">Search apps</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search apps" autoComplete="off" /></label>
-    <div className="mp-chart-controls"><h2>{search ? "Search results" : "Discover apps"}</h2><div className="mp-chart-actions"><button type="button" className={`mp-text-button mp-discount-link${discount.active ? " is-active" : ""}`} onClick={editDiscount}><Icon name={discount.active ? "check" : "discount"} />{discount.active ? `${discountPercent(discount.discountBps)} off` : "Discount code"}</button><label><span className="mp-sr-only">Ranking period</span><select value={window} onChange={(event) => setWindow(event.target.value as RankingWindow)}><option value="week">7 days</option><option value="month">30 days</option><option value="all">All time</option></select></label></div></div>
-    {(["paid", "free"] as const).map((tier) => <CatalogSection key={JSON.stringify([tier, window, search.trim()])} client={client} tier={tier} window={window} search={search.trim()} refresh={refresh} discount={discount} select={select} publisher={publisher} />)}
-  </div>;
-}
-
-function CatalogSection({ client, tier, window, search, refresh, discount, select, publisher }: { client: MarketplaceClient; tier: AppTier; window: RankingWindow; search: string; refresh: number; discount: DiscountPreference; select: (app: AppListing) => void; publisher: (id: string) => void }) {
-  const [pages, setPages] = useState<AppListing[]>([]), [nextCursor, setNextCursor] = useState<string | null | undefined>(undefined), [paging, setPaging] = useState(false), [pageError, setPageError] = useState(""), [retry, setRetry] = useState(0);
-  const read = useRead(JSON.stringify([tier, window, search]), () => client.catalog({ tier, window, search }), retry + refresh, search ? 200 : 0);
-  const pagingActive = useRef(false);
-  const requestGeneration = useRef(0);
-  useEffect(() => {
-    requestGeneration.current++; pagingActive.current = false;
-    setPages([]); setNextCursor(undefined); setPaging(false); setPageError("");
-    return () => { requestGeneration.current++; };
-  }, [refresh]);
-  const cursor = nextCursor === undefined ? read.data?.nextCursor : nextCursor;
-  async function more() {
-    if (!cursor || pagingActive.current) return;
-    pagingActive.current = true; setPaging(true); setPageError("");
-    const generation = requestGeneration.current;
-    try {
-      const page = await client.catalog({ tier, window, search, cursor });
-      if (generation === requestGeneration.current) { setPages((old) => [...old, ...page.items]); setNextCursor(page.nextCursor); }
-    } catch (cause) { if (generation === requestGeneration.current) setPageError(errorMessage(cause)); }
-    finally { if (generation === requestGeneration.current) { pagingActive.current = false; setPaging(false); } }
-  }
-  const rows = [...(read.data?.items ?? []), ...pages].filter((app, index, all) => all.findIndex((other) => other.id === app.id) === index);
-  const title = `${search ? "" : "Top "}${tier}`;
-  return <section className="mp-catalog-section" aria-label={search ? `${tier === "paid" ? "Paid" : "Free"} apps` : title}>
-    <h3>{search ? `${tier === "paid" ? "Paid" : "Free"} apps` : title}</h3>
-    <ErrorNote error={read.error} retry={() => setRetry((value) => value + 1)} /><ErrorNote error={pageError} retry={() => void more()} />
-    {read.loading && !read.data ? <div className="mp-app-grid" aria-label={`Loading ${tier} apps`} aria-busy="true">{Array.from({ length: 3 }, (_, i) => <div className="mp-card-skeleton" key={i}><span /><div><i /><i /><i /></div></div>)}</div> : rows.length === 0 && !read.error ? <p className="mp-catalog-empty">{search ? `No matching ${tier} apps.` : `New ${tier} apps are on their way.`}</p> : <div className="mp-app-grid">{rows.map((app) => <AppCard key={app.id} app={app} discount={discount} select={() => select(app)} publisher={publisher} />)}</div>}
-    {cursor && <button type="button" className="mp-secondary mp-load-more" disabled={paging} onClick={() => void more()}>{paging ? "Loading…" : `Show more ${tier} apps`}</button>}
-    {read.data?.asOf && <p className="mp-chart-footnote">Ranked by acquisitions · {dateLabel(read.data.asOf)}</p>}
-  </section>;
 }
 
 function Library({ client, connected, refresh, select, install, installing, explore, publisher }: { client: MarketplaceClient; connected: boolean; refresh: number; select: (app: AppListing) => void; install: (ids: string[], quote: InstallationQuote) => void | Promise<void>; installing: boolean; explore: () => void; publisher: (id: string) => void }) {

@@ -12,7 +12,13 @@ export type ReleaseSelection = { mode: "stable" | "beta"; packages: ReleaseSelec
 export type PurchaseSelection = { releasePreferences: ReleasePreferences; packages: ReleaseSelectionPackage[] };
 export type VersionComment = { id: string; owner: string; text: string; createdAt: string; updatedAt: string };
 export type RatingBuckets = { one: string; two: string; three: string; four: string; five: string };
+export type AppTag = { id: string; name: string };
+export type CatalogInput = { tier: AppTier; window: RankingWindow; search: string; cursor?: string; tag?: string; exclude?: string[] };
+export type StorefrontSelection = { search: string; tag?: string };
+export type Storefront = { tags: AppTag[]; featured: AppListing[] };
 export type AppListing = {
+  /** Existing title is the app name; headline/subtitle are editorial cover copy. */
+  headline?: string; subtitle?: string; tags?: AppTag[]; coverUrl?: string;
   id: string; title: string; summary: string; category: string; publisher: string;
   publisherId?: string | null; publisherName?: string | null;
   priceUsdMicros: string; iconUrl?: string; version: string;
@@ -127,7 +133,8 @@ export interface MarketplaceClient {
   connect(): Promise<Session>;
   discount(): Promise<DiscountPreference>;
   setDiscountCode(code: string): Promise<DiscountPreference>;
-  catalog(input: { tier: AppTier; window: RankingWindow; search: string; cursor?: string }): Promise<Page<AppListing>>;
+  catalog(input: CatalogInput): Promise<Page<AppListing>>;
+  storefront?(input: StorefrontSelection): Promise<Storefront>;
   detail(appId: string): Promise<AppDetail>;
   publisherDetail(appId: string): Promise<AppDetail>;
   library(cursor?: string): Promise<Page<LibraryApp>>;

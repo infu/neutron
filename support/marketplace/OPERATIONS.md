@@ -267,6 +267,62 @@ Stage a new Dispenser starter separately only when future Neutrons should start
 with the new stable set. The complete release and starter workflow is
 [App Package Updates](../../doc/package-updates.md).
 
+## Storefront curation
+
+The [storefront contract](spec/storefront.md) defines editable categories,
+featured order, short app copy and cover selection. Use an existing configured
+admin identity; these commands make direct authenticated calls without cycles.
+The source must first have the state-preserving storefront upgrade.
+
+Publish cover images using the existing first-party media workflow from the
+repository root, retaining its exact manifest, bytes and journal:
+
+```sh
+npm --workspace neutron-marketplace-protocol run publish:media -- --manifest catalog/first-party-media.json
+npm --workspace neutron-marketplace-protocol run publish:media -- --manifest catalog/first-party-media.json --execute
+npm --workspace neutron-marketplace-protocol run publish:media -- --manifest catalog/first-party-media.json --execute
+```
+
+The review is query-only; execution uses the existing first-party Blast ID 0.
+Inspect the certified media postflight and require every result `unchanged`,
+`updateCalls: 0` on the repeat. This edits listing media and retains prices and
+packages. The manifest preserves existing icons/screenshots and appends covers.
+
+Then, from `support/marketplace`, prepare the proposed curation with an empty
+directory under the repository-root `tmp/`:
+
+```sh
+bun scripts/operator.ts storefront --canister "$MARKETPLACE" --identity "$ADMIN_IDENTITY" --network ic
+bun scripts/operator.ts storefront-prepare --input catalog/first-party-storefront.json --out ../../tmp/storefront-review --canister "$MARKETPLACE" --identity "$ADMIN_IDENTITY" --network ic
+bun scripts/operator.ts admin-storefront --input ../../tmp/storefront-review/storefront.json --canister "$MARKETPLACE" --identity "$ADMIN_IDENTITY" --network ic
+bun scripts/operator.ts admin-presentation --input ../../tmp/storefront-review/jetcreeper.json --canister "$MARKETPLACE" --identity "$ADMIN_IDENTITY" --network ic
+```
+
+Preparation makes only queries. It binds each local cover's SHA-256 to its
+already published listing artifact ID and saves fixed expected revisions. It
+accounts for tag removal by the preceding config update. It rejects missing
+cover uploads and never overwrites earlier review files. Inspect the config and
+every per-app JSON file before execution. `title` here is the editorial headline;
+the app name remains the selected release's existing title. Revisions and cover
+IDs are exact decimal strings; use JSON `null` for the default cover.
+
+Apply the reviewed config with the same `admin-storefront` command plus
+`--execute`, then each reviewed app file with `admin-presentation --execute`.
+Retain their returned revisions. Repeat the exact same files and require
+identical results/revisions; use `storefront` and `app-presentation --app APP_ID`
+to inspect the retained values. Resume those same files after a lost response.
+A conflict requires reading the intervening change and preparing a new review
+directory. Updating all presentations is a sequence of editorial commits;
+package publication remains its separate atomic catalog workflow.
+
+For later edits, prepare only the intended apps in a format-1 manifest while
+retaining the complete desired config, or inspect `app-presentation` and prepare
+one explicit `admin-presentation` file. Category labels can be renamed without
+changing assignments. Removing a category prunes its assignments atomically;
+featured order follows the config array, with two eligible entries shown by the
+app. These admin commands are also available through their public Candid to
+existing canister admin principals.
+
 ## Admin calls and initial source transition
 
 These commands call the protocol directly as the configured admin identity:

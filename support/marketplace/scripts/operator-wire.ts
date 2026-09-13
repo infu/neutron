@@ -54,7 +54,7 @@ export async function call(target: Target, method: string, args: Uint8Array, que
     return Uint8Array.from(Buffer.from(output, "hex"));
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
-export const ADMIN_METHODS = new Set(["admin_auditor_set", "admin_reserve_app", "admin_set_burn_account", "rates_refresh"]);
+export const ADMIN_METHODS = new Set(["admin_auditor_set", "admin_reserve_app", "admin_set_burn_account", "rates_refresh", "admin_storefront_set", "admin_storefront_app_set"]);
 export async function adminCall(target: Target, method: string, args: Uint8Array, run?: Run): Promise<Uint8Array> {
   if (!ADMIN_METHODS.has(method)) throw new Error("This method is not a direct administrator marketplace update.");
   return call(target, method, args, false, run);

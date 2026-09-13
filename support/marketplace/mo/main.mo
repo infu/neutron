@@ -37,6 +37,8 @@ import Repository "./Repository";
 import Store "./Store";
 import Types "./Types";
 import Views "./Views";
+import Storefront "./Storefront";
+import StorefrontMemory "./memory/storefront/v1";
 import ReleaseStore "./ReleaseStore";
 import ReleaseTransitions "./ReleaseTransitions";
 import FeedbackStore "./FeedbackStore";
@@ -52,6 +54,7 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   let certificationMemory = Http.init();
   let releaseMemory = ReleaseStore.init();
   let feedbackMemory = FeedbackStore.init();
+  let storefrontMemory = StorefrontMemory.init();
   transient let db = Store.Use(memory, publisherMemory, releaseMemory);
   transient let source = Principal.fromActor(this);
   transient let feedback = Feedback.Service(db, feedbackMemory, func(appId, candidateId, version, digest) {
@@ -230,6 +233,24 @@ persistent actor class Marketplace(initial : Types.Init) = this {
   };
   public shared query ({ caller }) func catalog_query_v2(input : API.ChannelCatalogRequest) : async API.Result<API.ChannelCatalogPage> {
     Views.catalogFor(db, source, viewer(caller), input.request, Time.now(), input.mode);
+  };
+  public shared query ({ caller }) func storefront_query(input : Storefront.Selection) : async API.Result<Storefront.Home> {
+    #ok(Storefront.home(db, storefrontMemory, source, viewer(caller), input));
+  };
+  public shared query ({ caller }) func storefront_browse(input : Storefront.BrowseRequest) : async API.Result<Storefront.Page> {
+    Storefront.browse(db, storefrontMemory, source, viewer(caller), input, Time.now());
+  };
+  public shared query ({ caller }) func admin_storefront_app_get(appId : Text) : async API.Result<?StorefrontMemory.Presentation> {
+    if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can inspect editable storefront metadata.");
+    #ok(Map.get(storefrontMemory.apps, Text.compare, appId));
+  };
+  public shared ({ caller }) func admin_storefront_set(input : Storefront.ConfigInput) : async API.Result<StorefrontMemory.Config> {
+    if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can edit storefront tags and featured apps.");
+    Storefront.saveConfig(db, storefrontMemory, input);
+  };
+  public shared ({ caller }) func admin_storefront_app_set(input : Storefront.AppInput) : async API.Result<StorefrontMemory.Presentation> {
+    if (not Access.isAdmin(db, caller)) return failure("admin_required", "Only an administrator can edit app presentation.");
+    Storefront.saveApp(db, storefrontMemory, input);
   };
   public shared query ({ caller }) func app_detail_v2(input : API.ChannelDetailRequest) : async API.Result<API.ChannelAppDetail> {
     Views.detailFor(db, source, viewer(caller), input.appId, input.mode);
