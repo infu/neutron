@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "evm_wallet: exact gross Ethereum USDC/wrapping/gas and cycle review, authenticated frozen helper review, approval/mined receipt insufficient before protocol verification, then installation allowed while wrapping remains pending.",
+    "browser: exact gross Ethereum USDC/wrapping/gas and cycle review, authenticated frozen helper review, approval/mined receipt insufficient before protocol verification, then installation allowed while wrapping remains pending.",
+    "Normal-agent cancellation, converted-payment collection and original-hash verification show distinct exact-cost reviews without another purchase; verification rejects a mismatched invoice.",
+    "An interrupted browser payment freezes its source/terms, reconnects directly from Continue, and resumes the original operation without a new quote or purchase.",
+    "The actual pending Saved request validates and verifies the original Ethereum hash and invoice through an exact Normal review, without another purchase, resume or wallet connection; verified ownership remains visible in Activity and allows installation from My Apps while conversion remains pending."
+  ],
+  "errors": []
+}
