@@ -377,10 +377,11 @@ test("failure feedback distinguishes preparation from uncertain deployment", () 
   const preparation = renderSurface({
     ...idleState,
     phase: "error",
-    error: "Package validation failed.",
+    error: "Download access denied for Aave (aave). Acquire the listed apps in Marketplace or use authorized publisher/auditor review access.",
     errorStage: "prepare",
   });
   expect(preparation).toContain("No updates were applied.");
+  expect(preparation).toContain("Download access denied for Aave (aave).");
   expect(preparation).not.toContain("do not assume");
 
   const deployment = renderSurface({

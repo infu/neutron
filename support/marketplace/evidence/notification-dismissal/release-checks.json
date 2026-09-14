@@ -1,0 +1,55 @@
+{
+  "checkedAt": "2026-09-13T23:45:22.461528+00:00",
+  "marketplaceVersion": 124,
+  "archiveSha256": "9db663a9b0b5dbc38d54a08a9eb7d2ae8ea602aa97433aac62afaa11d398c2c0",
+  "checks": [
+    {
+      "name": "complete package",
+      "command": "npm --workspace neutron-marketplace run package",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-notification-delete/package.log",
+      "logSha256": "13fb0166ec654d6af2474b840c154384deeaa17460913daea9038ea79a9343f9"
+    },
+    {
+      "name": "app tests and Motoko backend",
+      "command": "npm --workspace neutron-marketplace test",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-notification-delete/app-tests-final.log",
+      "logSha256": "1ab8d84674c201fa2644ad8b7340a460312b30983d4012d58d657a8ad4b922e2"
+    },
+    {
+      "name": "typecheck",
+      "command": "npm --workspace neutron-marketplace run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-notification-delete/typecheck-final.log",
+      "logSha256": "a144807c7a0915f1677d58c9ba6b58aac5e0e4fa35deca5d230994644f76e353"
+    },
+    {
+      "name": "all nine browser suites",
+      "command": "npm --workspace neutron-marketplace run test:browser",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-notification-delete/browser-all.log",
+      "logSha256": "7f524372771035256338a31cf3cd9279684d75126ebc411cc04e124ee24d9622"
+    },
+    {
+      "name": "actual client/protocol integration",
+      "command": "npm --workspace neutron-marketplace run test:protocol",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-notification-delete/protocol-integration.log",
+      "logSha256": "bb334463cc516347fa02a3c6a2a933856981d2ff7d511907704f20aaf922fded"
+    },
+    {
+      "name": "five released upgrades and clean initialization",
+      "command": "NEUTRON_RUN_MARKETPLACE_DISCOUNT_UPGRADE=1 NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION=124 NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256=9db663a9b0b5dbc38d54a08a9eb7d2ae8ea602aa97433aac62afaa11d398c2c0 NEUTRON_POCKETIC_BIN=<pinned PocketIC> bun test ./apps/marketplace/test/discount_upgrade.pocketic.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-notification-delete/upgrade.log",
+      "logSha256": "db1339254ec332891359c6548e9f548e7d91706739fee90f90af76b67b13b116"
+    }
+  ]
+}

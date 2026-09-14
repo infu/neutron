@@ -59,6 +59,22 @@ export async function saveIntent(kernel: Kernel, id: string, value: unknown): Pr
   const encoded = new TextEncoder().encode(JSON.stringify(value));
   unwrap(await kernel.updateSelf("marketplace_save_draft", [{ id, value: encoded }]));
 }
+export async function saveChildIntent(kernel: Kernel, id: string, value: unknown, parentId: string, parent: unknown): Promise<void> {
+  const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+  unwrap(await kernel.updateSelf("marketplace_save_draft_child", [{ draft: { id, value: encode(value) }, parent: { id: parentId, value: encode(parent) } }]));
+}
+export async function operationDrafts(kernel: Kernel, operationId: string): Promise<Array<{ id: string; value: Uint8Array }>> {
+  if (!/^[0-9a-f]{32}$/.test(operationId)) throw new Error("Select the original operation ID.");
+  const roots = [`operation:${operationId}`, `ethereum:operation:${operationId}`, `ethereum:step:${operationId}:approval`, `ethereum:step:${operationId}:deposit`];
+  const drafts = await Promise.all(roots.map(async id => {
+    const value = optional(await kernel.querySelf("marketplace_draft", [id]));
+    return value === null ? null : { id, value: bytes(value) };
+  }));
+  return drafts.filter((draft): draft is { id: string; value: Uint8Array } => draft !== null);
+}
+export async function deleteOperationDrafts(kernel: Kernel, id: string, expected: Awaited<ReturnType<typeof operationDrafts>>): Promise<void> {
+  unwrap(await kernel.updateSelf("marketplace_delete_operation", [{ id, expected }]));
+}
 export async function reviseIntent(kernel: Kernel, id: string, expected: unknown, value: unknown): Promise<void> {
   const previous = new TextEncoder().encode(JSON.stringify(expected));
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", previous));

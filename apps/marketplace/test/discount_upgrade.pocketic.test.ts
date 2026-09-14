@@ -45,6 +45,9 @@ const draftsMethod = IDL.Func([IDL.Record({ cursor: IDL.Opt(IDL.Text), limit: ID
 const initializeMethod = IDL.Func([Blob], [result(State)], []);
 const saveDraftMethod = IDL.Func([IDL.Record({ id: IDL.Text, value: Blob })], [result(IDL.Text)], []);
 const reviseDraftMethod = IDL.Func([IDL.Record({ id: IDL.Text, expected: Blob, value: Blob, revision: IDL.Text })], [result(IDL.Text)], []);
+const draft = IDL.Record({ id: IDL.Text, value: Blob });
+const deleteOperationMethod = IDL.Func([IDL.Record({ id: IDL.Text, expected: IDL.Vec(draft) })], [result(IDL.Text)], []);
+const saveChildMethod = IDL.Func([IDL.Record({ draft, parent: draft })], [result(IDL.Text)], []);
 const configureMethod = IDL.Func([IDL.Record({ canister: IDL.Principal, host: IDL.Text })], [result(State)], []);
 const readKeyMethod = IDL.Func([IDL.Null], [result(Blob)], []);
 const readIdentityMethod = IDL.Func([IDL.Record({ publicKey: Blob })], [result(IDL.Record({ publicKey: Blob, sessionPublicKey: Blob, signature: Blob, expiration: IDL.Nat64, target: IDL.Principal }))], []);
@@ -104,12 +107,14 @@ const predecessors = [
   { version: 112, memoryVersion: 1, digest: "6412027d0bd3fc594c878d653342ce3c4599a9cbe7d3379448c725b5314f9a21", size: 476_452 },
   { version: 118, memoryVersion: 2, digest: "54136d8bd22c9d682fc958c1eef7904816f34e599f6dd2daf503c10c554eec20", size: 489_788 },
   { version: 121, memoryVersion: 2, digest: "d6ac1fc5b3e563c5af4bf0d7cd5d40f9469d756a5d6bb988782fe9ea96671dcd", size: 519_184 },
+  { version: 122, memoryVersion: 2, digest: "ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42", size: 519_194 },
+  { version: 123, memoryVersion: 2, digest: "74dbfa3edf839d8c80b3ded6f77fb674041bd53001164907fe888dfb70e304e2", size: 519_245 },
 ] as const;
 
 for (const predecessor of predecessors) qualify(`Marketplace${predecessor.version} managed state ${predecessor.memoryVersion === 1 ? "migrates once" : "keeps v2 unchanged"} and retains identity, journals and discount preference`, async () => {
   const candidateDigest = process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256;
   if (!candidateDigest || !/^[0-9a-f]{64}$/.test(candidateDigest)) throw new Error("Set the exact reviewed candidate archive digest after packaging");
-  const candidateVersion = Number(process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION ?? "122");
+  const candidateVersion = Number(process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION ?? "124");
   expect(candidateVersion).toBeGreaterThan(predecessor.version);
   const kernel = await pinned("kernel", 359, "6b506590ab9160a6e8e31859a791d40e60b797f06e9fde28781b8f0beb89574d", 2_466_756);
   const previous = await pinned("marketplace", predecessor.version, predecessor.digest, predecessor.size);
@@ -250,6 +255,18 @@ for (const predecessor of predecessors) qualify(`Marketplace${predecessor.versio
       expect(stateJson(await existing.call("marketplace_state", stateMethod, [null]))).toBe(savedState);
       expect(await existing.call("marketplace_drafts", draftsMethod, [{ cursor: [], limit: 100n }])).toEqual(savedDrafts);
     }
+    // Exercise the generated deletion ABI after the checked upgrade. The
+    // original financial/install journals above remain byte-for-byte intact.
+    const dismissedId = "ee".repeat(16), checkout = { id: `ethereum:operation:${dismissedId}`, value: bytes('{"kind":"approval_only"}') };
+    const approval = { id: `ethereum:step:${dismissedId}:approval`, value: bytes('{"state":"confirmed"}') };
+    ok(await existing.call("marketplace_save_draft", saveDraftMethod, [checkout]));
+    ok(await existing.call("marketplace_save_draft_child", saveChildMethod, [{ parent: checkout, draft: approval }]));
+    const revised = { ...checkout, value: bytes('{"kind":"approval_only","updated":true}') };
+    ok(await existing.call("marketplace_revise_draft", reviseDraftMethod, [{ ...revised, expected: checkout.value, revision: "approved" }]));
+    ok(await existing.call("marketplace_delete_operation", deleteOperationMethod, [{ id: dismissedId, expected: [revised, approval] }]));
+    expect(await existing.call("marketplace_drafts", draftsMethod, [{ cursor: [], limit: 100n }])).toEqual(savedDrafts);
+    expect(await existing.call("marketplace_save_draft_child", saveChildMethod, [{ parent: revised, draft: approval }])).toHaveProperty("err");
+    expect(stateJson(await existing.call("marketplace_state", stateMethod, [null]))).toBe(savedState);
     console.log("Marketplace discount upgrade: verify clean v2 installation defaults");
     const fresh = await initialize(targets, clean, 0x92);
     const freshState = await fresh.call("marketplace_state", stateMethod, [null]) as any;

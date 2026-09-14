@@ -12,6 +12,7 @@ import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Test "mo:test";
+import Text "mo:core/Text";
 
 persistent actor {
   transient let publisher = Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
@@ -64,16 +65,20 @@ persistent actor {
   type Fixture = { app : Types.App; candidate : Types.Candidate; package : Types.Artifact; source : Types.Artifact; image : Types.Artifact };
 
   func fixture(db : Store.DB, free : Bool) : Fixture {
-    let package = artifact(db, "package-content", "application/octet-stream");
-    let source = artifact(db, "offered-source-content", "application/gzip");
-    let image = artifact(db, "listing-image-content", "image/png");
+    namedFixture(db, free, "access_test", "Access test");
+  };
+
+  func namedFixture(db : Store.DB, free : Bool, appId : Text, title : Text) : Fixture {
+    let package = artifact(db, Text.encodeUtf8(appId # ":package-content"), "application/octet-stream");
+    let source = artifact(db, Text.encodeUtf8(appId # ":offered-source-content"), "application/gzip");
+    let image = artifact(db, Text.encodeUtf8(appId # ":listing-image-content"), "image/png");
     let app = stored(Store.insertApp(db, {
-      appId = "access_test"; owner = publisher; title = "Access test"; summary = "Test app"; description = "";
+      appId; owner = publisher; title; summary = "Test app"; description = "";
       priceUsdMicros = if (free) 0 else 1_000_000; revision = 1; approvedCandidate = null; visible = true;
       iconArtifact = ?image.id; screenshots = []; ratingCount = 0; ratingTotal = 0; createdAtNs = 1; updatedAtNs = 1;
     }));
     let candidate = stored(Store.insertCandidate(db, {
-      appId = app.appId; version = 1; publisher; requestId; listingRevision = 1;
+      appId = app.appId; version = 1; publisher; requestId = appId; listingRevision = 1;
       artifactId = package.id; sourceArtifactId = ?source.id; digest = package.digest; sourceDigest = ?source.digest;
       dependencies = []; state = #approved; published = true; createdAtNs = 1; updatedAtNs = 1;
     }));
@@ -164,6 +169,13 @@ persistent actor {
       assert not Access.canAccess(db, buyer, f.source.id, #buyer);
       assert not Access.authorizeHttp(db, packagePath(f.package), ?token);
       assert not Access.authorizeHttp(db, sourcePath(f.source), ?token);
+      switch (Access.grant(db, buyer, request([packagePath(f.package), sourcePath(f.source)]), #buyer, 11)) {
+        case (#err(error)) {
+          assert error.code == "access_denied";
+          assert error.message == "Download access is no longer available for Access test (access_test).";
+        };
+        case (#ok(_)) Runtime.trap("Revoked access was restored");
+      };
       assert Access.canAccess(db, publisher, f.package.id, #publisher);
       assert Access.canAccess(db, auditor, f.source.id, #auditor);
       assert Store.getEntitlement(Store.Use(mem, publisherMemory, channelMemory), buyer, f.app.appId) != null;
@@ -172,6 +184,35 @@ persistent actor {
       assert Access.authorizeHttp(db, packagePath(f.package), ?otherToken);
       Store.setConfig(db, { Store.config(db) with auditors = [] });
       assert not Access.authorizeHttp(db, packagePath(f.package), ?otherToken);
+    });
+  };
+
+  public func mixed_downloads_name_only_blocked_apps_and_allow_acquisition_without_reinstall() : async Test.Metrics {
+    Test.test(func() {
+      let db = Store.Use(memory(), PublisherStore.init(), ReleaseStore.init());
+      let owned = fixture(db, false);
+      own(db, buyer, owned.app);
+      let free = namedFixture(db, true, "free", "Free app");
+      let aave = namedFixture(db, false, "aave", "Aave");
+      let curve = namedFixture(db, false, "curve", "Curve");
+      let input = request([packagePath(owned.package), packagePath(free.package), packagePath(curve.package), packagePath(aave.package), sourcePath(aave.source)]);
+      switch (Access.grant(db, buyer, input, #buyer, 10)) {
+        case (#err(error)) {
+          assert error.code == "access_denied";
+          assert error.message == "Download access denied for Aave (aave), Curve (curve). Acquire the listed apps in Marketplace or use authorized publisher/auditor review access.";
+        };
+        case (#ok(_)) Runtime.trap("Unowned paid apps were granted");
+      };
+      assert Store.getGrant(db, buyer, requestId) == null;
+      assert Store.getEntitlement(db, buyer, free.app.appId) == null;
+      assert Access.authorizeHttp(db, packagePath(free.package), null);
+      own(db, buyer, aave.app);
+      own(db, buyer, curve.app);
+      let granted = accepted(Access.grant(db, buyer, input, #buyer, 11));
+      assert granted.new;
+      assert Access.authorizeHttp(db, packagePath(aave.package), ?token);
+      assert Access.authorizeHttp(db, packagePath(curve.package), ?token);
+      assert not accepted(Access.grant(db, buyer, input, #buyer, 12)).new;
     });
   };
 

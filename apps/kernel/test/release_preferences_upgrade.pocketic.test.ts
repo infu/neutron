@@ -6,7 +6,7 @@
  * NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
  * bun test apps/kernel/test/release_preferences_upgrade.pocketic.test.ts
  *
- * Uses isolated disposable actors. Kernel361 is retained published evidence,
+ * Uses isolated disposable actors. Kernel361/362 are retained published evidence,
  * never rebuilt; both subsequent upgrades use the checked in-product install.
  * Installing Hello201 after the Kernel update exercises another actor upgrade
  * with the exact same Kernel package and preference schema, without inventing
@@ -144,7 +144,10 @@ async function compileSuccessor(state: KernelPackageState, packages: PreparedPac
   return result;
 }
 
-qualify("Kernel release preferences initialize disabled, authorize owner access, and survive two checked actor upgrades", async () => {
+for (const predecessor of [
+  { version: 361, archive: "kernel.v0.3.61.neutron", digest: "34a003ee2e01d045df211c0bf52609b472956f7f9ec5085c9a045d2457ef7ca4" },
+  { version: 362, archive: "kernel.v0.3.62.neutron", digest: "253f19c9d97d8d1a2138004de98a9645d79708582db2cc9fc90df891eebd87e5" },
+]) qualify(`Kernel${predecessor.version} roots and release preferences survive two checked actor upgrades`, async () => {
   const {
     DirectPocketIcCalls, advancePackageState, createApplicationInstance,
     deployExactTransition, freshDeployment, freshPackageState, launchPocketIc,
@@ -152,17 +155,18 @@ qualify("Kernel release preferences initialize disabled, authorize owner access,
     requiredAppInstance, requiredPocketIcBinary, stopPocketIc,
   } = checkedUpgradeHarness!;
   const [previous, candidate, hello] = await Promise.all([
-    archive(new URL("../kernel.v0.3.61.neutron", import.meta.url), "kernel", 361,
-      "34a003ee2e01d045df211c0bf52609b472956f7f9ec5085c9a045d2457ef7ca4", 2_477_271),
+    archive(new URL(`../${predecessor.archive}`, import.meta.url), "kernel", predecessor.version, predecessor.digest),
     candidateArchive(),
     archive(new URL("../../hello/hello.v0.2.1.neutron", import.meta.url), "hello", 201,
       "82613cc3882c7404e51e09308e27a4885062f5f622663becf18cca0a046b8c27", 185_021),
   ]);
-  expect(previous.prepared.manifest.memory?.kernel_release_preferences).toBeUndefined();
+  const retainedPreferences = predecessor.version >= 362;
+  if (retainedPreferences) expect(previous.prepared.manifest.memory?.kernel_release_preferences).toMatchObject({ version: 1 });
+  else expect(previous.prepared.manifest.memory?.kernel_release_preferences).toBeUndefined();
   expect(candidate.prepared.manifest.memory?.kernel_release_preferences).toMatchObject({
     version: 1, migrations: [],
   });
-  console.log("Release preferences: compiling clean target and retained Kernel361");
+  console.log(`Release preferences: compiling clean target and retained Kernel${predecessor.version}`);
   const fresh = await compileFreshPackages({ packages: [candidate.prepared], persistenceMode: "classical" });
   const initial = await compileFreshPackages({ packages: [previous.prepared], persistenceMode: "classical" });
   const state = freshPackageState([previous.prepared], initial);
@@ -171,7 +175,9 @@ qualify("Kernel release preferences initialize disabled, authorize owner access,
     { kind: "keep", owner: "kernel", memoryId: "kernel", version: 4 },
     { kind: "keep", owner: "kernel", memoryId: "kernel_activation", version: 1 },
     { kind: "keep", owner: "kernel", memoryId: "kernel_cycle_calls", version: 1 },
-    { kind: "initialize", owner: "kernel", memoryId: "kernel_release_preferences", to: 1 },
+    retainedPreferences
+      ? { kind: "keep", owner: "kernel", memoryId: "kernel_release_preferences", version: 1 }
+      : { kind: "initialize", owner: "kernel", memoryId: "kernel_release_preferences", to: 1 },
   ]);
   const provision = await loadProvisionHarness();
   const binary = requiredPocketIcBinary();
@@ -222,6 +228,7 @@ qualify("Kernel release preferences initialize disabled, authorize owner access,
     expect(await direct.kernelActivation(canister, owner, { use: token })).toEqual({ authorized: null });
     await direct.actorCall(canister, owner, "kernel_authorized_add", IDL.Func([IDL.Principal], [], []), [backup]);
     const actor = provision.createDirectPocketIcKernelActor({ ...actorOptions, caller: owner });
+    if (retainedPreferences) expect(await write(canister, true)).toEqual({ beta_enabled: true, revision: 1n });
     const before = await actor.kernel_runtime_info();
     const kernelScope = requiredAppInstance(normalizeAppInstances(before.apps), "kernel").scope;
     const request = {
@@ -255,11 +262,11 @@ qualify("Kernel release preferences initialize disabled, authorize owner access,
       expect(await actor.kernel_install_status(null)).toEqual([]);
     };
 
-    console.log("Release preferences: checked Kernel361 to candidate upgrade with nonempty predecessor roots");
+    console.log(`Release preferences: checked Kernel${predecessor.version} to candidate upgrade with nonempty predecessor roots`);
     const deployed = await deployExactTransition({ actor, canisterId: canister,
       packages: [candidate.prepared], state, compiled: upgraded, expectedDeploymentId: initial.deploymentId });
     await verifyRetainedRoots();
-    expect(await read(canister)).toEqual({ beta_enabled: false, revision: 0n });
+    expect(await read(canister)).toEqual(retainedPreferences ? { beta_enabled: true, revision: 1n } : { beta_enabled: false, revision: 0n });
     expect(await write(canister, true)).toEqual({ beta_enabled: true, revision: 1n });
     expect(await write(canister, true, backup)).toEqual({ beta_enabled: true, revision: 1n });
     await rejectUnauthorized(canister);

@@ -4,6 +4,7 @@ import { runPurchase, runWithdrawal, operationStatus, operationHistory, recentOp
 import { quoteInstallation, installApplications, installationStatus, recentInstallations, markInstallationOpened, resumeInstallation, prepareInstallationForTile } from "./install.ts";
 import { matchesSavedDiscount } from "./discount.ts";
 import { loadIntent } from "./store.ts";
+import { dismissOperation } from "./dismiss.ts";
 import {
   quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, ethereumSavedStatus, recentEthereumPurchases,
   prepareEthereumBrowser, ethereumJournalRead, ethereumJournalClaim, ethereumJournalRecord, finishEthereumBrowser,
@@ -123,6 +124,7 @@ async function uiWrite(context: MsgBusToolContext, method: string, args: JsonObj
       return runWithdrawal(context, quote);
     }
     case "resumeOperation": return resume(context, String(args.operationId));
+    case "dismissOperation": await dismissOperation(context, String(args.operationId)); return null;
     case "install": return prepareInstallationForTile(context, args.appIds as string[], args.quote as unknown as InstallationQuote);
     case "installationOpened": return markInstallationOpened(context, args.quote as unknown as InstallationQuote);
     case "rate": return client.rate(String(args.appId), Number(args.stars), String(args.text));

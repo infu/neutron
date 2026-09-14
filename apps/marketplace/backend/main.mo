@@ -16,6 +16,8 @@ module {
     public type DiscountCodeResult = { #ok : ?Text; #err : Text };
     public type Draft = { id : Text; value : Blob };
     public type DraftRevision = { id : Text; expected : Blob; value : Blob; revision : Text };
+    public type DraftChild = { draft : Draft; parent : Draft };
+    public type OperationDeletion = { id : Text; expected : [Draft] };
     public type DraftPageRequest = { cursor : ?Text; limit : Nat };
     public type DraftPage = { items : [{ id : Text; value : Blob }]; nextCursor : ?Text };
     public type Call = { canister : Principal; method : Text; args : Blob; cycles : Nat };
@@ -140,6 +142,42 @@ module {
                 case null { Map.add(mem.drafts, Text.compare, request.id, value); #ok(request.id) };
             };
         };
+        public func /*update*/ marketplace_save_draft_child(request : DraftChild) : TextResult {
+            // An approval finishing after dismissal must not recreate a journal
+            // or start the next payment step from an already deleted checkout.
+            if (marketplace_draft(request.parent.id) != ?request.parent.value) return #err("The checkout changed or was dismissed. Its next payment step was not started.");
+            marketplace_save_draft(request.draft);
+        };
+        public func /*update*/ marketplace_delete_operation(request : OperationDeletion) : TextResult {
+            if (request.id.size() != 32) return #err("Select the original operation ID.");
+            for (char in request.id.chars()) {
+                if (not ((char >= '0' and char <= '9') or (char >= 'a' and char <= 'f'))) return #err("Select the original operation ID.");
+            };
+            let roots = ["operation:" # request.id, "ethereum:operation:" # request.id, "ethereum:step:" # request.id # ":approval", "ethereum:step:" # request.id # ":deposit"];
+            let expected = Map.empty<Text, Blob>();
+            for (draft in request.expected.vals()) {
+                var known = false;
+                for (root in roots.vals()) { if (draft.id == root) known := true };
+                if (not known or Map.containsKey(expected, Text.compare, draft.id)) return #err("The operation snapshot is invalid.");
+                Map.add(expected, Text.compare, draft.id, draft.value);
+            };
+            // Check every root, including absent deposit journals, before any
+            // deletion. A concurrent payment claim must win or block dismissal.
+            for (root in roots.vals()) {
+                if (marketplace_draft(root) != Map.get(expected, Text.compare, root)) return #err("The operation changed while dismissing it. Check its current status and try again.");
+            };
+            let remove = List.empty<Text>();
+            for (root in roots.vals()) {
+                List.add(remove, root);
+                let prefix = "history:" # root # ":";
+                label history for ((id, _) in Map.entriesFrom(mem.drafts, Text.compare, prefix)) {
+                    if (not Text.startsWith(id, #text(prefix))) break history;
+                    List.add(remove, id);
+                };
+            };
+            for (id in List.values(remove)) { Map.remove(mem.drafts, Text.compare, id) };
+            #ok(request.id);
+        };
         public func /*update*/ marketplace_revise_draft(request : DraftRevision) : TextResult {
             let expected = switch (Text.decodeUtf8(request.expected)) { case null return #err("The previous intent is not valid UTF-8."); case (?value) value };
             let value = switch (Text.decodeUtf8(request.value)) { case null return #err("The revised intent is not valid UTF-8."); case (?value) value };
@@ -196,6 +234,12 @@ public type marketplace_drafts_Output = DraftPage;
 
 public type marketplace_save_draft_Input = (request : Draft);
 public type marketplace_save_draft_Output = TextResult;
+
+public type marketplace_save_draft_child_Input = (request : DraftChild);
+public type marketplace_save_draft_child_Output = TextResult;
+
+public type marketplace_delete_operation_Input = (request : OperationDeletion);
+public type marketplace_delete_operation_Output = TextResult;
 
 public type marketplace_revise_draft_Input = (request : DraftRevision);
 public type marketplace_revise_draft_Output = TextResult;

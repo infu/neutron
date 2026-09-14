@@ -94,6 +94,8 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
     },
   }));
   const { quoteEthereumPurchase, runEthereumPurchase, resumeEthereumPurchase, prepareEthereumBrowser, ethereumJournalClaim, ethereumJournalRecord, finishEthereumBrowser, ethereumSavedStatus, cancelEthereumPurchase } = await import("../src/ethereum_actions.ts");
+  const { dismissOperation } = await import("../src/dismiss.ts");
+  const { deleteDraftFixture } = await import("./intent-fixture.ts");
   function context(root = false): MsgBusToolContext {
     return { agentMode: root, signal: new AbortController().signal,
       caller: { appId: root ? "agent" : "marketplace", installationUid: "install-1", role: root ? "background" : "tile", endpoint: root ? "app:agent:background" : "app:marketplace:tile:main:instance:test" },
@@ -102,8 +104,14 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
         listTools: async () => [{ name: "updates.preferences" }],
         querySelf: async (name: string, args: string[]) => { if (name !== "marketplace_draft") throw new Error(`Unexpected query ${name}`); return stored.has(args[0]!) ? [stored.get(args[0]!)] : []; },
         updateSelf: async (name: string, args: Array<{ id: string; value: Uint8Array; expected?: Uint8Array; revision?: string }>) => {
-          const arg = args[0]!;
-          if (name === "marketplace_save_draft") {
+          if (name === "marketplace_delete_operation") return deleteDraftFixture(stored, args[0]);
+          let arg = args[0]!;
+          if (name === "marketplace_save_draft_child") {
+            const request = arg as unknown as { draft: typeof arg; parent: typeof arg };
+            if (!stored.has(request.parent.id) || Buffer.compare(stored.get(request.parent.id)!, request.parent.value) !== 0) return { err: "Checkout changed or was dismissed" };
+            arg = request.draft;
+          }
+          if (name === "marketplace_save_draft" || name === "marketplace_save_draft_child") {
             const old = stored.get(arg.id);
             if (old && Buffer.compare(old, arg.value) !== 0) return { err: "Existing retained intent differs" };
             stored.set(arg.id, new Uint8Array(arg.value)); events.push(`save:${arg.id}`);
@@ -121,6 +129,49 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
     } as unknown as MsgBusToolContext;
   }
   beforeEach(() => { stored = new Map(); events = []; reviews = []; updates = []; sends = []; observations = []; status = null; prepared = fixture(); idCounter = 0; ownerApproved = true; lostClaimReply = false; approvalRequired = true; states = { approval: "confirmed", deposit: "submitted" }; quotePreferences = undefined; preferences = { betaEnabled: false, revision: "0" }; channelEnabled = false; walletAuthorizations = 0; });
+
+  test("X erases an on-chain approval and its history, including a canceled invoice, without a deposit", async () => {
+    const ctx = context(), prepared = await prepareEthereumBrowser(ctx, quote("browser"));
+    const record: EthereumFundingRecord = { version: 1, invoiceId: ID, source: "browser", step: prepared.plan.steps.approval, state: "unknown", transactionHash: null, walletIntent: null, receipt: null };
+    await ethereumJournalClaim(ctx, ID, record);
+    const confirmed = { ...record, state: "confirmed" as const, transactionHash: `0x${"11".repeat(32)}` as `0x${string}` };
+    await ethereumJournalRecord(ctx, ID, record, confirmed);
+    expect((await ethereumSavedStatus(ctx, ID))?.canDismiss).toBe(true);
+    expect([...stored.keys()].some(key => key.startsWith("history:"))).toBe(true);
+    await dismissOperation(ctx, ID);
+    expect(stored.size).toBe(0);
+    await expect(ethereumJournalClaim(ctx, ID, { ...record, step: prepared.plan.steps.deposit })).rejects.toThrow("not saved");
+    expect(sends).toEqual([]);
+  });
+
+  for (const state of ["unknown", "submitted", "confirmed"] as const) test(`X cannot erase a ${state} deposit while payment recovery is unfinished`, async () => {
+    const ctx = context(), prepared = await prepareEthereumBrowser(ctx, quote("browser"));
+    await ethereumJournalClaim(ctx, ID, { version: 1, invoiceId: ID, source: "browser", step: prepared.plan.steps.deposit, state, transactionHash: state === "unknown" ? null : `0x${"22".repeat(32)}`, walletIntent: null, receipt: null });
+    const before = new Map(stored);
+    await expect(dismissOperation(ctx, ID)).rejects.toThrow("unresolved");
+    expect(stored).toEqual(before);
+    expect(sends).toEqual([]);
+  });
+
+  for (const state of ["prepared", "reverted", "rejected"] as const) test(`X erases a ${state} deposit with no remaining payment to recover`, async () => {
+    const ctx = context(), prepared = await prepareEthereumBrowser(ctx, quote("browser"));
+    await ethereumJournalClaim(ctx, ID, { version: 1, invoiceId: ID, source: "browser", step: prepared.plan.steps.deposit, state, transactionHash: state === "reverted" ? `0x${"22".repeat(32)}` : null, walletIntent: null, receipt: null });
+    expect((await ethereumSavedStatus(ctx, ID))?.canDismiss).toBe(true);
+    await dismissOperation(ctx, ID);
+    expect(stored.size).toBe(0);
+  });
+
+  test("a step claim already waiting for storage cannot recreate a dismissed parent", async () => {
+    const ctx = context(), prepared = await prepareEthereumBrowser(ctx, quote("browser"));
+    const original = ctx.kernel.updateSelf.bind(ctx.kernel);
+    ctx.kernel.updateSelf = (async (...args: Parameters<typeof original>) => {
+      if (args[0] === "marketplace_save_draft_child") await dismissOperation(context(), ID);
+      return original(...args);
+    }) as typeof ctx.kernel.updateSelf;
+    await expect(ethereumJournalClaim(ctx, ID, { version: 1, invoiceId: ID, source: "browser", step: prepared.plan.steps.deposit, state: "unknown", transactionHash: null, walletIntent: null, receipt: null })).rejects.toThrow("dismissed");
+    expect(stored.size).toBe(0);
+    expect(sends).toEqual([]);
+  });
 
   test("channel Ethereum preparation and recovery retain the exact original wrapper after a toggle", async () => {
     channelEnabled = true; quotePreferences = preferences = { betaEnabled: true, revision: "1" };
@@ -312,7 +363,7 @@ if (process.env.NEUTRON_MARKETPLACE_ETHEREUM_ACTIONS_CHILD !== "1") {
     expect(refreshed?.checkoutCanceled).toBeUndefined(); expect(refreshed?.canceledBeforeSubmission).toBeUndefined();
     expect(updates).toEqual(["ethereum_prepare", "ethereum_cancel"]); expect(sends).toEqual([]);
   });
-  for (const depositState of ["prepared", "unknown", "submitted", "confirmed", "reverted"] as const) test(`canceling checkout preserves its ${depositState} deposit for review after reload`, async () => {
+  for (const depositState of ["unknown", "submitted", "confirmed"] as const) test(`canceling checkout preserves its ${depositState} deposit for review after reload`, async () => {
     const { ctx, record } = await browserRecord();
     const hash = ["submitted", "confirmed", "reverted"].includes(depositState) ? `0x${"22".repeat(32)}` as const : null;
     await ethereumJournalClaim(ctx, ID, { ...record, state: depositState, transactionHash: hash });

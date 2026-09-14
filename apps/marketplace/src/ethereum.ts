@@ -197,7 +197,7 @@ async function executeStep(plan: EthereumFundingPlan, kind: EthereumFundingKind,
     // Wallet can return an unsigned, revised review after its nonce changes.
     // An explicit continuation may ask the existing provider to review that
     // exact same request again; no new ID or root signing bypass is used.
-    if (driver.source === "evm_wallet" && saved.state === "prepared") return send(saved);
+    if (driver.source === "evm_wallet" && saved.state === "prepared") return send(await retain(saved, { state: "unknown", message: "The original Wallet request is being continued." }));
     return retain(saved, await driver.observe(saved));
   }
   const step = plan.steps[kind];
