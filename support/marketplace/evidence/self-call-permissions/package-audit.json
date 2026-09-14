@@ -1,0 +1,67 @@
+{
+  "auditedAt": "2026-09-14T00:31:34.599Z",
+  "id": "marketplace",
+  "version": 125,
+  "size": 520930,
+  "sha256": "e10102a164f43a0d7dd3dd47b3492f6eb01d8ba07c439d6282be7135471c6989",
+  "predecessor": {
+    "version": 124,
+    "size": 520871,
+    "sha256": "9db663a9b0b5dbc38d54a08a9eb7d2ae8ea602aa97433aac62afaa11d398c2c0"
+  },
+  "memory": {
+    "state": {
+      "version": 2,
+      "schemas": {
+        "1": {
+          "src": "memory/state/v1.mo",
+          "hash": "a836b686252699bac742db06b99144d6bd5d4ddea08f6653aa142e9de10a5b9c",
+          "entry": "13eed1d37736f93cd6931637052266d6c7c132eb024f9f76a394c13dd1a41863"
+        },
+        "2": {
+          "src": "memory/state/v2.mo",
+          "hash": "ed2102ace90eae7bf6a36369ec942cfca186c18fe780df2882221611e012ae00",
+          "entry": "2e78c1b78630e2113288d5e63bdeb9217afb8807e567c39d855f82b3582e5a81"
+        }
+      },
+      "migrations": [
+        {
+          "from": 1,
+          "to": 2,
+          "src": "memory/state/v1_to_v2.mo",
+          "entry": "f8a0944817ddd2b304ed962c212474367c4ca0d22597de918fe2344a4835a767"
+        }
+      ]
+    }
+  },
+  "unchangedBackendAndLockFileCount": 50,
+  "addedSelfCallPermissions": [
+    "marketplace_save_draft_child",
+    "marketplace_delete_operation"
+  ],
+  "unchangedOtherCapabilitiesAndDependencies": true,
+  "restore": {
+    "upgrades": [
+      {
+        "kind": "keep",
+        "owner": "marketplace",
+        "memoryId": "state",
+        "version": 2
+      }
+    ],
+    "removedApps": [],
+    "destructiveMemoryRoots": []
+  },
+  "clean": {
+    "upgrades": [
+      {
+        "kind": "initialize",
+        "owner": "marketplace",
+        "memoryId": "state",
+        "to": 2
+      }
+    ],
+    "removedApps": [],
+    "destructiveMemoryRoots": []
+  }
+}

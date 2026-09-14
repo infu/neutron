@@ -156,7 +156,7 @@ try {
     assert.equal((await snapshot()).quoteCalls.length, 1);
     assert.equal((await snapshot()).writes.length, 0, "opening release review cannot execute promotion");
     await page.locator(".mp-cost-detail summary").click();
-    assert.match(await page.locator(".mp-cost-detail").innerText(), /1,700,000,000 cycles/);
+    assert.match(await page.locator(".mp-cost-detail").innerText(), /0.0017 TC/);
     await geometry();
     await page.screenshot({ path: join(out, `publisher-release-${width}.png`) });
     await page.getByRole("button", { name: "Close dialog", exact: true }).click();

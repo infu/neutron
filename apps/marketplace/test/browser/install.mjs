@@ -77,7 +77,7 @@ try {
   assert.equal(await button.isDisabled(), true);
   assert.deepEqual(await installed(), []);
   await resolveQuote(0);
-  await page.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
+  await page.getByText('0.005 TC', { exact: true }).waitFor();
   assert.equal(await button.isEnabled(), true);
   assert.equal(await page.locator('.mp-install-cost').getAttribute('title'), 'Includes selection preparation and private download access. Neutron reviews app permissions and installation costs next.');
   await button.click();
@@ -104,18 +104,18 @@ try {
   await page.goto(url);
   await waitRequests(1);
   await resolveQuote(0);
-  await page.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
+  await page.getByText('0.005 TC', { exact: true }).waitFor();
   await page.evaluate(() => window.installFixture.select(['beta']));
   await waitRequests(2);
   assert.equal(await page.evaluate(()=>window.installFixture.requests[1].operationId),undefined,'a different selection starts its own request identity');
   assert.equal(await button.isDisabled(), true);
-  assert.equal(await page.getByText('5,000,000,007 cycles', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('0.005 TC', { exact: true }).count(), 0);
   await page.evaluate(() => window.installFixture.select(['alpha','beta']));
   await waitRequests(3);
   await resolveQuote(1);
   assert.equal(await button.isDisabled(), true, 'an older selection resolving late cannot enable installation');
   await resolveQuote(2);
-  await page.getByText('5,000,000,009 cycles', { exact: true }).waitFor();
+  await page.getByText('0.005 TC', { exact: true }).waitFor();
   await button.click();
   await waitRequests(4);
   await page.getByText('Ready · No additional access charge', { exact: true }).waitFor();
@@ -131,16 +131,16 @@ try {
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await waitRequests(2);
   await resolveQuote(1);
-  await page.getByText('5,000,000,008 cycles', { exact: true }).waitFor();
+  await page.getByText('0.005 TC', { exact: true }).waitFor();
   assert.equal(await button.isEnabled(), true);
   assert.deepEqual(await installed(),[]);
   await page.getByRole('button', { name: 'Refresh installation cost', exact: true }).click();
   assert.equal(await button.isDisabled(),true,'refresh invalidates the old fee before another dispatch can occur');
   await waitRequests(3);
-  assert.equal(await page.getByText('5,000,000,008 cycles', { exact: true }).count(),0);
+  assert.equal(await page.getByText('0.005 TC', { exact: true }).count(),0);
   assert.equal(await page.evaluate(()=>window.installFixture.requests[2].operationId),'installation-1');
   await resolveQuote(2);
-  await page.getByText('5,000,000,009 cycles', { exact: true }).waitFor();
+  await page.getByText('0.005 TC', { exact: true }).waitFor();
   assert.deepEqual(await installed(),[]);
   await button.click();
   await waitRequests(4);
@@ -150,13 +150,13 @@ try {
   await page.goto(url);
   await waitRequests(1);
   await resolveQuote(0);
-  await page.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
+  await page.getByText('0.005 TC', { exact: true }).waitFor();
   await page.evaluate(() => window.installFixture.selectRelease('beta:102'));
   await waitRequests(2);
   assert.equal(await button.isDisabled(), true, 'changing the displayed release clears the previous quote even for identical app IDs');
   assert.equal(await page.evaluate(() => window.installFixture.requests[1].operationId), undefined);
   await resolveQuote(1);
-  await page.getByText('5,000,000,008 cycles', { exact: true }).waitFor();
+  await page.getByText('0.005 TC', { exact: true }).waitFor();
   assert.deepEqual(await installed(), []);
   checks.push('Changing the displayed stable/beta release clears its old quote identity while retaining the same app IDs.');
 
@@ -171,7 +171,7 @@ try {
   const freshPreferenceId = await page.evaluate(() => window.installFixture.requests[1].operationId);
   assert.match(freshPreferenceId, /^[0-9a-f]{32}$/);
   await resolveQuote(1);
-  await page.getByText('5,000,000,008 cycles', { exact: true }).waitFor();
+  await page.getByText('0.005 TC', { exact: true }).waitFor();
   assert.equal(await button.isEnabled(), true);
   assert.deepEqual(await installed(), []);
   checks.push('A changed preference disables stale installation and lets Prepare latest review a new request without charging.');
@@ -191,7 +191,7 @@ try {
   const detailInstall = detail.getByRole('button', { name: 'Install app', exact: true });
   assert.equal(await detailInstall.isDisabled(), true);
   await resolveQuote(0);
-  await detail.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
+  await detail.getByText('0.005 TC', { exact: true }).waitFor();
   for (const width of [320,380,960]) {
     await page.setViewportSize({width,height:760});
     const layout = await detail.evaluate(node=>({right:node.getBoundingClientRect().right,overflow:node.scrollWidth>node.clientWidth,footerOverflow:node.querySelector('.mp-modal-footer').scrollWidth>node.querySelector('.mp-modal-footer').clientWidth}));
@@ -222,7 +222,7 @@ try {
   await review.getByRole('button', { name: 'Install apps', exact: true }).waitFor();
   const contents = await review.innerText();
   assert.match(contents,/alpha/); assert.match(contents,/beta/);
-  assert.match(contents,/5,000,000,008 cycles/);
+  assert.match(contents,/0.005 TC/);
   assert.match(contents,/rrkah-fqaaa-aaaaa-aaaaq-cai/);
   assert.match(contents,/3rurp-vyaaa-aaaay-aacua-cai/);
   assert.match(contents,/includes selection preparation and private download access/);
@@ -240,7 +240,7 @@ try {
   await page.goto(url+'/?mode=owned');
   await waitRequests(1);
   await resolveQuote(0);
-  await detail.getByText('5,000,000,007 cycles', { exact: true }).waitFor();
+  await detail.getByText('0.005 TC', { exact: true }).waitFor();
   await page.evaluate(() => window.installFixture.rejectInstall=true);
   await detailInstall.evaluate(button=>{button.click();button.click();});
   await detail.getByRole('alert').getByText('Installation fee changed. Refresh the cost before installing.', { exact: true }).waitFor();
@@ -252,7 +252,7 @@ try {
   await waitRequests(2);
   assert.equal(await page.evaluate(()=>window.installFixture.requests[1].operationId),'installation-0');
   await resolveQuote(1);
-  await detail.getByText('5,000,000,008 cycles', { exact: true }).waitFor();
+  await detail.getByText('0.005 TC', { exact: true }).waitFor();
   assert.equal((await installed()).length,1,'reviewing a fresh fee must not redispatch installation');
   assert.equal(await detail.getByRole('alert').count(),0);
   await detailInstall.click();

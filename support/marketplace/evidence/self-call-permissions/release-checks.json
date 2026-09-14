@@ -1,0 +1,63 @@
+{
+  "checkedAt": "2026-09-14T00:39:14.307178+00:00",
+  "marketplaceVersion": 125,
+  "archiveSha256": "e10102a164f43a0d7dd3dd47b3492f6eb01d8ba07c439d6282be7135471c6989",
+  "checks": [
+    {
+      "name": "complete package",
+      "command": "npm --workspace neutron-marketplace run package",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-self-call-permissions/package.log",
+      "logSha256": "f26c551ec8e0c5868751af10982ad683bdebcc9181946ca623c7a7574b6aeafd"
+    },
+    {
+      "name": "app tests and Motoko backend",
+      "command": "npm --workspace neutron-marketplace run test",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-self-call-permissions/tests.log",
+      "logSha256": "ea02cd678768303e2219283f1f8816bb658bf32bbfa3762516cc9500e95425b6"
+    },
+    {
+      "name": "typecheck",
+      "command": "npm --workspace neutron-marketplace run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-self-call-permissions/typecheck.log",
+      "logSha256": "a144807c7a0915f1677d58c9ba6b58aac5e0e4fa35deca5d230994644f76e353"
+    },
+    {
+      "name": "Kernel self-call permission checks",
+      "command": "bun test ./apps/kernel/test/self_calls.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-self-call-permissions/kernel-self-calls.log",
+      "logSha256": "6fa6d30eec83da7d96d8cafcae8516b3754efdd780ea895fe7956bf8c30067fd"
+    },
+    {
+      "name": "all nine browser suites",
+      "command": "npm --workspace neutron-marketplace run test:browser",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-self-call-permissions/browser.log",
+      "logSha256": "a118260b448ab1e5622b62282297000343cc693a04c45105ec5cceba75d7d06d"
+    },
+    {
+      "name": "actual client/protocol integration",
+      "command": "npm --workspace neutron-marketplace run test:protocol",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-self-call-permissions/protocol.log",
+      "logSha256": "bb334463cc516347fa02a3c6a2a933856981d2ff7d511907704f20aaf922fded"
+    },
+    {
+      "name": "six released upgrades and clean initialization",
+      "command": "NEUTRON_RUN_MARKETPLACE_DISCOUNT_UPGRADE=1 NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION=125 NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256=e10102a164f43a0d7dd3dd47b3492f6eb01d8ba07c439d6282be7135471c6989 NEUTRON_POCKETIC_BIN=<pinned PocketIC> bun test ./apps/marketplace/test/discount_upgrade.pocketic.test.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "tmp/marketplace-self-call-permissions/upgrade.log",
+      "logSha256": "ae7a7372388659c372d3d78a5a210b9aaf0af685076201ee6df7db99113b4fb0"
+    }
+  ]
+}

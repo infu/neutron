@@ -3,9 +3,9 @@
  *
  * NEUTRON_RUN_MARKETPLACE_DISCOUNT_UPGRADE=1 \
  * NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256=<reviewed archive SHA-256> \
- * NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION=122 \
+ * NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION=125 \
  * NEUTRON_POCKETIC_BIN=.neutron/cache/bin/pocket-ic-14.0.0-linux-x64/pocket-ic \
- * bun test apps/marketplace/test/discount_upgrade.pocketic.test.ts
+ * bun test ./apps/marketplace/test/discount_upgrade.pocketic.test.ts
  *
  * No browser, protocol deployment, ledger payment, archive rebuild or production
  * call. The only upgrade is the normal checked installation transaction for
@@ -19,10 +19,10 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { physicalAppMethodName } from "neutron-tools/src/physical_names.js";
+import { requirePhysicalSelfCallMethod, requirePreapprovedSelfCall } from "../../kernel/src/self_calls.ts";
 import {
   compileFreshPackages, compilePackages, preparePackageInstall,
-  type CompileResult,
+  type AppRegistryEntry, type CompileResult,
 } from "../../../packages/neutron-compiler/src/install.ts";
 import {
   DirectPocketIcCalls, createApplicationInstance, deployExactTransition,
@@ -109,12 +109,13 @@ const predecessors = [
   { version: 121, memoryVersion: 2, digest: "d6ac1fc5b3e563c5af4bf0d7cd5d40f9469d756a5d6bb988782fe9ea96671dcd", size: 519_184 },
   { version: 122, memoryVersion: 2, digest: "ebce4f77fc05285a5f331515e42a2e9448de1d463b1fdd562c24018138640b42", size: 519_194 },
   { version: 123, memoryVersion: 2, digest: "74dbfa3edf839d8c80b3ded6f77fb674041bd53001164907fe888dfb70e304e2", size: 519_245 },
+  { version: 124, memoryVersion: 2, digest: "9db663a9b0b5dbc38d54a08a9eb7d2ae8ea602aa97433aac62afaa11d398c2c0", size: 520_871 },
 ] as const;
 
 for (const predecessor of predecessors) qualify(`Marketplace${predecessor.version} managed state ${predecessor.memoryVersion === 1 ? "migrates once" : "keeps v2 unchanged"} and retains identity, journals and discount preference`, async () => {
   const candidateDigest = process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_SHA256;
   if (!candidateDigest || !/^[0-9a-f]{64}$/.test(candidateDigest)) throw new Error("Set the exact reviewed candidate archive digest after packaging");
-  const candidateVersion = Number(process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION ?? "124");
+  const candidateVersion = Number(process.env.NEUTRON_MARKETPLACE_DISCOUNT_CANDIDATE_VERSION ?? "125");
   expect(candidateVersion).toBeGreaterThan(predecessor.version);
   const kernel = await pinned("kernel", 359, "6b506590ab9160a6e8e31859a791d40e60b797f06e9fde28781b8f0beb89574d", 2_466_756);
   const previous = await pinned("marketplace", predecessor.version, predecessor.digest, predecessor.size);
@@ -179,10 +180,32 @@ for (const predecessor of predecessors) qualify(`Marketplace${predecessor.versio
       expect(await direct.kernelActivation(canister, deployer, { set: Uint8Array.from(Buffer.from(sha256(token), "hex")) })).toEqual({ ready: null });
       expect(await direct.kernelActivation(canister, owner, { use: token })).toEqual({ authorized: null });
       const actor = provision.createDirectPocketIcKernelActor({ ...options, caller: owner });
-      const call = (name: string, method: IDL.FuncClass, args: unknown[]) => direct.actorCall(canister, owner, physicalAppMethodName("marketplace", name), method, args);
-      return { canister, actor, call };
+      // Read the installed registry, as the browser does. Direct owner calls
+      // alone miss absent preapprovals even when the generated ABI works.
+      let app: AppRegistryEntry;
+      const reloadSelfCalls = async () => {
+        const registry = await direct.readJsonAsset(canister, "/system/apps.json") as Record<string, AppRegistryEntry>;
+        app = registry.marketplace!;
+        expect(app).toBeDefined();
+        const runtime = requiredAppInstance(normalizeAppInstances((await actor.kernel_runtime_info()).apps), "marketplace");
+        expect(app.version).toBe(runtime.version);
+        expect(app.capability_plan_fingerprint).toBe(runtime.capability_plan_fingerprint);
+        return app;
+      };
+      await reloadSelfCalls();
+      const call = (name: string, method: IDL.FuncClass, args: unknown[]) => {
+        const mode = method.annotations.includes("query") ? "query" : "update";
+        const entry = requirePreapprovedSelfCall(app, name, mode);
+        return direct.actorCall(canister, owner, requirePhysicalSelfCallMethod("marketplace", entry), method, args);
+      };
+      return { canister, actor, call, reloadSelfCalls };
     }
     const existing = await initialize(baseline, initial, 0x91);
+    if (predecessor.version === 124) {
+      for (const [name, method] of [["marketplace_save_draft_child", saveChildMethod], ["marketplace_delete_operation", deleteOperationMethod]] as const) {
+        expect(() => existing.call(name, method, [])).toThrow("Method is not preapproved for this app");
+      }
+    }
     const production = Principal.fromText("sj2r4-haaaa-aaaay-aadgq-cai");
     const beforeFresh = await existing.call("marketplace_state", stateMethod, [null]) as any;
     expect(beforeFresh.seed).toEqual([]);
@@ -223,6 +246,7 @@ for (const predecessor of predecessors) qualify(`Marketplace${predecessor.versio
     console.log(`Marketplace discount upgrade: checked install of successor over saved v${predecessor.memoryVersion} identity, journals and discount`);
     const installed = await deployExactTransition({ actor: existing.actor, canisterId: existing.canister, packages: [next.prepared], state, compiled: upgraded, expectedDeploymentId: initial.deploymentId });
     const after = await existing.actor.kernel_runtime_info();
+    const installedApp = await existing.reloadSelfCalls();
     expect(after.deployment_id).toBe(installed.compiled.deploymentId);
     expect(await existing.actor.kernel_install_status(null)).toEqual([]);
     expect(normalizeMemoryInventory(after.memories)).toContainEqual(["marketplace", "state", 2]);
@@ -255,8 +279,9 @@ for (const predecessor of predecessors) qualify(`Marketplace${predecessor.versio
       expect(stateJson(await existing.call("marketplace_state", stateMethod, [null]))).toBe(savedState);
       expect(await existing.call("marketplace_drafts", draftsMethod, [{ cursor: [], limit: 100n }])).toEqual(savedDrafts);
     }
-    // Exercise the generated deletion ABI after the checked upgrade. The
-    // original financial/install journals above remain byte-for-byte intact.
+    // Pass the real browser preapproval check using the committed registry,
+    // then exercise the generated deletion ABI after the checked upgrade.
+    // Original financial/install journals remain byte-for-byte intact.
     const dismissedId = "ee".repeat(16), checkout = { id: `ethereum:operation:${dismissedId}`, value: bytes('{"kind":"approval_only"}') };
     const approval = { id: `ethereum:step:${dismissedId}:approval`, value: bytes('{"state":"confirmed"}') };
     ok(await existing.call("marketplace_save_draft", saveDraftMethod, [checkout]));
@@ -284,7 +309,8 @@ for (const predecessor of predecessors) qualify(`Marketplace${predecessor.versio
     await mkdir(output, { recursive: true });
     const receipt = {
       status: "passed", qualification: `marketplace${predecessor.version}-state${predecessor.memoryVersion}-to-state2`,
-      scope: "Exact released archives and immutable memory source/lock lineage, generated actor compatibility, one checked app upgrade, retained complete state root, read key/delegation and original/revised journal bytes/history, clean v2 initialization. No browser or protocol financial calls.",
+      scope: "Exact released archives and immutable memory source/lock lineage, generated actor compatibility, one checked app upgrade, retained complete state root, read key/delegation and original/revised journal bytes/history, clean v2 initialization. Every app call passes the Kernel browser preapproval check against the installed registry and its runtime fingerprint before invoking the real actor. No browser or protocol financial calls.",
+      selfCallPermissions: { capabilityPlanFingerprint: installedApp.capability_plan_fingerprint, verifiedUpdates: ["marketplace_save_draft_child", "marketplace_delete_operation"], predecessor124RejectionReproduced: predecessor.version === 124 },
       kernel: { version: 359, sha256: sha256(kernel.archive) },
       predecessor: { version: predecessor.version, memoryVersion: predecessor.memoryVersion, sha256: sha256(previous.archive), size: previous.archive.byteLength },
       successor: { version: candidateVersion, sha256: sha256(next.archive) },

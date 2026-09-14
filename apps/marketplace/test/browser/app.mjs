@@ -34,7 +34,7 @@ const entries=[
 ];
 const listing=([id,title,summary,priceUsdMicros])=>({id,title,summary,priceUsdMicros,category:'Productivity',publisher:principal,publisherId:'aae',publisherName:'AAE',version:'3',rating:id==='studio'?null:4.8,ratingCount:id==='studio'?0:42,owned:state.owned.includes(id),installed:state.installed.includes(id),freeAcquisitions:priceUsdMicros==='0'?'42':'0',paidPurchases:priceUsdMicros==='0'?'0':'1234'});
 const money=atoms=>({atoms,decimals:6,symbol:'ckUSDC'});
-const cycles={total:'1100000',processing:'1100000',schedule:'fixed-v1'};
+const cycles={total:'351285000',processing:'351285000',schedule:'fixed-v1'};
 const quote=(args)=>{
  const dependency=args.appIds.includes('studio');
  return {operationId:dependency?'22222222222222222222222222222222':'0123456789abcdef0123456789abcdef',commitment:dependency?'free-root-paid-dependency':'exact-reviewed-quote',appIds:args.appIds,items:entries.filter(x=>args.appIds.includes(x[0])||(dependency&&x[0]==='folio')).map(listing),token:args.token,subtotalUsdMicros:dependency?'5000000':'10000000',discountUsdMicros:dependency?'0':args.affiliateCode?'1000000':'0',payment:money(dependency?'5000000':args.affiliateCode?'9000000':'10000000'),approvalFee:money('10000'),collectionFee:money('10000'),totalDebit:money(dependency?'5020000':args.affiliateCode?'9020000':'10020000'),allocations:dependency?[{kind:'developer',principal,amount:money('1500000')},{kind:'burn',principal:null,amount:money('3500000')}]:[{kind:'developer',principal,amount:money('2700000')},{kind:'affiliate',principal:'aaaaa-aa',amount:money('2700000')},{kind:'burn',principal:null,amount:money('3600000')}],cycles,affiliateCode:args.affiliateCode,warnings:[],opaque:{immutable:true}};
@@ -277,6 +277,11 @@ try {
   assert.match(await checkout.innerText(), /9.02 ckUSDC/);
   assert.match(await checkout.innerText(), /3.6 ckUSDC/);
   assert.match(await checkout.innerText(), /3rurp-vyaaa-aaaay-aacua-cai/);
+  assert.equal(await checkout.locator('.mp-cost-detail summary strong').innerText(), '0.00035 TC');
+  await checkout.locator('.mp-cost-detail summary').click();
+  assert.equal(await checkout.locator('.mp-cost-detail dd').first().innerText(), '0.00035 TC');
+  assert.doesNotMatch(await checkout.innerText(), /351,285,000 cycles/);
+  checks.push('Cycle totals and processing costs use TC with two significant digits: 351285000 cycles displays as 0.00035 TC.');
   await page.screenshot({ path: join(output, "checkout-380.png") });
   await checkout.getByRole("button", { name: "Buy · 9 ckUSDC", exact: true }).click();
   assert.equal(await page.locator('.mp-operation').count(), 0);

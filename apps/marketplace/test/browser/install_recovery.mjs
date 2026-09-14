@@ -196,7 +196,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.installRecovery.preparations), [old.id]);
   await row.getByRole("button", { name: "Prepare latest selection", exact: true }).click();
   await page.waitForFunction(() => window.installRecovery.latestIds.length === 1);
-  await row.getByText("2,400,000 cycles", { exact: true }).waitFor();
+  await row.getByText("0.0000024 TC", { exact: true }).waitFor();
   const freshId = await page.evaluate(() => window.installRecovery.latestIds[0]);
   assert.match(freshId, /^[0-9a-f]{32}$/);
   assert.notEqual(freshId, old.id, "the explicit new selection must not rebind the old manifest");
@@ -207,7 +207,7 @@ try {
   assert.deepEqual(await page.evaluate(() => window.installRecovery.preparations), [old.id, freshId]);
   assert.deepEqual(await page.evaluate(() => window.installRecovery.latestIds), [freshId], "a lost new response must retain that new request rather than generate another");
   await row.getByRole("button", { name: "Refresh installation cost", exact: true }).click();
-  await row.getByText("2,400,000 cycles", { exact: true }).waitFor();
+  await row.getByText("0.0000024 TC", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.installRecovery.quotes.at(-1).returned), freshId);
   await row.getByRole("button", { name: "Install", exact: true }).click();
   await page.waitForFunction(() => !!window.installRecovery.saved?.setupUrl);
@@ -245,7 +245,7 @@ try {
   await retiredRow.getByText("Selection no longer available", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.installRecovery.quotes.at(-1).returned), retired.id);
   await retiredRow.getByRole("button", { name: "Prepare latest selection", exact: true }).click();
-  await retiredRow.getByText("2,400,000 cycles", { exact: true }).waitFor();
+  await retiredRow.getByText("0.0000024 TC", { exact: true }).waitFor();
   const replacement = await page.evaluate(() => window.installRecovery.latestIds[0]);
   assert.match(replacement, /^[0-9a-f]{32}$/);
   assert.notEqual(replacement, retired.id);
@@ -254,7 +254,7 @@ try {
   await retiredRow.getByRole("alert").getByText("Latest preparation response interrupted", { exact: true }).waitFor();
   assert.deepEqual(await page.evaluate(() => window.installRecovery.latestIds), [replacement]);
   await retiredRow.getByRole("button", { name: "Refresh installation cost", exact: true }).click();
-  await retiredRow.getByText("2,400,000 cycles", { exact: true }).waitFor();
+  await retiredRow.getByText("0.0000024 TC", { exact: true }).waitFor();
   await retiredRow.getByRole("button", { name: "Install", exact: true }).click();
   await page.waitForFunction(() => window.installRecovery.opened.length === 1);
   assert.deepEqual(await page.evaluate(() => window.installRecovery.preparations), [retired.id, retired.id, replacement, replacement]);

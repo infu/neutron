@@ -1,0 +1,14 @@
+{
+  "checks": [
+    "Combined preparation and source-access cost is visible before installation; one click opens its handoff, and a remounted control recovers the same ID without another charge.",
+    "Changed selections clear the old quote immediately; late earlier responses cannot install the wrong apps or attach their fee.",
+    "Failed quotes and cost refreshes only perform reads; stale fees disable dispatch, and the fresh visible fee retains the original request ID.",
+    "Changing the displayed stable/beta release clears its old quote identity while retaining the same app IDs.",
+    "A changed preference disables stale installation and lets Prepare latest review a new request without charging.",
+    "A submitted request awaiting reconciliation remains explicitly distinguishable from a new installation after preferences change.",
+    "Owned app details share the cost-aware one-click Install control at narrow and wide tile sizes; public Get retains acquisition behavior.",
+    "Normal agent installation review displays exact apps, principals and cost; declining causes no installation, and inconsistent fee summaries are rejected.",
+    "Rejected installation errors stay visible in the detail dialog; duplicate clicks dispatch once, and only explicit cost refresh plus another Install prepares the original ID."
+  ],
+  "errors": []
+}

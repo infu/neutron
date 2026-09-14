@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { InstallationQuote, MarketplaceClient } from "../view-types.ts";
-import { ErrorNote, Icon, errorMessage, useRead } from "./primitives.tsx";
+import { ErrorNote, Icon, errorMessage, formatCycles, useRead } from "./primitives.tsx";
 
 /** Installation's protocol fee is reviewed on the existing Install control. */
 export function InstallControl({ client, appIds, selectionIdentity = "", disabled = false, busy = false, label = "Install", onInstall, className = "mp-secondary" }: {
@@ -61,7 +61,7 @@ export function InstallControl({ client, appIds, selectionIdentity = "", disable
   }
   return <div className="mp-install-control">
     <div className="mp-button-row">
-      {!disabled && appIds.length > 0 && <span className="mp-muted mp-install-cost" aria-live="polite" title="Includes selection preparation and private download access. Neutron reviews app permissions and installation costs next.">{quote ? quote.unavailableReason ? "Selection no longer available" : BigInt(quote.cycles.total) === 0n ? "Ready · No additional access charge" : `${BigInt(quote.cycles.total).toLocaleString("en-US")} cycles` : read.error || dispatchError ? "Refresh cost to continue" : "Checking cost…"}</span>}
+      {!disabled && appIds.length > 0 && <span className="mp-muted mp-install-cost" aria-live="polite" title="Includes selection preparation and private download access. Neutron reviews app permissions and installation costs next.">{quote ? quote.unavailableReason ? "Selection no longer available" : BigInt(quote.cycles.total) === 0n ? "Ready · No additional access charge" : formatCycles(quote.cycles.total) : read.error || dispatchError ? "Refresh cost to continue" : "Checking cost…"}</span>}
       {!disabled && appIds.length > 0 && <button type="button" className="mp-text-button" aria-label="Refresh installation cost" title="Refresh cost" disabled={working || read.loading} onClick={() => setRevision((value) => value + 1)}><Icon name="refresh" /></button>}
       <button type="button" className={className} disabled={disabled || working || !quote || !!unavailableReason || preferenceChanged && !reconciliationRequired} onClick={() => void install()}>{working ? "Opening install…" : reconciliationRequired ? "Continue original request" : label}</button>
     </div>
