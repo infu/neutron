@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { unpackNeutronPackage } from "neutron-compiler/src/install.ts";
 import { generateAppMethodSchemaArtifact } from "neutron-scripts/src/method_schema.js";
+import { packageArchiveFilename } from "neutron-tools/src/package_archive.js";
 import { type NeutronManifest } from "neutron-tools/src/schema.js";
 import { validate_neutron_conf } from "neutron-tools/src/validate_schema.js";
 
@@ -36,6 +38,22 @@ test("it declares a tile and a resident background", async () => {
   // Agent tools are registered by the background so an agent can reach them
   // with no tile open. Losing this declaration silently breaks that.
   expect(manifest.background?.path).toBe("service.html");
+});
+
+test("the resident ships the exact Candid compiler Wasm used for UI and agent proposals", async () => {
+  const manifest = await readManifest();
+  const files = unpackNeutronPackage(await readFile(new URL(
+    `../${packageArchiveFilename(manifest.id, manifest.version)}`, import.meta.url,
+  )));
+  const wasmPaths = Object.keys(files).filter(path => /^web\/didc_rust_bg-.*\.bin$/.test(path));
+  expect(wasmPaths).toHaveLength(1);
+  const wasmPath = wasmPaths[0]!;
+  const compiler = await readFile(new URL(import.meta.resolve("icblast/didc-wasm")));
+  expect(files[wasmPath]).toEqual(new Uint8Array(compiler));
+  expect(WebAssembly.validate(files[wasmPath]!)).toBe(true);
+  // The UI delegates custom payloads to sns_validate_payload in the resident.
+  const service = new TextDecoder().decode(files["web/service.js"]!);
+  expect(service.includes(wasmPath.slice("web/".length))).toBe(true);
 });
 
 test("every preapproved self call resolves to a real authorized method", async () => {

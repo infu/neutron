@@ -128,6 +128,9 @@ qualifies live queries and custom validator queries without submitting actions.
 
 Release tests include schema/codec cases, invocation authority, recovery,
 managed-memory lineage, journal PocketIC tests and sandboxed browser fixtures.
+The Candid compiler Wasm is packaged with the resident that handles UI and agent
+proposals. Browser tests exercise custom payload compilation from app-relative
+URLs with the real compiler, and archive checks verify its exact shipped bytes.
 The write-path verifier uses genuine SNS canisters in isolated PocketIC; see
 [`scripts/local-sns.md`](./scripts/local-sns.md) for its precise coverage.
 Local tests do not certify every deployed SNS version or every proposal target.

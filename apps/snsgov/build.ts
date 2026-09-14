@@ -26,7 +26,7 @@ const config: BuildOptions = {
   external: [],
   format: "esm",
   jsx: "automatic",
-  loader: { ".ts": "ts", ".tsx": "tsx" },
+  loader: { ".bin": "file", ".ts": "ts", ".tsx": "tsx" },
   platform: "browser",
   plugins: [
     sassPlugin(),

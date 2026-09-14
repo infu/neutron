@@ -17,6 +17,7 @@
     "src/service.ts",
     "src/action_tools.ts",
     "src/provider.ts",
+    "src/ui/ProposalMarkdown.tsx",
     "src/candid/**/*.d.ts",
     "test/**/*.ts",
     "types/**/*.d.ts"

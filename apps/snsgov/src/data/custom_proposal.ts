@@ -13,12 +13,13 @@
  *   IDL.encode(plain JS value)     -> payload bytes
  *   validator(payloadBytes)        -> Ok("<what voters will see>") | Err(reason)
  *
- * `icblast` already bundles the Rust Candid parser as wasm (864 KB), so it is
- * imported lazily — only a user who opens the builder pays for it.
+ * The build packages icblast's Rust Candid parser as a local Wasm asset. Its
+ * bytes are fetched only when the tile or resident first compiles an interface.
  */
 
 import { IDL } from "@dfinity/candid";
 import { Principal } from "@dfinity/principal";
+import didcWasmUrl from "icblast/didc-wasm";
 import { callRawQuery, getAgent, QueryMethodUnavailableError, type AgentOptions } from "./agent";
 import { decodeIcrcAccount, encodeIcrcAccount, toCandidAccount } from "./accounts";
 import { SnsError } from "./errors";
@@ -85,7 +86,11 @@ export interface CustomMethodSignature {
 
 async function methodSignature(did: string, methodName: string): Promise<CustomMethodSignature | null> {
   const { idlFactoryFromCandid } = await import("icblast");
-  const factory = (await idlFactoryFromCandid(did)) as IDL.InterfaceFactory;
+  const factory = (await idlFactoryFromCandid(did, {
+    // Bundling relocates icblast's module, so its package-relative default URL
+    // does not exist in Neutron. Resolve the emitted asset beside this bundle.
+    didcWasm: new URL(didcWasmUrl, import.meta.url),
+  })) as IDL.InterfaceFactory;
   const service = factory({ IDL }) as unknown as {
     _fields: [string, CustomMethodSignature][];
   };

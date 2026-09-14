@@ -1,0 +1,35 @@
+{
+  "action": "promotion_verified",
+  "protocol": "neutron-update-source-publish-v2",
+  "operation": "promote",
+  "channel": "stable",
+  "requestId": "d70a3083f6ccd78dcde05aab222f622da7be9d7a096a4cf8fd4c95f874da9c2c",
+  "canister_id": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "origin": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io",
+  "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+  "atomic": true,
+  "batch_id": null,
+  "reconciled_batch_id": "2",
+  "journal": "/srv/shared/code/neutron/.neutron/marketplace-publications/promote-stable-d23e7924961606a74545b1eef97712e9078c62cccdbcaa0e37fac891ccc09806.json",
+  "published_at": "2026-09-14T14:11:55.331Z",
+  "packages": [
+    {
+      "id": "snsgov",
+      "candidate_id": "89",
+      "version": 118,
+      "sha256": "1a6c015ba711d75ab2d810e7726433a296f932adfc620ad3d9db6167a2a61c99",
+      "size": 1010782,
+      "package_path": "/repo/v1/packages/1a6c015ba711d75ab2d810e7726433a296f932adfc620ad3d9db6167a2a61c99.neutron",
+      "release_path": "/repo/v1/releases/snsgov.json",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/f70e7b8031209a89f4fbcbe36c70be9d93556703e91ef1e6666b2977d9095ced.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/f70e7b8031209a89f4fbcbe36c70be9d93556703e91ef1e6666b2977d9095ced.source.v1.msgpack.gz",
+        "sha256": "f70e7b8031209a89f4fbcbe36c70be9d93556703e91ef1e6666b2977d9095ced",
+        "size": 818011,
+        "status": "unchanged"
+      },
+      "release_digest": "f05c62815c8174546330d09c6ad6646c5950cd364a15780442bcf8cf40b1cc09",
+      "status": "unchanged"
+    }
+  ]
+}

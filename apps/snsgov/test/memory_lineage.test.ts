@@ -137,3 +137,21 @@ test("every checked-in production predecessor keeps its v1 root and initializes 
     });
   }
 });
+
+test("production releases with an operation journal preserve both memory roots", async () => {
+  const { manifest } = await successor();
+  for (const version of [115, 116, 117]) {
+    const files = unpackNeutronPackage(await readFile(new URL(packageArchiveFilename("snsgov", version), app)));
+    const previous = JSON.parse(decode(files["neutron.json"]!)) as PackagedNeutronManifest;
+    expect(previous.version).toBe(version);
+    expect(previous.memory).toEqual(manifest.memory);
+    expect(planMemoryMigrations({ kernel, snsgov: previous }, { kernel, snsgov: manifest })).toEqual({
+      upgrades: [
+        { kind: "keep", owner: "snsgov", memoryId: "snsgov", version: 1 },
+        { kind: "keep", owner: "snsgov", memoryId: "snsgov_operations", version: 1 },
+      ],
+      removedApps: [],
+      destructiveMemoryRoots: [],
+    });
+  }
+});

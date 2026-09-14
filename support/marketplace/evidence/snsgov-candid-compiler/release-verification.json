@@ -1,0 +1,59 @@
+{
+  "archive": {
+    "path": "apps/snsgov/snsgov.v0.1.18.neutron",
+    "size": 1010782,
+    "sha256": "1a6c015ba711d75ab2d810e7726433a296f932adfc620ad3d9db6167a2a61c99"
+  },
+  "id": "snsgov",
+  "version": 118,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "memoryUnchanged": true,
+  "backendUnchanged": true,
+  "capabilitiesUnchanged": true,
+  "source": {
+    "kind": "https",
+    "revision": "source-sha256:f70e7b8031209a89f4fbcbe36c70be9d93556703e91ef1e6666b2977d9095ced",
+    "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/f70e7b8031209a89f4fbcbe36c70be9d93556703e91ef1e6666b2977d9095ced.source.v1.msgpack.gz",
+    "sha256": "f70e7b8031209a89f4fbcbe36c70be9d93556703e91ef1e6666b2977d9095ced",
+    "bytes": 818011,
+    "localPath": "apps/snsgov/.neutron/sources/f70e7b8031209a89f4fbcbe36c70be9d93556703e91ef1e6666b2977d9095ced.source.v1.msgpack.gz",
+    "actualSize": 818011,
+    "actualSha256": "f70e7b8031209a89f4fbcbe36c70be9d93556703e91ef1e6666b2977d9095ced"
+  },
+  "tests": {
+    "release": {
+      "passed": 362,
+      "skipped": 8,
+      "failed": 0,
+      "command": "npm --workspace neutron-snsgov test",
+      "skippedReason": "Optional mainnet integration tests were not enabled."
+    },
+    "finalRegression": {
+      "passed": 17,
+      "failed": 0,
+      "command": "bun test test/custom_proposal_browser.test.ts test/package.test.ts test/memory_lineage.test.ts (from apps/snsgov)"
+    },
+    "memory": "passed clean initialization and restoration; v0.1.10 through v0.1.17 lineage retained",
+    "writePath": {
+      "passed": true,
+      "command": "npm --workspace neutron-snsgov run verify:write-path"
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "npx tsc -b apps/snsgov --pretty false"
+    }
+  },
+  "publication": {
+    "beta": {
+      "batch_id": "26",
+      "receipt": "beta-publish.json",
+      "postflight": "beta-repeat.json"
+    },
+    "stable": {
+      "batch_id": "2",
+      "receipt": "stable-promote.json",
+      "postflight": "stable-repeat.json"
+    },
+    "verifiedPostflightBatchId": null
+  }
+}
