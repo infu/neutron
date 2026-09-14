@@ -44,3 +44,11 @@ payment/install journal bytes and history, and authorized deletion after the
 upgrade. The 124 receipt also records reproduction of both permission failures
 before the upgrade. These checks use disposable PocketIC canisters; production
 user installations are not modified by this release workflow.
+
+Marketplace **0.1.25** was [published to beta](beta-publish.json) in batch **25**
+through root `npm run updates:publish`. The [second run against the same bytes](beta-repeat.json)
+returned `batch_id: null`, with all 28 packages and offered sources `unchanged`.
+[Postflight verification](publication-verification.json) compares every version,
+URL, path, size and SHA-256 with the frozen reviewed artifacts. Marketplace is
+the only changed package. Kernel remains at its published 0.3.63; production
+user canisters and Dispenser starter selection are unchanged.
