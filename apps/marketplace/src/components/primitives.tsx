@@ -20,6 +20,12 @@ export function quantity(value: Money): string {
   const fraction = (n % base).toString().padStart(value.decimals, "0").replace(/0+$/, "");
   return `${(n / base).toLocaleString("en-US")}${fraction ? `.${fraction}` : ""} ${value.symbol}`;
 }
+/** Display only: round to two significant digits without changing quoted atoms. */
+export function formatCycles(value: string): string {
+  const cycles = BigInt(value), step = 10n ** BigInt(Math.max(0, cycles.toString().length - 2));
+  const rounded = (cycles + step / 2n) / step * step;
+  return quantity({ atoms: String(rounded), decimals: 12, symbol: "TC" });
+}
 export function parseAmount(input: string, decimals: number): string {
   if (!/^\d+(?:\.\d*)?$/.test(input.trim())) throw new Error("Enter a positive amount.");
   const [whole = "0", fraction = ""] = input.trim().split(".");
@@ -93,7 +99,7 @@ export function EmptyState({ title, children, icon = "apps", action }: { title: 
 export function Loading({ label = "Loading apps…" }: { label?: string }) { return <div className="mp-loading" role="status"><span className="mp-spinner" />{label}</div>; }
 export function Principal({ value }: { value: string }) { return <span className="mp-principal" title={value}>{value}</span>; }
 export function CycleCost({ value, storage = false }: { value: CycleEstimate; storage?: boolean }) {
-  return <details className="mp-cost-detail"><summary><span>{storage ? "Upload & first-year storage" : "Protocol processing"}</span><strong>{BigInt(value.total).toLocaleString("en-US")} cycles</strong></summary><dl className="mp-facts"><div><dt>Processing</dt><dd>{BigInt(value.processing).toLocaleString("en-US")} cycles</dd></div>{value.storage && BigInt(value.storage) > 0n && <div><dt>First-year storage</dt><dd>{BigInt(value.storage).toLocaleString("en-US")} cycles</dd></div>}<div><dt>Fixed cost schedule</dt><dd>{value.schedule}</dd></div></dl><p className="mp-muted">Paid by this Neutron. {storage ? "The operator funds storage after year one. No annual renewal is required." : "Separate from token and network fees."}</p></details>;
+  return <details className="mp-cost-detail"><summary><span>{storage ? "Upload & first-year storage" : "Protocol processing"}</span><strong>{formatCycles(value.total)}</strong></summary><dl className="mp-facts"><div><dt>Processing</dt><dd>{formatCycles(value.processing)}</dd></div>{value.storage && BigInt(value.storage) > 0n && <div><dt>First-year storage</dt><dd>{formatCycles(value.storage)}</dd></div>}<div><dt>Fixed cost schedule</dt><dd>{value.schedule}</dd></div></dl><p className="mp-muted">Paid by this Neutron. {storage ? "The operator funds storage after year one. No annual renewal is required." : "Separate from token and network fees."}</p></details>;
 }
 export function Modal({ title, close, children, footer, wide = false }: { title: string; close: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);

@@ -206,7 +206,7 @@ try {
   assert.deepEqual((await snapshot()).quotes.map(quote => quote.price), ['1999999', '1999999']);
   assert.equal((await snapshot()).writes.length, 0);
   await page.locator('.mp-cost-detail summary').click();
-  assert.match(await page.locator('.mp-cost-detail').innerText(), /3,000,000,000 cycles/);
+  assert.match(await page.locator('.mp-cost-detail').innerText(), /0.003 TC/);
   assert.match(await page.locator('.mp-cost-detail').innerText(), /operator funds storage after year one/);
   assert.match(await page.locator('.mp-cost-detail').innerText(), /No annual renewal/);
   await page.setViewportSize({ width: 320, height: 720 });

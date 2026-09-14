@@ -140,8 +140,8 @@ try {
     assert.doesNotMatch(await dialog.locator('.mp-total-facts').innerText(), /Wallet approval fee|Payment collection fee/);
     assert.match(await dialog.innerText(), /0x3333333333333333333333333333333333333333/);
     assert.match(await dialog.innerText(), /rrkah-fqaaa-aaaaa-aaaaq-cai/);
-    assert.match(await dialog.innerText(), /1,000,000,000 cycles/);
-    assert.match(await dialog.innerText(), /50,000,000,000 cycles/);
+    assert.match(await dialog.innerText(), /0.001 TC/);
+    assert.match(await dialog.innerText(), /0.05 TC/);
   };
   const approveRoute = async () => {
     const route = page.getByRole('dialog', { name: 'Review updated purchase costs', exact: true });
@@ -225,7 +225,7 @@ try {
     },kind);
     const maintenance = page.getByRole('dialog',{name:title,exact:true});
     await maintenance.getByRole('button',{name:action,exact:true}).waitFor();
-    assert.match(await maintenance.innerText(),/1,234,500 cycles/);
+    assert.match(await maintenance.innerText(),/0.0000012 TC/);
     if(kind==='ethereum_cancel') assert.match(await maintenance.innerText(),/cannot stop an Ethereum payment already sent.*late payment remains recoverable as ckUSDC credit/);
     if(kind==='ethereum_settle') assert.match(await maintenance.innerText(),/protocol accounting without another Ethereum payment/);
     if(kind==='ethereum_verify') {
@@ -289,7 +289,7 @@ try {
   const hashReview = page.getByRole('dialog', { name: 'Verify original payment', exact: true });
   await hashReview.getByRole('button', { name: 'Verify payment', exact: true }).waitFor();
   assert.match(await hashReview.innerText(), new RegExp(originalHash));
-  assert.match(await hashReview.innerText(), /50,000,000,000 cycles/);
+  assert.match(await hashReview.innerText(), /0.05 TC/);
   assert.match(await hashReview.innerText(), /rrkah-fqaaa-aaaaa-aaaaq-cai/);
   assert.match(await hashReview.innerText(), /verify it independently.*does not send another Ethereum payment/);
   await hashReview.getByText('Saved request', { exact: true }).click();
