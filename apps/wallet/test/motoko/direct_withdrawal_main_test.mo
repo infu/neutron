@@ -42,6 +42,10 @@ persistent actor {
             public var withdrawalBytes : [Blob] = [];
             public var loseApproval = false;
             public var loseMinter = false;
+            public var estimatedGas : Nat = 65_000;
+            public var chargedGas : Nat = 65_000;
+            public var gasAllowance : Nat = 0;
+            public var burns : Nat = 0;
             wallet.configured := true;
             for (ledger in [eth, usdc].vals()) {
                 Map.add<Principal, WalletMemory.Ledger>(wallet.ledgers, Principal.compare, ledger, {
@@ -61,13 +65,14 @@ persistent actor {
                     case ("icrc1_fee") #ok(to_candid (10 : Nat));
                     case ("get_events") #err({ code = "unavailable"; message = "Optional event tail unavailable" });
                     case ("eip_1559_transaction_price") {
-                        let price = { gas_limit = 65_000 : Nat; max_fee_per_gas = 1 : Nat; max_priority_fee_per_gas = 1 : Nat; max_transaction_fee = 65_000 : Nat; timestamp = null : ?Nat64 };
+                        let price = { gas_limit = 65_000 : Nat; max_fee_per_gas = 1 : Nat; max_priority_fee_per_gas = 1 : Nat; max_transaction_fee = estimatedGas; timestamp = null : ?Nat64 };
                         #ok(to_candid (price));
                     };
                     case ("icrc2_approve") {
                         let ?args : ?Icrc.ApproveArg = from_candid request.args else Runtime.trap("Bad approval");
                         assert (args.spender.owner == minter and args.fee == ?10);
                         approvalBytes := Array.concat(approvalBytes, [request.args]);
+                        if (request.canister == eth) gasAllowance := args.amount;
                         if (loseApproval) { loseApproval := false; return #err({ code = "reply_lost"; message = "Approval reply lost" }) };
                         let result : Icrc.ApproveResult = #Ok(20);
                         #ok(to_candid (result));
@@ -82,6 +87,12 @@ persistent actor {
                             let result : { #Ok : { block_index : Nat } } = #Ok({ block_index = 90 });
                             #ok(to_candid (result));
                         } else {
+                            if (chargedGas > gasAllowance) {
+                                let result : { #Err : { #CkEthLedgerError : { error : { #InsufficientAllowance : { allowance : Nat; failed_burn_amount : Nat; token_symbol : Text; ledger_id : Principal } } } } } =
+                                    #Err(#CkEthLedgerError({ error = #InsufficientAllowance({ allowance = gasAllowance; failed_burn_amount = chargedGas; token_symbol = "ckETH"; ledger_id = eth }) }));
+                                return #ok(to_candid (result));
+                            };
+                            burns += 1;
                             let result : { #Ok : { cketh_block_index : Nat; ckerc20_block_index : Nat } } = #Ok({ cketh_block_index = 91; ckerc20_block_index = 92 });
                             #ok(to_candid (result));
                         };
@@ -117,6 +128,39 @@ persistent actor {
                 request_id = id(byte); ledger; address = "0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD"; amount = 1_000;
                 withdrawal_quote = ?{ asset_fee = 10; gas = if (ledger == eth) null else ?{ ledger = eth; minter; budget = 65_000; ledger_fee = 10 } };
             };
+        };
+        // Gas can rise in both windows: between review and approval, and again
+        // when withdraw_erc20 refreshes its cached estimate before the burn.
+        for ((estimate, charge, succeeds) in [(70_000, 76_000, true), (65_000, 79_000, false), (79_000, 79_000, false)].vals()) {
+            let f = Fixture();
+            f.estimatedGas := estimate;
+            f.chargedGas := charge;
+            let input = { request(usdc, 4) with withdrawal_quote = ?{ asset_fee = 10; gas = ?{ ledger = eth; minter; budget = 78_000; ledger_fee = 10 } } };
+            let app = Main.Init(f.env);
+            ignore operation(app.wallet_ethereum_withdraw_prepare_v1(input));
+            let result = operation(await* app.wallet_transfer_resume_v2(input.request_id));
+            if (succeeds) {
+                switch (result.status) { case (#succeeded(_)) {}; case (_) Runtime.trap("Gas inside ceiling must succeed") };
+                assert (f.gasAllowance == 78_000 and f.burns == 1);
+                // A gas estimate/ceiling must never become a fictitious debit.
+                let ?gasLedger = Map.get(f.wallet.ledgers, Principal.compare, eth) else Runtime.trap("Missing gas ledger");
+                assert (Map.size(gasLedger.history.transactions) == 0);
+            } else {
+                switch (result.status) {
+                    case (#rejected(error)) {
+                        if (estimate <= 78_000) {
+                            assert Text.contains(error, #text("No withdrawal burn occurred"));
+                            assert Text.contains(error, #text("0.000000000000079000"));
+                        } else assert Text.contains(error, #text("costs changed"));
+                    };
+                    case (_) Runtime.trap("Definitive gas rejection must not remain pending");
+                };
+                assert (f.burns == 0);
+                if (estimate > 78_000) assert (f.approvalBytes.size() == 0);
+            };
+            let before = f.callsMade;
+            ignore operation(await* Main.Init(f.env).wallet_transfer_resume_v2(input.request_id));
+            assert (f.callsMade == before);
         };
         for (ledger in [eth, usdc].vals()) {
             let f = Fixture();

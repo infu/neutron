@@ -110,7 +110,7 @@ module {
                     case (?#TxCreated) #pending("Ethereum transaction created; waiting for broadcast.");
                     case (?#TxSent(value)) #submitted({
                         transaction_hash = value.transaction_hash;
-                        message = "Ethereum transaction broadcast; waiting for finalization.";
+                        message = "Ethereum transaction broadcast. Waiting for the minter to confirm finalization; the explorer may show it received sooner.";
                     });
                     case (?#TxFinalized(#Success(value))) #confirmed({ transaction_hash = value.transaction_hash });
                     case (?#TxFinalized(#PendingReimbursement(value))) {

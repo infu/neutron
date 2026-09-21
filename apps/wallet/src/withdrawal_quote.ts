@@ -50,9 +50,9 @@ export const walletWithdrawalQuoteOutputSchema: JsonObject = {
     assetSufficient: nullable({ type: "boolean" }),
     gas: nullable({
       type: "object",
-      required: ["ledger", "budget", "ledgerFee", "allowance", "totalDebit", "balance", "sufficient"],
+      required: ["ledger", "estimate", "budget", "ledgerFee", "allowance", "totalDebit", "balance", "sufficient"],
       properties: {
-        ledger: principalSchema, budget: natSchema, ledgerFee: natSchema,
+        ledger: principalSchema, estimate: natSchema, budget: natSchema, ledgerFee: natSchema,
         allowance: natSchema, totalDebit: natSchema, balance: natSchema,
         sufficient: { type: "boolean" },
       },
@@ -80,6 +80,7 @@ export type WalletWithdrawalQuote = {
   assetSufficient: boolean | null;
   gas: {
     ledger: string;
+    estimate: string;
     budget: string;
     ledgerFee: string;
     allowance: string;
@@ -150,6 +151,20 @@ export function quoteAuthorizationWire(quote: WalletWithdrawalQuote): SelfCallOb
   };
 }
 
+/** Change only the owner's gas ceiling; retain the estimate and approval fee. */
+export function withWithdrawalGasBudget(quote: WalletWithdrawalQuote, budget: string): WalletWithdrawalQuote {
+  if (quote.gas === null || quote.authorization.gas === null) throw new Error("This withdrawal has no separate ckETH gas payment");
+  requiredNat(budget, "maximum ckETH gas amount");
+  if (BigInt(budget) < BigInt(quote.gas.estimate)) throw new Error("Maximum gas must cover the current estimate");
+  const totalDebit = (BigInt(budget) + BigInt(quote.gas.ledgerFee)).toString();
+  const reviewed = { ...quote,
+    gas: { ...quote.gas, budget, allowance: budget, totalDebit, sufficient: BigInt(quote.gas.balance) >= BigInt(totalDebit) },
+    authorization: { ...quote.authorization, gas: { ...quote.authorization.gas, budget } },
+  };
+  validateQuote(reviewed);
+  return reviewed;
+}
+
 export async function readWalletWithdrawalQuote(
   value: { ledger: string; amount?: string },
   updateSelf: (method: string, args: SelfCallValue[], timeout?: number) => Promise<unknown>,
@@ -179,9 +194,11 @@ export async function handleWalletWithdrawalQuote(
 function parseGas(value: unknown): NonNullable<WalletWithdrawalQuote["gas"]> {
   const gas = exactObject(value,
     ["ledger", "budget", "ledger_fee", "allowance", "total_debit", "balance", "sufficient"],
-    "Wallet withdrawal gas");
+    "Wallet withdrawal gas", ["estimate"]);
   return {
     ledger: principal(gas.ledger, "gas ledger"),
+    // Older installed backends expose only the exact estimate as their budget.
+    estimate: requiredNat(gas.estimate ?? gas.budget, "Wallet withdrawal gas estimate"),
     budget: requiredNat(gas.budget, "Wallet withdrawal gas budget"),
     ledgerFee: requiredNat(gas.ledger_fee, "Wallet withdrawal gas ledger fee"),
     allowance: requiredNat(gas.allowance, "Wallet withdrawal gas allowance"),
@@ -224,7 +241,7 @@ function validateQuote(quote: WalletWithdrawalQuote): void {
     return;
   }
   const total = BigInt(gas.budget) + BigInt(gas.ledgerFee);
-  if (gas.allowance !== gas.budget || gas.totalDebit !== total.toString() ||
+  if (BigInt(gas.budget) < BigInt(gas.estimate) || gas.allowance !== gas.budget || gas.totalDebit !== total.toString() ||
     gas.sufficient !== (BigInt(gas.balance) >= total)) {
     throw new Error("Inconsistent Wallet withdrawal gas totals");
   }

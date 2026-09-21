@@ -6,6 +6,7 @@ import { IoArrowBack, IoCheckmark, IoOpenOutline, IoPeopleOutline, IoRefresh, Io
 import { TokenMark } from "./token_mark.tsx";
 import { formatTokenAmount, maxTransferAmount, parseTransferAmount } from "./format.ts";
 import { readWalletWithdrawalQuote, type WalletWithdrawalQuote } from "./withdrawal_quote.ts";
+import { useWithdrawalGasBudget, WithdrawalGasReview } from "./withdrawal_gas.tsx";
 import { createEthereumWithdrawalAttempt, executeEthereumWithdrawal, type EthereumWithdrawalAttempt } from "./ethereum_withdrawal_controller.ts";
 import type { WalletTransferOperation } from "./transfers.ts";
 import type { WalletLedger } from "./wallet_data.ts";
@@ -33,7 +34,9 @@ export function WalletEthereumWithdrawal({ ledger, mode, onMode, onBack, onNetwo
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
-  const [quote, setQuote] = useState<WalletWithdrawalQuote | null>(null);
+  const [baseQuote, setQuote] = useState<WalletWithdrawalQuote | null>(null);
+  const gasReview = useWithdrawalGasBudget(baseQuote);
+  const quote = gasReview.quote;
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [readRevision, setReadRevision] = useState(0);
@@ -91,7 +94,7 @@ export function WalletEthereumWithdrawal({ ledger, mode, onMode, onBack, onNetwo
   let amountError: string | null = null;
   if (amount.trim()) { try { amountAtoms = parseTransferAmount(amount, reviewedLedger); } catch (reason) { amountError = message(reason); } }
   const maximum = maxTransferAmount(reviewedLedger);
-  const ready = quote !== null && !quoteBusy && quoteError === null && amountAtoms !== null && !amountError && destination !== "" && !addressError && !(mode === "evm" && (accountBusy || accountError)) && (quote.gas === null || quote.gas.sufficient);
+  const ready = quote !== null && !quoteBusy && quoteError === null && gasReview.error === null && amountAtoms !== null && !amountError && destination !== "" && !addressError && !(mode === "evm" && (accountBusy || accountError)) && (quote.gas === null || quote.gas.sufficient);
   const accepted = operation?.status === "succeeded";
   const complete = accepted && operation.settlement?.status === "confirmed";
   const failed = operation?.status === "rejected" || operation?.settlement?.status === "failed";
@@ -109,6 +112,14 @@ export function WalletEthereumWithdrawal({ ledger, mode, onMode, onBack, onNetwo
       await executeEthereumWithdrawal(attempt.current, { updateSelf }, remember);
     } catch (reason) { setError(message(reason)); }
     finally { running.current = false; setBusy(false); }
+  };
+  const reviewAgain = () => {
+    if (busy || operation?.status !== "rejected") return;
+    // A definitive rejection permits a fresh review. Ambiguous outcomes keep
+    // the original request and can only use Continue, never a second burn.
+    attempt.current = null;
+    setOperation(null); setError(null); setQuote(null);
+    setReadRevision((value) => value + 1);
   };
   const displayAtoms = (atoms: string, decimals = ledger.decimals, ticker = symbol) => decimals === null ? `${atoms} units` : `${formatTokenAmount(atoms, decimals)} ${ticker}`;
 
@@ -139,6 +150,7 @@ export function WalletEthereumWithdrawal({ ledger, mode, onMode, onBack, onNetwo
           <div><dt>Approval fee</dt><dd>{quote ? displayAtoms(quote.assetFee) : "—"}</dd></div>
           {quote?.gas ? <div className="wallet-withdrawal-cost"><dt>Maximum Ethereum gas cost</dt><dd>{displayAtoms(quote.gas.totalDebit, 18, "ckETH")}</dd></div> : null}
         </dl>
+        <WithdrawalGasReview review={gasReview} disabled={busy || quoteBusy} />
         {quoteBusy ? <small role="status">Checking fees and balances…</small> : null}
         {quoteError ? <small className="wallet-amount-error" role="alert">{quoteError}</small> : null}
         {quote?.gas && !quote.gas.sufficient ? <small className="wallet-amount-error" role="alert">You need {displayAtoms(quote.gas.totalDebit, 18, "ckETH")} to cover Ethereum gas and its approval fee.</small> : null}
@@ -151,6 +163,7 @@ export function WalletEthereumWithdrawal({ ledger, mode, onMode, onBack, onNetwo
       </div>}
       {error ? <p className="wallet-amount-error" role="alert">{saved ? `Your request is saved. ${error}` : error}</p> : null}
       <div className="wallet-ethereum-submit">
+        {operation?.status === "rejected" ? <button className="nt-button" type="button" disabled={busy} onClick={reviewAgain}>Refresh costs and review again</button> : null}
         {complete || failed ? <button className="nt-button" type="button" onClick={onBack}>Done</button> : <button className="nt-button" type="button" disabled={busy || (!saved && !ready)} onClick={() => void submit()}>{busy ? <span className="wallet-spinner" /> : accepted ? <IoRefresh /> : null}{busy ? "Processing…" : accepted ? "Check progress" : saved ? "Continue withdrawal" : `Withdraw ${symbol}`}</button>}
         {!saved ? <button className="nt-icon-button" type="button" title="Refresh fees and balances" aria-label="Refresh fees and balances" disabled={quoteBusy || accountBusy} onClick={() => setReadRevision((value) => value + 1)}><IoRefresh /></button> : null}
       </div>
@@ -158,7 +171,7 @@ export function WalletEthereumWithdrawal({ ledger, mode, onMode, onBack, onNetwo
         <div><dt>Recipient</dt><dd><code>{destination}</code></dd></div>
         {quote ? <><div><dt>Token approval</dt><dd>{amountAtoms ?? "—"} atomic units</dd></div><div><dt>Approval fee</dt><dd>{quote.assetFee} atomic units</dd></div>{quote.gas ? <><div><dt>ckETH gas budget</dt><dd>{displayAtoms(quote.gas.budget, 18, "ckETH")}</dd></div><div><dt>ckETH approval fee</dt><dd>{displayAtoms(quote.gas.ledgerFee, 18, "ckETH")}</dd></div><div><dt>ckETH allowance</dt><dd>{quote.gas.allowance} atomic units</dd></div><div><dt>Available ckETH</dt><dd>{displayAtoms(quote.gas.balance, 18, "ckETH")}</dd></div></> : <div><dt>Ethereum gas</dt><dd>Deducted from the withdrawn ETH</dd></div>}<div><dt>Quote checked</dt><dd>{new Date(Number(BigInt(quote.observedAtNs) / 1_000_000n)).toLocaleTimeString()}</dd></div></> : null}
         {attempt.current ? <div><dt>Request</dt><dd><code>{attempt.current.requestId}</code></dd></div> : null}
-      </dl><p>Ethereum Mainnet. Costs are checked again before approvals; a changed quote requires a fresh review.</p></details> : null}
+      </dl><p>Ethereum Mainnet. Gas may change up to your reviewed maximum. A higher gas charge or changed approval fee requires another review.</p></details> : null}
     </div>
   </section>;
 }

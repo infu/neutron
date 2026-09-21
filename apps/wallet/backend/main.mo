@@ -358,7 +358,7 @@ module {
     public type WalletWithdrawalAuthorizationV1 = { asset_fee : Nat; gas : ?WalletWithdrawalGasAuthorizationV1 };
     public type WalletWithdrawalQuoteRequestV1 = { ledger : Principal; amount : ?Nat };
     public type WalletWithdrawalGasQuoteV1 = {
-        ledger : Principal; budget : Nat; ledger_fee : Nat; allowance : Nat;
+        ledger : Principal; estimate : ?Nat; budget : Nat; ledger_fee : Nat; allowance : Nat;
         total_debit : Nat; balance : Nat; sufficient : Bool;
     };
     public type WalletWithdrawalQuoteV1 = {
@@ -1285,12 +1285,10 @@ module {
                     );
                     switch (receipt.gas_burn) {
                         case null {};
-                        case (?gas) recordSecondaryNativeBurn(
-                            request,
-                            resolved,
-                            receipt.asset_burn,
-                            gas,
-                        );
+                        // Discover the actual gas debit from ledger history.
+                        // Neither the estimate nor the approved maximum proves
+                        // the amount charged by the minter's refreshed quote.
+                        case (?gas) ensureRetainedLedger(gas.ledger);
                     };
                     #ok(transferReceipt(
                         request,
@@ -4301,33 +4299,6 @@ module {
                 nativeContext,
             );
             invalidateLedgerBalance(request.ledger, fee);
-        };
-
-        func recordSecondaryNativeBurn(
-            request : WalletTransferRequest,
-            resolved : ResolvedTransferDestination,
-            asset : Withdrawals.BurnReceipt,
-            gas : Withdrawals.BurnReceipt,
-        ) : () {
-            ensureRetainedLedger(gas.ledger);
-            let intent = transferIntent(request, resolved, true);
-            ignore history.recordTransfer(
-                gas.ledger,
-                gas.block_index,
-                #burn,
-                gas.amount,
-                null,
-                null,
-                null,
-                ?intent,
-                ?{
-                    network = intent.network;
-                    transaction_id = null;
-                    output_index = null;
-                    related_ledger = ?asset.ledger;
-                    related_block_index = ?asset.block_index;
-                },
-            );
         };
 
         func transferIntent(

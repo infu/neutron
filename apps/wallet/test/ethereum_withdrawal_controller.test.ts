@@ -22,6 +22,14 @@ function wireOperation(status: WalletTransferOperation["status"], id = requestId
   };
 }
 
+test("the submitted status preserves the minter-specific explanation", () => {
+  const detail = "Ethereum transaction broadcast. Waiting for the minter to confirm finalization; the explorer may show it received sooner.";
+  const result = parseTransferOperation({ ...wireOperation("succeeded"), settlement: {
+    checked_at: "0", status: { submitted: { transaction_hash: "0x1234", message: detail } },
+  } });
+  expect(result.settlement?.message).toBe(detail);
+});
+
 test("review freezes the exact address, amount, quote and ID before asynchronous preparation", () => {
   const quote = { ledger, amount: "1000000", authorization: {
     assetFee: "10000", gas: { ledger, minter: "aaaaa-aa", budget: "20", ledgerFee: "2" },

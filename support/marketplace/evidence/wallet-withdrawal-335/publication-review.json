@@ -1,0 +1,32 @@
+{
+  "action": "publication_review",
+  "operation": "publish",
+  "channel": "beta",
+  "requestId": "2b16f9533a7f8aa2ebacb96fd08c82c21f7063ae76b78370d8047643ea422321",
+  "canister": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+  "changedAppIds": [
+    "wallet"
+  ],
+  "skippedListingAppIds": [],
+  "analysis": "Trusted first-party publication. Automated checks verified the exact .neutron archive SHA-256 and size, packed manifest identity/version/update source, package compiler install-preparation checks (including declared dependencies and memory migration structure), and any declared Complete App Source digest, size and build-input compatibility. This stamp records automated package validation; it is not a manual malware or application-behavior review.",
+  "atomic": true,
+  "batch_id": null,
+  "packages": [
+    {
+      "protocol": "neutron-repo-v1",
+      "id": "wallet",
+      "version": 335,
+      "sha256": "6cab4ea035cec52787bd07b90a444a8a6efff4860fa9067446fa74c075e5b70c",
+      "size": 972730,
+      "channel": "beta",
+      "release_path": "/repo/v1/channels/beta/releases/wallet.json",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818.source.v1.msgpack.gz",
+        "sha256": "9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818",
+        "size": 894931
+      }
+    }
+  ]
+}

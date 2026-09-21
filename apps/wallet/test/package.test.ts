@@ -63,7 +63,7 @@ test("Wallet declares managed memory and generic backend calls", async () => {
   expect(value).toMatchObject({
     format: 3,
     id: "wallet",
-    version: 334,
+    version: 335,
     update_source: "sj2r4-haaaa-aaaay-aadgq-cai",
     background: {
       path: "service.html",

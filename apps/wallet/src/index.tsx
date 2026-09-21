@@ -66,6 +66,7 @@ import "./style.scss";
 import { WalletRefillPage, WalletRefillPromptHost, requestWalletRefillReview } from "./refill_page.tsx";
 import { WALLET_REFILL_PRESENT_TOOL, handleWalletRefillPresentation, walletRefillPresentationInputSchema, walletRefillOutputSchema } from "./refill_tools.ts";
 import { readWalletWithdrawalQuote, quoteAuthorizationWire, type WalletWithdrawalQuote } from "./withdrawal_quote.ts";
+import { useWithdrawalGasBudget, WithdrawalGasReview } from "./withdrawal_gas.tsx";
 import {
   finishSavedWalletTransfer,
   readSavedWalletTransfersForRecovery,
@@ -2050,7 +2051,9 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
         const merged = new Map(local.map((entry) => [entry.requestId, entry]));
         for (const entry of refreshed) merged.set(entry.requestId, entry);
         setPendingTransfers([...merged.values()]);
-        const terminal = refreshed.filter((entry) => entry.native && (entry.status === "rejected" || entry.settlement?.status === "confirmed" || entry.settlement?.status === "failed"));
+        // Leave rejected requests visible until the owner opens their saved
+        // receipt. A background poll must not hide the reason a burn failed.
+        const terminal = refreshed.filter((entry) => entry.native && entry.status === "succeeded" && (entry.settlement?.status === "confirmed" || entry.settlement?.status === "failed"));
         if (terminal.length > 0) {
           // Acknowledge only a visible terminal receipt; never execute a new
           // transfer or an approval from automatic progress tracking.
@@ -2558,7 +2561,7 @@ function WalletAppContent({ surface }: { surface: WalletSurface }) {
             operations={pendingTransfers}
             onOperation={(operation) => {
               setPendingTransfers((current) => [...current.filter((entry) => entry.requestId !== operation.requestId), operation]);
-              if (operation.status === "succeeded") {
+              if (operation.status !== "pending") {
                 void updateSelf("wallet_refresh_balances", [null]).then((value) => setSnapshot(parseWalletSnapshotResult(value))).catch(() => undefined);
                 publishWalletInvalidation();
               }
@@ -4174,7 +4177,9 @@ function WalletTransfer({
   const native = candidate.destination.network !== "internet_computer";
   const custom = catalog === null;
   const erc20 = catalog?.nativeRoute?.kind === "ckerc20";
-  const [quote, setQuote] = useState<WalletWithdrawalQuote | null>(null);
+  const [baseQuote, setQuote] = useState<WalletWithdrawalQuote | null>(null);
+  const gasReview = useWithdrawalGasBudget(baseQuote);
+  const quote = gasReview.quote;
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteRevision, setQuoteRevision] = useState(0);
@@ -4213,7 +4218,7 @@ function WalletTransfer({
 
   const quoteAssetSufficient = quote === null || amountAtoms === null ? true : BigInt(amountAtoms) + BigInt(quote.assetFee) <= BigInt(quote.assetBalance);
   const requiresGasReview = native && erc20;
-  const gasReviewReady = !requiresGasReview || (quote !== null && quote.gas !== null && quote.gas.sufficient && quoteAssetSufficient && !quoteBusy && quoteError === null);
+  const gasReviewReady = !requiresGasReview || (quote !== null && quote.gas !== null && quote.gas.sufficient && quoteAssetSufficient && !quoteBusy && quoteError === null && gasReview.error === null);
 
   return (
     <section className="wallet-transfer" aria-label={`${action} token`}>
@@ -4303,6 +4308,7 @@ function WalletTransfer({
             {requiresGasReview && quote?.gas ? <div className="wallet-withdrawal-cost"><dt>Maximum Ethereum gas cost</dt><dd>{formatTokenAmount(quote.gas.totalDebit, 18)} ckETH</dd></div> : null}
           </dl>
           {requiresGasReview ? <div aria-live="polite">
+            <WithdrawalGasReview review={gasReview} disabled={busy || quoteBusy || receipt !== null} />
             {quoteBusy ? <p>Checking the current ckETH gas budget and balance…</p> : null}
             {quoteError ? <p role="alert">Gas quote unavailable: {quoteError}</p> : null}
             {quote?.gas && !quote.gas.sufficient ? <p role="alert">Add ckETH to cover the quoted gas budget and approval fee.</p> : null}
@@ -4312,7 +4318,7 @@ function WalletTransfer({
               <div><dt>ckETH approval fee</dt><dd>{formatTokenAmount(quote.gas.ledgerFee, 18)} ckETH</dd></div>
               <div><dt>ckETH allowance</dt><dd>{quote.gas.allowance} atomic units</dd></div>
               <div><dt>Available ckETH</dt><dd>{formatTokenAmount(quote.gas.balance, 18)} ckETH</dd></div>
-            </dl><small>Quoted {new Date(Number(BigInt(quote.observedAtNs) / 1_000_000n)).toLocaleTimeString()}. Costs are checked again before approvals. A changed quote requires another review.</small></details> : null}
+            </dl><small>Quoted {new Date(Number(BigInt(quote.observedAtNs) / 1_000_000n)).toLocaleTimeString()}. Gas may change up to your reviewed maximum. A higher gas charge or changed approval fee requires another review.</small></details> : null}
             <button className="nt-icon-button" title="Refresh gas quote" aria-label="Refresh gas quote" disabled={quoteBusy || busy || receipt !== null} type="button" onClick={() => setQuoteRevision((value) => value + 1)}><IoRefresh /></button>
           </div> : null}
         </div>

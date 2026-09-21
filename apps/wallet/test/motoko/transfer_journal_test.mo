@@ -506,7 +506,7 @@ switch (await* Withdrawals.withdraw(ercRoute, ledger, address, 1_000, 10, create
             case (?value) value;
             case null Runtime.trap("Missing gas burn receipt");
         };
-        assert (gas.ledger == gasLedger and gas.block_index == 91 and gas.amount == 200);
+        assert (gas.ledger == gasLedger and gas.block_index == 91);
     };
     case (#err(_)) assert false;
 };
@@ -567,7 +567,7 @@ func quoted(result : Withdrawals.Result<Withdrawals.Quote>) : Withdrawals.Quote 
 func quotedGas(value : Withdrawals.Quote) : Withdrawals.GasQuote {
     switch (value.gas) { case (?gas) gas; case null Runtime.trap("Missing ckETH gas quote") };
 };
-let quoteScript = QuoteScript(quoteReads(1_010, 220));
+let quoteScript = QuoteScript(quoteReads(1_010, 260));
 let withdrawalQuote = quoted(await* Withdrawals.quote(ercRoute, ledger, ?1_000, quoteScript.calls));
 assert (quoteScript.count == 5);
 assert (withdrawalQuote.ledger == ledger and withdrawalQuote.minter == minter);
@@ -575,31 +575,31 @@ assert (withdrawalQuote.amount == ?1_000 and withdrawalQuote.asset_fee == 10);
 assert (withdrawalQuote.asset_allowance == ?1_000 and withdrawalQuote.asset_total_debit == ?1_010);
 assert (withdrawalQuote.asset_balance == 1_010 and withdrawalQuote.asset_sufficient == ?true);
 let gasQuote = quotedGas(withdrawalQuote);
-assert (gasQuote.ledger == gasLedger and gasQuote.budget == 200 and gasQuote.ledger_fee == 20);
-assert (gasQuote.allowance == 200);
-assert (gasQuote.total_debit == 220 and gasQuote.balance == 220 and gasQuote.sufficient);
+assert (gasQuote.ledger == gasLedger and gasQuote.estimate == ?200 and gasQuote.budget == 240 and gasQuote.ledger_fee == 20);
+assert (gasQuote.allowance == 240);
+assert (gasQuote.total_debit == 260 and gasQuote.balance == 260 and gasQuote.sufficient);
 assert (withdrawalQuote.authorization == {
     asset_fee = 10;
-    gas = ?{ ledger = gasLedger; minter; budget = 200; ledger_fee = 20 };
+    gas = ?{ ledger = gasLedger; minter; budget = 240; ledger_fee = 20 };
 });
 
-let insufficientGasScript = QuoteScript(quoteReads(1_010, 219));
+let insufficientGasScript = QuoteScript(quoteReads(1_010, 259));
 let insufficientGasQuote = quoted(await* Withdrawals.quote(ercRoute, ledger, ?1_000, insufficientGasScript.calls));
 assert (insufficientGasScript.count == 5);
 assert (insufficientGasQuote.asset_sufficient == ?true);
 assert (not quotedGas(insufficientGasQuote).sufficient);
-assert (quotedGas(insufficientGasQuote).total_debit == 220);
-let insufficientAssetScript = QuoteScript(quoteReads(1_009, 220));
+assert (quotedGas(insufficientGasQuote).total_debit == 260);
+let insufficientAssetScript = QuoteScript(quoteReads(1_009, 260));
 let insufficientAssetQuote = quoted(await* Withdrawals.quote(ercRoute, ledger, ?1_000, insufficientAssetScript.calls));
 assert (insufficientAssetQuote.asset_sufficient == ?false and quotedGas(insufficientAssetQuote).sufficient);
 
 // Gas remains useful before an amount is entered, while amount-dependent
 // asset allowance/debit/sufficiency stay absent instead of looking like zero.
-let amountlessScript = QuoteScript(quoteReads(1_010, 220));
+let amountlessScript = QuoteScript(quoteReads(1_010, 260));
 let amountlessQuote = quoted(await* Withdrawals.quote(ercRoute, ledger, null, amountlessScript.calls));
 assert (amountlessScript.count == 5 and amountlessQuote.amount == null);
 assert (amountlessQuote.asset_allowance == null and amountlessQuote.asset_total_debit == null);
-assert (amountlessQuote.asset_sufficient == null and quotedGas(amountlessQuote).total_debit == 220);
+assert (amountlessQuote.asset_sufficient == null and quotedGas(amountlessQuote).total_debit == 260);
 
 let ethQuoteScript = QuoteScript([
     { request = Icrc.feeRequest(gasLedger); result = #ok(to_candid (gasFee)) },
@@ -661,15 +661,15 @@ switch (await* Withdrawals.withdrawReviewed(ercRoute, ledger, address, 1_000, 10
 };
 assert (missingGasReviewScript.count == 0);
 
-// Execution caps the actual approvals at the reviewed burn amounts. The
-// minter recalculates gas after the approvals; zero burn fees mean adding
-// fee headroom would otherwise permit spending beyond the reviewed budget.
+// Execution approves the reviewed ceiling, including its visible headroom,
+// even when the estimate rises before approvals. The asset approval stays
+// exact and no additional fee is added to either burn allowance.
 let reviewedCommand = command(nativeIdOne, true);
 let reviewedScript = Script(reviewedCommand, [
-    { request = priceRequest; result = #ok(to_candid (price)) },
+    { request = priceRequest; result = #ok(to_candid ({ price with max_transaction_fee = 230 : Nat })) },
     { request = Icrc.feeRequest(gasLedger); result = #ok(to_candid (gasFee)) },
     { request = approvalWithMemo(approveRequest(ledger, 1_000, 10), nativeIdOne); result = #ok(to_candid (approvalOk)) },
-    { request = approvalWithMemo(approveRequest(gasLedger, 200, 20), nativeIdOne); result = #ok(to_candid (approvalOk)) },
+    { request = approvalWithMemo(approveRequest(gasLedger, 240, 20), nativeIdOne); result = #ok(to_candid (approvalOk)) },
     { request = ercWithdrawal; result = #ok(to_candid (ercReceipt)) },
 ]);
 let reviewedReplay = Journal.Replay(reviewedCommand, reviewedScript.calls);
