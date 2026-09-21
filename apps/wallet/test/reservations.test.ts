@@ -121,7 +121,7 @@ test("reapplying a selected custom ledger replaces partial access with one princ
   const desired = desiredWalletReservationScopes(catalog, new Set([custom]));
   expect(reservationActions(current, desired)).toEqual([
     { kind: "reserve", scope: { kind: "principal", principal: custom } },
-    ...current.map((scope) => ({ kind: "release", scope })),
+    ...current.map((scope) => ({ kind: "release" as const, scope })),
   ]);
 });
 

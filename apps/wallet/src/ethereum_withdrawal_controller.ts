@@ -33,9 +33,7 @@ export function createEthereumWithdrawalAttempt(
   const authorization = input.quote ? quoteAuthorizationWire(input.quote) : undefined;
   if (authorization?.gas && typeof authorization.gas === "object") Object.freeze(authorization.gas);
   if (authorization) Object.freeze(authorization);
-  const args: SelfCallObject = Object.freeze({
-    // A fresh view prevents consumers from mutating the saved ID's bytes.
-    get request_id() { return transferIdBytes(requestId); },
+  const reviewedArgs: SelfCallObject = Object.freeze({
     ledger,
     address: getAddress(address).toLowerCase(),
     amount: input.amountAtoms,
@@ -43,7 +41,12 @@ export function createEthereumWithdrawalAttempt(
   });
   return Object.defineProperties({ operation: null } as EthereumWithdrawalAttempt, {
     requestId: { value: requestId, enumerable: true },
-    args: { value: args, enumerable: true },
+    args: {
+      // Each snapshot protects the saved ID while the wire record contains
+      // only data properties, as required by the self-call encoder.
+      get: () => Object.freeze({ request_id: transferIdBytes(requestId), ...reviewedArgs }),
+      enumerable: true,
+    },
   });
 }
 
