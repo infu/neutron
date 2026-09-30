@@ -1,0 +1,35 @@
+{
+  "action": "promotion_verified",
+  "protocol": "neutron-update-source-publish-v2",
+  "operation": "promote",
+  "channel": "stable",
+  "requestId": "ffc41683aa82a2d87a279f981dcb148f05fafe8424b21b2b83bc8b67c86ec90a",
+  "canister_id": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "origin": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io",
+  "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+  "atomic": true,
+  "batch_id": null,
+  "reconciled_batch_id": "3",
+  "journal": "/srv/shared/code/neutron/.neutron/marketplace-publications/wallet-334-ethereum-withdrawal-promotion.json",
+  "published_at": "2026-09-21T19:00:34.614Z",
+  "packages": [
+    {
+      "id": "wallet",
+      "candidate_id": "90",
+      "version": 334,
+      "sha256": "60c591a0c8b4ed288edfd50aaaa72d00bf8ef7e015b31a7da3510c7c0b6f7d3f",
+      "size": 970910,
+      "package_path": "/repo/v1/packages/60c591a0c8b4ed288edfd50aaaa72d00bf8ef7e015b31a7da3510c7c0b6f7d3f.neutron",
+      "release_path": "/repo/v1/releases/wallet.json",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/3c9ec422856eff67963339fd7dca318940d4abd38ce7eebbe4a2b77c147eb56d.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/3c9ec422856eff67963339fd7dca318940d4abd38ce7eebbe4a2b77c147eb56d.source.v1.msgpack.gz",
+        "sha256": "3c9ec422856eff67963339fd7dca318940d4abd38ce7eebbe4a2b77c147eb56d",
+        "size": 890288,
+        "status": "unchanged"
+      },
+      "release_digest": "0ffde2559c94916caca70eb2bbb215c013ba85334d391821de9b20a9d13a3723",
+      "status": "unchanged"
+    }
+  ]
+}

@@ -2390,6 +2390,12 @@ body {
   .wallet-transfer-details dd { overflow: visible; overflow-wrap: anywhere; text-align: right; white-space: normal; }
   p { line-height: 1.5; }
 }
+.wallet-withdrawal-gas-review {
+  display: grid; gap: 6px;
+  label { display: grid; gap: 6px; }
+  input { width: 100%; min-width: 0; }
+  small { display: block; margin-block: 6px; }
+}
 .wallet-transfer-progress-list {
   border-bottom: 1px solid var(--nt-line-subtle); font-size: 0.65rem; padding: 8px 14px;
   summary { color: var(--nt-text-muted); cursor: pointer; }

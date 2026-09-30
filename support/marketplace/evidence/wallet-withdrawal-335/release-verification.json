@@ -1,0 +1,170 @@
+{
+  "package": {
+    "id": "wallet",
+    "version": 335,
+    "path": "apps/wallet/wallet.v0.3.35.neutron",
+    "size": 972730,
+    "sha256": "6cab4ea035cec52787bd07b90a444a8a6efff4860fa9067446fa74c075e5b70c"
+  },
+  "source": {
+    "file": "apps/wallet/.neutron/sources/9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818.source.v1.msgpack.gz",
+    "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818.source.v1.msgpack.gz",
+    "path": "/repo/v1/sources/9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818.source.v1.msgpack.gz",
+    "size": 894931,
+    "sha256": "9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818"
+  },
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "memoryRootsPreserved": [
+    "wallet",
+    "wallet_commands",
+    "wallet_bridge",
+    "wallet_transfers",
+    "wallet_bridge_replacements",
+    "wallet_bridge_provider",
+    "wallet_bridge_activity",
+    "wallet_refills"
+  ],
+  "memoryLockUnchanged": true,
+  "capabilitiesUnchanged": true,
+  "dependenciesUnchanged": true,
+  "packageFileDigests": {
+    "legal/APPLICATION-NOTICE.txt": "c1093ddb159ea67bf30716a8ee7e07420ce613e5bc35c272d5fe94cc70983476",
+    "legal/LICENSE.APP.txt": "44cb6531b9001797dced71351728c6acd8b06ccb918987f9127b141b351b17c6",
+    "legal/THIRD_PARTY_NOTICES.md": "dbc0b9ab88cd58f6a31aa3a22c6cb0f5ba7136957eaf7293235e7a546df64c0c",
+    "legal/package-record.v1.json": "e3a25402dc3fce7c8021f74f92ac71341d27e984271e1fecf214e8a829a1a81a",
+    "legal/third-party/EXACT-MATERIALS.v1.txt": "bee1748fee3592ac1a5625e4c966e2eff3afae20e8a51334222fc649d48d33f6",
+    "mo/00bf6dc15ec20fec4b7f1acfee48b63ede4d913bb570d189df14f7673a125c15.mo": "00bf6dc15ec20fec4b7f1acfee48b63ede4d913bb570d189df14f7673a125c15",
+    "mo/0789f55ce62438e22d4c1e434fb93688e6f2b574e926051152b9421a1837b736.mo": "0789f55ce62438e22d4c1e434fb93688e6f2b574e926051152b9421a1837b736",
+    "mo/08c6c3fe7349c1ebea25422210a0dd556627d466d1e1bdb9558629128a9745fe.mo": "08c6c3fe7349c1ebea25422210a0dd556627d466d1e1bdb9558629128a9745fe",
+    "mo/08f58325429a83208362703ec76f96c87e2285885bc4fb227ccb0b9041b8321a.mo": "08f58325429a83208362703ec76f96c87e2285885bc4fb227ccb0b9041b8321a",
+    "mo/0e908d8e686bdd55fd1b2b25ecb6680dbfbf40cd55aaa83cd46107923c7df772.mo": "0e908d8e686bdd55fd1b2b25ecb6680dbfbf40cd55aaa83cd46107923c7df772",
+    "mo/1139a72434524d135111737f2989032ad31b0607ca80812f3e6e6cf1dab0f565.mo": "1139a72434524d135111737f2989032ad31b0607ca80812f3e6e6cf1dab0f565",
+    "mo/127e56334621abd08ce848e1f792cb7c44ad5b694444e17d0e308c96826ac554.mo": "127e56334621abd08ce848e1f792cb7c44ad5b694444e17d0e308c96826ac554",
+    "mo/19b02c076ce668bb689661ffc961cbd1454ca3f3d4ae5628dbb57a306844797d.mo": "19b02c076ce668bb689661ffc961cbd1454ca3f3d4ae5628dbb57a306844797d",
+    "mo/1a7e3db706620709d2f22b7706a7cb961304cf11bdedeb519b90f7c8eb0104d3.mo": "1a7e3db706620709d2f22b7706a7cb961304cf11bdedeb519b90f7c8eb0104d3",
+    "mo/1ae38af22bbd20d80bd4bb2c276075935a1c9069b03d6773928b247616e48193.mo": "1ae38af22bbd20d80bd4bb2c276075935a1c9069b03d6773928b247616e48193",
+    "mo/1b7b6e5be3acc918c796697ffc71910852dc692095eafe1d819b740a3bb72f1f.mo": "1b7b6e5be3acc918c796697ffc71910852dc692095eafe1d819b740a3bb72f1f",
+    "mo/2197f3f885e6d4aba5587f1a2ded35f4957e56c91777170e4aec2f797fa713ea.mo": "2197f3f885e6d4aba5587f1a2ded35f4957e56c91777170e4aec2f797fa713ea",
+    "mo/303b5fc2cfee4a6ab0cd43abae6846ba4a066d7885567284e9609632caf128aa.mo": "303b5fc2cfee4a6ab0cd43abae6846ba4a066d7885567284e9609632caf128aa",
+    "mo/37b0a0b4a3877799371ae41375543d39bbd7598dea33a88fb0cb68fce39c57d1.mo": "37b0a0b4a3877799371ae41375543d39bbd7598dea33a88fb0cb68fce39c57d1",
+    "mo/39204af128f3c2a63ad0092d3ab9ee026d343b0c88f93465238021389ae28a5f.mo": "39204af128f3c2a63ad0092d3ab9ee026d343b0c88f93465238021389ae28a5f",
+    "mo/394eda524ad6869af6e1f8bf5be2f6885951b4191c71c790ca325539ef65464e.mo": "394eda524ad6869af6e1f8bf5be2f6885951b4191c71c790ca325539ef65464e",
+    "mo/3aeed20003aa1864549527075a8298f890157a6e37366384c9e275a38dc0d8ba.mo": "3aeed20003aa1864549527075a8298f890157a6e37366384c9e275a38dc0d8ba",
+    "mo/3d4c60fef6a72fd8c4a62ea5e45c654cdda4b59a44240fefeaf39c053a3536d3.mo": "3d4c60fef6a72fd8c4a62ea5e45c654cdda4b59a44240fefeaf39c053a3536d3",
+    "mo/4b6d97683d4354a7fe185827a135298026e670b1279af4284c74059628ec0f39.mo": "4b6d97683d4354a7fe185827a135298026e670b1279af4284c74059628ec0f39",
+    "mo/52a7c600886416b0c0d29373b0cc53a9f47ee2a65dce6950ca2e546341f9fc8d.mo": "52a7c600886416b0c0d29373b0cc53a9f47ee2a65dce6950ca2e546341f9fc8d",
+    "mo/5584e23cbcf391d048c53efb5aa6385045d65bcb7ad0dd3a7d73ea86c6109384.mo": "5584e23cbcf391d048c53efb5aa6385045d65bcb7ad0dd3a7d73ea86c6109384",
+    "mo/588ed9b28e7b6a15b8100df4edf5744028a8e7e748407208cf2c3751f6cd11b0.mo": "588ed9b28e7b6a15b8100df4edf5744028a8e7e748407208cf2c3751f6cd11b0",
+    "mo/59d991367413199580f31df1021c41cd6aafb1ad1580824a58e45ca6e5d1f9f2.mo": "59d991367413199580f31df1021c41cd6aafb1ad1580824a58e45ca6e5d1f9f2",
+    "mo/5d79c6c7f69145f1f4acd4fa19c50489b9519e0c0b1f7f3675d1563ece03d4e2.mo": "5d79c6c7f69145f1f4acd4fa19c50489b9519e0c0b1f7f3675d1563ece03d4e2",
+    "mo/5f3c1cfb2d06091295ac1452c1fbbd495a2fcd84d91126ccd51ce51dfd296b35.mo": "5f3c1cfb2d06091295ac1452c1fbbd495a2fcd84d91126ccd51ce51dfd296b35",
+    "mo/5fbac4d75068d3280279439bcce36622f948ad6b8a49d7f234de050d6dda67cd.mo": "5fbac4d75068d3280279439bcce36622f948ad6b8a49d7f234de050d6dda67cd",
+    "mo/62a0c18349ac120f7b590a630656ce6d7adeca94846242367aa6733ac04c9b2d.mo": "62a0c18349ac120f7b590a630656ce6d7adeca94846242367aa6733ac04c9b2d",
+    "mo/65fa1aeec4c7addf6aba1cdf39391097ce337877bb28f0b3dbe06fb5bfab8330.mo": "65fa1aeec4c7addf6aba1cdf39391097ce337877bb28f0b3dbe06fb5bfab8330",
+    "mo/67916ab2aba9bcf791f3d76a77739e4b6db5e5b2dceda87eec1fddeb20841415.mo": "67916ab2aba9bcf791f3d76a77739e4b6db5e5b2dceda87eec1fddeb20841415",
+    "mo/69112abe7e34e8fd066236a4031159abf28ba5d1554c33999f4ddf3cb68c1f49.mo": "69112abe7e34e8fd066236a4031159abf28ba5d1554c33999f4ddf3cb68c1f49",
+    "mo/7063f209c517e1e3565b8baed3ce18310147aad933ee8e1cb61309e62d5f9a50.mo": "7063f209c517e1e3565b8baed3ce18310147aad933ee8e1cb61309e62d5f9a50",
+    "mo/7763996a5f84485c73ecdb118f2e5ab53115818ed91fc74d6082c1a9f53ce81d.mo": "7763996a5f84485c73ecdb118f2e5ab53115818ed91fc74d6082c1a9f53ce81d",
+    "mo/78222225a965bef98f662c85ff9e55e747c729bdd0633968a3935628fabccb98.mo": "78222225a965bef98f662c85ff9e55e747c729bdd0633968a3935628fabccb98",
+    "mo/8117ebf24b38366725d1c204242d1a7961af94e59ff82333c4943e82eb9375ba.mo": "8117ebf24b38366725d1c204242d1a7961af94e59ff82333c4943e82eb9375ba",
+    "mo/86fc8d9cd78e2de596fc95da124bd232b3b9f3c4b88857478baa0e667c5950fe.mo": "86fc8d9cd78e2de596fc95da124bd232b3b9f3c4b88857478baa0e667c5950fe",
+    "mo/90ceff10e993638ce5c2a0f74cb1f0394a87f22faa89588d6f2cc504d76a9a0c.mo": "90ceff10e993638ce5c2a0f74cb1f0394a87f22faa89588d6f2cc504d76a9a0c",
+    "mo/913cd0ab298bba347b30c16f19666e991d0c7624a031fae8354c0980d90876b0.mo": "913cd0ab298bba347b30c16f19666e991d0c7624a031fae8354c0980d90876b0",
+    "mo/916835316a7c5de644228c546114d0acebc1907478c571fd349146229a0aba61.mo": "916835316a7c5de644228c546114d0acebc1907478c571fd349146229a0aba61",
+    "mo/9b8fb4c8507f5ffef6fd6b896481e345e9155fad7f6e294e5a31489819744afa.mo": "9b8fb4c8507f5ffef6fd6b896481e345e9155fad7f6e294e5a31489819744afa",
+    "mo/9c2fdf9f4b27e415542962aa9a38f578e941e95e26554d2414b0cc2a26dde7c3.mo": "9c2fdf9f4b27e415542962aa9a38f578e941e95e26554d2414b0cc2a26dde7c3",
+    "mo/a27cb9f5be71b29c2878b419603862cffac9acceb40076a535bb771b8cedf8f3.mo": "a27cb9f5be71b29c2878b419603862cffac9acceb40076a535bb771b8cedf8f3",
+    "mo/a8a32fbe89dbac7be2e400108c996e9456e3b3cd455aba48d251d52835bcf5a6.mo": "a8a32fbe89dbac7be2e400108c996e9456e3b3cd455aba48d251d52835bcf5a6",
+    "mo/acd0452caddecaa53f4678f0cfeddf0e530f4a8e74d740ee0cbd21bea65ebdde.mo": "acd0452caddecaa53f4678f0cfeddf0e530f4a8e74d740ee0cbd21bea65ebdde",
+    "mo/ace8acb6fa301c6d3eaba4e0c3b7729d9e68003f1dcdfe24992df522c82eb843.mo": "ace8acb6fa301c6d3eaba4e0c3b7729d9e68003f1dcdfe24992df522c82eb843",
+    "mo/ad88f22cc90e512609a7ac91fb197fd821afe21c09f4a29323f1dc01d2714d56.mo": "ad88f22cc90e512609a7ac91fb197fd821afe21c09f4a29323f1dc01d2714d56",
+    "mo/b2304f6f816a2cbbd3dc9417cb23b1dd6d4dc3f173787c16495c066d1fd94791.mo": "b2304f6f816a2cbbd3dc9417cb23b1dd6d4dc3f173787c16495c066d1fd94791",
+    "mo/b28a4a7776ac8d70095f0bcf15b97da0e8a77560b5c8ba7fe143b8b741596b9d.mo": "b28a4a7776ac8d70095f0bcf15b97da0e8a77560b5c8ba7fe143b8b741596b9d",
+    "mo/ba9cd383f91b639746f5c1913f42f82f71daf7c21f5fc7e45e77b02128a10a2f.mo": "ba9cd383f91b639746f5c1913f42f82f71daf7c21f5fc7e45e77b02128a10a2f",
+    "mo/c4887b7baa75a8500692d8ec2d7187854b468b4d52a11aabab50781c642cf76d.mo": "c4887b7baa75a8500692d8ec2d7187854b468b4d52a11aabab50781c642cf76d",
+    "mo/c9939ff58b27058e135e20c7d168667444b17b0af54606c223ba7ad6095e5fa0.mo": "c9939ff58b27058e135e20c7d168667444b17b0af54606c223ba7ad6095e5fa0",
+    "mo/ccb23e2d72bb4ab9edc842d7dc106d708734b3a441117e4a7816067209391eac.mo": "ccb23e2d72bb4ab9edc842d7dc106d708734b3a441117e4a7816067209391eac",
+    "mo/d1927098cfb3257168bd88173d54bc790ff6688874dcab35f45cdc0c6cbd26c2.mo": "d1927098cfb3257168bd88173d54bc790ff6688874dcab35f45cdc0c6cbd26c2",
+    "mo/d1ceaf3da72a662842dad6256b90f6c4214b079f5658917a72e0fa3b97e21bdc.mo": "d1ceaf3da72a662842dad6256b90f6c4214b079f5658917a72e0fa3b97e21bdc",
+    "mo/d6ead510bdcb1d51da9b00e1f2a0c831b4cfa8573f7e53124b665179b1feb369.mo": "d6ead510bdcb1d51da9b00e1f2a0c831b4cfa8573f7e53124b665179b1feb369",
+    "mo/dd9e5b8474e8503a5251a24ce7244a36dc33f20641b69041a5328baa5938cc8d.mo": "dd9e5b8474e8503a5251a24ce7244a36dc33f20641b69041a5328baa5938cc8d",
+    "mo/df9d67fd89daaa8317eeb84103657280933ac7254697f784c7550596ea9d8145.mo": "df9d67fd89daaa8317eeb84103657280933ac7254697f784c7550596ea9d8145",
+    "mo/e01ff241602950705f098a4b116c1ee7efef906d651cffbdff07af8fcaa3d0cf.mo": "e01ff241602950705f098a4b116c1ee7efef906d651cffbdff07af8fcaa3d0cf",
+    "mo/e34368c73dec890d9b56beaac5650de43bfeeee3192b2c881bc28088f42a1abc.mo": "e34368c73dec890d9b56beaac5650de43bfeeee3192b2c881bc28088f42a1abc",
+    "mo/ea8cedd0dd11b5e947db29ad7c16eaa507f7e93251c4762332aee1d1b81ce89b.mo": "ea8cedd0dd11b5e947db29ad7c16eaa507f7e93251c4762332aee1d1b81ce89b",
+    "mo/ea9deeaf06ddbfa2004e183948513c3b305edea5d80be11ae385b68da5ce7701.mo": "ea9deeaf06ddbfa2004e183948513c3b305edea5d80be11ae385b68da5ce7701",
+    "mo/eb2640563690222ee84e1396ae267c5a3dfe78284b7473e5c46b5d8f555dd7e5.mo": "eb2640563690222ee84e1396ae267c5a3dfe78284b7473e5c46b5d8f555dd7e5",
+    "mo/ec64e40330b2bd235aaff46d7c1c5878ddd9e7011d37b71c32b2f52bc6af8cc4.mo": "ec64e40330b2bd235aaff46d7c1c5878ddd9e7011d37b71c32b2f52bc6af8cc4",
+    "mo/ec7dbec249c3a772f59f1d9267af73e35ba229dee89b9262933cad23a9c23b94.mo": "ec7dbec249c3a772f59f1d9267af73e35ba229dee89b9262933cad23a9c23b94",
+    "mo/ed011449ce694061cdf1be6125d83bafb6fd23aa1e6e5208195963dc1323e756.mo": "ed011449ce694061cdf1be6125d83bafb6fd23aa1e6e5208195963dc1323e756",
+    "mo/ed6e47cb80f1da72c69a052013e766ee5da4e119e120eb125f1671fa148b1cb7.mo": "ed6e47cb80f1da72c69a052013e766ee5da4e119e120eb125f1671fa148b1cb7",
+    "mo/ef68324962c683aae3966a81d3ce74fd8c433dab14180d3dac366d0922551cf4.mo": "ef68324962c683aae3966a81d3ce74fd8c433dab14180d3dac366d0922551cf4",
+    "mo/ef79bd3a2daff777c4064d0e81f84feaf2a3bbf2fb1ee979b0a0d94151907e3d.mo": "ef79bd3a2daff777c4064d0e81f84feaf2a3bbf2fb1ee979b0a0d94151907e3d",
+    "mo/f1eb230c92edf81f008049838104db8e5fe2901e7eb08ed826b7e1de2a48bd11.mo": "f1eb230c92edf81f008049838104db8e5fe2901e7eb08ed826b7e1de2a48bd11",
+    "mo/f3dffd4ec6c6c5c0b6935030901c42120fdbe685207d45bd7bc13bca163a3fe6.mo": "f3dffd4ec6c6c5c0b6935030901c42120fdbe685207d45bd7bc13bca163a3fe6",
+    "mo/f648f2f47bf47de7ea63ddbec9b0a2a70208191934cf8668f78bd197f90e280e.mo": "f648f2f47bf47de7ea63ddbec9b0a2a70208191934cf8668f78bd197f90e280e",
+    "mo/fe45cc69bcad5c3283a472988075a08cb2bd3c578ee5bf802670fe0b38bfa994.mo": "fe45cc69bcad5c3283a472988075a08cb2bd3c578ee5bf802670fe0b38bfa994",
+    "mo/fefcc21197346ff0720fb317fe710d084decb146d8bcaa774728fb443ca9ef6e.mo": "fefcc21197346ff0720fb317fe710d084decb146d8bcaa774728fb443ca9ef6e",
+    "neutron.json": "5b39822a5f45976f9afa16b3202a47349f5836117103c094516949aa079a306f",
+    "neutron.lock.json": "d8ad45354d2bbe2f8ab6cf822767a6a141a982b5cfe346106c5d56695867ae52",
+    "schema.json": "feba5726aa21a783e41ce2061ad34b57b83f059eb8c8f49bcf6337981b064b3a",
+    "web/index.html": "5d7a337613bce0cb951ce5084038e051e538085ce16d044fe93d54cb67272c6c",
+    "web/main.css": "45824fa19df5674abb9c04160b553fc0cfeaa7bdf5405d9f675aa980f6567084",
+    "web/main.js": "056757bccd7573246fd12c015bcfedc2c763c0727c25be5e343978d47918497f",
+    "web/service.html": "ff3c8d6aa388face0b557d0d3d437a0c48ce08e634f3ac1ac86f2b847de3d0c7",
+    "web/service.js": "53ead26982ec5dbe33917987e790ec3dee0f0a9190f540eab2b148df514ba138",
+    "web/static/icon.svg": "2f40d9ce56e60251db4320c672a51eb6103c4d7c1bea8962539fde3fbf11580b",
+    "web/static/icon.webp": "adcce047a1278c3c029276ebfae72f5218d80beef781caea3b8eca512fe87ce5",
+    "web/tray.css": "45824fa19df5674abb9c04160b553fc0cfeaa7bdf5405d9f675aa980f6567084",
+    "web/tray.html": "ac677ab5e10811d21875e3c85ce51902ace9756766239f2962f1f3ae192ecaa1",
+    "web/tray.js": "8fb933344604fc7aef912cf2d970d814a8a64ec16ef1a4c9bcc1b8a63a3735e6",
+    ".neutron/browser-surface-origins.v1.json": "2f0fd78a91263ee7352df687964d366f9e7323d54cb0412cb1c1d73afeb5bcf1"
+  },
+  "tests": {
+    "package": {
+      "command": "npm --workspace neutron-wallet run package",
+      "passed": true
+    },
+    "unit": {
+      "command": "bun test",
+      "cwd": "apps/wallet",
+      "passed": 344,
+      "failed": 0
+    },
+    "motoko": {
+      "command": "npm --workspace neutron-wallet run test:motoko",
+      "passed": 20,
+      "failed": 0
+    },
+    "memory": {
+      "command": "npm --workspace neutron-wallet run test:memory",
+      "passed": true,
+      "scope": "Clean initialization and representative nonempty restoration; archive lineage through released Wallet334."
+    },
+    "browser": {
+      "command": "npm --workspace neutron-wallet run test:browser",
+      "passed": 7,
+      "failed": 0
+    },
+    "typecheck": {
+      "command": "npm exec tsc -- -b apps/wallet --pretty false",
+      "passed": true
+    },
+    "withdrawalRegression": {
+      "scope": "Real Motoko application with scripted ledger/minter and actual React form in Chromium. Gas increases before approvals and before burn, ceiling rejection, retained request recovery, refreshed review, actual-debit history. No live funds spent."
+    }
+  },
+  "publication": {
+    "beta": {
+      "batch_id": "28",
+      "receipt": "beta-publish.json",
+      "postflight": "beta-repeat.json"
+    },
+    "stable": {
+      "batch_id": "4",
+      "receipt": "stable-promote.json",
+      "postflight": "stable-repeat.json"
+    },
+    "verifiedPostflightBatchId": null
+  }
+}

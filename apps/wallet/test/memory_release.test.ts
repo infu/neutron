@@ -129,6 +129,10 @@ test("Current Wallet archive keeps every predecessor root and initializes only m
     expect(sourceShape(requiredMemory(candidate, memoryId))).toEqual(requiredMemory(source, memoryId));
   }
   const predecessors = [
+    { version: 334, bytes: 970910, sha256: "60c591a0c8b4ed288edfd50aaaa72d00bf8ef7e015b31a7da3510c7c0b6f7d3f" },
+    { version: 331, bytes: 957817, sha256: "8c6a93776de78da165526f9dfde1b557bac78a743815ffd70d909249eb815ccf" },
+    { version: 332, bytes: 959327, sha256: "0f747a22c42a070ab0322b9e75a1f239c972288865f759f695d79490052ea51f" },
+    { version: 333, bytes: 970902, sha256: "c2357102b16d903a30f112318a05b0abd82fb14446311f24a5819fb4be6288cf" },
     { version: 329, bytes: 941108, sha256: "48e56391089ca7e2d22552690bb33e73804ecaa0b7eb51a224a0b88d2aebd7b1" },
     { version: 330, bytes: 957812, sha256: "091af7f6bd5ef870e727db265bd549a2024a090c7dede70d6647d25709819e2b" },
     { version: 302, bytes: 575_530, sha256: "830e8cb4e59bcb73deed3024f704c373f6cce744ccf850efea65eac74b545b43" },

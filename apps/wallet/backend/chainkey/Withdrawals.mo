@@ -20,6 +20,7 @@ module {
     public type Authorization = { asset_fee : Nat; gas : ?GasAuthorization };
     public type GasQuote = {
         ledger : Principal;
+        estimate : ?Nat;
         budget : Nat;
         ledger_fee : Nat;
         allowance : Nat;
@@ -70,8 +71,12 @@ module {
                 };
                 // Minter burns go to the minting account and have zero ledger
                 // transfer fee (ICRC-1). Only icrc2_approve charges gasFee.
-                let total = price.max_transaction_fee + gasFee;
-                ?{ ledger = gasLedger; budget = price.max_transaction_fee; ledger_fee = gasFee; allowance = price.max_transaction_fee; total_debit = total; balance = gasBalance; sufficient = gasBalance >= total };
+                // withdraw_erc20 can refresh this cached estimate before its
+                // burn. Review a maximum with 20% headroom, rounded up to wei;
+                // the owner can adjust it before preparing the request.
+                let budget = (price.max_transaction_fee * 120 + 99) / 100;
+                let total = budget + gasFee;
+                ?{ ledger = gasLedger; estimate = ?price.max_transaction_fee; budget; ledger_fee = gasFee; allowance = budget; total_debit = total; balance = gasBalance; sufficient = gasBalance >= total };
             };
             case (_) null;
         };
@@ -98,7 +103,9 @@ module {
 
     public type Receipt = {
         asset_burn : BurnReceipt;
-        gas_burn : ?BurnReceipt;
+        // The minter returns the gas burn block, not its charged amount. Its
+        // refreshed fee can differ from both the quote and the allowance.
+        gas_burn : ?{ ledger : Principal; block_index : Nat };
     };
 
     public type ValidateDestination = () -> Result<()>;
@@ -484,7 +491,7 @@ module {
 
         switch (authorization) {
             case (?review) {
-                if (review.ledger != ckethLedger or review.minter != minter or review.budget != gasAmount or review.ledger_fee != ckethFee) {
+                if (review.ledger != ckethLedger or review.minter != minter or review.budget < gasAmount or review.ledger_fee != ckethFee) {
                     return #err("Withdrawal costs changed. Refresh the quote and review it before withdrawing.");
                 };
             };
@@ -512,7 +519,7 @@ module {
         switch (await* approve(
             ckethLedger,
             minter,
-            gasAmount + (if (authorization == null) ckethFee else 0),
+            switch (authorization) { case (?review) review.budget; case null gasAmount + ckethFee },
             ckethFee,
             createdAt,
             expiresAt,
@@ -546,7 +553,6 @@ module {
                 ledger,
                 amount,
                 ckethLedger,
-                gasAmount,
             );
         };
     };
@@ -713,7 +719,6 @@ module {
         assetLedger : Principal,
         assetAmount : Nat,
         gasLedger : Principal,
-        gasAmount : Nat,
     ) : Result<Receipt> {
         let decoded : ?Erc20WithdrawalResult = from_candid reply;
         switch (decoded) {
@@ -727,7 +732,6 @@ module {
                     gas_burn = ?{
                         ledger = gasLedger;
                         block_index = value.cketh_block_index;
-                        amount = gasAmount;
                     };
                 });
             };
@@ -796,7 +800,19 @@ module {
             case (#TokenNotSupported(_)) "Token is not supported by the ckETH minter";
             case (#RecipientAddressBlocked(_)) "The Ethereum destination is blocked";
             case (#CkEthLedgerError(value)) {
-                "ckETH gas payment failed: " # ledgerErrorText(value.error);
+                switch (value.error) {
+                    case (#InsufficientAllowance(error)) {
+                        "The minter requires " # ckethAmount(error.failed_burn_amount) #
+                        " ckETH for gas, but the available allowance is " # ckethAmount(error.allowance) #
+                        " ckETH. No withdrawal burn occurred; approval fees were charged. Refresh costs and review the maximum again.";
+                    };
+                    case (#InsufficientFunds(error)) {
+                        "The minter requires " # ckethAmount(error.failed_burn_amount) #
+                        " ckETH for gas, but only " # ckethAmount(error.balance) #
+                        " ckETH is available. No withdrawal burn occurred; approval fees were charged.";
+                    };
+                    case (_) "ckETH gas payment failed: " # ledgerErrorText(value.error);
+                };
             };
             case (#CkErc20LedgerError(value)) {
                 "ckETH gas was burned in block " # Nat.toText(value.cketh_block_index) #
@@ -804,6 +820,15 @@ module {
             };
             case (#TemporarilyUnavailable(message)) message;
         };
+    };
+
+    func ckethAmount(amount : Nat) : Text {
+        let scale = 1_000_000_000_000_000_000;
+        let fraction = amount % scale;
+        if (fraction == 0) return Nat.toText(amount / scale);
+        var digits = Nat.toText(fraction);
+        while (digits.size() < 18) { digits := "0" # digits };
+        Nat.toText(amount / scale) # "." # digits;
     };
 
     func ledgerErrorText(error : LedgerError) : Text {

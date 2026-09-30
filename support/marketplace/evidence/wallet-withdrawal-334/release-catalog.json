@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "packages": [
+    {
+      "id": "wallet",
+      "directory": "../../../../apps/wallet"
+    }
+  ]
+}

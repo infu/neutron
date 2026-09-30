@@ -1,0 +1,35 @@
+{
+  "action": "promotion_verified",
+  "protocol": "neutron-update-source-publish-v2",
+  "operation": "promote",
+  "channel": "stable",
+  "requestId": "831d489f3bb5b3b1d65456f16e46cd7f62ae548628698118425b5f54081b74f6",
+  "canister_id": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "origin": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io",
+  "publisher": "y7t6r-gtsqz-45ogs-2k3gk-l6hic-2h7wm-zosg6-uldzf-l4ams-2jaky-wqe",
+  "atomic": true,
+  "batch_id": "4",
+  "reconciled_batch_id": "4",
+  "journal": "/srv/shared/code/neutron/.neutron/marketplace-publications/wallet-335-ethereum-gas-promotion.json",
+  "published_at": "2026-09-21T20:03:37.388Z",
+  "packages": [
+    {
+      "id": "wallet",
+      "candidate_id": "91",
+      "version": 335,
+      "sha256": "6cab4ea035cec52787bd07b90a444a8a6efff4860fa9067446fa74c075e5b70c",
+      "size": 972730,
+      "package_path": "/repo/v1/packages/6cab4ea035cec52787bd07b90a444a8a6efff4860fa9067446fa74c075e5b70c.neutron",
+      "release_path": "/repo/v1/releases/wallet.json",
+      "source": {
+        "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818.source.v1.msgpack.gz",
+        "path": "/repo/v1/sources/9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818.source.v1.msgpack.gz",
+        "sha256": "9ec8ad6fc99b05c5ecd063c929a15c1e61405413a1fceb5191391cfa8d839818",
+        "size": 894931,
+        "status": "unchanged"
+      },
+      "release_digest": "5b5f987d53dc933021b902ec08f339af682a3cb0ea23608ae83b9adde981a219",
+      "status": "promoted"
+    }
+  ]
+}

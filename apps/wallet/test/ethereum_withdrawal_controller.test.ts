@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { SelfCallValue } from "neutron-tools/app";
+import { encodeSelfCallValues, type SelfCallValue } from "neutron-tools/app";
 import {
   createEthereumWithdrawalAttempt,
   executeEthereumWithdrawal,
@@ -21,6 +21,14 @@ function wireOperation(status: WalletTransferOperation["status"], id = requestId
       : { succeeded: { block_index: "91", duplicate: false, native, amount: "1000000" } },
   };
 }
+
+test("the submitted status preserves the minter-specific explanation", () => {
+  const detail = "Ethereum transaction broadcast. Waiting for the minter to confirm finalization; the explorer may show it received sooner.";
+  const result = parseTransferOperation({ ...wireOperation("succeeded"), settlement: {
+    checked_at: "0", status: { submitted: { transaction_hash: "0x1234", message: detail } },
+  } });
+  expect(result.settlement?.message).toBe(detail);
+});
 
 test("review freezes the exact address, amount, quote and ID before asynchronous preparation", () => {
   const quote = { ledger, amount: "1000000", authorization: {
@@ -58,6 +66,42 @@ test("a route-only fee quote authorizes the selected amount while preserving the
   expect(() => createEthereumWithdrawalAttempt({ ...input, quote: { ...quote, ledger: "aaaaa-aa" } })).toThrow("quote");
 });
 
+for (const [symbol, tokenLedger] of [
+  ["ckETH", "ss2fx-dyaaa-aaaar-qacoq-cai"],
+  ["ckUSDC", "xevnm-gaaaa-aaaar-qafnq-cai"],
+  ["ckUSDT", "cngnf-vqaaa-aaaar-qag4q-cai"],
+] as const) test(`${symbol} withdrawal preparation encodes the reviewed intent through the real self-call transport`, async () => {
+  const gas = symbol === "ckETH" ? null : {
+    ledger: "ss2fx-dyaaa-aaaar-qacoq-cai", minter: "sv3dd-oaaaa-aaaar-qacoa-cai",
+    budget: "25000000000000", ledgerFee: "2000000000",
+  };
+  const quote = { ledger: tokenLedger, amount: null, authorization: { assetFee: "10000", gas } } as WalletWithdrawalQuote;
+  const attempt = createEthereumWithdrawalAttempt({ ...input, ledger: tokenLedger, quote }, requestId);
+  (attempt.args.request_id as Uint8Array).fill(0);
+  const calls: string[] = [];
+  const result = await executeEthereumWithdrawal(attempt, { updateSelf: async (method, args) => {
+    const encoded = encodeSelfCallValues(args);
+    calls.push(method);
+    expect(encoded.blobs).toHaveLength(1);
+    expect([...new Uint8Array(encoded.blobs[0]!.data)]).toEqual([...transferIdBytes(requestId)]);
+    if (method === "wallet_ethereum_withdraw_prepare_v1") {
+      expect(encoded.blobs[0]!.path).toEqual([0, "request_id"]);
+      expect(encoded.value).toEqual([{
+        request_id: null, ledger: tokenLedger, address: address.toLowerCase(), amount: input.amountAtoms,
+        withdrawal_quote: { asset_fee: "10000", ...(gas === null ? {} : {
+          gas: { ledger: gas.ledger, minter: gas.minter, budget: gas.budget, ledger_fee: gas.ledgerFee },
+        }) },
+      }]);
+      return { ...wireOperation("pending"), ledger: tokenLedger };
+    }
+    expect(method).toBe("wallet_transfer_resume_v2");
+    expect(encoded.blobs[0]!.path).toEqual([0]);
+    return { ...wireOperation("succeeded"), ledger: tokenLedger };
+  } });
+  expect(result.status).toBe("succeeded");
+  expect(calls).toEqual(["wallet_ethereum_withdraw_prepare_v1", "wallet_transfer_resume_v2"]);
+});
+
 for (const lostAt of ["prepare", "resume"] as const) test(`a lost ${lostAt} reply retains the same intent and reconciles without a second burn`, async () => {
   const attempt = createEthereumWithdrawalAttempt(input, requestId);
   const calls: { method: string; args: SelfCallValue[] }[] = [];
@@ -65,6 +109,7 @@ for (const lostAt of ["prepare", "resume"] as const) test(`a lost ${lostAt} repl
   let loseReply = true;
   let burns = 0;
   const backend = { updateSelf: async (method: string, args: SelfCallValue[]) => {
+    encodeSelfCallValues(args);
     calls.push({ method, args });
     if (method === "wallet_ethereum_withdraw_prepare_v1") {
       expect(args).toEqual([attempt.args]);

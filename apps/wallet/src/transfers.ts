@@ -150,7 +150,8 @@ function parseSettlement(value: unknown): WalletTransferOperation["settlement"] 
   if (status === "confirmed" || status === "submitted") {
     if (!payload || typeof payload !== "object" || !("transaction_hash" in payload) || typeof payload.transaction_hash !== "string") throw new Error("Invalid native transaction hash");
     return { status, transactionHash: payload.transaction_hash,
-      message: status === "confirmed" ? "Native withdrawal confirmed" : "Native transaction submitted; settlement pending" };
+      message: status === "confirmed" ? "Native withdrawal confirmed" :
+        "message" in payload && typeof payload.message === "string" ? payload.message : "Native transaction submitted; settlement pending" };
   }
   if ((status !== "pending" && status !== "failed" && status !== "unknown") || typeof payload !== "string") throw new Error("Invalid native withdrawal settlement");
   return { status, transactionHash: null, message: payload };

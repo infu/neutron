@@ -17,6 +17,7 @@ import {
   walletWithdrawalQuoteJson,
   walletWithdrawalQuoteOutputSchema,
   walletWithdrawalQuoteRequest,
+  withWithdrawalGasBudget,
 } from "../src/withdrawal_quote.ts";
 
 const ledger = "xevnm-gaaaa-aaaar-qafnq-cai";
@@ -73,7 +74,7 @@ test("withdrawal quotes preserve exact asset and gas balances with one approval 
     assetFee: "10000", assetAllowance: amount, assetTotalDebit: total,
     assetBalance: total, assetSufficient: true,
     gas: {
-      ledger: gasLedger, budget: "25000000000000", ledgerFee: "2000000000",
+      ledger: gasLedger, estimate: "25000000000000", budget: "25000000000000", ledgerFee: "2000000000",
       allowance: "25000000000000", totalDebit: "25002000000000",
       balance: "25001999999999", sufficient: false,
     },
@@ -137,6 +138,20 @@ test("reading a quote uses the resident wallet method and preserves its exact re
   expect(quote.gas?.sufficient).toBe(false);
 });
 
+test("an adjustable gas ceiling preserves the estimate, exact approval fee, and reviewed authorization", () => {
+  const original = parseWalletWithdrawalQuote({ ...wireQuote(), gas: {
+    ...wireQuote().gas as JsonObject, estimate: "20000000000000",
+  } });
+  const reviewed = withWithdrawalGasBudget(original, "30000000000000");
+  expect(reviewed.gas).toMatchObject({ estimate: "20000000000000", budget: "30000000000000",
+    allowance: "30000000000000", ledgerFee: "2000000000", totalDebit: "30002000000000", sufficient: false });
+  expect(quoteAuthorizationWire(reviewed)).toMatchObject({ gas: { budget: "30000000000000", ledger_fee: "2000000000" } });
+  expect(original.gas?.budget).toBe("25000000000000");
+  expect(withWithdrawalGasBudget(original, "20000000000000").gas?.sufficient).toBe(true);
+  expect(() => withWithdrawalGasBudget(original, "19999999999999")).toThrow("cover the current estimate");
+  expect(() => withWithdrawalGasBudget(original, "3e13")).toThrow("maximum ckETH");
+});
+
 test("quote reads surface backend errors and never fabricate success or reuse another amount", async () => {
   const error = new Error("Unable to read live ckETH balance");
   await expect(readWalletWithdrawalQuote({ ledger }, async () => { throw error; })).rejects.toBe(error);
@@ -160,7 +175,7 @@ test("the actual private Candid quote unwraps ok and projects optional records w
   const aliases = backendAliases();
   const output = motokoTypeToIdl(aliases.wallet_withdrawal_quote_v1_Output!, IDL, aliases);
   const gas = {
-    ledger: Principal.fromText(gasLedger), budget: 25_000_000_000_000n,
+    ledger: Principal.fromText(gasLedger), estimate: [20_000_000_000_000n], budget: 25_000_000_000_000n,
     ledger_fee: 2_000_000_000n, allowance: 25_000_000_000_000n,
     total_debit: 25_002_000_000_000n, balance: 25_001_999_999_999n, sufficient: false,
   };

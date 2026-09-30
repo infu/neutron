@@ -1,0 +1,81 @@
+{
+  "package": {
+    "id": "wallet",
+    "version": 334,
+    "path": "apps/wallet/wallet.v0.3.34.neutron",
+    "size": 970910,
+    "sha256": "60c591a0c8b4ed288edfd50aaaa72d00bf8ef7e015b31a7da3510c7c0b6f7d3f"
+  },
+  "source": {
+    "file": "apps/wallet/.neutron/sources/3c9ec422856eff67963339fd7dca318940d4abd38ce7eebbe4a2b77c147eb56d.source.v1.msgpack.gz",
+    "url": "https://sj2r4-haaaa-aaaay-aadgq-cai.icp0.io/repo/v1/sources/3c9ec422856eff67963339fd7dca318940d4abd38ce7eebbe4a2b77c147eb56d.source.v1.msgpack.gz",
+    "path": "/repo/v1/sources/3c9ec422856eff67963339fd7dca318940d4abd38ce7eebbe4a2b77c147eb56d.source.v1.msgpack.gz",
+    "size": 890288,
+    "sha256": "3c9ec422856eff67963339fd7dca318940d4abd38ce7eebbe4a2b77c147eb56d"
+  },
+  "update_source": "sj2r4-haaaa-aaaay-aadgq-cai",
+  "backendUnchanged": true,
+  "memoryRootsPreserved": [
+    "wallet",
+    "wallet_commands",
+    "wallet_bridge",
+    "wallet_transfers",
+    "wallet_bridge_replacements",
+    "wallet_bridge_provider",
+    "wallet_bridge_activity",
+    "wallet_refills"
+  ],
+  "memoryLockUnchanged": true,
+  "capabilitiesUnchanged": true,
+  "dependenciesUnchanged": true,
+  "testedRuntimeFilesUnchanged": 85,
+  "tests": {
+    "package": {
+      "command": "npm --workspace neutron-wallet run package",
+      "passed": true
+    },
+    "unit": {
+      "command": "bun test",
+      "cwd": "apps/wallet",
+      "passed": 342,
+      "failed": 0
+    },
+    "motoko": {
+      "command": "npm --workspace neutron-wallet run test:motoko",
+      "passed": 20,
+      "failed": 0
+    },
+    "memory": {
+      "command": "npm --workspace neutron-wallet run test:memory",
+      "passed": true,
+      "scope": "Fresh initialization and representative nonempty state restoration; archive tests preserve released root lineage through Wallet333."
+    },
+    "browser": {
+      "command": "npm --workspace neutron-wallet run test:browser",
+      "passed": 6,
+      "failed": 0
+    },
+    "typecheck": {
+      "command": "npm exec tsc -- -b apps/wallet --pretty false",
+      "passed": true
+    },
+    "withdrawalRegression": {
+      "beforeFix": "Real self-call encoder rejected ckETH, ckUSDC and ckUSDT withdrawal preparation with the reported enumerable-data-properties error.",
+      "afterFix": "All three encode successfully; lost preparation/resume replies retain one request ID and do not duplicate the scripted burn.",
+      "scope": "Real frontend controller and self-call encoder with fixture backend replies; no production token transfer."
+    }
+  },
+  "publication": {
+    "beta": {
+      "batch_id": "27",
+      "receipt": "beta-publish.json",
+      "postflight": "beta-repeat.json"
+    },
+    "stable": {
+      "batch_id": "3",
+      "receipt": "stable-promote.json",
+      "postflight": "stable-repeat.json"
+    },
+    "verifiedPostflightBatchId": null
+  }
+}
